@@ -1,0 +1,21 @@
+---
+## Review: ddx-d5e71fb3 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No acceptance criteria specified | BLOCK | Diff contains only execution evidence JSON files, no FEAT-010 refactor |
+
+### Summary
+
+The reviewed commit (30105318) only adds execution manifest/result JSON under `.ddx/executions/20260430T004105-eed19186/` — it is a chore commit with execution evidence, not the FEAT-010 refactor itself. The actual refactor work appears to be in the parent commit `f6949364` ("docs(frame): refactor FEAT-010 for three-layer architecture + substrate unification"), which is referenced as `result_rev` but not included in this diff.
+
+### Findings
+
+- The diff under review contains zero changes to `docs/helix/01-frame/features/FEAT-010*` or any frame artifact. It is purely execution telemetry (`manifest.json`, `result.json`).
+- No evidence of: three-layer architecture documentation, substrate unification of `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/`, `ddx work` no-progress/stop conditions, run-type catalog reduction, or read-only amendment narrowing for `artifactRegenerate`.
+- The substantive refactor is in commit `f6949364` (referenced as `result_rev` in `result.json:5`), which must be re-reviewed against the plan at `docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md`. Re-run review pointing at that revision, not the chore commit.
+- No acceptance criteria were provided in the bead — re-reviewing against the plan document is the only way to evaluate substantive completeness.

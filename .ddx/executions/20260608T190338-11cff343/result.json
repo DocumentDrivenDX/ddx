@@ -1,0 +1,58 @@
+{
+  "bead_id": "ddx-d2725150",
+  "attempt_id": "20260608T190338-11cff343",
+  "base_rev": "4440f0b97fa20dabaf341ced1ca17987c69859d7",
+  "result_rev": "c7b3605270fbae8055c09d3e04a656736d208a5f",
+  "implementation_rev": "cb51baa8281eb6461f6927d8f0a99dab8bf65abc",
+  "landed_rev": "c7b3605270fbae8055c09d3e04a656736d208a5f",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "merged onto current tip",
+  "orchestrator_status": "success",
+  "reason": "merged onto current tip",
+  "candidate_ref": "refs/ddx/iterations/20260608T190338-11cff343/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260608T190338-11cff343",
+      "result_rev": "cb51baa8281eb6461f6927d8f0a99dab8bf65abc",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.5"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.5"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.5"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.5",
+  "session_id": "eb-e413b018",
+  "duration_ms": 2002601,
+  "tokens": 10645240,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260608T190338-11cff343",
+  "prompt_file": ".ddx/executions/20260608T190338-11cff343/prompt.md",
+  "manifest_file": ".ddx/executions/20260608T190338-11cff343/manifest.json",
+  "result_file": ".ddx/executions/20260608T190338-11cff343/result.json",
+  "usage_file": ".ddx/executions/20260608T190338-11cff343/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-08T19:03:53.962666241Z",
+  "finished_at": "2026-06-08T19:37:16.563949983Z"
+}

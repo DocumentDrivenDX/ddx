@@ -1,0 +1,15 @@
+---
+## Review: ddx-ae77dfac iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Try Hextra CSS-variable override via assets/css/custom.css | APPROVE | website/assets/css/custom.css:1-39 — overrides --primary-hue/saturation/lightness and exposes --ddx-color-* tokens |
+| 2 | Document outcome (override vs. accept-divergence fallback) | APPROVE | custom.css header comment + commit message — primary scale overridden; secondary/tertiary intentionally divergent (would require theme fork), referenced to plan §V3.5 |
+
+### Summary
+
+Implementation takes the preferred CSS-variable override path: a single `website/assets/css/custom.css` retints Hextra's primary HSL scale to DDx `#4878C6` and exposes the full DESIGN.md token set as `--ddx-color-*` for downstream layouts. The commit message records that `hugo --minify` was used to verify the fingerprinted `main.min.css` picks up the override after Hextra's defaults, and the partial-fallback (secondary/tertiary not piped into Tailwind utilities) is documented inline with rationale. Minimal, on-spec, no scope creep.

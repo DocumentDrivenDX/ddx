@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260603T114423-18bf0966",
+  "bead_id": "ddx-2b9c26d7",
+  "base_rev": "8fbb32ad36b842cefed25f048cd5511a8b64afe9",
+  "created_at": "2026-06-03T11:44:30.169437799Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2b9c26d7",
+    "title": "project install surface: ddx install (no flag) and ddx update honor in-tree vs convention mode",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a, slice 3 of 4)\n\nWithout `--global`, install and update must target the project's ddx root, which differs by mode: in-tree (`\u003cproject\u003e/.ddx/plugins/\u003cname\u003e`) versus convention (`${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e`). Either way the project-tier agent skill links (`\u003cproject\u003e/.claude/skills` and `\u003cproject\u003e/.agents/skills`) must point into whichever plugins tree is active.\n\nROOT CAUSE\n- `resolveInstallDirs(global=false)` (cli/cmd/install.go:184, project branch install.go:195-197) sets `installRoot = ddxroot.Path(ctx, f.WorkingDir)` and skill dirs to `\u003cworkingDir\u003e/.agents/skills` and `\u003cworkingDir\u003e/.claude/skills`. `ddxroot.Path` (cli/internal/ddxroot/ddxroot.go:75) returns the in-tree `.ddx` path when `\u003cproject\u003e/.ddx` exists and the convention `${XDG_DATA_HOME}/ddx/projects/...` path otherwise, so mode selection is implicit.\n- `installLocal` non-global branch derives `ddxRootDir := ddxroot.Path(...)` (install.go:453) for the same routing.\n- Update: the non-global path `performUpdate` (cli/cmd/update.go:204) uses `ddxroot.JoinProject(workingDir, ...)` (e.g. update.go:227) so it updates the project install in whichever mode is active; mode is not an explicit flag but follows `ddxroot`.\n\nPROPOSED FIX\nEnsure `ddx install \u003cname\u003e` (no `--global`) in in-tree mode writes to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and links `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`; in convention mode (no `\u003cproject\u003e/.ddx/`) writes to the XDG project plugins path and links the project-tier skill dirs into that path. Ensure `ddx update` (no flag) updates the project install in whichever mode is active.\n\nNON-SCOPE\n- The `--global` install/update surface (slice 2).\n- `ddx init` behavior and doctor reporting (slice 4).\n- Removing either mode — in-tree and convention coexist.\n\nDEPS\n- Slice 1 (plugin lookup precedence) and ddx-06cbaa90 (ddx home resolution) — project paths route through `ddxroot.Path()`.",
+    "acceptance": "1. `TestInstall_InTreeWritesProjectTreeAndLinks` (cli/cmd/install_test.go:21) asserts `ddx install \u003cname\u003e` in in-tree mode writes to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and creates project-tier links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`.\n2. `TestInstall_ConventionModeWritesXDGProjectTree` (cli/cmd/install_test.go:73) asserts `ddx install \u003cname\u003e` in convention mode writes to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and creates project-tier links pointing into that XDG plugins path.\n3. `TestUpdate_RespectsConventionVsInTreeMode` (cli/cmd/update_test.go:247) asserts `ddx update` (no flag) updates the project install in whichever mode is active.\n4. cd cli \u0026\u0026 go test ./cmd/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "parent:ddx-602ae31a",
+      "dep:ddx-06cbaa90"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T114423-18bf0966",
+    "prompt": ".ddx/executions/20260603T114423-18bf0966/prompt.md",
+    "manifest": ".ddx/executions/20260603T114423-18bf0966/manifest.json",
+    "result": ".ddx/executions/20260603T114423-18bf0966/result.json",
+    "checks": ".ddx/executions/20260603T114423-18bf0966/checks.json",
+    "usage": ".ddx/executions/20260603T114423-18bf0966/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2b9c26d7-20260603T114423-18bf0966"
+  },
+  "prompt_sha": "963c633de26fd7d68d7e8180e8ed4d149a88378c65a31308e7026e02047f9a32"
+}

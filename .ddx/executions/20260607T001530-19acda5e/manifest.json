@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260607T001530-19acda5e",
+  "bead_id": "ddx-2965925e",
+  "base_rev": "3293792ddea50499718c09162a3431c59445dbe1",
+  "created_at": "2026-06-07T00:16:11.902557139Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2965925e",
+    "title": "execute-bead: 'committing tracker' commit path lacks transient-retry on index contention — fails beads under 2-worker load",
+    "description": "PROBLEM (captured live, 2nd 2-worker collision): With two `ddx work --watch` workers on /Users/erik/Projects/ddx, the DURABLE-AUDIT commit path correctly retried index contention (ddx-82c89a10: \"transient git index/ref contention committing durable audit outputs ... will retry next iteration\" -\u003e merged), BUT a SEPARATE commit path — the tracker commit at cli/internal/agent/execute_bead.go:2286 (`return fmt.Errorf(\"committing tracker: %s: %w\", ...)`) — does NOT route through the transient-retry, so the SAME \"fatal: unable to write new index file: exit status 128\" contention FAILED 3 beads outright: ddx-3fd19af1, ddx-122e0ec5, ddx-e6f047cd (\"committing tracker: fatal: unable to write new index file: exit status 128\"). So the resilience added for the durable-audit commit (ddx-23ac2796, and pending ddx-83361480/ddx-e8bf0695) does NOT protect the tracker-commit call-site.\n\nROOT CAUSE: the tracker commit at execute_bead.go:2286 (and its caller) returns the git error directly as a hard failure; it does not classify \"unable to write new index file\" / index.lock / \"signal: killed\" as transient nor retry, unlike the durable-audit path's finalizeDurableAuditOrStop + isTransientGitContention (execute_bead_loop.go:1026,1288). Two workers committing tracker state to the same shared .git/index contend, and the loser fails its bead instead of retrying.\n\nPROPOSED FIX: Route the tracker commit through the SAME transient-contention handling as the durable-audit commit — classify index-write/index.lock/ref-lock/SIGKILL/deadline contention (via the shared isTransientGitContention, extended by ddx-83361480) as transient and retry on a later iteration (the tracker commit should be idempotent — re-deriving and re-committing the same staged state), rather than failing the bead. Prefer a single shared resilient-commit helper used by BOTH the durable-audit path and the execute_bead.go:2286 tracker path so the two cannot diverge again.\n\nNON-SCOPE: the durable-audit classifier/deadline (ddx-83361480, ddx-e8bf0695 — this bead reuses that classifier); worktree/file leaks (ddx-b320e794, ddx-274943fc).",
+    "acceptance": "1. New test (e.g. TestExecuteBead_TrackerCommitIndexContentionIsTransientNotBeadFailure): simulate the tracker commit at execute_bead.go:2286 hitting \"fatal: unable to write new index file: exit status 128\" (and index.lock) under a held lock; assert the bead is NOT marked failed and the tracker commit retries/succeeds on a subsequent attempt.\n2. The tracker-commit path and the durable-audit-commit path share one transient-contention classifier (no divergent copy); a test asserts both call-sites treat \"unable to write new index file\" as transient.\n3. Regression: a genuine non-transient tracker-commit failure (e.g. permission) still fails the bead as before.\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestExecuteBead_TrackerCommit|TestIsTransientGitContention' -count=1 green.\n5. cd cli \u0026\u0026 go test ./internal/agent/... -count=1 green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "area:git",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:TP-021",
+      "spec:FEAT-010",
+      "prevention:ddx-23ac2796",
+      "incident:durable-audit-collision"
+    ],
+    "metadata": {
+      "queue-rank": -1,
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 2983171)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T14:51:13Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T001530-19acda5e",
+    "prompt": ".ddx/executions/20260607T001530-19acda5e/prompt.md",
+    "manifest": ".ddx/executions/20260607T001530-19acda5e/manifest.json",
+    "result": ".ddx/executions/20260607T001530-19acda5e/result.json",
+    "checks": ".ddx/executions/20260607T001530-19acda5e/checks.json",
+    "usage": ".ddx/executions/20260607T001530-19acda5e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2965925e-20260607T001530-19acda5e"
+  },
+  "prompt_sha": "36c270ef659a45850cd25f48622d5370bbca64d5c175350d0e2ea3f9d238c854"
+}

@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260607T103534-7817572c",
+  "bead_id": "ddx-72ee9fbc",
+  "base_rev": "1ac043ab9cc0adadf337c602eb6e166076692281",
+  "created_at": "2026-06-07T10:35:49.907019624Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-72ee9fbc",
+    "title": "docs: align API-001 execute-bead status contract",
+    "description": "PROBLEM\nAPI-001 documents only five supervisor-visible execute-bead statuses, but the implementation exposes a larger stable status contract used by `ddx try`, `ddx work`, retry logic, review outcomes, land conflict handling, and resource exhaustion. A worker or server consumer that follows API-001 literally will miss valid statuses.\n\nROOT CAUSE\n- docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md:177 lists only `structural_validation_failed`, `execution_failed`, `post_run_check_failed`, `land_conflict`, and `success`.\n- cli/internal/agent/execute_bead_status.go:330 defines additional stable statuses including `ratchet_failed`, `push_failed`, `push_conflict`, `preserved_needs_review`, `no_evidence_produced`, `no_changes`, `already_satisfied`, `resource_exhausted`, review statuses, conflict-resolution statuses, and repair-cycle statuses.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md already describes richer candidate-cycle and drain lifecycle semantics, so API-001 is stale rather than the implementation being obviously wrong.\n\nPROPOSED FIX\nUpdate API-001 to define the full supervisor-visible status taxonomy or explicitly delegate the canonical list to FEAT-010 plus the implementation enum. Add a compact status table with close/unclaim/operator-attention behavior categories and note which statuses are legacy/future-only if any are not emitted today.\n\nNON-SCOPE\nDo not change status strings or worker behavior. Do not redo landing semantics; ddx-693d504f covers that separately.",
+    "acceptance": "1. docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md contains a status table or canonical delegation that covers every `ExecuteBeadStatus*` constant in cli/internal/agent/execute_bead_status.go.\n2. Any API-001 text that still lists only five statuses is removed or explicitly scoped as a historical minimal v1 subset.\n3. `rg -n \"status.*one of|structural_validation_failed.*execution_failed.*post_run_check_failed\" docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md` has no stale five-status-only contract hit.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... -run TestExecuteBeadStatus` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-4ac4da95",
+    "labels": [
+      "phase:iterate",
+      "area:docs",
+      "area:agent",
+      "kind:spec",
+      "spec-drift"
+    ],
+    "metadata": {
+      "spec-id": "API-001"
+    }
+  },
+  "governing": [
+    {
+      "id": "API-001",
+      "path": "docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md",
+      "title": "API/Interface Contract: Execute-Bead Supervisor"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260607T103534-7817572c",
+    "prompt": ".ddx/executions/20260607T103534-7817572c/prompt.md",
+    "manifest": ".ddx/executions/20260607T103534-7817572c/manifest.json",
+    "result": ".ddx/executions/20260607T103534-7817572c/result.json",
+    "checks": ".ddx/executions/20260607T103534-7817572c/checks.json",
+    "usage": ".ddx/executions/20260607T103534-7817572c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-72ee9fbc-20260607T103534-7817572c"
+  },
+  "prompt_sha": "fdd285e1ada984ceecaf0b0f346dffde815778789875976d8230bd76b21984d7"
+}

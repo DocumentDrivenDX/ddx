@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_git="/home/linuxbrew/.linuxbrew/bin/git"
+private_cfg="/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-df319cf9-20260608T172539-14bcbbc6/.ddx/executions/20260608T172539-14bcbbc6/embedded/git-local-private.cfg"
+
+args=("$@")
+sub_idx=-1
+i=0
+while (( i < ${#args[@]} )); do
+  case "${args[$i]}" in
+    -C|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix|--config-env|-c)
+      ((i+=2))
+      continue
+      ;;
+    --)
+      ((i++))
+      break
+      ;;
+    -*)
+      ((i++))
+      continue
+      ;;
+    *)
+      sub_idx=$i
+      break
+      ;;
+  esac
+done
+
+if (( sub_idx >= 0 )) && [[ "${args[$sub_idx]}" == "config" ]]; then
+  prefix=("${args[@]:0:sub_idx}")
+  suffix=("${args[@]:sub_idx+1}")
+
+  repo_scope_idx=-1
+  explicit_scope=0
+  dangerous_key=0
+  for i in "${!suffix[@]}"; do
+    case "${suffix[$i]}" in
+      core.bare|core.worktree)
+        dangerous_key=1
+        ;;
+      --local|--worktree)
+        repo_scope_idx=$i
+        explicit_scope=1
+        ;;
+      --global|--system|--file|--blob)
+        explicit_scope=1
+        ;;
+    esac
+  done
+
+  if (( dangerous_key == 1 )); then
+    if (( repo_scope_idx >= 0 )); then
+      suffix[$repo_scope_idx]=--file
+      suffix=("${suffix[@]:0:repo_scope_idx+1}" "$private_cfg" "${suffix[@]:repo_scope_idx+1}")
+    elif (( explicit_scope == 0 )); then
+      suffix=(--file "$private_cfg" "${suffix[@]}")
+    fi
+  elif (( repo_scope_idx >= 0 )); then
+    suffix[$repo_scope_idx]=--worktree
+  elif (( explicit_scope == 0 )); then
+    suffix=(--worktree "${suffix[@]}")
+  fi
+
+  exec "$real_git" "${prefix[@]}" config "${suffix[@]}"
+fi
+
+exec "$real_git" "${args[@]}"

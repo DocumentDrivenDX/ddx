@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260611T214454-ce886f5c",
+  "bead_id": "ddx-0ab16765",
+  "base_rev": "e54653ba8b09ce94a596334c79ca4b5477dae96c",
+  "created_at": "2026-06-11T21:45:04.448510392Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0ab16765",
+    "title": "MIG: Migration tooling factory — Migrator interface + NewMigrator + remove 7 *Store migration methods",
+    "description": "# PROBLEM\n`*Store` exposes 7 migration-tooling methods used by `cli/cmd/bead_migrate.go` and related admin commands: `MigrateLifecycle`, `MigrateFromHelix`, `MigrateToAxon`, `MigrateDryRun`, `MigrateLifecycleDryRun`, `DetectLifecycleMigrationRequired`, `ReconcileLifecycleMetadata`. These are admin/one-shot tooling, not steady-state Backend operations. After the BL bead moves concrete `*Store` to `cli/internal/bead/internal/storage/`, `cli/cmd/bead_migrate.go` cannot reach these methods. They need an exposure path that doesn't violate the boundary lockdown.\n\n# ROOT CAUSE\n`cli/internal/bead/store.go` exposes the 7 migration methods. `cli/cmd/bead_migrate.go` imports `cli/internal/bead` and calls them on `*Store` concretely. Per TD-027 §11.5 + Migration row in the mutation rules table, these are admin tools not on the `Backend` interface. After BL, the only public surface in `cli/internal/bead/` is what's exported there — concrete `*Store` won't be reachable.\n\n# PROPOSED FIX\n\nPer the converged design recommendation (separate factory rather than `BeadMigration` sub-interface on Backend, to avoid forcing every backend to stub source-specific migrations):\n\n1. Create `cli/internal/bead/migrator.go` with a `Migrator` interface and `NewMigrator` factory:\n   ```go\n   type Migrator interface {\n       MigrateLifecycle(ctx context.Context, opts MigrationOptions) (MigrationResult, error)\n       MigrateLifecycleDryRun(ctx context.Context, opts MigrationOptions) (MigrationResult, error)\n       MigrateFromHelix(ctx context.Context, src string) error\n       MigrateToAxon(ctx context.Context, opts MigrateToAxonOptions) error  // deprecated; replaced by ddx-IMP\n       MigrateDryRun(ctx context.Context, opts MigrationOptions) (MigrationResult, error)\n       DetectLifecycleMigrationRequired(ctx context.Context) (bool, MigrationReport, error)\n       ReconcileLifecycleMetadata(ctx context.Context) (ReconcileReport, error)\n   }\n\n   func NewMigrator(opts MigratorOptions) (Migrator, error)\n   ```\n   The concrete implementation lives in `cli/internal/bead/internal/storage/` after BL; the public factory returns a `Migrator` interface.\n\n2. Move the 7 methods' bodies from `*Store` (in `cli/internal/bead/store.go` and `migrate.go`) onto an unexported `*storeMigrator` type that holds a `*Store` reference and implements `Migrator`. The `NewMigrator` factory returns this.\n\n3. Update `cli/cmd/bead_migrate.go` and any related admin commands:\n   ```go\n   mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: workspace})\n   if err != nil { ... }\n   mig.MigrateLifecycle(ctx, opts)\n   ```\n\n4. Remove `*Store.MigrateLifecycle`, `MigrateLifecycleDryRun`, `MigrateFromHelix`, `MigrateToAxon`, `MigrateDryRun`, `DetectLifecycleMigrationRequired`, `ReconcileLifecycleMetadata` from the `*Store` public method set. Logic moves to the `*storeMigrator` type.\n\n5. `MigrateToAxon` retained as a deprecated method on `Migrator` that returns `ErrDeprecated` with a pointer to the IMP bead's new importer. Final removal happens after IMP lands.\n\n# NON-SCOPE\n- The new JSONL→Postgres importer (replaces `MigrateToAxon`'s JSONL-writing behavior) — separate IMP bead.\n- Schema-versioning migration ladder framework — deferred until first breaking change is proposed.\n- Other concerns — separate beads.\n\n# Acceptance criteria\n\n1. `cli/internal/bead/migrator.go` declares the `Migrator` interface (7 methods, ctx-aware) and `NewMigrator(opts) (Migrator, error)` factory. Compile-time assertion: `var _ Migrator = (*storeMigrator)(nil)`.\n2. `*Store` no longer exposes the 7 migration methods directly. Verified by `grep -E 'func \\(s \\*Store\\) (MigrateLifecycle|MigrateLifecycleDryRun|MigrateFromHelix|MigrateToAxon|MigrateDryRun|DetectLifecycleMigrationRequired|ReconcileLifecycleMetadata)\\b' cli/internal/bead/*.go` returning nothing.\n3. `cli/cmd/bead_migrate.go` constructs `Migrator` via `bead.NewMigrator(...)` and invokes operations. Holds `Migrator` interface, not `*storeMigrator` concrete.\n4. End-to-end CLI invocation works: `ddx bead migrate --lifecycle --dry-run`, `ddx bead migrate --lifecycle --apply` produce identical output to today. Test: `TestMigrator_LifecycleMigration_RoundTrip`, `TestMigrator_FromHelix_PreservesAllFields`.\n5. `MigrateToAxon` on the Migrator returns `ErrDeprecated` with message pointing at the new importer (will be implemented in IMP). Test: `TestMigrator_MigrateToAxon_ReturnsDeprecated`.\n6. Existing migration tests in `cli/internal/bead/migrate_test.go` continue to pass against the new Migrator-mediated path.\n7. `cd cli \u0026\u0026 go test ./...` is green.\n8. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:migration, kind:refactor, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: ddx-c6317784.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:bead",
+      "area:migration",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.438122019Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260611T214454-ce886f5c",
+    "prompt": ".ddx/executions/20260611T214454-ce886f5c/prompt.md",
+    "manifest": ".ddx/executions/20260611T214454-ce886f5c/manifest.json",
+    "result": ".ddx/executions/20260611T214454-ce886f5c/result.json",
+    "checks": ".ddx/executions/20260611T214454-ce886f5c/checks.json",
+    "usage": ".ddx/executions/20260611T214454-ce886f5c/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-0ab16765-20260611T214454-ce886f5c"
+  },
+  "prompt_sha": "b62c4b1744ec752b2362137725f196b25003211d6f3c30bd7e467b4edf4bbaf1"
+}

@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260603T134246-d419cee2",
+  "bead_id": "ddx-747f1b35",
+  "base_rev": "30bd34c2897401c3f5e75270793cefece519ead3",
+  "created_at": "2026-06-03T13:42:53.879135311Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-747f1b35",
+    "title": "install/update: project install honors in-tree vs convention mode + project-tier skill links",
+    "description": "PROBLEM (epic ddx-602ae31a, Principle 2)\n\nWithout `--global`, `ddx install`/`ddx update` must target the active project install location, which differs by mode: in-tree mode (a `\u003cproject\u003e/.ddx/` exists) writes under `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/`; convention mode (no `.ddx/`) writes under `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/`. In both modes the project-scoped agent skill dirs (`\u003cproject\u003e/.claude/skills/` and `\u003cproject\u003e/.agents/skills/`) must link into whichever plugins/ path the mode resolves to.\n\nROOT CAUSE\n- For global=false, `resolveInstallDirs` (cli/cmd/install.go:184) returns installRoot=`ddxroot.Path(context.Background(), f.WorkingDir)` and skill dirs under `f.WorkingDir/.agents/skills` and `f.WorkingDir/.claude/skills` (install.go:195-197). `ddxroot.Path()` is what selects the in-tree vs convention plugins root, so the install root automatically follows the mode.\n- `ddx update` (no flag) must update the project install in whichever mode is active; the non-global path in update.go (dispatched when `opts.Global` is false, update.go:66) operates on the project working dir's resolved root.\n- Project installs auto-commit trackable project changes (install.go:174-176) — global installs do not.\n\nPROPOSED FIX\n1. Verify `ddx install \u003cname\u003e` (no --global) in in-tree mode installs to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`.\n2. Verify `ddx install \u003cname\u003e` (no --global) in convention mode installs to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and the project-tier links point into that XDG plugins/ path.\n3. Verify `ddx update` (no flag) updates the project install in whichever mode is active and does not touch the global tree.\n4. The ddx-validate pre-commit hook (ddx-777f4a09) must continue to scope skill validation to staged skill files regardless of mode.\n\nNON-SCOPE\n- Runtime lookup precedence (sibling child — ResolvePlugin).\n- The `--global` install/update surface (sibling child).\n- init/doctor wiring (sibling child).\n- Removing the existing per-project install entirely (both modes coexist).\n- Migrating any ~/.config/ddx/ legacy paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution) — project install root is computed by `ddxroot.Path()`, which encodes the in-tree vs convention decision.",
+    "acceptance": "1. TestInstall_InTreeMode_WritesProjectPluginsAndLinks (cli/cmd/install_test.go) asserts `ddx install \u003cname\u003e` with a `\u003cproject\u003e/.ddx/` present installs to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and creates links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`.\n2. TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks (cli/cmd/install_test.go) asserts `ddx install \u003cname\u003e` with no `\u003cproject\u003e/.ddx/` installs under `${XDG_DATA_HOME}/ddx/projects/\u003cidentity\u003e/plugins/\u003cname\u003e/` and the project-tier links resolve into that XDG plugins/ path.\n3. TestUpdate_RespectsConventionVsInTreeMode (cli/cmd/update_test.go) asserts `ddx update` (no flag) updates the project install for whichever mode is active and leaves the global tree untouched.\n4. cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:plugin",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T134246-d419cee2",
+    "prompt": ".ddx/executions/20260603T134246-d419cee2/prompt.md",
+    "manifest": ".ddx/executions/20260603T134246-d419cee2/manifest.json",
+    "result": ".ddx/executions/20260603T134246-d419cee2/result.json",
+    "checks": ".ddx/executions/20260603T134246-d419cee2/checks.json",
+    "usage": ".ddx/executions/20260603T134246-d419cee2/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-747f1b35-20260603T134246-d419cee2"
+  },
+  "prompt_sha": "630374bc845bbef38241313456292a8644b5a702f5e18f80b1ae74ef0cb5665e"
+}

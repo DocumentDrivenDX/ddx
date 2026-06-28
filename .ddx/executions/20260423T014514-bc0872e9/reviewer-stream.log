@@ -1,0 +1,24 @@
+---
+## Review: ddx-12cae4dd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | findMarkdownFiles skips .claude directory | BLOCK | — not found in diff |
+| 2 | doc.Path is relative to workingDir | BLOCK | — not found in diff |
+| 3 | GraphQL documents query excludes .claude/worktrees | BLOCK | — not found in diff |
+| 4 | GraphQL document(id:) resolver handles both forms | BLOCK | — not found in diff |
+| 5 | Web UI document route renders without double slash | BLOCK | — not found in diff |
+| 6 | Unit test for .claude/worktrees exclusion + relative paths | BLOCK | — not found in diff |
+| 7 | Playwright e2e test for documents list | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only execution evidence metadata (`result.json`). No source code changes to `docgraph`, GraphQL resolvers, frontend, or tests are present. All seven acceptance criteria are unmet.
+
+### Findings
+
+- **All AC items**: The merged diff consists solely of `.ddx/executions/20260423T014514-bc0872e9/result.json`, which is execution bookkeeping. Zero functional changes were landed — no modifications to `cli/internal/docgraph/docgraph.go`, no GraphQL resolver updates, no frontend changes, no tests. The execution result claims `"outcome": "task_succeeded"` but the merge commit contains none of the required implementation. The work branch may have been incorrectly merged or the agent's changes were lost during the merge process. Investigate whether the implementation commits from `5ae2fb8c` were actually included in the merge at `4671d2db`.

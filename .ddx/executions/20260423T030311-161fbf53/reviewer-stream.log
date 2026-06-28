@@ -1,0 +1,28 @@
+---
+## Review: ddx-7de0ce80 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Per-card in-flight tracking | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:56` — per-plugin `SvelteMap`/`SvelteSet`; line 264 blocks duplicate dispatch |
+| 2 | Worker-driven refresh | BLOCK | `cli/internal/server/graphql/resolver_feat008.go:122` — `pluginDispatch` runs synchronously and returns a synthetic dispatch id, not a worker that emits `workerProgress` |
+| 3 | Fallback polling | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:217` — 30s fallback timer; line 190 starts 2s polling |
+| 4 | In-flight visual state | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:376` — spinner/status replacement; line 475 disables update button |
+| 5 | Failure surfacing | BLOCK | `cli/internal/server/graphql/resolver_feat008.go:122` — no plugin worker terminal failure phase can arrive for the frontend handler |
+| 6 | Concurrent dispatch | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:317` — renders active worker stack from `inFlightWorkers`; e2e at `plugins.spec.ts:372` |
+| 7 | No extra refetch overhead | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:184` — refresh uses only `PLUGINS_LIST_QUERY` |
+| 8 | Playwright e2e | APPROVE | `cli/internal/server/frontend/e2e/plugins.spec.ts:284` — success scenario; line 314 failure; line 340 stream dropout |
+| 9 | Install flow adopts tracking | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:294` — confirm install uses shared `dispatchPlugin`; e2e at `plugins.spec.ts:199` |
+
+### Summary
+
+The frontend state management and tests mostly match the requested UI behavior, but the core worker integration is not real against the current backend. `pluginDispatch` still performs the plugin action synchronously and returns an audit-record id, so the subscribed `workerProgress` terminal events and worker links cannot work in production.
+
+### Findings
+
+- `cli/internal/server/graphql/resolver_feat008.go`, `PluginDispatch`: this resolver calls `dispatchPluginAction` synchronously at line 122 and creates a `.ddx/plugin-dispatches` record id at line 126. It does not start a `WorkerManager` worker or emit `workerProgress`, so `+page.svelte:225` subscribes to an id that will never produce terminal events.
+
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, failure handling: the per-card failure badge at lines 391-403 depends on receiving a `failed`/`error` worker phase, but plugin install/update failures currently return as synchronous GraphQL errors from `resolver_feat008.go:123`, leaving only the global `dispatchError` path.

@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata under .ddx/executions. It does not modify FEAT-014 or FEAT-016 to add MET cross-references, and it provides no evidence that the doc-audit acceptance criterion was made clean.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No edits were made to FEAT-014 or FEAT-016, so the required explicit MET cross-reference updates are not implemented in the submitted diff.",
+      "location": ".ddx/executions/20260507T014326-3a89d45b/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The submission includes no doc-audit output or related document fixes, so AC requiring a clean doc audit is not satisfied or verifiable from this diff.",
+      "location": ".ddx/executions/20260507T014326-3a89d45b/manifest.json:1"
+    }
+  ]
+}
+```

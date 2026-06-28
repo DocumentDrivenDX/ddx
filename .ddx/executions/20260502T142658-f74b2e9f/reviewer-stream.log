@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact. No graph.e2e.ts test file, no fixture changes, no implementation present. AC1-AC5 cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "Missing graph.e2e.ts at cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/graph.e2e.ts" },
+    { "severity": "block", "summary": "No fixture additions for a project with >=1 dependency edge in the GraphQL mock", "location": "cli/internal/server/frontend/" },
+    { "severity": "info", "summary": "Only an execution result.json was committed; AC1-AC5 are unverifiable from this diff", "location": ".ddx/executions/20260502T142658-f74b2e9f/result.json" }
+  ]
+}
+```

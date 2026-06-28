@@ -1,0 +1,32 @@
+---
+## Review: ddx-69789664 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Copy + IA | BLOCK | — not found in diff |
+| 2 | Worker -> Sessions navigation | BLOCK | — not found in diff |
+| 3 | Session -> Worker backlink | BLOCK | — not found in diff |
+| 4 | Stop worker | BLOCK | — not found in diff |
+| 5 | Start worker | BLOCK | — not found in diff |
+| 6 | Audit trail | BLOCK | — not found in diff |
+| 7 | No regressions | BLOCK | — insufficient diff to evaluate |
+| 8 | Playwright e2e | BLOCK | — not found in diff |
+| 9 | Design review sign-off | BLOCK | — not found in diff |
+
+### Summary
+
+The reviewed commit only adds execution evidence files under `.ddx/executions/20260423T021809-c3ed3f02/`. It contains no frontend, GraphQL/server, worker lifecycle, audit, documentation, or test changes needed to satisfy the acceptance criteria.
+
+### Findings
+
+- `.ddx/executions/20260423T021809-c3ed3f02/result.json:1` and `.ddx/executions/20260423T021809-c3ed3f02/usage.json:1` are the only changed files; they are execution metadata, not implementation.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte` has no diff adding Workers-vs-Sessions copy, cross-link navigation, Start worker UI, or Stop buttons.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/` has no diff adding Sessions page copy or worker backlinks.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/` has no diff adding a Sessions section, audit trail display, lifecycle controls, or preserving detail-page behavior.
+- Server GraphQL schema/resolvers/mutations for `startWorker` and worker stop are absent from the diff, so AC 4, AC 5, and AC 6 are not implemented.
+- `docs/helix/02-design/` has no design note for the Workers-vs-Sessions mental model or chosen lifecycle controls.
+- No Playwright or integration tests were added or changed for the required navigation, lifecycle controls, confirmation behavior, or worker detail smoke coverage.

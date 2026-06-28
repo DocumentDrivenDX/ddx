@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260603T050446-d02a031f",
+  "bead_id": "ddx-aa9687f5",
+  "base_rev": "0880ae33fe1dd6ec36044bfe87023a024e2b93c6",
+  "created_at": "2026-06-03T05:04:54.902279529Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aa9687f5",
+    "title": "post-review: reviewer-unavailable holds (not park); lone block needs evidence/quorum (D6)",
+    "description": "PROBLEM\nThe adversarial post-merge review step fabricates failures two ways: (a) a reviewer that cannot be ROUTED (OutcomeReviewReviewerUnavailable / transport) parks a landed-eligible candidate to operator-required after ReviewMaxRetries (applyReviewOperatorRequiredParking in cli/internal/agent/execute_bead_post_review.go); (b) reducePreCloseReviewGroup returns the FIRST non-APPROVE verdict, so a single spurious BLOCK/REQUEST_CHANGES overrides approving reviewers. Re-pin lines against HEAD.\n\nROOT CAUSE\nReviewer unavailability (an infra/routing condition) is treated as a quality verdict; and a lone dissent auto-blocks without evidence or quorum.\n\nPROPOSED FIX (fail open on unavailability; require evidence for a block)\n1. Reviewer UNAVAILABLE after retries: hold/retry-with-backoff, or land with a degraded-review note — never terminal-park a landed-eligible candidate on a routing failure.\n2. Reviewer DISAGREEMENT: a BLOCK must cite a concrete location/AC to count; a lone dissent among approvals goes to a tie-break/quorum rule (e.g. majority, or one more reviewer) rather than auto-block.\n\nNON-SCOPE: do not weaken a well-formed BLOCK that cites a real AC/location.\n\nACCEPTANCE\n1. New test: reviewer-routing failure (OutcomeReviewReviewerUnavailable) after ReviewMaxRetries does NOT applyReviewOperatorRequiredParking on a landed-eligible candidate (holds/retries instead).\n2. New test: APPROVE + a single evidence-less BLOCK does not auto-block (tie-break/quorum applies); APPROVE + a BLOCK that cites a location does block.\n3. cd cli \u0026\u0026 go test ./internal/agent/... green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:review",
+      "kind:reliability",
+      "fail-open-contract"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T050446-d02a031f",
+    "prompt": ".ddx/executions/20260603T050446-d02a031f/prompt.md",
+    "manifest": ".ddx/executions/20260603T050446-d02a031f/manifest.json",
+    "result": ".ddx/executions/20260603T050446-d02a031f/result.json",
+    "checks": ".ddx/executions/20260603T050446-d02a031f/checks.json",
+    "usage": ".ddx/executions/20260603T050446-d02a031f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-aa9687f5-20260603T050446-d02a031f"
+  },
+  "prompt_sha": "b2215ebb999901f0965d974c7f8026312fc07aac476e3ef4f17f40d581cda804"
+}

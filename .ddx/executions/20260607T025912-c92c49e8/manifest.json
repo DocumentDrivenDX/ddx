@@ -1,0 +1,120 @@
+{
+  "attempt_id": "20260607T025912-c92c49e8",
+  "bead_id": "ddx-0c96c8b1",
+  "base_rev": "fe74b679e43eab7b387f1d9f8224c67093b4699f",
+  "created_at": "2026-06-07T02:59:21.66818267Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0c96c8b1",
+    "title": "Reject bead dep edges that re-introduce the parent or any ancestor: part 3",
+    "description": "PROBLEM\nParent bead ddx-e19185aa is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nThe decomposition action (currently invoked when a bead is too large for one execution and the agent splits it into child beads) is writing the parent's ID as a dep edge on every child. This produces an unbreakable deadlock:\n\n  e29892a4 (parent, open) -- parent --\u003e child_A\n  e29892a4 -- parent --\u003e child_B\n  child_A.deps = [e29892a4]           \u003c- BAD: parent is also a dep\n  child_B.deps = [child_A, e29892a4]  \u003c- BAD\n\nThe parent stays open until its children close. Every child is blocked on the parent. Nothing can be claimed. ddx work loops on the parent, the orchestrator emits 'mixed_commit_and_no_changes_rationale', the worker retries, and burns claim budget without progress.\n\nObserved scenario (niflheim, 2026-06-04 04:30-05:13 UTC):\n- Parent: niflheim-e29892a4 ('feat(delta): async write-behind ...')\n- 10 children created during planning loops (23223661, a44a8ceb, 054c89b7, 0470ba0d, f10e9e35, f076b08c, 6c041162, 94e1df73, 9da62c2d, 5e4f9fb2)\n- Every child carried deps=[..siblings.., niflheim-e29892a4]\n- ~50 minutes of agent time + 4 strong-policy claude/opus attempts with zero feature commits; only tracker chores\n- Unwedged manually by closing the parent via 'ddx bead close', after which siblings drained correctly in foundational order\n\nRoot cause is structural, not model-capability — auto-upgrading to a stronger model does NOT fix this. The orchestrator already detects the no-progress state but its only remediation is 'retry parent', which re-enters the same loop.\n\nThere is also a 'project root mutation rejected (continuing)' warning emitted by the readiness check during this state; that's a downstream symptom of the same problem, not the cause.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- The orchestrator's 'project root mutation rejected (continuing)' warning, when emitted alongside the parent-back-edge state, is upgraded from WARN to ERROR with the offending bead ID logged. Test: dispatch_logs_error_on_root_mutation_with_back_edge.\n- Lifecycle schema documents that 'parent' and 'deps' MUST be disjoint and that 'deps' MUST be acyclic with the parent-tree. docs/ddx/lifecycle-rules.md (or equivalent) updated; ADR file if no governing artifact already exists.\n- Existing valid graphs continue to pass 'ddx bead doctor' without --fix and without regression — regression test against a pre-existing tracker snapshot.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. The orchestrator's 'project root mutation rejected (continuing)' warning, when emitted alongside the parent-back-edge state, is upgraded from WARN to ERROR with the offending bead ID logged. Test: dispatch_logs_error_on_root_mutation_with_back_edge.\n2. Lifecycle schema documents that 'parent' and 'deps' MUST be disjoint and that 'deps' MUST be acyclic with the parent-tree. docs/ddx/lifecycle-rules.md (or equivalent) updated; ADR file if no governing artifact already exists.\n3. Existing valid graphs continue to pass 'ddx bead doctor' without --fix and without regression — regression test against a pre-existing tracker snapshot.\n4. cd cli \u0026\u0026 go test ./... passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-07T02:38:37.196541877Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260607T022323-252ad886\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":5715662,\"output_tokens\":17284,\"total_tokens\":5732946,\"cost_usd\":0,\"duration_ms\":903770,\"exit_code\":0}",
+          "created_at": "2026-06-07T02:38:37.289121122Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=5732946 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260607T022323-252ad886\",\"bead_id\":\"ddx-0c96c8b1\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-07T02:38:41.713625237Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=retryable repo-wide gate failure. `cd cli \u0026\u0026 go test ./...` fails on pre-existing unrelated tests in `internal/agent`, `internal/bead`, `internal/server`, and `internal/server/graphql`; the bead-scoped regression test for the back-edge path passes, but the acceptance gate cannot be satisfied until the baseline failures are fixed.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-06-07T02:38:41.911906754Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: retryable repo-wide gate failure. `cd cli \u0026\u0026 go test ./...` fails on pre-existing unrelated tests in `internal/agent`, `internal/bead`, `internal/server`, and `internal/server/graphql`; the bead-scoped regression test for the back-edge path passes, but the acceptance gate cannot be satisfied until the baseline failures are fixed.\nresult_rev=a9b5793a1db506a704ae972d6041f793f635a9b5\nbase_rev=a9b5793a1db506a704ae972d6041f793f635a9b5\nretry_after=2026-06-07T02:43:42Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-07T02:38:42.111491729Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-06-07T02:53:09.469502112Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-0c96c8b1\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-07T02:53:09.556926816Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-06-07T02:53:10.042362541Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-0c96c8b1\",\"fingerprint\":\"8844b3d7840172f9b709237e08b1ee089a747d3920772968bd86663d39ffa4c5\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8844b3d7840172f9b709237e08b1ee089a747d3920772968bd86663d39ffa4c5\"}",
+          "created_at": "2026-06-07T02:57:09.746362556Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-last-detail": "retryable repo-wide gate failure. `cd cli \u0026\u0026 go test ./...` fails on pre-existing unrelated tests in `internal/agent`, `internal/bead`, `internal/server`, and `internal/server/graphql`; the bead-scoped regression test for the back-edge path passes, but the acceptance gate cannot be satisfied until the baseline failures are fixed.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-06-07T02:43:42Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "retryable repo-wide gate failure. `cd cli \u0026\u0026 go test ./...` fails on pre-existing unrelated tests in `internal/agent`, `internal/bead`, `internal/server`, and `internal/server/graphql`; the bead-scoped regression test for the back-edge path passes, but the acceptance gate cannot be satisfied until the baseline failures are fixed.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T025912-c92c49e8",
+    "prompt": ".ddx/executions/20260607T025912-c92c49e8/prompt.md",
+    "manifest": ".ddx/executions/20260607T025912-c92c49e8/manifest.json",
+    "result": ".ddx/executions/20260607T025912-c92c49e8/result.json",
+    "checks": ".ddx/executions/20260607T025912-c92c49e8/checks.json",
+    "usage": ".ddx/executions/20260607T025912-c92c49e8/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0c96c8b1-20260607T025912-c92c49e8"
+  },
+  "prompt_sha": "a68798b482b0c53e2d84ea45b4796d944a686cf5be62d9997f7dd5e427c5a776"
+}

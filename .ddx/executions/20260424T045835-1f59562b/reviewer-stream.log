@@ -1,0 +1,17 @@
+---
+## Review: ddx-b9a57cb9 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:1656+ — both fakes removed; replaced by real `runGit` closure + `agent.NewRunner(agent.Config{})` |
+| 2 | Real git + script harness dispatch | APPROVE | cli/cmd/agent_execute_bead_test.go:~1690-1710 — `git init`, real commits, `--harness script --model directivePath` with directives `create-file/commit/fail-during` |
+| 3 | Test passes (`go test … -count=1`) | APPROVE | result.json `outcome: task_succeeded`, `exit_code: 0` for the merged commit 001bd5e8 |
+| 4 | No other test in file modified | APPROVE | git stat: `1 file changed, 83 insertions(+), 10 deletions(-)` localized to `TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand` |
+
+### Summary
+
+Clean migration. The new test exercises real git + RealLandingGitOps via the script harness, preserves every original assertion (exit code, outcome, status, preserve ref, no merge), and adds stronger checks (preserve ref resolves to worker SHA, main unchanged, no merge commit on main). Scope held to the single target test.

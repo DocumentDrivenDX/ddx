@@ -1,0 +1,15 @@
+---
+## Review: ddx-1af82676 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg ExecuteBeadLoopOptions{ → 0 matches | APPROVE | Grep on both files returned 0 matches |
+| 2 | go test ./internal/agent/... passes | APPROVE | Execution result.json: exit_code=0, outcome=task_succeeded (could not re-run locally — go test not auto-approved) |
+
+### Summary
+
+Mechanical migration cleanly applied: 8 call sites in `execute_bead_review_test.go` and 1 in `execute_bead_review_evidence_test.go` converted from `worker.Run(..., ExecuteBeadLoopOptions{Assignee:..., ...})` to `worker.RunWithConfig(..., rcfg, ExecuteBeadLoopRuntime{...})` using `config.NewTestConfigForLoop` + `Resolve`. `Assignee` correctly hoisted into `TestLoopConfigOpts`; runtime-only fields (`Once`, `NoReview`) preserved on the runtime struct, matching SD-024's runtime/durable split.

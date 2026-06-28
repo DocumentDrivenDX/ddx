@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260606T082428-e5ac4f62",
+  "bead_id": "ddx-cc298105",
+  "base_rev": "59e036221a7357130ea3e1ca08fed6e5ff8fd695",
+  "created_at": "2026-06-06T08:24:40.895211635Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cc298105",
+    "title": "bead store: migrate read APIs to ctx-first signatures",
+    "description": "PROBLEM\nTD-027 requires the foundational bead Store read surface to be typed and ctx-first, but the read methods still accept untyped variadic arguments. This keeps the local bead package API ambiguous and makes the ddx-464feba2 caller sweep too large to execute as one bead.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/backend.go:80-84 declares BeadReader with ReadAll(args ...any), ReadAllFiltered(args ...any), and Get(args ...any).\n- cli/internal/bead/store.go:181-240 exposes Store.ReadAll(args ...any) and Store.ReadAllFiltered(args ...any), using storeCallContext from cli/internal/bead/store.go:134-141.\n- cli/internal/bead/store.go:599-625 exposes Store.Get(args ...any), using argument scanning for the bead ID.\n- cli/internal/bead/archive.go:158-174 exposes Store.GetWithArchive(id string) and currently supplies context.Background() internally instead of accepting caller context.\n\nPROPOSED FIX\nChange only the read-side Store methods to typed ctx-first signatures: ReadAll(ctx context.Context), ReadAllFiltered(ctx context.Context, pred func(Bead) bool), Get(ctx context.Context, id string), and GetWithArchive(ctx context.Context, id string). Update BeadReader in cli/internal/bead/backend.go. Migrate only read-method callsites across the repo to pass context explicitly. Add deterministic bead package tests that prove canceled contexts are honored and GetWithArchive forwards the supplied context instead of creating a background context.\n\nNON-SCOPE\n- Init and GenID signature migration.\n- Mutation APIs: Create, Update, and Close.\n- Event method ctx threading: AppendEvent, Events, and EventsByKind.\n- Removing workflow helper methods beyond the foundational signatures this bead changes.\n- Caller migration unrelated to ReadAll, ReadAllFiltered, Get, and GetWithArchive.\n\nGOVERNING ARTIFACT\n- TD-027.\n\nPARENT/DEPS\n- Parent/split source: ddx-464feba2.\n- Deps: no additional deps; this child can land independently of the setup/id and mutation signature children.",
+    "acceptance": "1. cli/internal/bead/store.go exposes ReadAll(ctx context.Context), ReadAllFiltered(ctx context.Context, pred func(Bead) bool), and Get(ctx context.Context, id string) with typed parameters and no variadic argument parsing for those methods.\n2. cli/internal/bead/archive.go exposes GetWithArchive(ctx context.Context, id string) and passes ctx through to both active and archive lookups.\n3. cli/internal/bead/backend.go exposes BeadReader methods with the same ctx-first typed read signatures.\n4. All Go callsites for Store.ReadAll, Store.ReadAllFiltered, Store.Get, and Store.GetWithArchive pass an explicit context and typed arguments.\n5. Add or update deterministic tests named TestStoreReadAll_RejectsCanceledContext, TestStoreReadAllFiltered_RejectsCanceledContext, TestStoreGet_RejectsCanceledContext, and TestStoreGetWithArchive_UsesSuppliedContext.\n6. cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestStore(ReadAll|ReadAllFiltered|Get|GetWithArchive)_' passes.\n7. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-3fd19af1",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"cli/internal/bead/store.go:134\\\"\",\"fingerprint\":\"716d046668d73169c9e2e85166d08c5057036cdcf971ba75568e820f0926c1c9\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"716d046668d73169c9e2e85166d08c5057036cdcf971ba75568e820f0926c1c9\"}",
+          "created_at": "2026-06-06T08:23:58.493848735Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T082428-e5ac4f62",
+    "prompt": ".ddx/executions/20260606T082428-e5ac4f62/prompt.md",
+    "manifest": ".ddx/executions/20260606T082428-e5ac4f62/manifest.json",
+    "result": ".ddx/executions/20260606T082428-e5ac4f62/result.json",
+    "checks": ".ddx/executions/20260606T082428-e5ac4f62/checks.json",
+    "usage": ".ddx/executions/20260606T082428-e5ac4f62/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cc298105-20260606T082428-e5ac4f62"
+  },
+  "prompt_sha": "33200131693794ce3855885b42c302b2a596577a217fe32d7016beccb24272e5"
+}

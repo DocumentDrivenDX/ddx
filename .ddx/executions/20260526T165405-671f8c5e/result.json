@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-606fe854",
+  "attempt_id": "20260526T165405-671f8c5e",
+  "base_rev": "fbeee2912fcc6b0ff356fe0da2efa8b5f38153bb",
+  "result_rev": "fbeee2912fcc6b0ff356fe0da2efa8b5f38153bb",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "context canceled",
+  "harness": "claude",
+  "session_id": "eb-a7226a90",
+  "duration_ms": 5,
+  "exit_code": -1,
+  "error": "context canceled",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260526T165405-671f8c5e",
+  "prompt_file": ".ddx/executions/20260526T165405-671f8c5e/prompt.md",
+  "manifest_file": ".ddx/executions/20260526T165405-671f8c5e/manifest.json",
+  "result_file": ".ddx/executions/20260526T165405-671f8c5e/result.json",
+  "started_at": "2026-05-26T16:54:12.437330203Z",
+  "finished_at": "2026-05-26T16:54:12.44322316Z"
+}

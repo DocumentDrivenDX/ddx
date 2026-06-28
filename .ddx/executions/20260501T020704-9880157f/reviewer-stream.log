@@ -1,0 +1,13 @@
+The implementation looks complete: schema additions (RunLayer enum, Run/RunEdge/RunConnection types, runs/run queries), resolver with filter logic, state provider, and tests covering layer filtering, parent/child, missing IDs (Run returns nil not error). ExecutionRun is untouched.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "RunLayer enum + Run type + runs/run queries added in schema.graphql; resolver applies layer/bead/status/harness filters with cursor pagination; ExecutionRun untouched; tests cover layer filtering, parent/child fields, and missing-id returning nil.",
+  "findings": [
+    {"severity": "info", "summary": "Run.beadId/parentRunId use camelCase per Go gqlgen mapping; matches schema spec.", "location": "cli/internal/server/graphql/schema.graphql"},
+    {"severity": "info", "summary": "RunsStateProvider is an optional sub-interface — providers without it return empty connection rather than error, which is graceful.", "location": "cli/internal/server/graphql/resolver_runs.go:24"}
+  ]
+}
+```

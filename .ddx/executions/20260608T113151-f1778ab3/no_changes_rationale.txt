@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` still fails in unrelated agent/cmd suites after the review-gate regressions pass. The remaining failures are broad fixture/setup issues outside this bead's scope (for example: `TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker`, `TestAcRun_PassExitsZero`, `TestBeadCommandsCRUDLifecycle`, `TestWorkPlan_CLI_TextOutput`, `TestWorkProviderConnectivityCommitsEvidence`), so I cannot honestly claim the package-wide gate is green yet.

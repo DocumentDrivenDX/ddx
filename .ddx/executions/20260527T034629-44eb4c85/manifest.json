@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260527T034629-44eb4c85",
+  "bead_id": "ddx-ca94d157",
+  "base_rev": "f82c934d3604258b7b285794d329f197138c21d0",
+  "created_at": "2026-05-27T03:46:36.027308395Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ca94d157",
+    "title": "work: provider_connectivity attempts leave execution evidence untracked",
+    "description": "PROBLEM\nA `ddx work --watch` attempt in downstream project `/home/erik/Projects/niflheim` failed before agent execution because Fizeau/DDx routed ARCH-A.5 (`niflheim-520db87a`) to an unreachable local provider:\n\n- attempt_id: `20260518T040339-c8b9865a`\n- provider/model: `grendel-omlx` / `Qwen3.6-27B-MLX-8bit`\n- error: `openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout`\n- tracker event: `kind=route-failure`, `outcome_reason=provider_connectivity`\n\nThe tracker commit landed (`a0bf1dbe chore: update tracker (execute-bead 20260518T040339-c8b9865a)`), but the corresponding failure evidence bundle was left untracked in the downstream repo:\n\n`.ddx/executions/20260518T040339-c8b9865a/{manifest.json,prompt.md,result.json,embedded/...}`\n\nThis appears to be the failure-path gap left after the closed evidence-landing work: successful docgraph attempt `20260518T035019-c80ab2a8` committed its evidence, but the provider_connectivity attempt did not.\n\nPROPOSED FIX\nExtend the execute/work finalizer so terminal provider_connectivity / route-failure attempts commit their `.ddx/executions/\u003cattempt\u003e/` evidence bundle (or deliberately clean/ignore it if policy says failure bundles are runtime-only). The worktree should not be left dirty after DDx has already committed tracker/metrics state for the terminal attempt.\n\nAlso verify the route-failure path still records failed-route evidence and remains eligible for automatic fallback/exclusion without repeatedly selecting the same unreachable provider.\n\nNON-SCOPE\nDo not hardcode provider names (`grendel`, `bragi`) or force paid/cloud fallback. Do not change successful-attempt evidence behavior except as needed to share the finalizer.",
+    "acceptance": "1. A regression test simulates an execute/work attempt ending in provider_connectivity before agent output and asserts `.ddx/executions/\u003cattempt\u003e/manifest.json`, `prompt.md`, and `result.json` are either committed by the finalizer or intentionally absent/ignored by policy.\n2. The same test asserts `git status --porcelain` is clean after the tracker/metrics update commit for that terminal failure path.\n3. Route-failure evidence remains recorded on the bead with provider, model, reason, and error detail, and the next routing request excludes or avoids that failed route when another eligible route exists.\n4. Existing successful-attempt evidence landing tests still pass.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'Test.*ProviderConnectivity.*Evidence|Test.*RouteFailure|Test.*Evidence' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:git",
+      "area:routing",
+      "kind:bug",
+      "downstream:niflheim"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T034629-44eb4c85",
+    "prompt": ".ddx/executions/20260527T034629-44eb4c85/prompt.md",
+    "manifest": ".ddx/executions/20260527T034629-44eb4c85/manifest.json",
+    "result": ".ddx/executions/20260527T034629-44eb4c85/result.json",
+    "checks": ".ddx/executions/20260527T034629-44eb4c85/checks.json",
+    "usage": ".ddx/executions/20260527T034629-44eb4c85/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ca94d157-20260527T034629-44eb4c85"
+  },
+  "prompt_sha": "102a83b3ee7b75acff665d63188054f38925c9b68b19ad1469d5e028d81b71ec"
+}

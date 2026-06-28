@@ -1,0 +1,20 @@
+---
+## Review: ddx-d7778715 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | New specs reach first expect without GraphQL error | BLOCK | — not found in diff; only execution evidence files were added |
+
+### Summary
+
+The diff does not include any GraphQL schema, resolver, or client query changes. It only adds `.ddx/executions/.../manifest.json` and `result.json`, so the implementation cannot be evaluated against the acceptance criteria.
+
+### Findings
+
+- GraphQL schema/resolver implementation is missing: no diff adds required operations such as `beadClose`, `workerDispatch`, `pluginDispatch`, `queueSummary`, `paletteSearch`, `worker(id).recentEvents`, or the flat `data.personas` shape.
+- Client query updates are missing: no application/spec-facing query files are changed to match the mocked operation names required by the bead.
+- Stub fixture data is missing: the diff contains no resolver fixture data capable of satisfying the new specs.

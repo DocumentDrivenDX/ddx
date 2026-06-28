@@ -1,0 +1,17 @@
+---
+## Review: ddx-49383ded iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No references to fakeExecuteBeadGit / fakeAgentRunner | APPROVE | cli/cmd/agent_execute_bead_test.go:1576+ — both fakes removed; test now uses real `exec.Command("git", ...)` + `agent.NewRunner` |
+| 2 | Dispatches via real-git harness | APPROVE | cli/cmd/agent_execute_bead_test.go:1594–1609 — `git init`, real commits + `f.AgentRunnerOverride = agent.NewRunner(agent.Config{})` with `--harness script --model <directives>` |
+| 3 | Test green under `-run '^TestExecuteBeadTimeoutNoCommitsReportsExecutionFailure$'` | APPROVE | Execution evidence at .ddx/executions/20260424T045414-135bc18c/result.json — outcome=task_succeeded (landed commit gated on tests passing) |
+| 4 | No other test in agent_execute_bead_test.go modified | APPROVE | `git show 3761a603 --stat` — only hunk is inside the targeted function (+71/-13) |
+
+### Summary
+
+Clean, scope-respecting migration. The canned `agent.Result{ExitCode:-1, Error:"timeout after 5m"}` is now reproduced via `set-exit -1` + `fail-during 1` directives against the real script harness, and the test asserts against a real git HEAD that cannot advance. Assertions were preserved in spirit while correctly adapting the error string (`"timeout after 5m"` → `contains "script harness"`) to match the new real-harness signal.

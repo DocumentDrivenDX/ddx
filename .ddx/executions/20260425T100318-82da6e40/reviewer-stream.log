@@ -1,0 +1,17 @@
+All non-test cli/cmd/ files are now free of `exec.Command("git", ...)`. The remaining hits are all in `_test.go` files (test helpers), which AC explicitly permits.
+
+---
+## Review: ddx-3984a48e iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No bare exec.Command("git"...) in cli/cmd/ except tests | APPROVE | `cli/cmd/init.go` — prior bare callsites at lines 307/314/326/711 removed in 72212ce9; grep over `cli/cmd/*.go` (non-test) returns zero matches |
+| 2 | All existing cli/cmd/ tests pass | APPROVE | execution result.json: outcome=task_succeeded, exit_code=0; iter1 only touched init.go (8 insertions / 16 deletions) |
+
+### Summary
+
+Iter 1 closes the gap flagged by the prior review by migrating the four remaining `exec.Command("git", …)` callsites in `cli/cmd/init.go` to `gitpkg.Command`. Combined with the earlier 8481ade6 commit (agent_cmd, agent_workers, checkpoint, status, bead, doc, bead_review, log), all non-test cli/cmd/ git callsites now go through `gitpkg.Command`.

@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The FEAT-008 acceptance criterion text was updated, but there is no evidence that `ddx doc audit` was run clean for FEAT-008, so the second acceptance criterion cannot be verified.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "The document now explicitly requires graph edge stroke and arrowhead contrast to meet WCAG AA non-text contrast in both light and dark themes.",
+      "location": "docs/helix/01-frame/features/FEAT-008-web-ui.md:510"
+    },
+    {
+      "severity": "block",
+      "summary": "No audit output or other evidence is included to verify that `ddx doc audit` is clean for FEAT-008.",
+      "location": "docs/helix/01-frame/features/FEAT-008-web-ui.md:1"
+    }
+  ]
+}
+```

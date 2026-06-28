@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260527T062206-fabc6e23",
+  "bead_id": "ddx-fef097ea",
+  "base_rev": "3b337646237dbc82f04595a5d36b91f558337dab",
+  "created_at": "2026-05-27T06:22:13.648364535Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fef097ea",
+    "title": "Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README",
+    "description": "PROBLEM\nWhen ddx work --watch went silently idle on a full queue (fizeau, 2026-05-18), the only signal was the agent-loop JSONL, and the emitted `suggested_action` (\"check the readiness route or harness configuration and retry\") was misleading because the actual fault was DDx's own decoder. Operators had no documented contract or diagnosis path for silent-idle.\n\nROOT CAUSE\nNo README section names the pre-claim intake readiness contract, the failure-class mapping (warn vs operator-attention vs hard error), or how to diagnose silent-idle on a full queue.\n\nPROPOSED FIX\nAdd a README section documenting (a) the pre-claim intake readiness contract — the shared schema and accepted verdict kinds; (b) the failure-class mapping — warn-only vs operator-attention escalation vs hard error; (c) the same-fingerprint escalation and the rolling claim-success-rate warning; and (d) operator diagnosis steps for silent-idle, including the agent-loop JSONL location and the repeated-fingerprint signal.\n\nNON-SCOPE\nDocumentation only — does NOT change decoder, schema, escalation, or claim-rate behavior. DEPENDS ON the decoder, schema, escalation, and claim-rate children (documents their behavior); land after them.",
+    "acceptance": "1. README documents the pre-claim intake contract (shared readiness schema and accepted verdict kinds), the failure-class mapping (warn / operator-attention / hard error), the same-fingerprint escalation and rolling claim-success-rate warning, and silent-idle diagnosis steps. Asserted by `TestReadmeDocumentsPreClaimIntakeContract` in `cli/cmd/readme_preclaim_intake_test.go`.\n2. cd cli \u0026\u0026 go test ./cmd/... green\n3. lefthook run pre-commit passes",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:pre-claim",
+      "observability",
+      "kind:docs"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T062206-fabc6e23",
+    "prompt": ".ddx/executions/20260527T062206-fabc6e23/prompt.md",
+    "manifest": ".ddx/executions/20260527T062206-fabc6e23/manifest.json",
+    "result": ".ddx/executions/20260527T062206-fabc6e23/result.json",
+    "checks": ".ddx/executions/20260527T062206-fabc6e23/checks.json",
+    "usage": ".ddx/executions/20260527T062206-fabc6e23/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-fef097ea-20260527T062206-fabc6e23"
+  },
+  "prompt_sha": "513b2d805ca3b633a6c4d30cccfdde192f83a4293adad1664db32ae82a712380"
+}

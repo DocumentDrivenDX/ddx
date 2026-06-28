@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 7 AC items implemented: landPushAutoRecover does fetch+merge+retry-push, push_conflict is a distinct status with kind:push-conflict event, capLoopCooldown(24h) clamps every SetExecutionCooldown call (push_failed, push_conflict, review-manual-required, declined), regression tests cover both race-resolved and unresolvable-conflict paths, and CHANGELOG documents the cross-cutting cap including the prior declined_needs_decomposition entry.",
+  "findings": []
+}
+```

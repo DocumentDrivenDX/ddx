@@ -1,0 +1,4 @@
+status: blocked
+reason: repo-wide verification is blocked by an existing unrelated failure in cli/internal/agent/agent_runner_service_wedge_test.go::TestWedgeImmune_HardWorkRunsToCompletion during `cd cli && go test ./...`
+
+verification_command: cd cli && go test ./internal/agent -run 'TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent|TestReadinessClassification_DecodesReadinessSchema|TestReadinessVerdict_AcceptsBoolStringOrNull'

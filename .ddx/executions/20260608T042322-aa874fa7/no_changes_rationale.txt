@@ -1,0 +1,2 @@
+status: blocked
+reason: broader go test ./internal/agent/... ./internal/bead/... ./cmd/... -count=1 still fails in unrelated cmd/bead tests after the bead-specific decomposition, prompt, and lifecycle fixes; targeted acceptance tests pass, but the full suite is not green in this environment.

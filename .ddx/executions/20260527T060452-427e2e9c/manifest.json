@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260527T060452-427e2e9c",
+  "bead_id": "ddx-92358bd8",
+  "base_rev": "1635d6b96ad7979604712b4e78e0d73f87b219e6",
+  "created_at": "2026-05-27T06:05:08.982009014Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-92358bd8",
+    "title": "Lock readiness_checks JSON schema in a shared file with a CI drift gate",
+    "description": "PROBLEM\nThe pre-claim readiness payload shape lived only implicitly in the Go decoder structs and the producer prompt text, so the two drifted: the producer emitted `verdict` as a bool while the consumer parsed a string, idling a full fizeau queue (2026-05-18). Nothing in CI fails when producer and consumer disagree on the payload shape.\n\nROOT CAUSE\n`cli/internal/agent/readiness_classification.go` — the producer prompt text (:616-617) and the Go decoder structs (:68-119, :356-395) independently describe the same payload with no single source of truth, allowing silent drift.\n\nPROPOSED FIX\nDefine the canonical payload in a shared schema file `cli/internal/agent/schema/readiness-checks.schema.json` that both the producer prompt and `decodePreClaimIntakePayloadResult` reference, typing `readiness_checks[].verdict` as `oneOf [boolean, string, null]` with `additionalProperties:true` for forward-compat. Add a test that validates representative payloads (bool, string, null verdict, and a malformed kind) against the schema so producer/consumer drift fails CI.\n\nNON-SCOPE\nDoes NOT implement the decoder coercion itself (decoder child). Does NOT touch the worker loop escalation or claim-rate signal, or README docs. DEPENDS ON the decoder child — the schema's verdict oneOf must match the kinds the decoder accepts. Preserves the FEAT-010 / ADR-023 readiness vocabulary.",
+    "acceptance": "1. `cli/internal/agent/schema/readiness-checks.schema.json` exists and declares `readiness_checks[].verdict` as `oneOf` boolean/string/null with `additionalProperties:true` for forward-compatibility, and is referenced as the single source of truth by the producer prompt and decoder.\n2. A schema-validation test loads the shared schema and asserts that bool, string, and null verdict payloads validate while a malformed-kind verdict fails. Asserted by `TestReadinessChecksSchema` in `cli/internal/agent/readiness_schema_test.go`.\n3. cd cli \u0026\u0026 go test ./internal/agent/... green\n4. lefthook run pre-commit passes",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:pre-claim",
+      "kind:reliability",
+      "observability",
+      "priority:reliability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"dependency must be resolved before claim: The bead is specific and testable, with concrete file targets, named test coverage, and CI gates, but it is not independently claimable as written because it explicitly depends on the decoder child and says the schema must match the kinds that decoder accepts. That missing prerequisite prevents a safe implementation attempt without resolving the child first. The work is decomposable rather than ambiguous: schema file, prompt reference, and validation test are all clearly identified.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-27T05:52:28.731503793Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T060452-427e2e9c",
+    "prompt": ".ddx/executions/20260527T060452-427e2e9c/prompt.md",
+    "manifest": ".ddx/executions/20260527T060452-427e2e9c/manifest.json",
+    "result": ".ddx/executions/20260527T060452-427e2e9c/result.json",
+    "checks": ".ddx/executions/20260527T060452-427e2e9c/checks.json",
+    "usage": ".ddx/executions/20260527T060452-427e2e9c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-92358bd8-20260527T060452-427e2e9c"
+  },
+  "prompt_sha": "0973cb0787aba87d4f4e38dbf4e7c72789d5340fe7e6c68a7c6a1da0dfb2ff28"
+}

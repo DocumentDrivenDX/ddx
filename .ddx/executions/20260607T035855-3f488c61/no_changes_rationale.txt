@@ -1,0 +1,2 @@
+status: blocked
+reason: external blocker: lefthook run pre-commit fails in cli/internal/bead/store_perf_test.go:149 with p95/p99 lock timing budget violations even when the acceptance slice passes; the failure reproduces under isolated CGO-enabled go test and is unrelated to the ancestor-edge validation change.

@@ -1,0 +1,21 @@
+## Review: ddx-8d51b137 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | /tmp/feat-011-status.md exists with required content | BLOCK | Diff contains only execution manifest/result JSON; no /tmp/feat-011-status.md artifact captured |
+| 2 | FEAT-011 status updated if skill exists in trees | BLOCK | No FEAT-011 spec edits in this diff |
+| 3 | Run `ls ...` and tee into status report | BLOCK | No evidence of ls inventory in diff |
+
+### Summary
+
+The diff under review (5fe539b3) contains only execution evidence (manifest.json, result.json) — no investigation report, no FEAT-011 spec update, no skill-tree inventory. The result.json claims `task_succeeded` but the deliverables required by the AC are not present in this commit.
+
+### Findings
+
+- /tmp/feat-011-status.md is not in the diff — AC explicitly requires this file to exist with FEAT-011 status, repo-tree inventory, and B15b proceed/defer recommendation. Note: /tmp is outside the repo so it wouldn't appear in a diff anyway, but no in-repo evidence (e.g., copy under `.ddx/executions/.../`) was preserved either.
+- FEAT-011 spec was not updated in this commit. The prior commit d014da12 ("mark consolidation implemented; site copy pending") may have done this, but AC #2 requires verification within this iteration's work; the reviewed diff shows no spec edits.
+- The `ls skills/ddx cli/internal/skills/ddx .agents/skills/ddx .claude/skills/ddx` inventory output is not captured anywhere in the diff. Re-run and append to the status report, then commit it under the execution evidence directory so it's reviewable.

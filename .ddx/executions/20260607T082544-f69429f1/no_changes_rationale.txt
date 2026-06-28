@@ -1,0 +1,2 @@
+status: open
+reason: cd cli && go test ./... fails in unrelated pre-existing packages (internal/integration, internal/server, internal/server/graphql); this bead's tracker/decomposition scope is already present in the tree, but repo-wide acceptance cannot be verified until those failures are fixed.

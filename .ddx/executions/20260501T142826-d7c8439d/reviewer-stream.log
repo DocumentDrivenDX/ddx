@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no changes to BeadDetail.svelte are present, so none of the acceptance criteria can be evaluated as implemented.",
+  "findings": [
+    { "severity": "block", "summary": "No changes to src/lib/components/BeadDetail.svelte in the reviewed diff", "location": "src/lib/components/BeadDetail.svelte" },
+    { "severity": "info", "summary": "Only execution evidence file added", "location": ".ddx/executions/20260501T142826-d7c8439d/result.json" }
+  ]
+}
+```

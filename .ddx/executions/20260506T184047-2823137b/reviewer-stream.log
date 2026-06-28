@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution result artifact and contains no documentation edits, so none of the required doc-boundary clarifications can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes were made to FEAT-006, so the required statement that DDx is a pass-through/marshalling consumer of Fizeau transcript events is not implemented in this diff.",
+      "location": "docs/helix/01-frame/features/FEAT-006-agent-service.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No changes were made to FEAT-002, so the distinction between DDx worker lifecycle events and opaque/forwarded Fizeau agent events is not implemented or reviewable.",
+      "location": "docs/helix/01-frame/features/FEAT-002-server.md"
+    },
+    {
+      "severity": "block",
+      "summary": "The only changed file is an execution artifact; there are no documentation edits removing or correcting claims that DDx renders inner Fizeau session logs.",
+      "location": ".ddx/executions/20260506T184047-2823137b/result.json"
+    }
+  ]
+}
+```

@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Context rot named as explicit second failure mode alongside isolation; within-run quality decay explained; bounded context execution tied directly to ddx work design rationale.",
+  "findings": []
+}
+```

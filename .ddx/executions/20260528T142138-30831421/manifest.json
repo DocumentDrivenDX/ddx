@@ -1,0 +1,225 @@
+{
+  "attempt_id": "20260528T142138-30831421",
+  "bead_id": "ddx-f71ef348",
+  "base_rev": "a76344b74be681a59bdb230700ccbcc9470bf041",
+  "created_at": "2026-05-28T14:21:51.771358504Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f71ef348",
+    "title": "checks: delete duplicate ratelimit_retry helpers superseded by try/attempt.go",
+    "description": "PROBLEM\nThe deadcode RTA artifact lists every helper in cli/internal/agent/ratelimit_retry.go as unreachable from the production graph. These are stale duplicates of the rate-limit logic now owned by the try package (cli/internal/agent/try/attempt.go), keeping ddx-83440482 from closing on current-tree evidence.\n\nROOT CAUSE WITH FILE:LINE\n.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json reports the following symbols dead in cli/internal/agent/ratelimit_retry.go:73 — EvaluateRateLimitWait, IsRateLimitResult, hasIsolated429, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig.resolved, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt. The live worker rate-limit path now runs through cli/internal/agent/try/attempt.go (proven by TestAttempt_RateLimit_WiresEvaluateRateLimitWait in cli/internal/agent/try/attempt_test.go), so the agent-package copies are dead duplicates.\n\nPROPOSED FIX\nDELETE the dead duplicate helpers from cli/internal/agent/ratelimit_retry.go and remove their now-orphaned unit file cli/internal/agent/ratelimit_retry_test.go (TestEvaluateRateLimitWait_*, TestParseRetryAfter, TestExtractRetryAfterFromStderr, TestIsRateLimitResult, TestRunWithRateLimitRetry_*, TestBuildRateLimitRouteAttempt_*). Confirm the surviving try-package rate-limit behavior remains green. If any single symbol turns out to still have a live caller and cannot be deleted in ~15 minutes, annotate it `// wiring:pending \u003cfollow-up-bead-id\u003e` and file the narrower follow-up before closing.\n\nNON-SCOPE\n- Do not touch the try-package rate-limit implementation in cli/internal/agent/try/attempt.go.\n- Do not touch candidate-cycle, compare, or execute-bead residuals.\n- Do not modify the preclaim/profile/recovery/service_run/triage/repair clusters (sibling beads).\n- Do not change the production-reachability protocol or checker implementation.",
+    "acceptance": "1. Every ratelimit_retry.go symbol listed for this cluster in .ddx/executions/20260515T210515-1a20052a/production-reachability-final.json is deleted (or, if a live caller exists, annotated `// wiring:pending` per AC 3).\n2. `cd cli \u0026\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/agent/ratelimit_retry\\.go'` returns no hits.\n3. The surviving try-package rate-limit tests pass: `cd cli \u0026\u0026 go test ./internal/agent/try/ -run 'TestAttempt_RateLimit_Retry_HonorsRetryAfter|TestAttempt_RateLimit_Retry_UsesExponentialBackoff|TestAttempt_RateLimit_WiresEvaluateRateLimitWait'` is green.\n4. Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\n5. Decisions log written to .ddx/executions/\u003crun-id\u003e/decisions.md records WIRE|DELETE|PENDING for each listed ratelimit_retry.go symbol.\n6. `cd cli \u0026\u0026 go test ./...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-97375097",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:cleanup",
+      "prevention",
+      "epic-closure"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\"}",
+          "created_at": "2026-05-28T12:19:37.143601193Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260528T121937-18b3b9fd\",\"bead_id\":\"ddx-f71ef348\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-05-28T12:49:37Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-05-28T12:50:07.23912893Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T12:50:07.468667877Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T121959-fede9311\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":562,\"output_tokens\":25193,\"total_tokens\":25755,\"cost_usd\":0.90112125,\"duration_ms\":1798115,\"exit_code\":-1}",
+          "created_at": "2026-05-28T12:50:07.526873142Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=25755 cost_usd=0.9011 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T12:52:21.097809758Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T125141-1347fb60\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-28T12:52:22.984590271Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T12:52:23.152357034Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=aca771a95643fd20ad8f9190f7c6c05bd340a5ec\nbase_rev=aca771a95643fd20ad8f9190f7c6c05bd340a5ec\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T12:52:23.210274492Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T13:32:36.150902943Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T133153-e1472831\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-28T13:32:38.968554462Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"keep_open_for_autonomous_retry\",\"actual_power\":5,\"count\":2,\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"model\":\"qwen3.5-27b\",\"provider\":\"bragi\",\"reason\":\"provider_connectivity\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T13:32:39.105247364Z",
+          "kind": "provider_connectivity.auto_retry",
+          "source": "ddx work",
+          "summary": "repeated provider connectivity failure kept open for autonomous retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T13:32:39.219793532Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=56babc3eb0cea0ed08148fbdf37bacd4c2713f57\nbase_rev=56babc3eb0cea0ed08148fbdf37bacd4c2713f57\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T13:32:39.283830027Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1743 tokens with tools=false at policy default\",\"fingerprint\":\"a388423426ba78394099b416ce1a93ccff0b46e70afc70cbdc0f40ecd67dd3b4\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"a388423426ba78394099b416ce1a93ccff0b46e70afc70cbdc0f40ecd67dd3b4\"}",
+          "created_at": "2026-05-28T14:10:33.101676009Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T14:10:47.426407648Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T14:10:47.484081681Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T14:10:47.579122805Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1801 tokens with tools=false at policy default\",\"fingerprint\":\"e15a8fd8480b3865eb198a52b9957b84d33e6ba0515dd83cfe78ffdb1a1bf96e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e15a8fd8480b3865eb198a52b9957b84d33e6ba0515dd83cfe78ffdb1a1bf96e\"}",
+          "created_at": "2026-05-28T14:11:13.923048913Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T14:11:30.249316159Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T14:11:30.305994026Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T14:11:30.364115766Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead is atomic, executable, and well-scoped. Title is imperative and names subsystem (checks/ratelimit_retry). Description provides specific file:line evidence (cli/internal/agent/ratelimit_retry.go:73) and enumerates all symbols to delete (EvaluateRateLimitWait, IsRateLimitResult, hasIsolated429, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig.resolved, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt). Acceptance criteria are numbered with verifiable gates: specific test names (TestAttempt_RateLimit_Retry_HonorsRetryAfter, TestAttempt_RateLimit_Retry_UsesExponentialBackoff, TestAttempt_RateLimit_WiresEvaluateRateLimitWait), deadcode checker invocation, full test suite, and lefthook. Parent (ddx-97375097) and scope boundaries (no touch to try-package, deadcode checker, sibling clusters) are explicit. Time-specific artifact path (.ddx/executions/20260515T210515-1a20052a/...) is mitigated by enumerated symbols in description.\",\"fingerprint\":\"5c79c5e79586e5d31f2abd46149a50091f0de05fbd3f268f18d3ee858a28f456\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5c79c5e79586e5d31f2abd46149a50091f0de05fbd3f268f18d3ee858a28f456\"}",
+          "created_at": "2026-05-28T14:21:21.458627805Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-28T13:32:39Z",
+          "count": 2,
+          "endpoint": "http://bragi:1234/v1/chat/completions",
+          "model": "qwen3.5-27b",
+          "provider": "bragi",
+          "reason": "provider_connectivity",
+          "timeout_class": "bad gateway"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T142138-30831421",
+    "prompt": ".ddx/executions/20260528T142138-30831421/prompt.md",
+    "manifest": ".ddx/executions/20260528T142138-30831421/manifest.json",
+    "result": ".ddx/executions/20260528T142138-30831421/result.json",
+    "checks": ".ddx/executions/20260528T142138-30831421/checks.json",
+    "usage": ".ddx/executions/20260528T142138-30831421/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f71ef348-20260528T142138-30831421"
+  },
+  "prompt_sha": "6e2dc1a1395088ab943ff03609f0287d1efc4e2e41585493f6db01a2b9a3de8e"
+}

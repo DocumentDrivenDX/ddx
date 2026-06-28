@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260606T232735-efaca194",
+  "bead_id": "ddx-4173d55c",
+  "base_rev": "7447bda21f77ced2ea6bcdc3790e33873d4d2198",
+  "created_at": "2026-06-06T23:27:47.179219198Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4173d55c",
+    "title": "Escalate lifecycle root-mutation rejection with back-edge context",
+    "description": "PROBLEM\nThe lifecycle dispatch path still returns the generic `project root mutation rejected` error and the caller path continues to log it as a warning/continuing condition. When that happens in the same run that already exhibits a parent-back-edge state, the operator only sees a soft warning instead of the structural failure that actually occurred.\n\nROOT CAUSE\n`cli/internal/agent/lifecycle_dispatch.go:130-165` rejects root mutations but does not include the offending bead ID in the failure shape, and `cli/internal/agent/preclaim_intake_hook.go:595` plus the surrounding loop code consume the error as a warning path. The result is a muted signal even though the run is already in a bad structural state.\n\nPROPOSED FIX\nWhen the parent-back-edge state and a root-mutation rejection coincide, upgrade the log/event severity from warning to error and attach the offending bead ID to the emitted message. Add the regression `TestDispatchLogsErrorOnRootMutationWithBackEdge` so the severity change cannot drift.\n\nNON-SCOPE\nDo not change the store validator, doctor scan/repair, or decomposition prompt text in this bead.\n\nIn-scope files:\n- cli/internal/agent/lifecycle_dispatch.go\n- cli/internal/agent/preclaim_intake_hook.go\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/preclaim_intake_hook_test.go\n\nOut-of-scope:\n- cli/internal/bead/store.go\n- cli/internal/bead/doctor.go\n- cli/internal/agent/execute_bead.go\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... -run TestDispatchLogsErrorOnRootMutationWithBackEdge` passes.\n2. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n3. `cd cli \u0026\u0026 lefthook run pre-commit` passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T232735-efaca194",
+    "prompt": ".ddx/executions/20260606T232735-efaca194/prompt.md",
+    "manifest": ".ddx/executions/20260606T232735-efaca194/manifest.json",
+    "result": ".ddx/executions/20260606T232735-efaca194/result.json",
+    "checks": ".ddx/executions/20260606T232735-efaca194/checks.json",
+    "usage": ".ddx/executions/20260606T232735-efaca194/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-4173d55c-20260606T232735-efaca194"
+  },
+  "prompt_sha": "3fab8ae9ad67da500437ad3e950193a322d8bbe8eda1ca3c9b26b346346b03d9"
+}

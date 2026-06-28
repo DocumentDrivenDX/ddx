@@ -1,0 +1,25 @@
+---
+## Review: .execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-4c9f51f9 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | /api/agent/models HTTP route | BLOCK | — not found in diff |
+| 2 | /api/agent/catalog HTTP route | BLOCK | — not found in diff |
+| 3 | /api/agent/capabilities HTTP route | BLOCK | — not found in diff |
+| 4 | Corresponding MCP tools | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only execution metadata (`manifest.json`, `result.json`) under `.ddx/executions/20260429T233924-ba29c9d6/`. No HTTP handlers, MCP tool registrations, routing wiring, or tests were added. The manifest itself records a prior iteration's review as BLOCK for the same reason, and a subsequent loop attempt failed with "no viable provider" — so no implementation was produced this iteration.
+
+### Findings
+
+- No HTTP route registration for `/api/agent/models`, `/api/agent/catalog`, or `/api/agent/capabilities` (expected in `cli/internal/server/` route table).
+- No MCP tool definitions for agent models/catalog/capabilities (expected in `cli/internal/mcp/` tool registry).
+- No handler implementations bridging existing CLI commands (`ddx agent models`, `ddx agent catalog show`, `ddx agent capabilities`) to HTTP/MCP surfaces.
+- No tests covering the new routes or MCP tools.
+- Diff consists entirely of `.ddx/executions/20260429T233924-ba29c9d6/manifest.json` and `result.json` — pure metadata, insufficient to evaluate any AC.

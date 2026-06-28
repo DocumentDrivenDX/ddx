@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260606T074720-4c84f1a2",
+  "bead_id": "ddx-e8bf0695",
+  "base_rev": "4f8c6bdce839a415f64f0fb644e48c9061ee1c53",
+  "created_at": "2026-06-06T07:47:31.622541682Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e8bf0695",
+    "title": "durable-audit commit: scope the git command deadline to execution only (after lock acquisition); never SIGKILL git under contention",
+    "description": "PROBLEM: Even with the classifier fix (B1=ddx-83361480) reclassifying \"signal: killed\" as transient, the underlying defect remains: the durable-audit commit can be forcibly SIGKILLed mid-`git commit` by a command deadline that competes with the shared-lock wait — the worst possible moment to kill git (risk of a wedged .git/index.lock + wasted work). The commit should WAIT/back off for the lock and only deadline the individual git subprocess actually running, not the entire critical section including lock acquisition.\n\nROOT CAUSE: cli/internal/agent/durable_audit.go:87-89 creates one context.WithTimeout(context.Background(), 30*time.Second) covering the whole commitDurableAuditOutputsLocked body, and CommitDurableAuditOutputs (durable_audit.go:49-53) acquires the shared lock via withTrackerLock whose own wait budget is DefaultLockRetryPolicy.MaxElapsed = 30s (cli/internal/agent/tracker_lock.go:57). These two 30s budgets run concurrently, so under contention the command deadline can fire while a git child is mid-flight -\u003e SIGKILL.\n\nPROPOSED FIX (structural — operator-preferred over merely lengthening the deadline): In commitDurableAuditOutputsLocked (durable_audit.go:87), start the command-deadline context AFTER the lock is held, so the deadline measures only git execution time, not lock-wait time (scope a fresh per-command deadline, or begin a single deadline at lock-acquisition). On expiry it returns an error B1 classifies transient. Confirm + assert idempotent resume across a killed-and-retried commit (re-derives dirty paths durable_audit.go:98-104, --only commits durable_audit.go:122). (Fallback if you want a minimal diff: just lengthen the single deadline to comfortably outlast a 30s lock wait + commit — smaller change but leaves the kill-primitive in place; B2 is scoped to the structural fix.)\n\nNON-SCOPE: the classifier (B1); lock retry policy curve; spec text (B3).\nIN-SCOPE FILES: cli/internal/agent/durable_audit.go, cli/internal/agent/durable_audit_test.go.",
+    "acceptance": "1. New test TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers: in a fixture repo (testutils.NewFixtureRepo standard), dirty a managed path, hold .ddx/.git-tracker.lock from a second goroutine past a shortened command deadline then release; assert the call either waits-and-commits or returns a transient-classified error, and a follow-up CommitDurableAuditOutputs commits the staged state cleanly (git status --short on managed pathspecs is empty).\n2. New test TestCommitDurableAuditOutputs_ResumesAfterPartialKill: simulate a killed commit (managed paths staged, HEAD unmoved), call CommitDurableAuditOutputs again, assert clean commit and no-op on a third call (idempotent).\n3. Assert the git-subprocess command deadline does not start until the lock is acquired (the command deadline budget is unaffected by lock-wait time).\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestCommitDurableAuditOutputs' -count=1 green.\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/gitlock/... -count=1 green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "area:git",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:TP-021",
+      "prevention:ddx-23ac2796"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T074720-4c84f1a2",
+    "prompt": ".ddx/executions/20260606T074720-4c84f1a2/prompt.md",
+    "manifest": ".ddx/executions/20260606T074720-4c84f1a2/manifest.json",
+    "result": ".ddx/executions/20260606T074720-4c84f1a2/result.json",
+    "checks": ".ddx/executions/20260606T074720-4c84f1a2/checks.json",
+    "usage": ".ddx/executions/20260606T074720-4c84f1a2/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-e8bf0695-20260606T074720-4c84f1a2"
+  },
+  "prompt_sha": "bbe0a94188454591c38c1edeeca16dce096297de1a22d4ea045d70ecae496044"
+}

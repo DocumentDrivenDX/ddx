@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "TC-042 added to graph.spec.ts toggles theme, measures computed stroke/strokeOpacity blended against canvas tokens and arrowhead fill, asserting >=3:1 in both modes. Existing mocked fixture provides edges. All 4 ACs satisfied.",
+  "findings": []
+}
+```

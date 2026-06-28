@@ -1,0 +1,27 @@
+{
+  "bead_id": "ddx-8d6af771",
+  "attempt_id": "20260531T173243-7554411f",
+  "base_rev": "6af5a3fa8f4a9f4fbf6b3994b6ea0c563380376c",
+  "result_rev": "6af5a3fa8f4a9f4fbf6b3994b6ea0c563380376c",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/failure_classification.go, cli/internal/agent/failure_classification_test.go",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "no_evidence_paths": [
+    "cli/internal/agent/failure_classification.go",
+    "cli/internal/agent/failure_classification_test.go"
+  ],
+  "session_id": "eb-477b78db",
+  "duration_ms": 751866,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/failure_classification.go, cli/internal/agent/failure_classification_test.go",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260531T173243-7554411f",
+  "prompt_file": ".ddx/executions/20260531T173243-7554411f/prompt.md",
+  "manifest_file": ".ddx/executions/20260531T173243-7554411f/manifest.json",
+  "result_file": ".ddx/executions/20260531T173243-7554411f/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-31T17:32:51.377393036Z",
+  "finished_at": "2026-05-31T17:45:23.243781658Z"
+}

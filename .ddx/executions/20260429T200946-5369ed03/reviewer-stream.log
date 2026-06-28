@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json) — no actual implementation of the GET /api/docs/changed route. Cannot evaluate AC against absent code changes.",
+  "findings": [
+    { "severity": "block", "summary": "No source code changes present in diff; only execution metadata files added. The actual route implementation referenced by result_rev 128136fc is not visible in this diff.", "location": ".ddx/executions/20260429T200946-5369ed03/" }
+  ]
+}
+```

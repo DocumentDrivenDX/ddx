@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no implementation, test, deadcode, or decisions-log evidence needed to satisfy the bead's acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code or tracker changes are present for the 14 `internal/metric` symbols, so there is no evidence that any symbol was wired into production reachability, deleted, or marked pending with a follow-up bead.",
+      "location": ".ddx/executions/20260506T185244-0c7e24ef/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log at `.ddx/executions/<run-id>/decisions.md` is not included in the diff, so AC5 is unmet and the per-symbol WIRE|DELETE|PENDING decisions cannot be reviewed.",
+      "location": ".ddx/executions/20260506T185244-0c7e24ef/result.json:17"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence in the diff for the required verification outcomes: zero remaining dead symbols in `internal/metric` from deadcode RTA and `cd cli && go test ./...` passing.",
+      "location": ".ddx/executions/20260506T185244-0c7e24ef/result.json:1"
+    }
+  ]
+}
+```

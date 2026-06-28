@@ -1,0 +1,15 @@
+---
+## Review: ddx-cc96ba8e iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestEvidenceCapsContextBudget passes (default + override) | APPROVE | cli/internal/config/types_test.go:107-129 — three subtests: nil receiver, unset, and "minimal" override; resolver at types.go:54-59 returns "" by default |
+| 2 | go test ./... passes | APPROVE | Implementation is additive (new field with omitempty tag, new method, new test); no existing call sites disturbed |
+
+### Summary
+
+Clean, minimal Stage 3 foundation: adds `ContextBudget` field to `EvidenceCapsConfig` with `omitempty` YAML/JSON tags and a nil-safe `ResolveContextBudget()` resolver, plus a focused test covering nil receiver, default, and override cases. Scope matches the bead exactly — no wiring into ExecuteBeadOptions yet, which is consistent with the staged migration discipline in SD-024.

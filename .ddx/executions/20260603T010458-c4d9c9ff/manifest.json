@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260603T010458-c4d9c9ff",
+  "bead_id": "ddx-2bb4e0a5",
+  "base_rev": "5eb66c637b47800eb92b648d30f22c734522c63f",
+  "created_at": "2026-06-03T01:05:06.735718609Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2bb4e0a5",
+    "title": "registry: plugin lookup precedence resolver (project → global → baked-in) + topology spec",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nSkills/personas/plugins can live in two install layers (project-scoped under ddxroot.Path() and machine-wide under ${XDG_DATA_HOME}/ddx/global/). Runtime callers need a single authoritative resolver that picks the right on-disk plugin directory with a defined precedence, otherwise the dual-location install surface has no consumer and project installs cannot shadow global ones.\n\nROOT CAUSE\n- cli/internal/registry/resolve.go:22 ResolvePlugin must implement precedence project → global → baked-in. The project path is filepath.Join(ddxroot.Path(ctx, projectRoot), \"plugins\", name) (resolve.go:23); the global path is filepath.Join(ddxroot.GlobalDir(), \"plugins\", name) (resolve.go:28); baked-in (defaultplugin.FS()) is valid only for name == \"ddx\" (resolve.go:33). ddxroot.GlobalDir() is defined at cli/internal/ddxroot/ddxroot.go:90.\n- Before this layer existed, install/update targeted ddxroot.Path() unconditionally and there was no precedence rule, so an operator with both a project and a global copy had undefined resolution.\n\nPROPOSED FIX\n1. ResolvePlugin(ctx, projectRoot, name) returns (path, layer, err): when both project and global copies exist, return the project path with layer \"project\"; when only the global copy exists, return its path with layer \"global\"; when neither exists and name == \"ddx\", return (\"\", \"baked-in\", nil) so callers fall back to defaultplugin.FS(); otherwise return a non-nil error naming all three layers.\n2. The project path resolves through ddxroot.Path() so it is correct in BOTH in-tree mode (\u003cproject\u003e/.ddx/plugins/\u003cname\u003e) and convention mode (${XDG_DATA_HOME}/ddx/projects/\u003cidentity\u003e/plugins/\u003cname\u003e).\n3. SPEC IMPACT: file/update the skill-install-topology ADR (docs/helix/02-design/adr/ADR-025-or-equivalent) documenting the three-layer precedence, and update the CLAUDE.md \"Persona System\" section to state the project-over-global-over-baked-in lookup precedence.\n\nNON-SCOPE\n- Does NOT remove the per-project install path (both layers coexist).\n- Does NOT migrate any legacy ~/.config/ddx paths.\n- Does NOT add agent-harness path discovery beyond Claude Code and Codex.\n- Writing the plugin content / creating agent-tier links is handled by the install and init child beads, not here.\n\nDEPS\nddx-06cbaa90 (ddx home resolution) — project path routes through ddxroot.Path() and the global path through ddxroot.GlobalDir(); both must be agreed-on. Governing epic: ddx-602ae31a (Principle 2: skills/personas install-to-agent vs install-in-project).",
+    "acceptance": "1. TestPluginLookup_PrefersProjectOverGlobal (cli/internal/registry/resolve_test.go:23) asserts that when both the project and global trees contain the plugin, ResolvePlugin returns the project path and layer \"project\".\n2. TestPluginLookup_FallsBackToGlobal (cli/internal/registry/resolve_test.go:52) asserts that when the project copy is absent, ResolvePlugin returns the ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e path and layer \"global\".\n3. A test asserts ResolvePlugin returns (\"\", \"baked-in\", nil) for name == \"ddx\" when neither project nor global copy exists, and a non-nil error for any other unresolved name.\n4. The skill-install-topology ADR and the CLAUDE.md \"Persona System\" precedence note are landed in this bead's commit.\n5. cd cli \u0026\u0026 go test ./internal/registry/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:registry",
+      "area:plugin",
+      "area:config",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T010458-c4d9c9ff",
+    "prompt": ".ddx/executions/20260603T010458-c4d9c9ff/prompt.md",
+    "manifest": ".ddx/executions/20260603T010458-c4d9c9ff/manifest.json",
+    "result": ".ddx/executions/20260603T010458-c4d9c9ff/result.json",
+    "checks": ".ddx/executions/20260603T010458-c4d9c9ff/checks.json",
+    "usage": ".ddx/executions/20260603T010458-c4d9c9ff/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2bb4e0a5-20260603T010458-c4d9c9ff"
+  },
+  "prompt_sha": "2790ab37afa370064aa8a1e1733166979077642737e60d5f668bf79e2590702b"
+}

@@ -1,0 +1,22 @@
+---
+## Review: ddx-a308bd84 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | US-081a.a-c green in e2e/documents.spec.ts | BLOCK | — not found in diff |
+| 2 | US-083a.a-d green in e2e/documents.spec.ts | BLOCK | — not found in diff |
+| 3 | Screenshots committed for /documents | BLOCK | — not found in diff |
+
+### Summary
+
+The supplied diff only adds `.ddx/executions/20260422T083901-a06a5e1a/result.json` execution evidence. It contains no application code, e2e test changes/results, or committed screenshots, so the acceptance criteria cannot be evaluated from this diff.
+
+### Findings
+
+- `.ddx/executions/20260422T083901-a06a5e1a/result.json` is the only changed file; no implementation files under the documents SPA are present to verify US-081a or US-083a behavior.
+- `e2e/documents.spec.ts` is not changed or shown in the diff, so the required green coverage for US-081a.a-c and US-083a.a-d is not evidenced.
+- No `/documents` screenshots are added in the diff, so the screenshot acceptance item is missing.

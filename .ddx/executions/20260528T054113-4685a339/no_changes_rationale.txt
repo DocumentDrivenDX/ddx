@@ -1,0 +1,1 @@
+verification_command: cd /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-fd02cf6e-20260528T054113-4685a339/cli && bash -c 'set -e && go test ./internal/agent -run "TestReadinessChecksSchema|TestPreClaimWarnSameFingerprintEscalatesAfterThreshold|TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent|TestReadinessVerdict_AcceptsBoolStringOrNull" -count=1 > /dev/null 2>&1'

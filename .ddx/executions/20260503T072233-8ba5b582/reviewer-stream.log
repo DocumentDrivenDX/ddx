@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution manifest/result JSON for the attempt — no actual web/Runs page changes are visible. Cannot evaluate any of the three AC items (chip primitives import, virtualization threshold, live worker phase updates) from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No source changes to Runs page or shared chip/virtualization primitives present in the diff; only execution evidence files were added.", "location": ".ddx/executions/20260503T072233-8ba5b582/" }
+  ]
+}
+```

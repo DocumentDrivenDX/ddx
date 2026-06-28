@@ -1,0 +1,4 @@
+verification_command: cd cli && go test ./internal/agent/... && lefthook run pre-commit
+
+The current tree already contains the requested loop extraction shape for this
+child bead, so no additional code edit was required in this execution pass.

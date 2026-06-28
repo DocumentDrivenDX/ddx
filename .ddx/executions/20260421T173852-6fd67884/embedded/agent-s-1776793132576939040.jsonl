@@ -1,0 +1,1 @@
+{"final":{"status":"cancelled","exit_code":0,"duration_ms":110848,"routing_actual":{"harness":"agent","provider":"grendel","model":"qwen3.5-27b"}},"metadata":{"attempt_id":"20260421T173852-6fd67884","base_rev":"31ff65644dc0cbf0ca8297248bff5df7d6e02295","bead_id":"ddx-455807e6","session_id":"eb-c2a309b7"},"time":"2026-04-21T17:40:43.425696505Z","type":"final"}

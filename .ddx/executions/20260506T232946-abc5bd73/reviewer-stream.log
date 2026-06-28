@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution artifacts under .ddx/executions and contains no implementation or test changes for the cited ACs, so the bead cannot be evaluated as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes are present in the in-scope implementation files (`cli/internal/bead/store.go`, `cli/internal/agent/execute_bead_loop.go`, `cli/cmd/agent_cmd.go`, related tests). The diff only adds execution metadata, so AC1-AC4 are not implemented in the submitted patch.",
+      "location": ".ddx/executions/20260506T232946-abc5bd73/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no test output or code diff demonstrating the required targeted Go tests or `lefthook run pre-commit`, so AC5-AC6 are not verifiable from this submission.",
+      "location": ".ddx/executions/20260506T232946-abc5bd73/result.json:1"
+    }
+  ]
+}
+```

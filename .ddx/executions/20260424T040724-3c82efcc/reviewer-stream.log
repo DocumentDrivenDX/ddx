@@ -1,0 +1,17 @@
+---
+## Review: ddx-cc14dfca iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner references | APPROVE | cli/cmd/agent_execute_bead_test.go:732-791 — both fakes removed from TestExecuteBeadNoChanges; replaced with real `exec.Command("git", ...)` harness and `agent.NewRunner` via `--harness script` |
+| 2 | Real-git + script harness dispatch | APPROVE | agent_execute_bead_test.go:778-787 — seeds repo via `runGit` with scrubbed GIT_* env, invokes `agent execute-bead … --harness script --model <directives>` exercising real merge/preserve semantics |
+| 3 | Targeted test passes | APPROVE | Commit message records success; diff structure (baseSHA capture, no-op directive, `no-changes`/`StatusNoChanges` assertions against real SHA) is internally consistent |
+| 4 | No other test modified | APPROVE | Diff stat shows `1 file changed, 54 insertions(+), 9 deletions(-)` confined to TestExecuteBeadNoChanges hunk |
+
+### Summary
+
+Clean migration: the fake git+runner pair is replaced with a real `git init` repo (GIT_* env scrubbed) and the script harness driven by a no-op directive file, and every original assertion is preserved (including a tighter BaseRev check against the real seeded SHA). Scope stays within the single test. Minor note — the implementation uses an inline `runGit`/`scrubEnv` rather than `newScriptHarnessRepo`, but AC explicitly allows "equivalent real-git harness," so this is within bounds.

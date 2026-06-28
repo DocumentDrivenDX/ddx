@@ -1,0 +1,16 @@
+---
+## Review: ddx-1c46a4f8 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No bare git exec.Command in 5 named files | APPROVE | grep across cmd/install.go, compare_adapter.go, execute_bead_review.go, execute_bead_orchestrator.go, script.go returns no matches; all migrated to `internalgit.Command(ctx, dir, ...)` |
+| 2 | cleanGitEnv removed from compare_adapter.go | APPROVE | compare_adapter.go diff deletes the helper (lines -308..-336); repo-wide grep for `cleanGitEnv` returns zero matches |
+| 3 | Build + tests green | APPROVE | result.json reports outcome=task_succeeded, exit_code=0 (post-merge build/test gate passed) |
+
+### Summary
+
+Clean migration of the remaining 13 callsites to `internalgit.Command`, with the redundant `cleanGitEnv` helper removed and its unused `strings`/`os` imports trimmed implicitly via the diff. Scope matches the bead exactly with no incidental changes.

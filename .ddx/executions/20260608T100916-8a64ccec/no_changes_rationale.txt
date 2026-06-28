@@ -1,0 +1,2 @@
+status: open
+reason: `lefthook run pre-commit` still fails in broader `cmd`/`internal/agent` coverage after the targeted active-work regressions pass; the remaining failures include config-free `work`/`bead` command fixtures, `bead_metrics`, `bead_replay`, `cleanup`, `install`, `work_plan`, and `run_state` coverage that require a narrower root-resolution follow-up.

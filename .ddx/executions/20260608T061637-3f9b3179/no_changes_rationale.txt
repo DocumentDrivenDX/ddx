@@ -1,0 +1,4 @@
+status: open
+orchestrator_action: decompose
+reason: Parent bead ddx-334c0958 exceeds the Step 0 size threshold at 13705 bytes and is already decomposed into focused child beads. Decomposition alone is success for this pass; implementation should move to the child beads instead of retrying or escalating this parent.
+child_beads: ddx-044cd257, ddx-3a6f1ad6, ddx-d4817c9b, ddx-01aa7b18, ddx-1865eadc

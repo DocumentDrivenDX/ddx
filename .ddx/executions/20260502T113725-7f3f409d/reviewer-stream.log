@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no changes to state_runs.go, no resolver join with AgentSession, no new layering test. Cannot verify any AC item from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No source changes to state_runs.go visible in diff; bundle→RunLayerTry and session→RunLayerRun layering cannot be verified", "location": "cli/internal/server/state_runs.go" },
+    { "severity": "block", "summary": "No evidence of lossless Run+AgentSession join in resolver", "location": "cli/internal/server/" },
+    { "severity": "block", "summary": "No new test for layering correctness present in diff", "location": "cli/internal/server/" }
+  ]
+}
+```

@@ -1,0 +1,28 @@
+---
+## Review: ddx-12cae4dd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `findMarkdownFiles` skips `.claude` and `worktrees/` | BLOCK | — not found in diff |
+| 2 | `doc.Path` is relative to `workingDir` | BLOCK | — not found in diff |
+| 3 | GraphQL documents exclude `.claude/worktrees/` | BLOCK | — not found in diff |
+| 4 | `document(id:)` handles old absolute/new relative IDs | BLOCK | — not found in diff |
+| 5 | Web UI document route renders real docs content | BLOCK | — not found in diff |
+| 6 | Unit test covers worktree exclusion and relative path | BLOCK | — not found in diff |
+| 7 | Playwright e2e covers documents list and click-through | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only execution bookkeeping under `.ddx/executions/20260423T021107-3834d7a9/`. No functional code, resolver changes, frontend changes, or tests were included, so the implementation cannot satisfy any acceptance criterion.
+
+### Findings
+
+- `cli/internal/docgraph/docgraph.go` / `findMarkdownFiles` is not changed, so `.claude` and arbitrary `worktrees/` directories are still not proven excluded.
+- `cli/internal/docgraph/docgraph.go` document path construction is not changed, so `doc.Path` is still not proven relative to `workingDir`.
+- The GraphQL documents and `document(id:)` resolver code is not changed, so `.claude/worktrees/` filtering and absolute-ID compatibility are not implemented in this diff.
+- `cli/internal/server/frontend/` is not changed, and no Playwright test is added for the documents route.
+- `cli/internal/docgraph/docgraph_test.go` is not changed, so the required fixture and assertions for `.claude/worktrees/agent-x/docs/foo.md` versus `docs/foo.md` are missing.

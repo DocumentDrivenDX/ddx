@@ -1,0 +1,1 @@
+verification_command: cd cli && go test -run 'TestE2E' ./cmd && go test ./internal/agent/workerprobe -run 'TestWorker_RealAttemptEvents_FlowToServer|TestSharedDdxBinaryBuildsOnce'

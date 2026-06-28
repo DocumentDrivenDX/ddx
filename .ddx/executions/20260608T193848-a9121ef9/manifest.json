@@ -1,0 +1,306 @@
+{
+  "attempt_id": "20260608T193848-a9121ef9",
+  "bead_id": "ddx-df319cf9",
+  "base_rev": "5f8aa8762e9df4a6dbfdf73cd51357e4c5c6c702",
+  "created_at": "2026-06-08T19:39:00.151410056Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-df319cf9",
+    "title": "Classify repeated pre-claim system warnings as operator-visible worker s: part 1",
+    "description": "PROBLEM\nParent bead ddx-eea2dfca is too broad for one execution pass. This child owns part 1 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nA Niflheim worker repeatedly emitted pre-claim readiness/intake warnings for the same systemic dirty/generated DDx artifact condition and continued polling/releasing. That looks like forward progress but does not create a clear operator-visible system-unready lane after the configured threshold.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_loop.go:1967-2072` emits pre-claim timeout/system-unready outcomes as warn-only by default and continues implementation when strict intake blocking is off.\n- `cli/internal/agent/failclass/failclass.go:103-142` says setup/dirty worktree/system outcomes should not escalate, but repeated pre-claim warnings are not consistently classified into retry/operator-attention decisions before worker retry loops continue.\n\nPROPOSED FIX\nAdd a self-contained Niflheim-style pre-claim fixture or table-driven case under `cli/internal/agent/...` for repeated readiness timeout/system-unready warnings with generated DDx artifact dirt such as `.ddx/harness-sessions/...json`. After the configured same-fingerprint threshold, classify the condition as system-unready/operator-attention and release/park without implementation retry or model escalation. Align with `ddx-d67f124e` rather than duplicating its lower-level implementation.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`; this bead only adds the Niflheim observation as regression coverage and decision/audit wiring.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related: `ddx-e1a576a7`, `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineering-principles.md:39-45.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention` adds a self-contained Niflheim evidence case for repeated readiness timeout/system-unready warnings with generated DDx artifact dirt and asserts the worker records an operator-visible system-unready/operator-attention state after the configured threshold.\n- `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile; repeated pre-claim system warnings, land coordination, decomposed-parent outcomes, and dirty generated DDx evidence do not raise min power.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention` adds a self-contained Niflheim evidence case for repeated readiness timeout/system-unready warnings with generated DDx artifact dirt and asserts the worker records an operator-visible system-unready/operator-attention state after the configured threshold.\n2. `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile; repeated pre-claim system warnings, land coordination, decomposed-parent outcomes, and dirty generated DDx evidence do not raise min power.",
+    "parent": "ddx-eea2dfca",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention",
+      "decomposed",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T17:17:05.089499965Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T170403-06372dd1\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":103437,\"output_tokens\":969,\"total_tokens\":104406,\"cost_usd\":0,\"duration_ms\":771877,\"exit_code\":1}",
+          "created_at": "2026-06-08T17:17:05.172410443Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=104406 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"dflash\",\"actual_power\":0,\"actual_provider\":\"sindri\",\"attempt_id\":\"20260608T170403-06372dd1\",\"bead_id\":\"ddx-df319cf9\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-08T17:17:08.411997779Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=dflash harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"07ef13a594a6054a3e7a947ab7b6204cfd4a8127\",\"classification\":\"transport\",\"decode_warnings\":[{\"field\":\"suggested_amendments\",\"warning\":\"expected array; dropped malformed field\",\"raw_excerpt\":\"[\\\"Consider reducing the context passed to the model (e.g., by trimming irrelevant parts of the bead description or history) before retrying.\\\",\\\"Ensure that the retry mechanism handles context window limits appropriately, potentially by splitting the task or reducing input size.\\\"]\"}],\"detail\":\"agent: provider error: openai: POST \\\"http://sindri:8080/v1/chat/completions\\\": 400 Bad Request {\\\"message\\\":\\\"prompt + max_tokens exceeds context window\\\",\\\"type\\\":\\\"invalid_request_error\\\"}\",\"malformed\":true,\"rationale\":\"The execution failed with a provider error indicating that the prompt + max_tokens exceeded the context window (400 Bad Request, invalid_request_error). This is a transient infrastructure/provider constraint, not a semantic failure of the task logic. The `outcome_reason` is `context_overflow`, which falls under transport/channel failures rather than task-specific errors. A retry may succeed if the context is managed differently or the provider state changes, but more importantly, it should be retried rather than permanently failed or escalated as a semantic issue. Since this is a transport-level context overflow, the recommended action is to retry with potential backoff or context reduction, but in the absence of specific 'retry_with_backoff' for context issues, 'release_claim_retry' is the standard transport retry action.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"07ef13a594a6054a3e7a947ab7b6204cfd4a8127\",\"session_id\":\"eb-d29473b9\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-08T17:20:08.96883645Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry (warnings=1)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://sindri:8080/v1/chat/completions\": 400 Bad Request {\"message\":\"prompt + max_tokens exceeds context window\",\"type\":\"invalid_request_error\"}\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=07ef13a594a6054a3e7a947ab7b6204cfd4a8127\nbase_rev=07ef13a594a6054a3e7a947ab7b6204cfd4a8127\noutcome_reason=transport",
+          "created_at": "2026-06-08T17:20:09.050009804Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T17:39:22.452419447Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T172539-14bcbbc6\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":98177,\"output_tokens\":746,\"total_tokens\":98923,\"cost_usd\":0,\"duration_ms\":809985,\"exit_code\":1}",
+          "created_at": "2026-06-08T17:39:22.515661065Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=98923 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"dflash\",\"actual_power\":0,\"actual_provider\":\"sindri\",\"attempt_id\":\"20260608T172539-14bcbbc6\",\"bead_id\":\"ddx-df319cf9\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-08T17:39:24.807951046Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=dflash harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"1ae8dad49314828eb629362e10db86c400f01130\",\"classification\":\"transport\",\"decode_warnings\":[{\"field\":\"suggested_amendments\",\"warning\":\"expected array; dropped malformed field\",\"raw_excerpt\":\"[\\\"Consider reducing the context passed to the model by summarizing or trimming the bead description and acceptance criteria before retrying, if the system does not do so automatically.\\\",\\\"Ensure that the retry mechanism handles context window limits appropriately, potentially by splitting the task into smaller sub-beads or reducing the input size in the prompt construction.\\\"]\"}],\"detail\":\"agent: provider error: openai: POST \\\"http://sindri:8080/v1/chat/completions\\\": 400 Bad Request {\\\"message\\\":\\\"prompt + max_tokens exceeds context window\\\",\\\"type\\\":\\\"invalid_request_error\\\"}\",\"malformed\":true,\"rationale\":\"The execution failed with a provider error: 'prompt + max_tokens exceeds context window' (400 Bad Request, invalid_request_error). This is a transport-level context overflow caused by the combination of the large bead description, acceptance criteria, and context passed to the model. The outcome_reason is explicitly 'context_overflow'. This is not a semantic failure of the task logic or code generation, but a transient provider constraint regarding context window limits. Retrying with a different model or after reducing the effective context (e.g. by trimming history or description) may succeed. The previous triage event also classified this as transport with release_claim_retry, which is consistent.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"1ae8dad49314828eb629362e10db86c400f01130\",\"session_id\":\"eb-c63d2906\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-08T17:41:12.357742909Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry (warnings=1)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://sindri:8080/v1/chat/completions\": 400 Bad Request {\"message\":\"prompt + max_tokens exceeds context window\",\"type\":\"invalid_request_error\"}\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"profile\":\"cheap\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=1ae8dad49314828eb629362e10db86c400f01130\nbase_rev=1ae8dad49314828eb629362e10db86c400f01130\noutcome_reason=transport",
+          "created_at": "2026-06-08T17:41:12.424568941Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T18:37:39.235144281Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T174614-9d22ba89\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":416465,\"output_tokens\":1905,\"total_tokens\":418370,\"cost_usd\":0,\"duration_ms\":3073979,\"exit_code\":1}",
+          "created_at": "2026-06-08T18:37:39.342808345Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=418370 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"dflash\",\"actual_power\":0,\"actual_provider\":\"sindri\",\"attempt_id\":\"20260608T174614-9d22ba89\",\"bead_id\":\"ddx-df319cf9\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-08T18:37:42.589980382Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=dflash harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"35cfb3f25caffe95c709dfd5f6bffce7c757943c\",\"classification\":\"transport\",\"detail\":\"agent: provider error: openai: POST \\\"http://sindri:8080/v1/chat/completions\\\": 400 Bad Request {\\\"message\\\":\\\"prompt + max_tokens exceeds context window\\\",\\\"type\\\":\\\"invalid_request_error\\\"}\",\"rationale\":\"The execution failed with a provider error: 'prompt + max_tokens exceeds context window' (400 Bad Request, invalid_request_error). The outcome_reason is explicitly 'context_overflow'. This is a transport-level constraint violation, not a semantic failure of the task logic. The input token count (416,465) is very high, likely due to the large bead description and acceptance criteria being included in the prompt. Retrying with reduced context (e.g., trimming the prompt or splitting the bead) is the appropriate action.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"35cfb3f25caffe95c709dfd5f6bffce7c757943c\",\"session_id\":\"eb-5d46ec36\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-08T18:38:36.701171Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://sindri:8080/v1/chat/completions\": 400 Bad Request {\"message\":\"prompt + max_tokens exceeds context window\",\"type\":\"invalid_request_error\"}\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"profile\":\"cheap\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=35cfb3f25caffe95c709dfd5f6bffce7c757943c\nbase_rev=35cfb3f25caffe95c709dfd5f6bffce7c757943c\noutcome_reason=transport",
+          "created_at": "2026-06-08T18:38:36.788474709Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-df319cf9\",\"fingerprint\":\"3321e9400a5e5f07ddca5e91fc1c4cb088db15b4145c97b13b6fc7183d4602c8\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3321e9400a5e5f07ddca5e91fc1c4cb088db15b4145c97b13b6fc7183d4602c8\"}",
+          "created_at": "2026-06-08T18:41:46.102072927Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T18:55:24.570295749Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T184357-4ff749ef\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":173414,\"output_tokens\":1508,\"total_tokens\":174922,\"cost_usd\":0,\"duration_ms\":670550,\"exit_code\":1}",
+          "created_at": "2026-06-08T18:55:24.662524118Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=174922 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"dflash\",\"actual_power\":0,\"actual_provider\":\"sindri\",\"attempt_id\":\"20260608T184357-4ff749ef\",\"bead_id\":\"ddx-df319cf9\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-08T18:55:29.515874368Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=dflash harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"729c4ee1db5e9b300bc17bbad3fee71a2f79fa85\",\"classification\":\"transport\",\"decode_warnings\":[{\"field\":\"suggested_amendments\",\"warning\":\"expected array; dropped malformed field\",\"raw_excerpt\":\"[\\\"Trim or compress the bead description and acceptance criteria to reduce prompt token count before retry.\\\"]\"}],\"detail\":\"agent: provider error: openai: POST \\\"http://sindri:8080/v1/chat/completions\\\": 400 Bad Request {\\\"message\\\":\\\"prompt + max_tokens exceeds context window\\\",\\\"type\\\":\\\"invalid_request_error\\\"}\",\"malformed\":true,\"rationale\":\"The execution failed with a provider error: 'prompt + max_tokens exceeds context window' (400 Bad Request, invalid_request_error). The outcome_reason is explicitly 'context_overflow'. This is a transport-level constraint violation caused by the prompt being too large for the model's context window, not a semantic failure of the task logic. Retrying with reduced context or after a system-ready reset is the appropriate action.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"729c4ee1db5e9b300bc17bbad3fee71a2f79fa85\",\"session_id\":\"eb-bbc647f0\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-08T18:56:17.954233005Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry (warnings=1)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://sindri:8080/v1/chat/completions\": 400 Bad Request {\"message\":\"prompt + max_tokens exceeds context window\",\"type\":\"invalid_request_error\"}\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"profile\":\"cheap\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=729c4ee1db5e9b300bc17bbad3fee71a2f79fa85\nbase_rev=729c4ee1db5e9b300bc17bbad3fee71a2f79fa85\noutcome_reason=transport",
+          "created_at": "2026-06-08T18:56:18.047186Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description supplied without changed_fields\",\"fingerprint\":\"95264d3cb9fd69a6c9f452cd76df0e00d0ba9aeae5be0c59a4877d846c3d1616\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"95264d3cb9fd69a6c9f452cd76df0e00d0ba9aeae5be0c59a4877d846c3d1616\"}",
+          "created_at": "2026-06-08T18:59:38.419781254Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T19:08:30.796259103Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"dflash\",\"actual_power\":0,\"actual_provider\":\"sindri\",\"attempt_id\":\"20260608T190141-64d16c87\",\"bead_id\":\"ddx-df319cf9\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-08T19:08:33.384491948Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=dflash harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-06-08T19:08:33.525962497Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-06-08T19:08:33.642490575Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_evidence_produced\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"profile\":\"cheap\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=95442111865ca1bc9c9281c207823eee35e897c2\nbase_rev=95442111865ca1bc9c9281c207823eee35e897c2\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-06-08T19:08:33.7540087Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T19:31:39.017230478Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T191249-a0097d74\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":141162,\"output_tokens\":1429,\"total_tokens\":142591,\"cost_usd\":0,\"duration_ms\":1115279,\"exit_code\":1}",
+          "created_at": "2026-06-08T19:31:39.087946196Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=142591 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"dflash\",\"actual_power\":0,\"actual_provider\":\"sindri\",\"attempt_id\":\"20260608T191249-a0097d74\",\"bead_id\":\"ddx-df319cf9\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-08T19:31:41.830034982Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=dflash harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"6441a04347d495e132816876eb7dd56ec49dbd9c\",\"classification\":\"transport\",\"detail\":\"agent: provider error: openai: POST \\\"http://sindri:8080/v1/chat/completions\\\": 400 Bad Request {\\\"message\\\":\\\"prompt + max_tokens exceeds context window\\\",\\\"type\\\":\\\"invalid_request_error\\\"}\",\"rationale\":\"transient provider failure: context window exceeded on a cheap model for a medium-difficulty task; previous attempt already produced no-evidence, so retry with same or slightly higher power profile is appropriate rather than immediate escalation\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"6441a04347d495e132816876eb7dd56ec49dbd9c\",\"session_id\":\"eb-b699caf1\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-08T19:33:43.064022724Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://sindri:8080/v1/chat/completions\": 400 Bad Request {\"message\":\"prompt + max_tokens exceeds context window\",\"type\":\"invalid_request_error\"}\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"profile\":\"cheap\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=6441a04347d495e132816876eb7dd56ec49dbd9c\nbase_rev=6441a04347d495e132816876eb7dd56ec49dbd9c\noutcome_reason=transport",
+          "created_at": "2026-06-08T19:33:43.131505145Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T193848-a9121ef9",
+    "prompt": ".ddx/executions/20260608T193848-a9121ef9/prompt.md",
+    "manifest": ".ddx/executions/20260608T193848-a9121ef9/manifest.json",
+    "result": ".ddx/executions/20260608T193848-a9121ef9/result.json",
+    "checks": ".ddx/executions/20260608T193848-a9121ef9/checks.json",
+    "usage": ".ddx/executions/20260608T193848-a9121ef9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-df319cf9-20260608T193848-a9121ef9"
+  },
+  "prompt_sha": "9929081cd98e4b16a7cb658b5f29951c4059956b0eca73f455092052068c5935"
+}

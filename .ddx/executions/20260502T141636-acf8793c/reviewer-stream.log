@@ -1,0 +1,15 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no schema, resolver, CSRF, idempotency, audit, or test code is present to evaluate against any of the 6 acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No mutation/schema changes in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "No CSRF enforcement code or test visible", "location": "(missing)" },
+    { "severity": "block", "summary": "No idempotency dedupe logic or test visible", "location": "(missing)" },
+    { "severity": "block", "summary": "No audit event with identity capture visible", "location": "(missing)" },
+    { "severity": "block", "summary": "No default-status=proposed handling visible", "location": "(missing)" },
+    { "severity": "block", "summary": "No tests covering the five ACs visible", "location": "(missing)" }
+  ]
+}
+```

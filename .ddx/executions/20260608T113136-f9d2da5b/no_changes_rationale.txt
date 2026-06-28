@@ -1,0 +1,2 @@
+status: blocked
+reason: The internal/agent land-coordination changes are implemented and the targeted agent tests pass, but the full `cd cli && go test ./internal/agent/... ./cmd/... -count=1` sweep still has unresolved `cmd` regressions in the bead/work/review helpers that are not reduced to a single remaining path. The remaining failures span attachment reconciliation, review/bead lookup, metrics backfill, and work focus/startup cleanup, so I cannot honestly mark the bead complete in this pass.

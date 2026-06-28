@@ -1,0 +1,27 @@
+---
+
+## Review: ddx-6ff597ca iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Typed Issues slice with Kind/Path/ID/Message/RelatedPath | APPROVE | `cli/internal/docgraph/docgraph.go:27-46` — `GraphIssue` struct with all fields; all 8 IssueKind constants defined |
+| 2 | GraphQL schema exposes `DocGraph.issues: [GraphIssue!]!` | APPROVE | `schema.graphql:329-344` — type + field added; `warnings` kept with deprecation comment |
+| 3 | Unit tests cover each issue kind | APPROVE | `docgraph_test.go` — individual `TestIssue_*` tests for duplicate_id, parse_error, missing_dep, id_path_missing, id_path_mismatch, required_root_missing, cascade_unknown, cycle |
+| 4 | Integrity panel grouped by kind with count/path/link/badge | APPROVE | `IntegrityPanel.svelte` — groups by kind, count per group, path links, `integrity-badge` in `+page.svelte` |
+| 5 | Zero issues hides panel and badge | APPROVE | `+page.svelte:19-27` conditional render; e2e TC-038 asserts both absent |
+| 6 | Duplicate-ID rows show both paths + "copy suggested unique ID" | APPROVE | `IntegrityPanel.svelte:166-172` — button with `copySuggestion`; `docgraph_test.go` `TestSuggestUniqueID_Stable` asserts determinism |
+| 7 | CLI `ddx docs audit` with exit codes and grouped output | REQUEST_CHANGES | `cli/cmd/doc.go` — command is `ddx doc audit`, not `ddx docs audit`. Also `--json` always exits 0 even with issues, which is inconsistent with AC ("exits 1 if any issues present") |
+| 8 | Playwright e2e with seeded fixtures | APPROVE | `e2e/graph.spec.ts` TC-037 seeds duplicate_id + missing_dep, expands groups, asserts paths, clicks link, asserts navigation; TC-038 asserts clean graph |
+
+### Summary
+
+Solid implementation covering structured issues end-to-end from Go core through GraphQL to UI. The main gap is minor: the CLI command lives at `ddx doc audit` rather than the spec's `ddx docs audit`, and the `--json` flag silently exits 0 even when issues exist, which breaks the AC's "exits 1 if any issues present" contract for CI gating.
+
+### Findings
+
+- **AC 7 — command path**: The command is registered as `ddx doc audit` (`cli/cmd/doc.go:59`), but the acceptance criteria specifies `ddx docs audit` (or `ddx doctor docs`). If `doc` is the existing noun, this is arguably fine, but the AC should be reconciled. The `Aliases: []string{"integrity"}` alias doesn't cover the spec'd names.
+- **AC 7 — `--json` exit code**: `cli/cmd/doc.go:79-83` — when `--json` is set, the command encodes issues and returns `nil` unconditionally. The AC requires exit 1 when issues are present regardless of output format, so CI pipelines using `ddx doc audit --json` would incorrectly report success on a broken graph. The test `TestDocAuditCommand_JSONOutput` even documents this as intentional ("--json always succeeds (exit 0) so piping into jq works"), which contradicts the AC. Either the AC should be amended or the `--json` path should also return `ExitError` when issues exist (with a `--exit-zero` escape hatch for pipe-friendly use).

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result metadata. No actual artifacts (prompt.md, png, png.ddx.yaml) for the user-workflow capstone are present in the changed files, so acceptance cannot be evaluated as met.",
+  "findings": [
+    { "severity": "block", "summary": "Expected artifacts at docs/helix/01-frame/visuals/user-workflow.{prompt.md,png,png.ddx.yaml} are not in the diff", "location": "docs/helix/01-frame/visuals/" },
+    { "severity": "info", "summary": "Only execution tracking files were added; result.json reports success but no deliverable files are visible in the changed-files list", "location": ".ddx/executions/20260501T165030-979aff9f/" }
+  ]
+}
+```

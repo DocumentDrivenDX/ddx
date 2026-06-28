@@ -1,0 +1,17 @@
+---
+## Review: ddx-34ebc405 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:551-639 — both removed; uses `agent.NewRunner(agent.Config{})` |
+| 2 | Real-git harness + RealLandingGitOps flow | APPROVE | cli/cmd/agent_execute_bead_test.go:561-585 — real `git init`, real commits, real `rev-parse`/`log` assertions, dispatched via `NewCommandFactory` + `script` harness with directive file |
+| 3 | `go test -run ^TestExecuteBeadNoMerge$` green | APPROVE | result.json outcome=task_succeeded, exit_code=0 (test was run as part of bead verification gate) |
+| 4 | No other test in file modified | APPROVE | `git show --stat` shows only one file, 89 lines touched all within `TestExecuteBeadNoMerge` (lines 548-639) |
+
+### Summary
+
+Clean migration. The fake structs are gone and replaced by a real git repo + script-harness directive file driving an actual worker commit, with assertions promoted from `git.mergeCalls == 0` / `git.refs[ref]` map lookups to real `git rev-parse` / `git log --merges` checks against `refs/heads/main` and the preserve ref. Scope was held to the single target test.

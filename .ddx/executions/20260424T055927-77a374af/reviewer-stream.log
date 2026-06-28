@@ -1,0 +1,17 @@
+---
+## Review: ddx-c55119a7 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner references | APPROVE | cli/cmd/agent_execute_bead_test.go:2726-2831 — replaced with real git + script harness |
+| 2 | Dispatches through real runner + real-git harness | APPROVE | cli/cmd/agent_execute_bead_test.go:2810-2811 — `NewCommandFactory(workDir)` + `agent.NewRunner(agent.Config{})`; real `git init/add/commit` via scrubbed-env `runGit` |
+| 3 | Target test passes | APPROVE | .ddx/executions/20260424T055927-77a374af/result.json — outcome `task_succeeded`, exit 0 |
+| 4 | No other test in file modified | APPROVE | `git show --stat` shows only TestExecuteBeadEmbeddedAgentStateRedirected hunk in agent_execute_bead_test.go |
+
+### Summary
+
+Clean migration. The test now exercises real `ExecuteBead → LandBeadResult → Land` against an isolated real-git repo, with a script-harness directive file bracketing the simulated embedded-agent write with `ls -A` snapshots — a faithful substitute for the prior in-process `sideEffect` callback. The script.go change (adding `DDX_SESSION_LOG_DIR` to the interpolation map) is a minimal enabling edit required for directives to reference the override dir and is outside the "only this test in the same file" scope restriction.

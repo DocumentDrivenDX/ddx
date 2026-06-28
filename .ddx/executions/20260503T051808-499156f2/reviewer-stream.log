@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "FEAT-006 Worker Contract section rewritten to rev 5: autonomous worker, server-probe goroutine, best-effort mirror, freshness states, cancel via bead extra. Rev 3 terms (session_token, heartbeat_interval, claim_lease, long-poll, next-bead/result/disconnect surface) removed. ADR-022 commit 484b9a08 cross-linked.",
+  "findings": []
+}
+```

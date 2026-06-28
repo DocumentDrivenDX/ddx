@@ -1,0 +1,25 @@
+---
+## Review: ddx-6ff597ca iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Typed graph issues with required kinds | APPROVE | cli/internal/docgraph/docgraph.go:30 — required issue kinds; cli/internal/docgraph/docgraph.go:46 — typed `GraphIssue` |
+| 2 | GraphQL exposes DocGraph.issues | APPROVE | cli/internal/server/graphql/schema.graphql:323 — `warnings`; cli/internal/server/graphql/schema.graphql:326 — `issues`; cli/internal/server/graphql/schema.graphql:330 — fields |
+| 3 | Unit tests cover each issue kind | APPROVE | cli/internal/docgraph/docgraph_test.go:640 — duplicate; cli/internal/docgraph/docgraph_test.go:669 — parse; cli/internal/docgraph/docgraph_test.go:687 — missing dep; cli/internal/docgraph/docgraph_test.go:708 — id path missing |
+| 4 | Graph Integrity panel grouped with links | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte:36 — conditional panel; cli/internal/server/frontend/src/lib/components/IntegrityPanel.svelte:30 — grouping; cli/internal/server/frontend/src/lib/components/IntegrityPanel.svelte:152 — document link |
+| 5 | Zero issues hides panel and badge | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte:21 — badge only with issues; cli/internal/server/frontend/e2e/graph.spec.ts:267 — clean graph test |
+| 6 | Duplicate repair affordance | APPROVE | cli/internal/docgraph/docgraph.go:54 — deterministic suggestion; cli/internal/server/frontend/src/lib/components/IntegrityPanel.svelte:162 — related path; cli/internal/server/frontend/src/lib/components/IntegrityPanel.svelte:195 — copy button |
+| 7 | `ddx docs audit` exits correctly | APPROVE | cli/cmd/doc.go:38 — `docs` alias; cli/cmd/doc.go:86 — JSON exit handling; cli/cmd/doc.go:94 — clean exit; cli/cmd/doc.go:120 — issue exit |
+| 8 | Playwright fixture repo e2e | REQUEST_CHANGES | cli/internal/server/frontend/e2e/graph.spec.ts:177 — uses mocked GraphQL issue payload, not a seeded fixture repo |
+
+### Summary
+
+The implementation covers the structured issue model, GraphQL plumbing, UI panel, repair affordances, and CLI behavior well. The remaining gap is AC 8: the Playwright coverage validates mocked client rendering, but not a `/graph` run against a fixture repo with actual duplicate and missing-dependency source files.
+
+### Findings
+
+- `cli/internal/server/frontend/e2e/graph.spec.ts:177` — AC 8 asks for a Playwright e2e on a fixture repo with one seeded duplicate-id pair and one missing-dep target. The test directly injects `duplicate_id` and `missing_dep` objects through a mocked `/graphql` response, so it does not exercise docgraph detection, GraphQL resolver plumbing, or project fixture routing end-to-end.

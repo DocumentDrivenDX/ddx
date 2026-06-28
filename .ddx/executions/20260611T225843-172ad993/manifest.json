@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260611T225843-172ad993",
+  "bead_id": "ddx-216c8dbd",
+  "base_rev": "dcde2f13c533f652d701241c0e6c67b17840e796",
+  "created_at": "2026-06-11T22:58:59.720510131Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-216c8dbd",
+    "title": "test: add worker single-pane and dispatch Playwright coverage",
+    "description": "PROBLEM\nThe server operator workbench now has explicit user stories and test-plan rows, but there are no focused E2E specs proving the basic worker single-pane and server-managed launch workflows.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:485 defines US-100 for seeing every worker in one pane.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:510 defines US-101 for starting server-managed ddx work capacity.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:312 defines TC-016, but the repository only has the older broad cli/internal/server/frontend/e2e/workers.spec.ts coverage and no workers-single-pane.spec.ts or workers-dispatch.spec.ts dedicated to TC-016.\n\nPROPOSED FIX\n- Add cli/internal/server/frontend/e2e/workers-single-pane.spec.ts covering node-wide worker listing, worker detail, freshness, and federation-scope listing fixture expectations.\n- Add cli/internal/server/frontend/e2e/workers-dispatch.spec.ts covering count=2 startWorker, workers.max_count refusal, stop worker, lifecycle/audit visibility, and live update behavior.\n- Reuse or extend existing frontend E2E fixture helpers instead of relying on the developer live DDx state.\n\nNON-SCOPE\nDo not implement production UI or server behavior in this bead except minimal fixture/test helper changes needed to express the tests. Do not cover Axon, 2k-scale artifact performance, or FEAT-029 managed-node outbound channels.",
+    "acceptance": "1. `workers-single-pane.spec.ts` includes tests named `shows all local project workers in one node-wide pane`, `opens worker detail with current bead and captured output`, and `shows hub and spoke workers in federation scope`.\n2. `workers-dispatch.spec.ts` includes tests named `starts two server managed work workers`, `refuses starts beyond workers max count`, and `stops a worker and shows the lifecycle event`.\n3. The specs use temp projects and isolated `XDG_DATA_HOME` fixtures, not the developer live server state.\n4. `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/workers-single-pane.spec.ts e2e/workers-dispatch.spec.ts` passes once implementation beads land.\n5. `cd cli \u0026\u0026 go test -short ./internal/server/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:web",
+      "area:test",
+      "kind:test",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "spec-id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH",
+      "path": "docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md",
+      "title": "Server Operator Workbench Plan"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260611T225843-172ad993",
+    "prompt": ".ddx/executions/20260611T225843-172ad993/prompt.md",
+    "manifest": ".ddx/executions/20260611T225843-172ad993/manifest.json",
+    "result": ".ddx/executions/20260611T225843-172ad993/result.json",
+    "checks": ".ddx/executions/20260611T225843-172ad993/checks.json",
+    "usage": ".ddx/executions/20260611T225843-172ad993/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-216c8dbd-20260611T225843-172ad993"
+  },
+  "prompt_sha": "b099d003bd1196f3ee40dbd4f17f23a8ea3d1ebdc533ba85bff37519867f5055"
+}

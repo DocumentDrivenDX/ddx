@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "FEAT-022 amended with the minimum-prompt rule paragraph as specified, including the closing sentence about dynamic egress caps. Placed adjacent to related shared-evidence guardrails (item 3) as item 3a.",
+  "findings": []
+}
+```

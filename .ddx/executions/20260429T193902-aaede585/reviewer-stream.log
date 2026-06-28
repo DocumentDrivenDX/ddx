@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json) under .ddx/executions/. No implementation of the ddx_list_personas MCP tool is present in the changed files, so AC cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "No source code changes for the MCP tool in the reviewed diff; only execution metadata files are included.", "location": ".ddx/executions/20260429T193902-aaede585/" }
+  ]
+}
+```

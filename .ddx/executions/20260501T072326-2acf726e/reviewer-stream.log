@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Persona System section replaced with Artifact Graph describing markdown + non-markdown artifacts via .ddx.yaml sidecar. No 'ddx try', 'ddx run', or HELIX methodology references remain in features/_index.md.",
+  "findings": []
+}
+```

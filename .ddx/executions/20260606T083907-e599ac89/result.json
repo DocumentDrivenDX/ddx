@@ -1,0 +1,45 @@
+{
+  "bead_id": "ddx-38801c65",
+  "attempt_id": "20260606T083907-e599ac89",
+  "base_rev": "c7cf172c21c5192d6322d3bacdeedbda5f811eef",
+  "result_rev": "96ea55f04c5568028b6eb33930fa631a4fbeb240",
+  "implementation_rev": "96ea55f04c5568028b6eb33930fa631a4fbeb240",
+  "outcome": "error",
+  "status": "execution_failed",
+  "detail": "land coordination failed: land advancer: fast-forwarding refs/heads/main to 96ea55f04c5568028b6eb33930fa631a4fbeb240: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 0368fcae0fee619ef5140bf73f802e405b1a27ac but expected c7cf172c21c5192d6322d3bacdeedbda5f811eef: exit status 128: land advancer: fast-forwarding refs/heads/main to 96ea55f04c5568028b6eb33930fa631a4fbeb240: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 0368fcae0fee619ef5140bf73f802e405b1a27ac but expected c7cf172c21c5192d6322d3bacdeedbda5f811eef: exit status 128",
+  "orchestrator_status": "execution_failed",
+  "reason": "land coordination failed: land advancer: fast-forwarding refs/heads/main to 96ea55f04c5568028b6eb33930fa631a4fbeb240: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 0368fcae0fee619ef5140bf73f802e405b1a27ac but expected c7cf172c21c5192d6322d3bacdeedbda5f811eef: exit status 128",
+  "preserve_ref": "refs/ddx/iterations/ddx-38801c65/20260606T083907-e599ac89-c7cf172c21c5",
+  "candidate_ref": "refs/ddx/iterations/20260606T083907-e599ac89/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260606T083907-e599ac89",
+      "result_rev": "96ea55f04c5568028b6eb33930fa631a4fbeb240",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-fc94a3e2",
+  "duration_ms": 2995854,
+  "tokens": 16947108,
+  "exit_code": 0,
+  "error": "land advancer: fast-forwarding refs/heads/main to 96ea55f04c5568028b6eb33930fa631a4fbeb240: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 0368fcae0fee619ef5140bf73f802e405b1a27ac but expected c7cf172c21c5192d6322d3bacdeedbda5f811eef: exit status 128",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260606T083907-e599ac89",
+  "prompt_file": ".ddx/executions/20260606T083907-e599ac89/prompt.md",
+  "manifest_file": ".ddx/executions/20260606T083907-e599ac89/manifest.json",
+  "result_file": ".ddx/executions/20260606T083907-e599ac89/result.json",
+  "usage_file": ".ddx/executions/20260606T083907-e599ac89/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-06T08:39:19.568815698Z",
+  "finished_at": "2026-06-06T09:29:15.422953572Z"
+}

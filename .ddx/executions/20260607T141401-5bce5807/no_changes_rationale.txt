@@ -1,0 +1,2 @@
+status: blocked
+reason: the fixture-backed Playwright screenshot harness could not be re-run to a green state in this environment; manual DDx server bootstraps kept resolving /api/projects to the machine-level repo root (/Users/erik/Projects/ddx) instead of the temp ddx-e2e-* fixture workspace, and the direct --update-snapshots retry also hit a Vite/Rolldown memory failure during frontend build

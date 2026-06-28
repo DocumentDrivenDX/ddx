@@ -1,0 +1,28 @@
+{
+  "bead_id": "ddx-f71ef348",
+  "attempt_id": "20260528T163954-cb8fcd94",
+  "base_rev": "82b27bf67595a3a2d36980e345a082e486db739a",
+  "result_rev": "82b27bf67595a3a2d36980e345a082e486db739a",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/ratelimit_retry.go, cli/internal/agent/ratelimit_retry_test.go, cli/cmd/.ddx/config.yaml",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "no_evidence_paths": [
+    "cli/internal/agent/ratelimit_retry.go",
+    "cli/internal/agent/ratelimit_retry_test.go",
+    "cli/cmd/.ddx/config.yaml"
+  ],
+  "session_id": "eb-066bc67d",
+  "duration_ms": 699385,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/ratelimit_retry.go, cli/internal/agent/ratelimit_retry_test.go, cli/cmd/.ddx/config.yaml",
+  "project_root": "/home/erik/Projects/ddx",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260528T163954-cb8fcd94",
+  "prompt_file": ".ddx/executions/20260528T163954-cb8fcd94/prompt.md",
+  "manifest_file": ".ddx/executions/20260528T163954-cb8fcd94/manifest.json",
+  "result_file": ".ddx/executions/20260528T163954-cb8fcd94/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-28T16:40:11.007632997Z",
+  "finished_at": "2026-05-28T16:51:50.39327098Z"
+}

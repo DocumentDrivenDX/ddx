@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no source changes for schema validator, status model, template, AC-skip, or self-mutation guard. Insufficient evidence to evaluate any AC item.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes for issueType=operator-prompt validator support", "location": "(missing)" },
+    { "severity": "block", "summary": "No code changes adding 'proposed' status or transitions", "location": "(missing)" },
+    { "severity": "block", "summary": "No prompt→bead template added", "location": "(missing)" },
+    { "severity": "block", "summary": "No structural AC-skip logic for operator-prompt", "location": "(missing)" },
+    { "severity": "block", "summary": "No runtime self-mutation guard or unit tests for allow/deny matrix", "location": "(missing)" }
+  ]
+}
+```

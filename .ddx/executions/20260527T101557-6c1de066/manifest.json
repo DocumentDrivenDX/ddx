@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260527T101557-6c1de066",
+  "bead_id": "ddx-fd02cf6e",
+  "base_rev": "f6f0022ac9f6bb616e66756885b48aebd85a463b",
+  "created_at": "2026-05-27T10:16:04.720850189Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fd02cf6e",
+    "title": "pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 1",
+    "description": "PROBLEM\nParent bead ddx-61f6c57d is too broad for one execution pass. This child owns part 1 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-f9ddaa68 is too broad for one execution pass. This child owns part 2 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nddx work --watch's pre-claim intake decoder fails to unmarshal the readiness_checks response when verdict is a JSON bool. Every claim attempt produces the same warn-only rejection, so the worker logs a warning and skips. With 23 ready beads in the fizeau queue and one fizeau-scoped daemon, the entire queue is idle indefinitely.\n\nOBSERVATION (Fizeau, 2026-05-18 05:27-05:39 UTC; about an hour after the previous wedge bug ddx-8f2e0ebf)\n- Worker: PID 1527216, ddx work --watch in /Users/erik/Projects/fizeau, etime 01:22:40 at observation.\n- Log: /Users/erik/Projects/fizeau/.ddx/agent-logs/agent-loop-1779077845655338391.jsonl\n- Pattern every ~50s: resource.preflight (status ok) -\u003e pre_claim_intake.start -\u003e pre_claim_intake.warn -\u003e loop.idle.\n- Sample pre_claim_intake.warn payload:\n  {\n    \"bead_id\":\"fizeau-5b2a8950\",\n    \"decision\":\"warn\",\n    \"decision_source\":\"pre_claim_intake\",\n    \"detail\":\"decode result: json: cannot unmarshal bool into Go struct field .readiness_checks.verdict of type string\",\n    \"fingerprint\":\"15155a1cd44e96daf53eabb14c8eb3ccd8b0e5271d881208cfcbbf2869899f4f\",\n    \"outcome\":\"intake_error\",\n    \"policy_mode\":\"warn-only\",\n    \"reason\":\"system_unready\",\n    \"rule_id\":\"pre_claim_intake.system_unready\",\n    \"suggested_action\":\"check the readiness route or harness configuration and retry\",\n    \"system_reason\":\"unavailable\"\n  }\n- Identical fingerprint across multiple bead_ids confirms it is a schema mismatch, not a bead-specific issue.\n- Queue state at observation: open=44, ready=23, dependency-waiting=19. None of the 23 ready beads got claimed in the prior 30 minutes; commit log empty for the same window.\n- Other beads (fizeau-a15106ab, fizeau-90b85c8b) WERE successfully closed earlier in the night through some other path (perhaps a different worker version or a different execute-bead invocation). Suggests this decoder bug appeared mid-session OR only affects certain readiness routes.\n\nWHY THIS IS A BUG\n1. Schema drift between the readiness-check producer and the pre_claim_intake consumer. One emits verdict as bool, the other parses it as string. Either the producer or consumer changed without coordination.\n2. warn-only policy_mode masks the failure: the worker keeps polling and looks alive (loop.idle every 5\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\n- Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\n2. Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.",
+    "parent": "ddx-61f6c57d",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-claim",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T09:44:57.897118152Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-27T09:46:51.468447955Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-27T10:15:45.777953065Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T101557-6c1de066",
+    "prompt": ".ddx/executions/20260527T101557-6c1de066/prompt.md",
+    "manifest": ".ddx/executions/20260527T101557-6c1de066/manifest.json",
+    "result": ".ddx/executions/20260527T101557-6c1de066/result.json",
+    "checks": ".ddx/executions/20260527T101557-6c1de066/checks.json",
+    "usage": ".ddx/executions/20260527T101557-6c1de066/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-fd02cf6e-20260527T101557-6c1de066"
+  },
+  "prompt_sha": "aa8279ff3bb835711e3481239ba7ce3b3a9de5aace488ccf5b1129c21e004db6"
+}

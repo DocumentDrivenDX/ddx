@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "cli/go.mod and cli/go.sum bumped DocumentDrivenDX/fizeau to v0.9.29 in merged commit f74d3071; go.sum hashes present; execution evidence recorded with task_succeeded/exit 0. Binary install/server-restart steps are operational and outside the repo diff.",
+  "findings": [
+    { "severity": "info", "summary": "AC 4/5 (reinstall ~/.local/bin/ddx, restart ddx-server) are not verifiable from the diff; rely on the agent's success status.", "location": ".ddx/executions/20260502T190840-94496a35/result.json" }
+  ]
+}
+```

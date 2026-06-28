@@ -1,0 +1,17 @@
+---
+## Review: ddx-7eab13a6 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Tests pass after fix | APPROVE | Fix in `cli/internal/bead/store.go` (commit 8557dd8d) + test additions in `worktree_prefix_test.go` (commit c86b2099); no compile/test breakage in diff |
+| 2 | Test fails before fix, passes after | APPROVE | `cli/internal/bead/worktree_prefix_test.go:39` and `:69` — both tests now `t.Chdir(worktreeCwd)` into a worktree-shaped non-git dir, exercising the pre-fix `filepath.Base(cwd)` fallback path (commit msg confirms verified against pre-fix code) |
+| 3 | 12 malformed beads repaired or deferred | APPROVE | `.ddx/beads.jsonl` still contains malformed `.execute-bead-wt-*` IDs (now 22, drift from new in-flight runs) with deferral note recorded on this bead in prior iteration |
+| 4 | Layer-2 design bead filed and referenced | APPROVE | ddx-d3a4f89c filed in commit 1f960e8d ("file ddx-7eab13a6 … and ddx-3bd7396a"), referenced from this bead's events; FEAT-006 documented in commit e7149f17 |
+
+### Summary
+
+This iteration cleanly addresses the prior REQUEST_CHANGES finding: both regression tests now `t.Chdir` into a worktree-shaped non-git temp dir before invoking `NewStore`/`detectPrefix`, so the pre-fix code path (which fell back to `filepath.Base(cwd)`) is actually exercised. Prior iteration's store.go fix and layer-2 design bead remain intact.

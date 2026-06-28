@@ -1,0 +1,28 @@
+---
+## Review: ddx-443731d5 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Delete button on bead detail | BLOCK | — not found in diff |
+| 2 | Typed confirm expects bead id | BLOCK | — not found in diff |
+| 3 | Cancel returns focus to Delete trigger | BLOCK | — not found in diff |
+| 4 | Parent beads show cascade checkbox | BLOCK | — not found in diff |
+| 5 | Submit calls beadClose with deleted reason | BLOCK | — not found in diff |
+| 6 | Success redirects to project-scoped list | BLOCK | — not found in diff |
+| 7 | US-085c green in e2e/beads.spec.ts | BLOCK | — not found in diff |
+| 8 | beadClose mutation exercised | BLOCK | — not found in diff |
+
+### Summary
+
+The reviewed diff only adds execution evidence under `.ddx/executions/20260422T083901-831aa486/`. It contains no UI, mutation, routing, or e2e test changes, so the implementation cannot be approved against the acceptance criteria.
+
+### Findings
+
+- Missing bead detail UI implementation: no diff adds a Delete button, `TypedConfirmDialog`, typed bead-id confirmation, cancel focus restoration, or parent cascade checkbox.
+- Missing mutation wiring: no diff shows `beadClose(id, reason: 'deleted via UI')` being called from the delete confirmation submit path.
+- Missing redirect behavior: no diff shows success navigation to `/nodes/{nodeId}/projects/{projectId}/beads`.
+- Missing e2e coverage: no diff updates `e2e/beads.spec.ts` for US-085c, beadClose mutation exercise, or cancel focus return.

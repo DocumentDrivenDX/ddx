@@ -1,0 +1,105 @@
+{
+  "attempt_id": "20260607T005603-7f483f19",
+  "bead_id": "ddx-f9bb7327",
+  "base_rev": "07bb3767300a6549dd9da50de285940077336d41",
+  "created_at": "2026-06-07T00:56:16.318333135Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f9bb7327",
+    "title": "Detect and repair parent-ancestor deps in bead doctor",
+    "description": "PROBLEM\n`ddx bead doctor` can currently repair oversized fields and detect dangling-success beads, but it never scans for dependency edges that point back to a bead's parent chain. That leaves structural back-edges hidden until work loops wedge.\n\nROOT CAUSE\n`cli/internal/bead/doctor.go` only reports field-length overflow, and `cli/cmd/bead_doctor.go` only exposes the oversized-field and dangling-success modes. There is no stable, scriptable `parent_ancestor_in_deps` pass that enumerates offending beads or repairs them under `--fix`.\n\nPROPOSED FIX\nExtend the bead doctor to scan for any dep whose target is the bead's parent or ancestor, emit a stable `parent_ancestor_in_deps` finding list, and remove only the offending edges when `--fix` is supplied. The command output must stay deterministic so shell tooling can parse it. Add a regression test named `ddx_doctor_detects_and_repairs_back_edge`.\n\nNON-SCOPE\nDo not change create-time validation, decomposition prompt text, work-loop remediation, or dispatch severity in this bead.\n\nIn-scope files:\n- cli/internal/bead/doctor.go\n- cli/internal/bead/doctor_test.go\n- cli/cmd/bead_doctor.go\n- cli/cmd/bead_doctor_test.go (new or existing command-level coverage)\n\nOut-of-scope:\n- cli/internal/bead/store.go\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/lifecycle_dispatch.go\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/bead/... -run TestBeadDoctorDetectsAndRepairsBackEdge` passes.\n2. `cd cli \u0026\u0026 go test ./cmd/... -run TestBeadDoctorDetectsAndRepairsBackEdge` passes.\n3. `cd cli \u0026\u0026 go test ./internal/bead/... ./cmd/...` passes.\n4. `cd cli \u0026\u0026 lefthook run pre-commit` passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T22:14:11.943060514Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T212922-62e8c270\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":17576133,\"output_tokens\":48450,\"total_tokens\":17624583,\"cost_usd\":0,\"duration_ms\":2651342,\"exit_code\":0}",
+          "created_at": "2026-06-06T22:14:12.043583785Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=17624583 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260606T212922-62e8c270/0\",\"cycle_index\":0,\"attempt_id\":\"20260606T212922-62e8c270\",\"base_rev\":\"d669eb15cd19fa18139727b5bd02d0b54cfbfae3\",\"result_rev\":\"ad28be165c000bdde2d62f0fc23d3728bedc9c56\"}",
+          "created_at": "2026-06-06T22:14:12.150284253Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-06T23:02:10.703766377Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f9bb7327\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-06T23:02:39.579869754Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"attempt failed while committing tracker metadata with git index write failure, and bead context also reports tracker lock timeout with retry_after; this is infrastructure contention, not bead-owned implementation failure\",\"recommended_action\":\"release_claim_wait_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-06T23:03:41.932359714Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_wait_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-06-06T23:03:42.066952168Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-07T00:09:48.864894221Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        }
+      ],
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 2983171)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T14:32:55Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T005603-7f483f19",
+    "prompt": ".ddx/executions/20260607T005603-7f483f19/prompt.md",
+    "manifest": ".ddx/executions/20260607T005603-7f483f19/manifest.json",
+    "result": ".ddx/executions/20260607T005603-7f483f19/result.json",
+    "checks": ".ddx/executions/20260607T005603-7f483f19/checks.json",
+    "usage": ".ddx/executions/20260607T005603-7f483f19/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f9bb7327-20260607T005603-7f483f19"
+  },
+  "prompt_sha": "d27b54f5d1ce1d3758a1a7924944b735f4efcf1243a5c3ed5a5982f7d72575ab"
+}

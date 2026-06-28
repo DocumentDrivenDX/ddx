@@ -1,0 +1,158 @@
+{
+  "attempt_id": "20260608T113151-f1778ab3",
+  "bead_id": "ddx-044cd257",
+  "base_rev": "64a8898b6f3a11c641d2ccc0fe1104195c329ba0",
+  "created_at": "2026-06-08T11:32:18.905171455Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-044cd257",
+    "title": "agent: reject empty review results before close",
+    "description": "PROBLEM\nThe worker can treat a successful cycle as closeable even when `ReviewResult` is empty or the reviewer is nil without an explicit skip reason. That matches the Niflheim success records where `cycle_trace.review_result={}` and nil-reviewer paths still reached close.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead_review.go:168-193` defines `ReviewResult` with all evidence fields optional, so the zero value is indistinguishable from a meaningful review artifact. `cli/internal/agent/execute_bead_post_review.go:95-107` skips review whenever `Reviewer` is nil or `NoReview` is set, and `cli/internal/agent/execute_bead_review_test.go:799-823` proves the nil-reviewer close path exists. Nothing currently rejects a non-skipped empty review result before close.\n\nPROPOSED FIX\n- Add a guard in the post-review or success path that treats an empty non-skipped `ReviewResult` as a review error or operator-attention event.\n- Require an explicit durable skip reason for `Reviewer: nil` or `NoReview` before close.\n- Add regression coverage for empty review close-blocking and explicit skip behavior.\n\nNON-SCOPE\n- Do not change land coordination, pre-claim intake, or decomposition handling in this child.\n- Do not alter the review model itself beyond the gating invariants needed for these regressions.",
+    "acceptance": "1. `TestExecuteBeadWorker_NiflheimEvidence_EmptyReviewResultCannotClose` proves a non-skipped success path with `cycle_trace.review_result={}` or an equivalent empty `ReviewResult` cannot close a bead and records `review_error` or operator-attention with a non-empty reason.\n2. `TestExecuteBeadWorker_NiflheimEvidence_NilReviewerRequiresExplicitSkip` updates the current nil-reviewer behavior so `Reviewer: nil` only closes when an explicit durable no-review/skip reason is present; otherwise it fails review gating.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'EmptyReviewResult|NilReviewer' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T10:25:58.681655709Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T100822-174f32ac\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":4713171,\"output_tokens\":37460,\"total_tokens\":4750631,\"cost_usd\":0,\"duration_ms\":770551,\"exit_code\":0}",
+          "created_at": "2026-06-08T10:25:58.749014302Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4750631 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[],\"requested_min_power\":7}",
+          "created_at": "2026-06-08T10:32:01.390079228Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T102640-9b3e7335\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":87348,\"output_tokens\":472,\"total_tokens\":87820,\"cost_usd\":0,\"duration_ms\":290300,\"exit_code\":1}",
+          "created_at": "2026-06-08T10:32:01.452980194Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=87820 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":8}",
+          "created_at": "2026-06-08T10:53:33.302372178Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T103203-3687dc30\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":8504058,\"output_tokens\":44180,\"total_tokens\":8548238,\"cost_usd\":0,\"duration_ms\":919354,\"exit_code\":0}",
+          "created_at": "2026-06-08T10:53:33.36486457Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=8548238 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":9}",
+          "created_at": "2026-06-08T11:10:21.86193435Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T105336-094bd9cb\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":5953701,\"output_tokens\":33217,\"total_tokens\":5986918,\"cost_usd\":0,\"duration_ms\":700601,\"exit_code\":0}",
+          "created_at": "2026-06-08T11:10:21.943011266Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=5986918 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260608T105336-094bd9cb\",\"bead_id\":\"ddx-044cd257\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"smart\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-08T11:10:24.877039385Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=`cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` is not green in this workspace; the `internal/agent` subset passes, but `./cmd/...` fails broadly with pre-existing fixture/state errors (for example `TestAcRun_PassExitsZero` cannot load bead `ddx-ac-pass`, and many work/bead commands report missing queue state). The review-gate change is implemented, but the acceptance-gated full suite is blocked on the cmd environment.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-06-08T11:10:24.994961448Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` is not green in this workspace; the `internal/agent` subset passes, but `./cmd/...` fails broadly with pre-existing fixture/state errors (for example `TestAcRun_PassExitsZero` cannot load bead `ddx-ac-pass`, and many work/bead commands report missing queue state). The review-gate change is implemented, but the acceptance-gated full suite is blocked on the cmd environment.\nresult_rev=bda0f13094e9bb676a60749823784213d1ccdc01\nbase_rev=bda0f13094e9bb676a60749823784213d1ccdc01\nretry_after=2026-06-08T11:15:25Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-08T11:10:25.163165068Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\"}",
+          "created_at": "2026-06-08T11:29:48.466651262Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "FEAT-010",
+      "work-last-detail": "`cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` is not green in this workspace; the `internal/agent` subset passes, but `./cmd/...` fails broadly with pre-existing fixture/state errors (for example `TestAcRun_PassExitsZero` cannot load bead `ddx-ac-pass`, and many work/bead commands report missing queue state). The review-gate change is implemented, but the acceptance-gated full suite is blocked on the cmd environment.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-06-08T11:15:25Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "`cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` is not green in this workspace; the `internal/agent` subset passes, but `./cmd/...` fails broadly with pre-existing fixture/state errors (for example `TestAcRun_PassExitsZero` cannot load bead `ddx-ac-pass`, and many work/bead commands report missing queue state). The review-gate change is implemented, but the acceptance-gated full suite is blocked on the cmd environment.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T113151-f1778ab3",
+    "prompt": ".ddx/executions/20260608T113151-f1778ab3/prompt.md",
+    "manifest": ".ddx/executions/20260608T113151-f1778ab3/manifest.json",
+    "result": ".ddx/executions/20260608T113151-f1778ab3/result.json",
+    "checks": ".ddx/executions/20260608T113151-f1778ab3/checks.json",
+    "usage": ".ddx/executions/20260608T113151-f1778ab3/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-044cd257-20260608T113151-f1778ab3"
+  },
+  "prompt_sha": "a065b8f0bde188e4e5a74a814b3bd8b8c64472ebcb6dd80bc5b2b626baa22395"
+}

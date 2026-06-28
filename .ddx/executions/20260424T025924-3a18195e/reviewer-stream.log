@@ -1,0 +1,33 @@
+## Review: ddx-23978824 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Unified view (harnessStatuses + async probes) | BLOCK | — diff contains only execution bookkeeping files |
+| 2 | Usage + quota fields | BLOCK | — no implementation in diff |
+| 3 | Trend detail route | BLOCK | — no implementation in diff |
+| 4 | Perf posture (fixtures, p95 targets) | BLOCK | — no perf test added |
+| 5 | Design note in docs/helix/02-design/ | BLOCK | — not present in diff |
+| 6 | No regressions (CLI commands intact) | BLOCK | — unable to evaluate; no code changes shown |
+| 7 | Cross-reference handling for ddx-2ceb02fa | BLOCK | — unable to evaluate |
+
+### Summary
+
+The diff at `6c870c7f` adds only `.ddx/executions/20260424T025924-3a18195e/manifest.json` and `result.json` — execution bookkeeping, not deliverable code. The actual work commit referenced as `result_rev=c334d94e` is not included in the review range. None of the seven acceptance criteria can be evaluated from this diff.
+
+### Findings
+
+- **Diff scope wrong.** Only `.ddx/executions/20260424T025924-3a18195e/{manifest,result}.json` are present. Re-extract with `git diff 6b041b0b..c334d94e` (base_rev → result_rev from `result.json`) and re-submit.
+- **Prior iteration findings still outstanding** (per manifest event log, reviewer at 2026-04-23T05:50:09Z against `727c5fdb`): if the new result_rev `c334d94e` is the follow-up, it must address:
+  - `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte` — add polling/subscription so rows patch within 5s (AC1).
+  - Remove `defaultRouteStatus` from initial page query and/or make `resolver_providers.go:102` async (AC1).
+  - Wire `QuotaFromRateLimitSignal` (`resolver_providers.go:488`) into live Claude/Codex call sites so harness quota rows populate (AC2).
+  - Add 7-day sparkline rendering in the list row when ≥6 hourly buckets exist (AC2).
+  - Return nullable usage (not zero-valued pointers) so missing data renders as "not reported" (`resolver_providers.go:412`) (AC2).
+  - Render quota ceiling as a chart overlay, not trailing text (`providers/[name]/+page.svelte:154`) (AC3).
+  - Replace mocked `providerTrend` in `agent-endpoints.e2e.ts:137` with a seeded-fixture Playwright assertion proving projection text appears (AC3).
+  - Add perf fixture ≥1,000 rows / ≥5 endpoints with p95 assertions under `cli/internal/server/graphql` or `.../perf` (AC4).
+  - Confirm design one-pager exists under `docs/helix/02-design/` (AC5).

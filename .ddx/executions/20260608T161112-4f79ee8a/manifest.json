@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260608T161112-4f79ee8a",
+  "bead_id": "ddx-d2725150",
+  "base_rev": "d5c3825699ffd602fe802d09138c4352cff209ec",
+  "created_at": "2026-06-08T16:11:27.052851998Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d2725150",
+    "title": "Mark decomposed parent beads execution-ineligible before retry",
+    "description": "PROBLEM\nA Niflheim decomposed parent bead kept consuming attempts and escalated to stronger routes despite evidence that the bead was already split into executable children. Stronger models cannot implement a parent bead whose correct action is decompose/execution-ineligible/operator work.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_loop.go:2175-2315` handles `PreClaimIntakeTooLargeDecomposed`, but missing or empty decomposition paths can warn and continue.\n- `cli/internal/agent/execute_bead_loop.go:3826-3831` recognizes execution-ineligible/decomposed state only after the bead has the right metadata.\n- `cli/internal/agent/failclass/failclass.go:103-142` says only genuine failure should escalate, but decomposed-parent/no-changes outcomes can still reach implementation retry and min-power escalation.\n\nPROPOSED FIX\nAdd a self-contained Niflheim-style decomposed-parent fixture or table-driven case under `cli/internal/agent/...` with `mixed_commit_and_no_changes_rationale`, `orchestrator_action: decompose`, child bead IDs, and `outcome_reason=decomposed`. Classify the parent as execution-ineligible, proposed, dependency-waiting, or operator-attention according to policy before another implementation attempt is scheduled. Preserve child bead evidence in the event/result audit.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related precedent: `ddx-e1a576a7` for execution-ineligible decomposed parent behavior. Related quality framework: `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineering-principles.md:39-45.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_DecomposedParentIsExecutionIneligible` adds a self-contained Niflheim evidence case for `mixed_commit_and_no_changes_rationale` with `orchestrator_action: decompose`, child bead IDs, and `outcome_reason=decomposed`; it asserts the parent is marked execution-ineligible/proposed or dependency-waiting according to policy.\n2. `TestWorkRetryEscalation_NiflheimEvidence_DecomposedParentDoesNotRaiseMinPower` proves decomposed-parent and no-changes-decompose outcomes do not schedule another implementation attempt and do not increase requested min power/profile.\n3. `TestExecuteBeadResult_NiflheimEvidence_DecomposedParentDecisionAudit` proves result JSON/event bodies include `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, decomposed-child bead IDs, and the execution-ineligible/proposed/dependency-waiting decision.\n4. Existing related behavior from `ddx-e1a576a7` remains aligned as precedent; this bead does not edit Niflheim beads or implement child work.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|DecomposedParent|RetryEscalation|DecomposedParentDecisionAudit' -count=1` passes.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T161112-4f79ee8a",
+    "prompt": ".ddx/executions/20260608T161112-4f79ee8a/prompt.md",
+    "manifest": ".ddx/executions/20260608T161112-4f79ee8a/manifest.json",
+    "result": ".ddx/executions/20260608T161112-4f79ee8a/result.json",
+    "checks": ".ddx/executions/20260608T161112-4f79ee8a/checks.json",
+    "usage": ".ddx/executions/20260608T161112-4f79ee8a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d2725150-20260608T161112-4f79ee8a"
+  },
+  "prompt_sha": "b32617b3fb682e9d489edefa3892afde622b7f3411f463e2198bdbfb03b9fac7"
+}

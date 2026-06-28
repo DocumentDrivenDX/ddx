@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260612T010639-c13be389",
+  "bead_id": "ddx-0abf27ea",
+  "base_rev": "df4b8753ad7f5bcf6dd8adb24dfb8c5faaacdd33",
+  "created_at": "2026-06-12T01:06:50.886975738Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0abf27ea",
+    "title": "perf: lock final FEAT-008 budget numbers",
+    "description": "After C2 produces gating numbers, lock them as the official budget in FEAT-008.",
+    "acceptance": "1. FEAT-008 perf section has concrete numbers (replacing provisional). 2. Numbers match what the gating test enforces.",
+    "parent": "ddx-97335425",
+    "labels": [
+      "area:specs",
+      "kind:doc",
+      "phase:2",
+      "story:7",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-ac7ec684 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.438142227Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"FEAT-008 perf section has concrete numbers (replacing provisional). 2. Numbers match what the gating test enforces.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-06-12T01:04:29.681100374Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"c2 predecessor is identified with a bead id or measurement artifact path: The bead cannot be executed because its sole input — the numbers produced by 'C2' — does not exist yet and 'C2' is never identified. No bead ID, measurement job name, or output artifact path is given for C2, so an agent has nothing to write. Additionally, no dep on the C2 predecessor is declared, the gating test is unnamed, and the FEAT-008 file path is omitted. The label ac-quality:needs-refinement confirms the operator already knows this bead is underspecified.\",\"fingerprint\":\"b59ab228203ecb3b1a74ebd58095885ec3985c346b6e58ffff3df086ce0f20bb\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"b59ab228203ecb3b1a74ebd58095885ec3985c346b6e58ffff3df086ce0f20bb\"}",
+          "created_at": "2026-06-12T01:06:30.6153616Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260612T010639-c13be389",
+    "prompt": ".ddx/executions/20260612T010639-c13be389/prompt.md",
+    "manifest": ".ddx/executions/20260612T010639-c13be389/manifest.json",
+    "result": ".ddx/executions/20260612T010639-c13be389/result.json",
+    "checks": ".ddx/executions/20260612T010639-c13be389/checks.json",
+    "usage": ".ddx/executions/20260612T010639-c13be389/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-0abf27ea-20260612T010639-c13be389"
+  },
+  "prompt_sha": "96e3eea5c1e5fb7c4581c18b9ca924687770c0d3912970b22db539b681b39b83"
+}

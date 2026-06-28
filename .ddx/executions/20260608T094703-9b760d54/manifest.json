@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260608T094703-9b760d54",
+  "bead_id": "ddx-8b71a46c",
+  "base_rev": "d3594e9722b04e102d63aa19308a114545d7bacd",
+  "created_at": "2026-06-08T09:47:12.829536037Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8b71a46c",
+    "title": "status: reconcile active worker counts across bead status and work views",
+    "description": "PROBLEM\n`ddx bead status` can report `In progress: 0` while `ddx work status` and `ddx work focus` show active workers currently running beads. In the current project state on 2026-06-08, `ddx bead status --json` reports `\"in_progress\": 0`, while `ddx work status --json` reports three live workers on beads `ddx-a509613d`, `ddx-e9542e0d`, and `ddx-9b78b617`. Operators asking \"how many workers are running and what are they doing?\" get contradictory answers depending on which status surface they use.\n\nROOT CAUSE\n`cli/internal/bead/store.go:2768` implements `Store.Status()` as persisted lifecycle counts only; `cli/internal/bead/store.go:2817-2823` increments `InProgress` only when `b.Status == StatusInProgress`. `cli/cmd/bead.go:1689-1705` prints that raw lifecycle count as `In progress`, so active work represented by fresh worker sidecars or fresh claim/run-state data is invisible. Meanwhile `cli/cmd/work_status.go:83-96` scans live worker data and enriches it with fresh liveness/run-state, and `cli/cmd/work_focus.go:157-166` separately treats fresh `.ddx/workers/\u003cid\u003e/status.json` sidecars as active capacity. `cli/internal/workerstatus/liveness.go:14-20` documents that sidecar as the operator-facing answer to \"is the worker alive and what is it doing?\" The GraphQL queue summary already has a partial precedent at `cli/internal/server/graphql/resolver_feat008.go:298-315`, where it adds in-flight attempts to the lifecycle in-progress count.\n\nPROPOSED FIX\nCreate a shared active-work snapshot/helper for project-scoped status surfaces that reconciles persisted lifecycle state, fresh worker liveness sidecars, and fresh run-state/claim data. Update `ddx bead status` text and `--json`, `ddx work focus`, and any queue-summary resolver that exposes the same concept so they agree on active worker count, bead IDs, attempt IDs, phase, and freshness rules. The CLI output must make the distinction explicit if lifecycle `status == in_progress` is still shown separately: lifecycle count and active worker/fresh-claim count must not both be labeled simply as \"In progress\".\n\nNON-SCOPE\n- Do not count stale/dead worker sidecars or expired claims as active.\n- Do not scan global processes outside the selected project root except through existing `ddx work status --all-projects` behavior.\n- Do not redesign the worker scheduler or worker concurrency model.\n- Do not change claim/release lifecycle semantics unless the regression tests prove an active claim is incorrectly being left as `StatusOpen`; if so, fix that narrowly and preserve child-bead workability.\n- Do not make closing/decomposed parent beads block their children. If a decomposed bead is tracked as a parent and is completed/closed, children must remain execution-eligible according to their own dependencies and readiness.",
+    "acceptance": "1. Add a regression test named `TestBeadStatusCountsFreshActiveWorkers` (or nearest existing command-test naming style) that creates a project with fresh worker liveness for two beads whose persisted lifecycle status is not `in_progress`; `ddx bead status` no longer reports an operator-misleading `In progress: 0` with no active-work signal, and its text output reports the active worker/fresh-claim count clearly.\n2. Add a regression test named `TestBeadStatusJSONReportsActiveWorkers` proving `ddx bead status --json` exposes structured active-work data, including count and bead IDs, without breaking existing lifecycle fields used by callers.\n3. Add or update tests named `TestWorkFocusActiveWorkerSummaryUsesSharedSnapshot` and `TestWorkStatusActiveWorkerSummaryMatchesBeadStatus` so `ddx work focus`, `ddx work status`, and `ddx bead status --json` agree on the project-scoped active worker count and bead IDs for fresh sidecars/run-state.\n4. Add a stale-data regression test named `TestActiveWorkSnapshotIgnoresStaleWorkerSidecars` proving sidecars older than `workerstatus.LivenessTTL` and expired/stale claims do not inflate active counts.\n5. If the implementation finds that `Store.Claim` or any execute-bead path leaves a fresh active claim with persisted `StatusOpen`, add a targeted test for that path and fix it without changing child readiness semantics; closing/completing a decomposed parent must not make child beads blocked or non-executable.\n6. Update operator-facing wording so lifecycle status and active execution are distinct concepts: either `In progress` reflects the reconciled active-work count everywhere, or the CLI prints separate labels such as `Lifecycle in progress` and `Active workers`; no surface may silently report zero active work while fresh workers are running.\n7. Run `cd cli \u0026\u0026 go test ./cmd/... ./internal/bead/... ./internal/workerstatus/... ./internal/server/graphql/... -run 'BeadStatus.*Active|WorkStatus.*Active|WorkFocus.*Active|ActiveWorkSnapshot|QueueSummary.*InProgress|StaleWorker' -count=1` and document any broader package failures encountered.\n8. Run `lefthook run pre-commit`.",
+    "parent": "ddx-2a1ece2b",
+    "labels": [
+      "phase:iterate",
+      "area:cli",
+      "area:agent",
+      "area:workerstatus",
+      "area:bead",
+      "kind:bug",
+      "kind:correctness",
+      "operator-ux",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-8b71a46c (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"505a26b02c91bb51541f48bb5b92c043052028964c2808011b6cb0ab30729f1a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"505a26b02c91bb51541f48bb5b92c043052028964c2808011b6cb0ab30729f1a\"}",
+          "created_at": "2026-06-08T09:45:00.640750988Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T094703-9b760d54",
+    "prompt": ".ddx/executions/20260608T094703-9b760d54/prompt.md",
+    "manifest": ".ddx/executions/20260608T094703-9b760d54/manifest.json",
+    "result": ".ddx/executions/20260608T094703-9b760d54/result.json",
+    "checks": ".ddx/executions/20260608T094703-9b760d54/checks.json",
+    "usage": ".ddx/executions/20260608T094703-9b760d54/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8b71a46c-20260608T094703-9b760d54"
+  },
+  "prompt_sha": "a7be86b82d6b3d8424554e0a28a32091115f2d4d2482802b84dafdd11d1c8ca9"
+}

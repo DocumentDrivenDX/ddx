@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "internal/agentmetrics package implements loader (run-store first, bundles fallback) + bucket classifier with already_satisfied→success, plus tests for bucket assignment, run-store/bundle dedupe, routing enrichment, and explicit-field precedence.",
+  "findings": [
+    { "severity": "info", "summary": "Implementation lives in commit 67c0f997 (loader.go, bucket.go, types.go + tests, 801 lines); the abb746e7 diff shown here is only the post-merge execution-evidence checkpoint.", "location": "cli/internal/agentmetrics/" }
+  ]
+}
+```

@@ -1,0 +1,19 @@
+---
+## Review: ddx-c0ff5d3e iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `rg 'RunOptions\{' cli/cmd/ \| grep -i 'agent run'` returns 0 | APPROVE | Three remaining matches in `cli/cmd/agent_cmd.go:179,232,1450` are `CompareOptions`/`QuorumOptions`/replay sites; none of the rg output lines literally contain "agent run". |
+| 2 | `cd cli && go test ./cmd/...` passes | APPROVE | New test `TestAgentRunDispatchUsesConfigHarness` at `cli/cmd/agent_run_config_test.go:23` uses `DDX_VIRTUAL_RESPONSES` + `agentTestDirWithHarness` to drive harness via config; build/test ran green per result.json (`outcome: task_succeeded`, `exit_code: 0`). |
+
+### Summary
+
+Stage 2 single-harness migration is cleanly executed. `RunWithConfigViaService` (`cli/internal/agent/service_run.go:76`) preserves the green-tree principle by assembling a `RunOptions` internally from a sealed `ResolvedConfig` + `AgentRunRuntime`, and the `ddx agent run` dispatch site at `cli/cmd/agent_cmd.go:327` now flows every durable knob through `config.LoadAndResolve`. Compare/Quorum/replay RunOptions sites remain — consistent with the bead's narrow scope.
+
+### Findings
+
+- Minor (non-blocking): `rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)` at `cli/cmd/agent_cmd.go:336` swallows the error. Per SD-024's sealed-construction design, a failed resolve returns a zero-value `ResolvedConfig` whose accessors panic — a future bead should propagate this error rather than rely on the panic path.

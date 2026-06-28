@@ -1,0 +1,16 @@
+{
+  "ran": true,
+  "changed_docs": [
+    "docs/helix/01-frame/features/FEAT-004-beads.md"
+  ],
+  "findings": [
+    {
+      "file": "docs/helix/01-frame/features/FEAT-004-beads.md",
+      "line": 48,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    }
+  ]
+}

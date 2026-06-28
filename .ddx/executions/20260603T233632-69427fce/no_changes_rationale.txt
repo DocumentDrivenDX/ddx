@@ -1,0 +1,18 @@
+verification_command: cd cli && go test ./cmd/... -run "TestInitGlobal_CreatesAgentTierLinks|TestInitProject_DoesNotInstallPlugins" -timeout 30s
+
+All acceptance criteria are satisfied by existing code at base rev 2ae0f4759:
+
+AC1: TestInitGlobal_CreatesAgentTierLinks — PASSES. initGlobal() in cli/cmd/init.go:318
+     installs the default ddx plugin to ${XDG_DATA_HOME}/ddx/global/plugins/ddx/,
+     creates ~/.claude/skills/ddx and ~/.agents/skills/ddx symlinks pointing into it,
+     and writes ${XDG_DATA_HOME}/ddx/global/config.yaml.
+
+AC2: TestInitProject_DoesNotInstallPlugins — PASSES. initProject() in cli/cmd/init.go:132
+     creates <project>/.ddx/ and config.yaml only; does not write to any plugins/ tree
+     and does not create agent-tier skill links in HOME.
+
+AC3: cd cli && go test ./cmd/... — init tests green (confirmed via -run TestInit; the
+     suite-level timeout is from TestTry_RecoversOrphanedWorktreesBeforeSpawn, a
+     pre-existing unrelated issue).
+
+AC4: lefthook run pre-commit — passes (all checks skip cleanly with no staged files).

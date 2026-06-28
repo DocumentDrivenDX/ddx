@@ -1,0 +1,135 @@
+{
+  "attempt_id": "20260606T220242-8aa52fb1",
+  "bead_id": "ddx-b85090ae",
+  "base_rev": "6ca4865289e453ed3ae4f7327b6ffbd6d3a6b4c8",
+  "created_at": "2026-06-06T22:02:55.923652919Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b85090ae",
+    "title": "Reject ancestor dependency edges in bead create and dep add",
+    "description": "PROBLEM\n`ddx bead dep add` and the bead create path still allow dependency edges that point back into the parent chain. That lets a child re-introduce its parent as a dep and creates the deadlock described in the parent bead.\n\nROOT CAUSE\n`cli/internal/bead/store.go:520-680` validates existence, self-deps, and cycles, but it does not reject an edge when the target bead is the caller's parent or any ancestor in the parent chain. `cli/cmd/bead.go:328-378` also lacks a `--depends-on` create input path, so create-time validation has to cover both the CLI flag and the shared store guard.\n\nPROPOSED FIX\nAdd ancestry-aware validation in the bead store and thread a `--depends-on` create flag through `cli/cmd/bead.go` so `ddx bead create --depends-on X --parent Y` hard-rejects when `X == Y` or `X` is any ancestor of `Y`. The error shape must name the offending ancestor and print the parent chain.\n\nNON-SCOPE\nDo not change the decomposition path, doctor repair logic, work-loop remediation, or lifecycle docs in this bead.\n\nIn-scope files:\n- cli/internal/bead/store.go\n- cli/internal/bead/store_test.go\n- cli/cmd/bead.go\n- cli/cmd/bead_test.go (new or existing create-path test coverage)\n\nOut-of-scope:\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/execute_bead_guardrails_test.go\n- cli/internal/bead/doctor.go\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/bead/... -run TestBeadDepAddRejectsParentAncestor` passes.\n2. `cd cli \u0026\u0026 go test ./cmd/... -run TestBeadCreateRejectsDependsOnParentAncestor` passes.\n3. `cd cli \u0026\u0026 go test ./internal/bead/... ./cmd/...` passes.\n4. `cd cli \u0026\u0026 lefthook run pre-commit` passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T20:27:09.882537368Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T194909-32387b67\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":8456462,\"output_tokens\":31525,\"total_tokens\":8487987,\"cost_usd\":0,\"duration_ms\":2270543,\"exit_code\":0}",
+          "created_at": "2026-06-06T20:27:09.987876443Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=8487987 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260606T194909-32387b67/0\",\"cycle_index\":0,\"attempt_id\":\"20260606T194909-32387b67\",\"base_rev\":\"ce92ed89818f5d5aa2ff7c13bb27c2e0d8677aeb\",\"result_rev\":\"0c22e0227eefe67e17e3ef0f0ce3b69d8ba66f75\"}",
+          "created_at": "2026-06-06T20:27:10.091370812Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T21:29:01.63154963Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T211706-5098f09e\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":2618665,\"output_tokens\":10652,\"total_tokens\":2629317,\"cost_usd\":0,\"duration_ms\":702054,\"exit_code\":0}",
+          "created_at": "2026-06-06T21:29:01.730551327Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=2629317 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260606T211706-5098f09e/0\",\"cycle_index\":0,\"attempt_id\":\"20260606T211706-5098f09e\",\"base_rev\":\"f78ca28486b7cabf52a51ad7ba727f008c8153ad\",\"result_rev\":\"e5cf4d7b8e7f072d239fcca99a6e95f0df070a78\"}",
+          "created_at": "2026-06-06T21:29:01.832748729Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-06T21:47:54.508518548Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T213009-e3804d37\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":1603616,\"output_tokens\":12751,\"total_tokens\":1616367,\"cost_usd\":0,\"duration_ms\":1016033,\"exit_code\":0}",
+          "created_at": "2026-06-06T21:47:54.715660106Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=1616367 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260606T213009-e3804d37\",\"bead_id\":\"ddx-b85090ae\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-06T21:47:59.476303921Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=`go test ./internal/bead/... ./cmd/...` is blocked by a pre-existing performance-budget failure in `cli/internal/bead/store_perf_test.go` on this host, while the bead-specific ancestor-rejection tests and `lefthook run pre-commit` pass. The requested ancestor-validation behavior is already present in `cli/internal/bead/store.go` and `cli/cmd/bead.go`; the remaining work is to rerun the broad sweep on a less contended runner or after the host load settles.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-06-06T21:47:59.835430854Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: `go test ./internal/bead/... ./cmd/...` is blocked by a pre-existing performance-budget failure in `cli/internal/bead/store_perf_test.go` on this host, while the bead-specific ancestor-rejection tests and `lefthook run pre-commit` pass. The requested ancestor-validation behavior is already present in `cli/internal/bead/store.go` and `cli/cmd/bead.go`; the remaining work is to rerun the broad sweep on a less contended runner or after the host load settles.\nresult_rev=58c25bf6cc64a06bf849f5da5031e0f6a7b69451\nbase_rev=58c25bf6cc64a06bf849f5da5031e0f6a7b69451\nretry_after=2026-06-06T21:53:00Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-06T21:48:00.148234221Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        }
+      ],
+      "work-last-detail": "`go test ./internal/bead/... ./cmd/...` is blocked by a pre-existing performance-budget failure in `cli/internal/bead/store_perf_test.go` on this host, while the bead-specific ancestor-rejection tests and `lefthook run pre-commit` pass. The requested ancestor-validation behavior is already present in `cli/internal/bead/store.go` and `cli/cmd/bead.go`; the remaining work is to rerun the broad sweep on a less contended runner or after the host load settles.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-06-06T21:53:00Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "`go test ./internal/bead/... ./cmd/...` is blocked by a pre-existing performance-budget failure in `cli/internal/bead/store_perf_test.go` on this host, while the bead-specific ancestor-rejection tests and `lefthook run pre-commit` pass. The requested ancestor-validation behavior is already present in `cli/internal/bead/store.go` and `cli/cmd/bead.go`; the remaining work is to rerun the broad sweep on a less contended runner or after the host load settles.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T220242-8aa52fb1",
+    "prompt": ".ddx/executions/20260606T220242-8aa52fb1/prompt.md",
+    "manifest": ".ddx/executions/20260606T220242-8aa52fb1/manifest.json",
+    "result": ".ddx/executions/20260606T220242-8aa52fb1/result.json",
+    "checks": ".ddx/executions/20260606T220242-8aa52fb1/checks.json",
+    "usage": ".ddx/executions/20260606T220242-8aa52fb1/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b85090ae-20260606T220242-8aa52fb1"
+  },
+  "prompt_sha": "da7acf9670f8318469c06b16bbdc8cd4c1aae33320246e4cfb113c10cd1cd0b3"
+}

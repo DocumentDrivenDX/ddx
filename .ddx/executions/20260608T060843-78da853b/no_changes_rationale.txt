@@ -1,0 +1,4 @@
+status: open
+orchestrator_action: decompose
+reason: parent bead exceeds the Step 0 size threshold and is already decomposed into focused child beads for review gating, land reconciliation, decomposed-parent handling, escalation boundaries, and audit-field work.
+child_ids: ddx-044cd257, ddx-3a6f1ad6, ddx-d4817c9b, ddx-01aa7b18, ddx-1865eadc

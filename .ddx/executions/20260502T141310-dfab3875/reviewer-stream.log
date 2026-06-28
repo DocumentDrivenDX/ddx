@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All ACs met: arrow marker uses fill-fg-muted/dark:fill-dark-fg-muted, edges use stroke-fg-muted/dark:stroke-dark-fg-muted with stroke-width 1.75, stroke-opacity 0.9, and stroke-linecap='round'. Tokens resolve to #4B5563/#B8AF9C. Only D3Graph.svelte modified.",
+  "findings": [
+    { "severity": "info", "summary": "Review diff displayed only the result.json artifact; actual code change is in merged commit e94020ef which was inspected directly to verify ACs.", "location": "cli/internal/server/frontend/src/lib/components/D3Graph.svelte" }
+  ]
+}
+```

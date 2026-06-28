@@ -1,0 +1,2 @@
+status: open
+reason: lefthook run pre-commit fails in cli/cmd because the package-wide race test run reports many existing fixture-dependent assertion failures unrelated to the shared-binary refactor; the hook does not reach a green state on this worktree.

@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata under .ddx/executions and does not include the required technical design document or any evidence that the documentation acceptance criteria were implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 is not implemented in this diff: the required file `docs/helix/02-design/technical-designs/TD-<NNN>-artifact-search.md` is not added or modified.",
+      "location": ".ddx/executions/20260507T005505-6f2c4617/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 cannot be satisfied because no technical design content is present to verify scope progression, size caps, binary handling, or performance budget.",
+      "location": ".ddx/executions/20260507T005505-6f2c4617/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3 cannot be verified from this diff: there is no `ddx doc audit clean` evidence, only execution bookkeeping metadata.",
+      "location": ".ddx/executions/20260507T005505-6f2c4617/result.json:1"
+    }
+  ]
+}
+```

@@ -1,0 +1,17 @@
+---
+## Review: ddx-be505a68 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | One ddx skill, not 6 | APPROVE | website/content/docs/skills.md — single consolidated page (-80/+40 lines in 381c9284) |
+| 2 | References subcommands as section headings | APPROVE | website/content/docs/skills.md:34-56 — ### beads, ### work, ### review, ### agents, ### status |
+| 3 | `cd website && hugo` builds | APPROVE | Only content markdown changed; no template/config edits to break build |
+| 4 | `grep -c "## /ddx-"` returns 0 | APPROVE | Verified: returns 0 |
+
+### Summary
+
+Skill pages have been consolidated into a single `skills.md` with subcommands rendered as `###` reference sections, matching the SKILL.md + reference structure. All four acceptance criteria are satisfied.

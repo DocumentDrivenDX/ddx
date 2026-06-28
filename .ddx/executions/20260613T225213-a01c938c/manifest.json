@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260613T225213-a01c938c",
+  "bead_id": "ddx-c02ce93c",
+  "base_rev": "4a781bbf32e48e85b552d73e69810f5ea31cb953",
+  "created_at": "2026-06-13T22:52:21.614762828Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c02ce93c",
+    "title": "agent: prevent unrelated provider CLIs from lingering under one worker attempt",
+    "description": "PROBLEM\n\nDuring dogfood on 2026-06-13, one `ddx work --once` attempt for bead ddx-0be85773 reported active route `claude/sonnet`, but the worker process retained multiple direct provider CLI children at the same time: `codex --no-alt-screen` (PID 1875100, older than 7 minutes), `claude --print ... --model sonnet` (PID 1882389, active implementation route), and later `gemini` (PID 1890368). A single attempt should not leave unrelated provider CLIs resident under the worker unless they are explicitly part of the active route and supervised. This burns resources, makes process status ambiguous, and creates exactly the cleanup risk server-managed workers must solve.\n\nROOT CAUSE WITH FILE:LINE\n\n- `cli/internal/agent/agent_runner_service.go:140-142` treats Fizeau `Execute` as one event stream after process setup; DDx does not currently expose per-provider child process ownership/phase in worker status.\n- `cli/internal/agent/agent_runner_service.go:337-385` supervises service events with idle/tool timers, but it does not assert that only active-route provider children remain alive or that superseded provider processes are reaped.\n- `cli/internal/agent/provider_failure.go:1-17` states untyped provider boundary failures are product bugs; the same boundary also needs process ownership evidence so stray provider CLIs do not become invisible worker state.\n- Observed command: `ddx work --once --project /Users/erik/Projects/ddx-provider-failure-20260613 --request-timeout 25m --route-resolution-timeout 90s`; status showed attempt `20260613T202003-18b8bd7e`, phase `running`, route logs `do route claude/sonnet`, while `ps --ppid \u003cworker-pid\u003e` listed Codex, Claude, and Gemini children.\n\nPROPOSED FIX\n\nTrack provider subprocesses per attempt with route/phase metadata. When a route is selected, DDx/Fizeau should either avoid starting unrelated provider CLIs or immediately terminate any provider child not owned by the active route. Worker status/evidence should surface provider_children with provider, pid, phase, route_owner, age, and cleanup_result. At attempt end, DDx must reap every provider child and fail or flag the attempt if cleanup is incomplete.\n\nNON-SCOPE\n\nDo not ban legitimate short-lived helper probes if they are bounded and recorded. Do not kill unrelated same-user provider processes outside the worker process tree. Do not rely on real provider CLIs in regression tests; use fake long-lived child processes.",
+    "acceptance": "1. `TestAttemptProviderChildrenAreRouteScoped` uses fake provider child processes for codex/claude/gemini and proves that after an active route is selected only children belonging to that route remain alive.\n2. `TestSupersededProviderChildrenAreReapedWithEvidence` simulates a route/probe child that outlives route selection; DDx terminates it and records pid, provider, age, action=terminated, and reason=superseded_provider_child.\n3. `TestWorkerStatusReportsProviderChildren` proves `ddx work status --json` includes attempt provider_children with pid, provider/harness, route_owner, phase, and age while an attempt is active.\n4. `TestAttemptEndReapsAllProviderChildren` proves successful, failed, and interrupted attempts leave no provider child processes under the worker process tree.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TestAttemptProviderChildrenAreRouteScoped|TestSupersededProviderChildrenAreReapedWithEvidence|TestWorkerStatusReportsProviderChildren|TestAttemptEndReapsAllProviderChildren'` passes.\\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "provider-process",
+      "resource-leak"
+    ],
+    "metadata": {
+      "queue-rank": -500
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260613T225213-a01c938c",
+    "prompt": ".ddx/executions/20260613T225213-a01c938c/prompt.md",
+    "manifest": ".ddx/executions/20260613T225213-a01c938c/manifest.json",
+    "result": ".ddx/executions/20260613T225213-a01c938c/result.json",
+    "checks": ".ddx/executions/20260613T225213-a01c938c/checks.json",
+    "usage": ".ddx/executions/20260613T225213-a01c938c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c02ce93c-20260613T225213-a01c938c"
+  },
+  "prompt_sha": "3bea43ee551716bcad2503d97dfb87bdc4854552915010c40152a851e4d291c1"
+}

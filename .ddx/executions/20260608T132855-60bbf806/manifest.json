@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260608T132855-60bbf806",
+  "bead_id": "ddx-01aa7b18",
+  "base_rev": "083798ef5c865457081f8fd7d28301b93ec843f0",
+  "created_at": "2026-06-08T13:29:29.805926871Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-01aa7b18",
+    "title": "agent: keep non-semantic failures from raising min power",
+    "description": "PROBLEM\nThe worker still treats non-semantic retry classes, including repeated pre-claim system-unready warnings, as if they were the same as acceptance failures. That can raise the requested min power or profile even though a stronger model cannot fix the underlying problem.\n\nROOT CAUSE\n`cli/internal/agent/failclass/failclass.go:103-142` already defines the normative boundary: only `OutcomeGenuineFailure` escalates, while dirty worktree, transport, quota, auth, setup, timeout, and merge-conflict outcomes do not. In the worker loop, however, the retry/escalation decision is not consistently reduced to that typed table before min-power/profile selection, so system warnings and structural failures can still drift into the escalation path.\n\nPROPOSED FIX\n- Wire the retry classifier into the worker path that chooses the next requested min power or profile.\n- Treat repeated pre-claim system-unready warnings as operator attention or same-tier retry, not escalation.\n- Keep decomposed-parent outcomes, land coordination failures, and dirty generated DDx evidence out of the min-power escalation path.\n- Allow only semantic acceptance/review failures to raise min power/profile.\n\nNON-SCOPE\n- Do not change review gating or land reconciliation mechanics in this child.\n- Do not alter the low-level failure-class enum unless the worker path needs the typed mapping.",
+    "acceptance": "1. `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile.\n2. Land coordination, repeated pre-claim system warnings, decomposed-parent outcomes, and dirty generated DDx evidence do not raise min power.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'RetryEscalation|Preclaim' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T13:28:51.532019864Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T132855-60bbf806",
+    "prompt": ".ddx/executions/20260608T132855-60bbf806/prompt.md",
+    "manifest": ".ddx/executions/20260608T132855-60bbf806/manifest.json",
+    "result": ".ddx/executions/20260608T132855-60bbf806/result.json",
+    "checks": ".ddx/executions/20260608T132855-60bbf806/checks.json",
+    "usage": ".ddx/executions/20260608T132855-60bbf806/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-01aa7b18-20260608T132855-60bbf806"
+  },
+  "prompt_sha": "aa350e22f6e392381588e6ecf3380543702e6f06d19ff21ac36a09a6f035a36f"
+}

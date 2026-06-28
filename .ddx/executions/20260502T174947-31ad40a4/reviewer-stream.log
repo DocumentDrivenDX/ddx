@@ -1,0 +1,21 @@
+---
+## Review: ddx-238880c4 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | --hub= flag registers on startup | APPROVE | cli/cmd/server.go:113-120 wires flag → `EnableSpokeMode`; `TestSpokeRegistersOnStart` |
+| 2 | Re-start with same node_id is idempotent | APPROVE | spoke.go:283-288 reuses persisted fingerprint; `TestSpokeReregisterIsIdempotent` (3 restarts → ≤1 spoke) |
+| 3 | Heartbeat 30s ± jitter | APPROVE | spoke.go:31 `DefaultHeartbeatInterval=30s`; `nextHeartbeatDelay` ±25%; `TestSpokeHeartbeatJitterBounds` |
+| 4 | URL change triggers re-registration | APPROVE | spoke.go:255-260 detects via persisted state; `TestSpokeReregistersOnURLChange` confirms hub picks up new URL |
+| 5 | Graceful shutdown sends best-effort deregister | APPROVE | server.go Shutdown calls ShutdownSpoke with 3s timeout; `TestSpokeDeregistersOnShutdown` + `TestSpokeDeregisterBestEffortOnDeadHub` |
+| 6 | hub_spoke role with both flags | APPROVE | server.go federationRole(); `TestFederationRoleHubSpoke` |
+| 7 | /api/node exposes federation_role | APPROVE | server.go handleGetNode adds `federation_role`; `TestNodeAPIExposesFederationRole` + `TestFederationRoleMatrix` |
+| 8 | Integration tests cover lifecycle | APPROVE | federation_spoke_test.go (449 lines) covers register → heartbeat → URL-change → deregister with in-process hub |
+
+### Summary
+
+Clean, complete implementation. Spoke lifecycle is encapsulated in `cli/internal/federation/spoke.go` with persisted state for URL-change detection and stable identity fingerprint, server integration via `EnableSpokeMode`/`ShutdownSpoke`, and CLI flags `--hub` / `--federation-self-url`. Test coverage maps directly to each AC item, including best-effort behavior when the hub is dead.

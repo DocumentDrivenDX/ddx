@@ -1,0 +1,118 @@
+{
+  "attempt_id": "20260608T060843-78da853b",
+  "bead_id": "ddx-334c0958",
+  "base_rev": "a7e9e49083c9b874fe4afa9dd5e4c30111ef30c7",
+  "created_at": "2026-06-08T06:09:22.224564829Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 8
+  },
+  "bead": {
+    "id": "ddx-334c0958",
+    "title": "execute-bead worker: gate success on review evidence and classify Niflheim retry failures",
+    "description": "PROBLEM\nA live Niflheim worker audit on 2026-06-06 showed that `ddx work` is not yet a stable release-grade autonomous worker. Strong-model escalation exists, but it is not reliably tied to the class of failure. The worker spent repeated attempts on structural or system failures that stronger models cannot fix, while automatic review evidence was empty on attempts that were recorded as successful. This violates the DDx engineering principle \"Cheapest Viable, Escalate on Evidence\" (docs/dev/engineering-principles.md:39-45): review, runtime, or retry evidence should determine escalation, and only lower-power inability to meet acceptance criteria should push to stronger routes. It also threatens FEAT-010 task-execution reliability because beads can be retried, escalated, or closed without a typed, auditable reason.\n\nThis bead is a Niflheim incident/regression closure bead. It is not a duplicate of the narrower queue items listed under INTERSECTIONS; instead it captures the external evidence DDx workers will not otherwise have, and requires a DDx-side regression suite proving those observed scenarios classify correctly before rerun, escalation, operator attention, or close.\n\nBACKGROUND AND OBSERVED NIFLHEIM EVIDENCE\nThe evidence was gathered from Niflheim worker logs and result bundles, but those files are not load-bearing for this bead. The relevant facts are copied here because an isolated DDx worker cannot access the Niflheim repository or `/tmp` logs.\n\n1. Decomposed parent kept consuming attempts and escalated to a stronger model anyway.\n- Niflheim bead: `niflheim-64217cc5`, title \"Instrument cold replicator with structured per-operation S3 tracing\".\n- Observed result bundle: `.ddx/executions/20260606T152006-a4ca7254/result.json` plus worker logs from 2026-06-05/2026-06-06.\n- Routing showed escalation exists: repeated routes started at `gpt-5.4-mini` with requested min powers 5, 7, 8, and 9, then reached `gpt-5.5` at requested min power 10.\n- Metrics on the bead showed `attempt_count=24`, `total_tokens=19371353`, and average duration about `244112ms`.\n- Despite triage recommending `close_decomposed_or_mark_execution_ineligible`, retries continued until the latest event recorded:\n  `mixed_commit_and_no_changes_rationale`\n  `powerClass=standard`\n  `rationale: status: open`\n  `orchestrator_action: decompose`\n  `reason: parent bead exceeds the Step 0 size threshold and is already decomposed into focused child beads for tracing, counters, tests, and runbook work.`\n  `child_beads: niflheim-f03c61a2, niflheim-df407aa8, niflheim-7a421ede, niflheim-0bbed6c9`\n  `outcome_reason=decomposed`\n- Expected DDx behavior: once the worker has reliable evidence that the bead is a decomposed parent or execution-ineligible parent, no further implementation attempt or model escalation should occur. It should mark execution-ineligible/proposed/operator-attention according to policy and move on.\n\n2. Land/evidence coordination failures were treated like implementation failure and retried expensively.\n- Niflheim bead: `niflheim-c75aba30`, title \"Materializer per-merge memory footprint OOMs even at concurrent_limit=8\".\n- Two expensive attempts both used `gpt-5.4-mini`; no useful stronger-model escalation was observed.\n- Metrics showed `attempt_count=2`, `total_tokens=65513510`, and average duration about `3306461.5ms`.\n- First attempt result: `.ddx/executions/20260606T113550-7b29ee42/result.json`.\n  - `status=execution_failed`, `outcome=error`.\n  - Implementation result commit was `7aaeb0712...`; a merge commit `2c6f4d6e6` was later observed as an ancestor of HEAD, but the result still recorded a land coordination failure.\n  - Error detail:\n    `land coordination failed: land advancer: restoring refs/heads/main to ba2d3059f14e834dcb147f2a6db3b294d83b0fac after evidence commit failed: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 5a176b332b182f2a959614f63769d835c47ffd97 but expected 2c6f4d6e6961b8a93742cde66bceec056934655a`\n  - `cycle_trace[0].final_decision=\"success\"` and `cycle_trace[0].review_result={}`.\n- Second attempt result: `.ddx/executions/20260606T142223-94f8f0f8/result.json`.\n  - `status=execution_failed`, `outcome=error`.\n  - Error detail:\n    `land coordination failed: land advancer: landing worktree has staged changes after waiting 2s: A .ddx/executions/20260606T150832-af40450b/result.json`\n  - `cycle_trace[0].final_decision=\"success\"` and `cycle_trace[0].review_result={}`.\n- At observation time the worker had claimed it again (`20260606T152024-a21d8c54`) and edited six files in a fresh isolated worktree:\n  `crates/niflheim-core/src/config/mod.rs`, `crates/niflheim-core/src/config/tests.rs`, `crates/niflheim-core/src/config/types.rs`, `crates/niflheim-delta-writer/src/materializer/config.rs`, `crates/niflheim-delta-writer/src/materializer/executor.rs`, and `crates/niflheim-delta-writer/src/materializer/tests.rs`.\n- Expected DDx behavior: land/ref/index/evidence-staging failures are system or coordination failures, not model-quality failures. The retry policy should reconcile a successfully landed candidate when possible, retry only the land/evidence step when safe, or park/operator-attention the bead when the landing worktree is dirty. It should not blindly rerun implementation at the same or stronger route.\n\n3. Pre-claim intake/system dirt caused repeated warning churn instead of a clear operator lane.\n- Niflheim bead: `niflheim-a62d31ce`, title \"Publish competitive benchmark artifacts and provenance metadata\".\n- A live worker repeatedly ran readiness/intake. The log showed readiness timeout after five minutes, then:\n  `preserved pre-dispatch implementation changes in /home/erik/Projects/niflheim under refs/ddx/pre-dispatch/20260606T153517-f7a32618; released niflheim-a62d31ce and continuing watch. dirty paths: .ddx/harness-sessions/-2929681.json. recover with git stash apply refs/ddx/pre-dispatch/20260606T153517-f7a32618`\n- Bead events included `pre_claim_intake.warn` with timeout/system-unready reason and generic suggested action.\n- Expected DDx behavior: repeated same/systemic pre-claim warnings and dirty generated DDx artifacts should become an operator-visible/system-unready state after the configured threshold, not an indefinite poll/release loop.\n\n4. Automatic reviews were not forcing meaningful quality improvement.\n- Recent Niflheim \"success\" attempts had empty review results:\n  - `niflheim-9dea95da`, result `.ddx/executions/20260606T043655-845c77ee/result.json`: closed success, `cycle_trace.review_result={}`, `final_decision=\"success\"`, model `gpt-5.4-mini`, result commit `78e51a168...`.\n  - `niflheim-da4e1311`, result `.ddx/executions/20260606T085358-d80ada3e/result.json`: closed success, `cycle_trace.review_result={}`, `final_decision=\"success\"`, model `gpt-5.4-mini`, result commit `d43be3a3...`.\n  - `niflheim-c75aba30` attempts listed above: `cycle_trace.final_decision=\"success\"` with `review_result={}` despite overall land failures.\n- Manual Claude review earlier improved bead wording and completeness, but the automatic worker path did not show enforceable per-AC review evidence.\n- Expected DDx behavior: unless review is explicitly skipped with a durable reason (`runtime.NoReview` or a valid `review:skip` + reason policy), an empty review result must be a review error or operator-attention signal. It must not be treated as approval, success, or evidence of quality improvement.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/failclass/failclass.go:103-142` contains the normative routing table: only `OutcomeGenuineFailure` can escalate; dirty worktree, transport, quota, auth, setup, timeout, and merge-conflict do not escalate. The live Niflheim behavior shows execute-bead/work outcomes are not consistently reduced to this typed table before retry/escalation decisions.\n- `cli/internal/agent/execute_bead_orchestrator.go:305-309` wraps `LandingAdvancer` errors as generic `land advancer` errors. The caller can record an overall `execution_failed` without distinguishing landed-candidate reconciliation, ref/index contention, staged evidence dirt, or dirty landing worktree from implementation failure.\n- `cli/internal/agent/execute_bead_loop.go:1967-2072` emits pre-claim timeout/system-unready outcomes as warn-only by default and continues implementation when strict intake blocking is off. This permits repeated same-fingerprint/system warnings to look like a live worker instead of a system-unready/operator lane.\n- `cli/internal/agent/execute_bead_loop.go:2175-2315` handles `PreClaimIntakeTooLargeDecomposed`, but missing/empty decomposition paths can warn and continue. `cli/internal/agent/execute_bead_loop.go:3826-3831` can recognize execution-ineligible/decomposed state only after the bead has the right metadata. The Niflheim parent evidence shows structural/decomposed-parent outcomes can still reach repeated implementation attempts and power escalation.\n- `cli/internal/agent/execute_bead_loop.go:3042-3138` treats success disposition/status as closeable once candidate-cycle review/landing has allowed success, and the old post-merge review is optional. `cli/internal/agent/execute_bead_review_test.go:799-823` explicitly proves a worker with `Reviewer: nil` can skip review and close the bead. `cli/internal/agent/execute_bead_review.go:168-193` defines `ReviewResult` with all fields optional except the zero-value enum field; no invariant rejects `{}` as a success-path review artifact.\n\nPROPOSED FIX\n- Add compact Niflheim-style regression fixtures under `cli/internal/agent/testdata/niflheim_worker_evidence/` or equivalent. The fixtures should encode the four scenario families above: empty review success, land coordination/ref-lock/staged-evidence failure, decomposed-parent no-changes rationale with child beads, and repeated pre-claim system-unready warning. Do not depend on Niflheim checkout paths.\n- Introduce or tighten a single execute-bead retry classification boundary that maps attempt result, land result, review result, no-changes rationale, and pre-claim intake outcome into exactly one action: close, retry same tier, escalate min power/profile, reconcile land/evidence, execution-ineligible/proposed, or operator-attention. Wire this boundary into `ddx work`/`ddx try` so `failclass.Classify` is not merely a standalone helper.\n- Enforce review evidence on success. For non-skipped success paths, `cycle_trace.review_result` or the equivalent result field must contain a non-empty verdict, per-AC evidence or documented reason, reviewer routing/session metadata when available, and a classification. `{}` is invalid and must prevent close or produce a review-error/operator-attention event. Explicit review skips remain allowed only when they are durable, reasoned, and visible in result JSON.\n- Classify land/ref/index/evidence-staging failures separately from implementation/model failures. If the candidate commit or merge is already landed or is an ancestor of the target, reconcile and close/continue without rerunning implementation. If the landing worktree has staged generated evidence or DDx metadata, retry/preserve the land/evidence step or move to operator attention according to the existing local reliability policy; do not escalate the model for this class.\n- Classify decomposed-parent/no-changes rationale as execution-ineligible or operator work before another implementation attempt. Stronger models cannot fix parent beads that are already split into executable children.\n- Make worker result JSON and event bodies carry enough audit fields to explain the decision: `failure_class`, `retry_action`, `escalation_count`, requested/actual power/profile/model, review status/verdict, and land/reconcile status.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names. DDx should continue to pass power/profile intent and let Fizeau choose concrete routes.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`; reuse or align with it.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`; this bead requires typed classification and review evidence, not another timeout implementation.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`; this bead uses the Niflheim observation as cross-scenario regression coverage.\n- Do not implement a full operator-lane product workflow beyond the state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\n- Parent: `ddx-3106674f` (multi-worker hardening and local reliability gates). This bead is the external Niflheim regression/incident closure layer under that reliability epic.\n- Dependency: `ddx-2965925e` covers tracker commit index contention. This bead must not reimplement that fix; it must prove land/ref/index/evidence failures classify separately from model failure once the low-level path is hardened.\n- Dependency: `ddx-b2846610` covers bounded post-commit review/land. This bead must still require typed review/land outcomes after the timeout wedge is fixed.\n- Dependency: `ddx-d67f124e` covers same-fingerprint pre-claim warning escalation. This bead adds the Niflheim `niflheim-a62d31ce` family as regression evidence.\n- Related but not a dependency: `ddx-e1a576a7` is an execution-ineligible decomposed parent and a local precedent for the `niflheim-64217cc5` class.\n- Related quality framework: `ddx-a9d130d0` and `ddx-ac10e7af` own broader bead lifecycle/operator-lane policy; this bead is concrete worker behavior and evidence gating.",
+    "acceptance": "1. Add Niflheim-evidence regression fixtures or table-driven cases under `cli/internal/agent/...` that encode the four observed scenario families from this bead: empty review success, land/ref/index/evidence-staging failure, decomposed-parent no-changes rationale with child beads, and repeated pre-claim system-unready warning. The fixtures must be self-contained and must not reference Niflheim paths as required inputs.\n2. `TestExecuteBeadWorker_NiflheimEvidence_EmptyReviewResultCannotClose` proves a non-skipped success path with `cycle_trace.review_result={}` or an equivalent empty `ReviewResult` cannot close a bead and records `review_error` or operator-attention with a non-empty reason.\n3. `TestExecuteBeadWorker_NiflheimEvidence_NilReviewerRequiresExplicitSkip` updates the current nil-reviewer behavior so `Reviewer: nil` only closes when an explicit durable no-review/skip reason is present; otherwise it fails review gating.\n4. `TestExecuteBeadLoop_NiflheimEvidence_LandCoordinationFailureDoesNotRerunImplementation` simulates both observed details (`cannot lock ref refs/heads/main` after a candidate/merge is already landed, and `landing worktree has staged changes after waiting 2s`) and asserts the action is reconcile/retry-land/operator-attention, not a fresh implementation run and not model escalation.\n5. `TestExecuteBeadLoop_NiflheimEvidence_DecomposedParentIsExecutionIneligible` simulates `mixed_commit_and_no_changes_rationale` with `orchestrator_action: decompose`, child bead IDs, and `outcome_reason=decomposed`; it asserts the parent is marked execution-ineligible/proposed or dependency-waiting according to policy and that no further implementation attempt or min-power escalation is scheduled.\n6. `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile. Land coordination, repeated pre-claim system warnings, decomposed-parent outcomes, and dirty generated DDx evidence must not raise min power.\n7. `TestExecuteBeadResult_NiflheimEvidence_CycleTraceCarriesDecisionAudit` proves result JSON/event bodies include `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, review status/verdict or explicit skip reason, and land/reconcile status for the Niflheim scenario families.\n8. Existing related behavior from `ddx-2965925e`, `ddx-b2846610`, and `ddx-d67f124e` remains covered; this bead either reuses their helpers or waits for those dependencies, and does not add duplicate low-level implementations.\n9. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|EmptyReviewResult|NilReviewer|LandCoordination|DecomposedParent|RetryEscalation|CycleTraceCarriesDecisionAudit' -count=1` passes.\n10. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n11. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-b2846610 (1 edge(s))\ndependencies→removed dangling ddx-d67f124e (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.441918053Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 2 change(s)"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-334c0958)\",\"fingerprint\":\"b2ddbdfa5d9901c0b19aa637cb850c3df14471da1bebc1447f28ce6c76cd4d2e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"b2ddbdfa5d9901c0b19aa637cb850c3df14471da1bebc1447f28ce6c76cd4d2e\"}",
+          "created_at": "2026-06-08T05:01:23.396414863Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T05:21:59.54415091Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T050356-0c4892e1\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":81546,\"output_tokens\":450,\"total_tokens\":81996,\"cost_usd\":0,\"duration_ms\":1047794,\"exit_code\":1}",
+          "created_at": "2026-06-08T05:21:59.611761521Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=81996 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T05:38:29.708820991Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T052202-d65fd266\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":85064,\"output_tokens\":555,\"total_tokens\":85619,\"cost_usd\":0,\"duration_ms\":977984,\"exit_code\":1}",
+          "created_at": "2026-06-08T05:38:29.775864937Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=85619 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[],\"requested_min_power\":7}",
+          "created_at": "2026-06-08T06:08:41.064372254Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T053832-6168c428\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":120218,\"output_tokens\":547,\"total_tokens\":120765,\"cost_usd\":0,\"duration_ms\":1774639,\"exit_code\":1}",
+          "created_at": "2026-06-08T06:08:41.140374173Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=120765 model=dflash"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T060843-78da853b",
+    "prompt": ".ddx/executions/20260608T060843-78da853b/prompt.md",
+    "manifest": ".ddx/executions/20260608T060843-78da853b/manifest.json",
+    "result": ".ddx/executions/20260608T060843-78da853b/result.json",
+    "checks": ".ddx/executions/20260608T060843-78da853b/checks.json",
+    "usage": ".ddx/executions/20260608T060843-78da853b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-334c0958-20260608T060843-78da853b"
+  },
+  "prompt_sha": "af12980d007e657d625ac10af44d3410de01b26dd8fb56a5ba34e44e5c67dda4"
+}

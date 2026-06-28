@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json evidence file; no source changes implementing re-queue buttons on try/run rows or 'Start worker' action on work rows. Insufficient to evaluate AC.",
+  "findings": [
+    { "severity": "block", "summary": "No frontend or backend source changes present in the diff; AC1 (re-queue button on try/run), AC2 (modal prefilled with original config and client-generated idempotency key), and AC3 (work-layer 'Start worker' prefilled action) cannot be verified.", "location": ".ddx/executions/20260503T060104-e7053ec7/result.json" }
+  ]
+}
+```

@@ -1,0 +1,16 @@
+---
+## Review: ddx-9c9a2eed iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | quorum removed from features/_index.md primary list | APPROVE | website/content/features/_index.md — Multi-Model Review section (12 lines) deleted |
+| 2 | Homepage hero/features grid no longer features quorum | APPROVE | website/content/_index.md — no quorum references (grep 0 matches) |
+| 3 | rg quorum returns 0 matches in both files | APPROVE | grep run on both files returned no matches |
+
+### Summary
+
+The Multi-Model Review section, including the `--quorum=majority` example, was cleanly removed from `website/content/features/_index.md`. Homepage had no prior quorum mention. All three acceptance criteria are satisfied.

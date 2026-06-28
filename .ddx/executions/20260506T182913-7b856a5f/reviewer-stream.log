@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no code, tests, deadcode output, or decisions log changes needed to evaluate the acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation changes are present for the five unreachable `internal/exec` symbols, so there is no evidence any symbol was wired or deleted.",
+      "location": ".ddx/executions/20260506T182913-7b856a5f/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required verification artifacts are missing from the diff: no deadcode RTA result, no `go test ./...` evidence, and no `.ddx/executions/<run-id>/decisions.md` log.",
+      "location": ".ddx/executions/20260506T182913-7b856a5f/result.json:1"
+    }
+  ]
+}
+```

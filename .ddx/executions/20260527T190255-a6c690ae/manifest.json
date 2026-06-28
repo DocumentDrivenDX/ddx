@@ -1,0 +1,84 @@
+{
+  "attempt_id": "20260527T190255-a6c690ae",
+  "bead_id": "ddx-f49ec1fb",
+  "base_rev": "2983d76c6ad456eb3d86098709e67a8082f5d44c",
+  "created_at": "2026-05-27T19:03:04.11900948Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f49ec1fb",
+    "title": "cleanup: reap expired run-state for dead worker PIDs",
+    "description": "PROBLEM\n`ddx cleanup --apply` can leave an expired per-attempt run-state file behind and continue treating the corresponding attempt worktree as live even after the worker process is gone. This keeps the project checkout dirty (`?? .ddx/run-state/`) and prevents reliable follow-up workers until an operator manually deletes the stale file.\n\nOBSERVED EVIDENCE\nIn `/home/erik/Projects/niflheim`, a canceled `ddx work --once` left `.ddx/run-state/20260521T071245-feb2ad20.json` with `pid: 4109595`, `refreshed_at: 2026-05-21T07:12:48Z`, and `expires_at: 2026-05-21T07:14:48Z`. After the process was gone and the expiry time had passed, `ddx cleanup --apply` reported `removed_run_state_files: 0` and still classified `/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-niflheim-439a49ae-20260521T071245-feb2ad20` as `preserved_live_attempt` with message `matched live run-state`.\n\nROOT CAUSE WITH FILE:LINE\n`cli/cmd/execute_loop_shared.go:616-623` only treats run-state freshness/expiry as the liveness predicate for cleanup preservation. It does not require the recorded `RunState.PID` to still be alive when deciding that an expired/dead attempt should be preserved. `cli/cmd/cleanup_test.go:77-180` covers run-state cleanup in simpler cases but does not reproduce an expired per-attempt run-state whose PID is dead while the worktree still matches that run-state.\n\nPROPOSED FIX\nMake cleanup treat a per-attempt run-state as live only when both conditions hold: the lease is fresh/non-expired and the recorded worker PID is still alive. Expired run-state files for dead PIDs must be removed, and matching attempt worktrees must be eligible for stale cleanup. Keep live active attempts protected.\n\nNON-SCOPE\n- Changing work status enrichment for live workers.\n- Changing worker heartbeat cadence.\n- Deleting completed evidence bundles.\n- Reworking global temp-root cleanup across projects.\n\nIN-SCOPE FILES\n- `cli/cmd/execute_loop_shared.go`\n- `cli/cmd/cleanup_test.go`\n- Adjacent cleanup/startup-housekeeping tests if needed.",
+    "acceptance": "1. Add a regression test that writes `.ddx/run-state/\u003cattempt\u003e.json` for a dead PID with `expires_at` in the past, creates the matching attempt worktree, runs cleanup with `--apply`, and asserts the run-state file is removed.\n2. The same test asserts the matching stale attempt worktree is no longer classified as `preserved_live_attempt` solely because an expired run-state file existed.\n3. Add or preserve a live-PID regression test proving a fresh run-state for a live worker still protects its worktree.\n4. `cd cli \u0026\u0026 go test ./cmd -run 'TestCleanup.*RunState|TestWorktreeStillLive' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:cleanup",
+      "area:execution",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:00:47.620553528Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T19:01:24.562599324Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T190049-cd889059\",\"bead_id\":\"ddx-f49ec1fb\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T19:01:26.665634555Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"173c1d42ebad5a82e7cd7203d7f212fbc0e8bde8\",\"classification\":\"transport\",\"detail\":\"docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \\\"bind\\\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\\n\\nRun 'docker run --help' for more information: exit status 125\",\"rationale\":\"Attempt failed at infrastructure setup before any execution: docker bind-mount source path /home/erik/.local/share/claude/versions/2.1.152 does not exist (exit status 125). duration_ms=45 and result_rev==base_rev confirm the worker never ran the bead. This is a host/container provisioning fault, not a defect in the bead.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"173c1d42ebad5a82e7cd7203d7f212fbc0e8bde8\",\"session_id\":\"eb-65d5632d\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:01:55.011522554Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\n\nRun 'docker run --help' for more information: exit status 125\npowerClass=standard\nresult_rev=173c1d42ebad5a82e7cd7203d7f212fbc0e8bde8\nbase_rev=173c1d42ebad5a82e7cd7203d7f212fbc0e8bde8\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:01:55.088816492Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260527T190255-a6c690ae",
+    "prompt": ".ddx/executions/20260527T190255-a6c690ae/prompt.md",
+    "manifest": ".ddx/executions/20260527T190255-a6c690ae/manifest.json",
+    "result": ".ddx/executions/20260527T190255-a6c690ae/result.json",
+    "checks": ".ddx/executions/20260527T190255-a6c690ae/checks.json",
+    "usage": ".ddx/executions/20260527T190255-a6c690ae/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-f49ec1fb-20260527T190255-a6c690ae"
+  },
+  "prompt_sha": "284dd723679078aa3078038c8b1ed6d6df5b30058a2faa74f0f3c671fc13fccd"
+}

@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review contains only execution evidence files (manifest.json, result.json) — no source code changes to evaluate against any AC item.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes present in diff; cannot verify ACs 1–6 (DispatchWorker default, single ResolveRoute call, absence of tier-ladder on default path, integration test, --escalate regression).", "location": ".ddx/executions/20260429T025051-28afce7c/" }
+  ]
+}
+```

@@ -1,0 +1,2 @@
+status: open
+reason: targeted dirty-timeout salvage tests pass, but the required broad `go test ./internal/agent/... ./cmd/... -count=1` gate still fails in this workspace due unrelated pre-existing cmd/agent failures and the default 10m test timeout

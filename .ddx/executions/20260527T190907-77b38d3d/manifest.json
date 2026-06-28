@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260527T190907-77b38d3d",
+  "bead_id": "ddx-6f7585da",
+  "base_rev": "bdaa9f3c6801b3fcc02f169f44fe0974a7bfa42b",
+  "created_at": "2026-05-27T19:09:28.959208961Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-6f7585da",
+    "title": "execute-bead: unattended drain halts on tool-managed skill-symlink churn (.crush/skills/*); make pre-claim resilient",
+    "description": "PROBLEM\nThe unattended `ddx work` drain halts with \"worker exited: operator attention required\" when a tracked skill SYMLINK is materialized into a real directory by an external skill-install/sync, leaving the project worktree dirty with a non-tracker path. Observed 2026-05-27 06:26: a continuous ddx worker closed 3 beads, then on the next pre-claim found `.crush/skills/nano-banana-pro-openrouter` dirty — git tracks it as a symlink (mode 120000) but the working tree had it as a directory (SKILL.md/assets/scripts) — and exited via the uncommitted-implementation-changes guard rather than continue. Operator had to restore the symlink (rm + git checkout) and restart the worker. This breaks the unattended-drain goal: a stray tool-managed skill dir stops the whole queue.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:2480 emits \"operator attention: project worktree %s has uncommitted implementation changes; released %s\" and exits the drain when the landing worktree has any non-allowlisted dirty path (message built at execute_bead_loop.go:955-957).\n- cli/internal/agent/work/guard.go:38-48 trackerMetadataPaths only allowlists DDx-managed files (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, …) — added by ddx-df77e668. Tool-managed skill symlinks under .crush/skills/ (and likely .claude/skills, .agents/skills) are NOT covered, so their symlink-\u003edir materialization reads as implementation dirt and halts the drain.\n\nPROPOSED FIX (pick one; implementer/operator decides)\nA. Pre-claim: treat a tracked symlink that has been materialized into a directory whose content matches the symlink target as benign (optionally auto-restore the symlink) instead of implementation dirt.\nB. Pre-claim: allowlist tool-managed skill-dir roots (.crush/skills, .claude/skills, .agents/skills) in the cleanliness check, analogous to trackerMetadataPaths.\nC. Repo hygiene: gitignore + untrack these tool-materialized skill paths so they never read as dirty (note: they are currently committed as symlinks, so this is a deliberate structural change).\nRecommend A (most precise; only neutralizes the spurious symlink-\u003edir case, preserves the guard for genuine edits).\n\nNON-SCOPE\n- Do not weaken the guard for genuine uncommitted source/test/doc edits.\n- Do not change what materializes the symlink (external skill tooling) — make ddx resilient to it.\n\nCROSS-REF: extends the tracker-file allowlist from ddx-df77e668; same unattended-drain-resilience theme.",
+    "acceptance": "1. With a tracked symlink (mode 120000) materialized into a directory whose contents equal the symlink target, the pre-claim cleanliness check does NOT classify it as uncommitted implementation changes and the drain continues to the next claim. Verified by a new test (e.g. TestPreClaim_MaterializedSkillSymlinkIsNotImplementationDirt in cli/internal/agent/work or cli/internal/agent) that sets up the symlink-\u003edir state and asserts pre-claim proceeds.\n2. A genuine uncommitted source/test/doc edit STILL halts the drain (regression) — existing behavior preserved, asserted by a test.\n3. cd cli \u0026\u0026 go test ./internal/agent/... green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "area:pre-claim",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "observability",
+      "prevention:ddx-df77e668"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-27T19:08:40.721581534Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:09:05.813472448Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T190907-77b38d3d",
+    "prompt": ".ddx/executions/20260527T190907-77b38d3d/prompt.md",
+    "manifest": ".ddx/executions/20260527T190907-77b38d3d/manifest.json",
+    "result": ".ddx/executions/20260527T190907-77b38d3d/result.json",
+    "checks": ".ddx/executions/20260527T190907-77b38d3d/checks.json",
+    "usage": ".ddx/executions/20260527T190907-77b38d3d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-6f7585da-20260527T190907-77b38d3d"
+  },
+  "prompt_sha": "33252273769d4c08ce2b27aa4881ebea72e4e27dfd2b81cf629aca3d31ca9465"
+}

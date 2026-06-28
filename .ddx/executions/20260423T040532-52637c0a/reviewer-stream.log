@@ -1,0 +1,28 @@
+---
+## Review: ddx-05b4cc9d iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Root-cause fix | BLOCK | — not found in diff |
+| 2 | Regression test — project-scoped query | BLOCK | — not found in diff |
+| 3 | Regression test — backward compat | BLOCK | — not found in diff |
+| 4 | End-to-end validation | BLOCK | — not found in diff |
+| 5 | No regression to unrelated surfaces | BLOCK | — not found in diff |
+| 6 | Cross-reference | BLOCK | — not found in diff |
+
+### Summary
+
+The supplied diff only adds execution evidence under `.ddx/executions/.../result.json`; it contains no resolver change, no GraphQL regression tests, no Playwright validation, and no cross-reference note. The implementation is therefore insufficient to evaluate or accept against every AC.
+
+### Findings
+
+- `cli/internal/server/state_graphql.go` / `GetWorkersGraphQL` is not changed in the diff, so AC1’s id-to-path root-cause fix is not implemented or evidenced.
+- `cli/internal/server/*test.go` has no diff adding the required two-project `workersByProject` regression coverage, global `workers` assertion, or unknown-project assertion for AC2.
+- No worker-record compatibility test is added for AC3, and the diff does not show whether Option 1 or Option 2 was chosen.
+- `cli/internal/server/frontend/e2e/*` has no diff adding the required Drain queue to Workers tab Playwright flow or second-project isolation check for AC4.
+- No evidence is added for AC5 that global workers, worker detail loading, or live-progress row patching still work.
+- No note or tracker/documentation update cross-references `ddx-69789664` as depending on this bead for AC6.

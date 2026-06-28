@@ -1,0 +1,73 @@
+{
+  "attempt_id": "20260527T075832-52cbeb9f",
+  "bead_id": "ddx-066cceaf",
+  "base_rev": "8d389b11651c0cc98e1f1636c1aa7b941547df14",
+  "created_at": "2026-05-27T07:58:38.982819367Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-066cceaf",
+    "title": "Lock readiness_checks schema behind shared CI validation",
+    "description": "PROBLEM\nThe readiness producer and pre-claim intake consumer can drift on the `readiness_checks` JSON shape. That drift caused the parent incident when one side emitted `verdict` as a bool and the other side expected a string.\n\nROOT CAUSE WITH FILE:LINE\nThe pre-claim prompt specifies the expected output shape in `cli/internal/agent/preclaim_intake_hook.go:616-621`, while the Go consumer decodes `ReadinessChecks` in `cli/internal/agent/preclaim_intake_hook.go:68` and `cli/internal/agent/preclaim_intake_hook.go:781-814`. Without a shared schema and CI gate, prompt text and decoder behavior can evolve independently.\n\nPROPOSED FIX\nDefine `readiness_checks` in a shared JSON schema file in the agent package, make the prompt/schema/decoder tests consume the same schema, and add a CI-accessible Make target that fails on schema drift. The schema must allow exactly the verdict forms accepted by the decoder from the decoder child: bool, string, null, or absent.\n\nNON-SCOPE\nDo not implement the decoder tolerance itself except as needed to align with the existing decoder contract; this child depends on the decoder child. Do not implement same-fingerprint escalation, claim-success-rate warnings, README documentation, Fizeau route/harness configuration, lock handling from ddx-57c40485, or route-resolution wedge handling from ddx-8f2e0ebf. Do not introduce a network-dependent schema validation step. Parent lifecycle, child dependency wiring, and tracker mutation are orchestrator-owned.\n\nGOVERNING ARTIFACT / CROSS-REF\nAR-2026-05-17 follow-up context; ADR-023 readiness warn-only policy; adjacent reliability bugs ddx-57c40485 and ddx-8f2e0ebf are cross-references only.\n\nDEPENDENCIES\nDepends on the decoder child that canonicalizes bool/string/null/absent verdicts.",
+    "acceptance": "1. `TestReadinessChecksSchema` compiles the shared readiness-checks schema and validates fixtures for bool, string, null, and absent verdicts.\n2. `TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema` or an equivalent prompt/schema contract test proves the producer prompt names the same `readiness_checks` shape validated by the schema.\n3. `make readiness-schema` or the repo's equivalent CI target runs the schema test and fails if the schema, prompt contract, or decoder accepted forms drift.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestReadinessChecksSchema|TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema|TestPreClaimReadinessPromptSpecifiesOutputShapes'` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-claim",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T07:40:41.583928966Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-066cceaf\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T07:40:55.659404458Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"The attempt failed while committing tracker metadata with git reporting `fatal: unable to write new index file`. That is a local git/filesystem transport failure after execution, not evidence that the bead implementation or acceptance criteria failed.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T07:41:18.287249967Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-27T07:41:18.347727992Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T075832-52cbeb9f",
+    "prompt": ".ddx/executions/20260527T075832-52cbeb9f/prompt.md",
+    "manifest": ".ddx/executions/20260527T075832-52cbeb9f/manifest.json",
+    "result": ".ddx/executions/20260527T075832-52cbeb9f/result.json",
+    "checks": ".ddx/executions/20260527T075832-52cbeb9f/checks.json",
+    "usage": ".ddx/executions/20260527T075832-52cbeb9f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-066cceaf-20260527T075832-52cbeb9f"
+  },
+  "prompt_sha": "7c6ea60b77dac11a4d341c389e84bcb9bd034e768948063b65c1ae53a40f31a8"
+}

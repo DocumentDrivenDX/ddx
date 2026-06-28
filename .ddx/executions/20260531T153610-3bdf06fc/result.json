@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-2a24727c",
+  "attempt_id": "20260531T153610-3bdf06fc",
+  "base_rev": "fec545933980c353cfcb2ceceff1b20756748e3a",
+  "result_rev": "fec545933980c353cfcb2ceceff1b20756748e3a",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "session_id": "eb-65d94fb4",
+  "duration_ms": 1808761,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260531T153610-3bdf06fc",
+  "prompt_file": ".ddx/executions/20260531T153610-3bdf06fc/prompt.md",
+  "manifest_file": ".ddx/executions/20260531T153610-3bdf06fc/manifest.json",
+  "result_file": ".ddx/executions/20260531T153610-3bdf06fc/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-31T15:36:18.002042105Z",
+  "finished_at": "2026-05-31T16:06:26.76319698Z"
+}

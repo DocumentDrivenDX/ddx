@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260606T040756-8d5bdb5f",
+  "bead_id": "ddx-d740539d",
+  "base_rev": "424b36bfd4b9cd2093458bd8b7f8711f456b24f4",
+  "created_at": "2026-06-06T04:08:13.023436947Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d740539d",
+    "title": "agent: unify managed tracker path exemptions for pre-claim",
+    "description": "PROBLEM\nDDx-managed tracker path exemptions are duplicated across durable audit, pre-claim guard, and staged-path filtering. If the lists drift, tracker-only metadata staged by concurrent workers can be misclassified as systemic dirty worktree state and block new claims.\n\nROOT CAUSE\n- cli/internal/agent/durable_audit.go:14-19 defines `durableAuditManagedPathspecs`.\n- cli/internal/agent/work/guard.go:38-50 defines `trackerMetadataPaths` with a comment saying it must stay in sync.\n- cli/internal/agent/execute_bead_land.go:608-620 separately classifies DDx-managed staged paths via `isDDxManagedTrackerPath`.\n\nPROPOSED FIX\n- Create one shared classification source or a contract test that enforces exact parity across the existing lists without creating an import cycle.\n- Add parameterized pre-claim/staged-path tests for `.ddx/beads.jsonl`, `.ddx/beads-archive.jsonl`, `.ddx/metrics/attempts.jsonl`, and `.ddx/attachments/...`.\n- Keep real code/doc/test staged files classified as systemic blockers.\n\nNON-SCOPE\n- Do not broaden the exemption to arbitrary `.ddx/**` files.\n- Do not change durable audit commit semantics beyond shared classification.",
+    "acceptance": "1. `TestManagedTrackerPathListsStayInSync` proves durable-audit, pre-claim, and staged-path helpers classify the managed tracker paths identically.\n2. `TestPreClaimStagedManagedTrackerPaths_SkipWithoutCooldown` is table-driven over `.ddx/beads.jsonl`, `.ddx/beads-archive.jsonl`, `.ddx/metrics/attempts.jsonl`, and `.ddx/attachments/example`.\n3. `TestPreClaimStagedCodeFile_IsSystemicNotTrackerContention` still proves real code/doc/test files block pre-claim.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestManagedTrackerPathListsStayInSync|TestPreClaimStagedManagedTrackerPaths_SkipWithoutCooldown|TestPreClaimStagedCodeFile_IsSystemicNotTrackerContention'` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:bead",
+      "kind:bug",
+      "spec:TP-021",
+      "reliability",
+      "concurrency"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-06-06T04:07:23.800818787Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "TP-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-021",
+      "path": "docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md",
+      "title": "Test Plan: Multi-Worker `ddx try` Reliability"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T040756-8d5bdb5f",
+    "prompt": ".ddx/executions/20260606T040756-8d5bdb5f/prompt.md",
+    "manifest": ".ddx/executions/20260606T040756-8d5bdb5f/manifest.json",
+    "result": ".ddx/executions/20260606T040756-8d5bdb5f/result.json",
+    "checks": ".ddx/executions/20260606T040756-8d5bdb5f/checks.json",
+    "usage": ".ddx/executions/20260606T040756-8d5bdb5f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d740539d-20260606T040756-8d5bdb5f"
+  },
+  "prompt_sha": "b4b6fd26694705f175e49b8acc6ad27f3104299b08e3657ad49bc957ca0890c2"
+}

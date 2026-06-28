@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no implementation, no tests, no source changes. Cannot evaluate any AC item against the actual code change.",
+  "findings": [
+    { "severity": "block", "summary": "No source or test changes in diff — only an execution evidence file was added. AC1–AC6 cannot be verified.", "location": ".ddx/executions/20260503T065653-c7305315/result.json" },
+    { "severity": "block", "summary": "Missing tests TestDoctor_ReadsFromServer_WhenAvailable, TestDoctor_FallsBackToOnDisk_WhenServerDown, TestDoctor_HandlesServerDownUpDown not present in diff.", "location": "cli/cmd/" }
+  ]
+}
+```

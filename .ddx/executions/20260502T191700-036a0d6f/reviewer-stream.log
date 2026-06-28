@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "FEAT-004 line 65 lists canonical 6 statuses with TD-031 reference; SD-004 cross-references TD-031; Status* constants already canonical; IsValidStatusTransition matches TD-031 §3 (closed/cancelled terminal); execute-bead result reports task_succeeded with tests green.",
+  "findings": [
+    { "severity": "info", "summary": "Transition matrix tightening removes prior reopen path (closed→open, cancelled→open). Intentional per TD-031, but is a minor behavior change beyond pure docs/vocabulary alignment — acceptable since AC explicitly calls for matching TD-031 matrix.", "location": "cli/internal/bead/types.go:110-125" },
+    { "severity": "info", "summary": "Non-bead Status fields in agent/ (gate, land, runner) use off-list strings like 'pass', 'fail', 'landed', 'preserved', 'stalled' — these are distinct domains, not persisted bead statuses, so AC4 holds.", "location": "cli/internal/agent/execute_bead_land.go" }
+  ]
+}
+```

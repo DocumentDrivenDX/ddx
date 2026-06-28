@@ -1,0 +1,2 @@
+status: blocked
+reason: `cd cli && go test ./internal/bead/... ./cmd/...` fails in existing `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with `p99 lock wait 1366.41ms exceeded budget 1000.00ms` at `cli/internal/bead/store_perf_test.go:149`. The scoped ancestry-guard implementation and tests are already present in the worktree, so there are no bead-scoped code changes to apply.

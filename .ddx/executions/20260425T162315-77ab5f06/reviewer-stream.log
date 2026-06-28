@@ -1,0 +1,18 @@
+The migration looks clean—using RunWithConfig + ExecuteBeadLoopRuntime + TestLoopConfigOpts pattern. AC #1 verified (0 matches). AC #2/#3 (test passes) — exit_code 0 in result.json, harness completed with task_succeeded.
+
+---
+## Review: ddx-d0973f38 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg ExecuteBeadLoopOptions{ returns 0 | APPROVE | cli/internal/agent/execute_bead_loop_test.go — 0 matches |
+| 2 | go test ./internal/agent/... passes | APPROVE | result.json exit_code 0, outcome task_succeeded |
+| 3 | go test ./... passes | APPROVE | result.json exit_code 0; harness completed checks |
+
+### Summary
+
+Mechanical migration of the second half of execute_bead_loop_test.go from `ExecuteBeadLoopOptions{}` to `RunWithConfig` + `ExecuteBeadLoopRuntime{}` using the `config.TestLoopConfigOpts` / `NewTestConfigForLoop` pattern. Conversions correctly route durable fields (`Assignee`, `Harness`, `Model`, `MaxNoChangesBeforeClose`) through the resolved config and keep runtime plumbing (`Once`, `EventSink`, `WorkerID`, `ProjectRoot`, `SessionID`) on the runtime struct, consistent with SD-024 Stage 1.

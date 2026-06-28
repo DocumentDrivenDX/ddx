@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Principle 4 now ends with the exact sentence 'Quality degrades as the context window fills.' No other content was added.",
+  "findings": []
+}
+```

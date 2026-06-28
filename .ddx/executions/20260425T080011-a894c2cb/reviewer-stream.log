@@ -1,0 +1,24 @@
+All AC items are implementable from the diff. Producing the review.
+
+---
+## Review: ddx-64299657 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | go build ./internal/evidence/... passes | APPROVE | cli/internal/evidence/{caps,read,clamp,sections,diff,strategy,marker}.go — package compiles (only stdlib imports) |
+| 2 | go test ./internal/evidence/... — every primitive has behavioral test | APPROVE | caps_test.go, clamp_test.go, diff_test.go, read_test.go, sections_test.go, strategy_test.go all present |
+| 3 | go test ./internal/config/... with per-harness override test | APPROVE | cli/internal/config/evidence_caps_test.go:25 TestResolveEvidenceCaps_LoadedFromYAML |
+| 4 | os.ReadFile/ioutil.ReadFile only inside ReadFileClamped | APPROVE | grep returns 0 matches; read.go uses os.Open + io.ReadFull (technically satisfies "only inside" trivially) |
+| 5 | EvidenceAssemblySection + TruncationMarker exported | APPROVE | sections.go:9 EvidenceAssemblySection; marker.go:6 TruncationMarker |
+| 6 | Self-contained package, no import cycles | APPROVE | evidence package imports only stdlib (errors, fmt, io, os, strings); config imports evidence one-way |
+| 7 | Permissive defaults shipped (4 MiB / 512 KiB / 2 MiB / 256 KiB) | APPROVE | caps.go:12-15 |
+| 8 | Pinned contracts: outcome class constants | APPROVE | marker.go:12-13 OutcomeReviewContextOverflow / OutcomeCompareContextOverflow |
+| 9 | evidence_caps in config schema with per-harness | APPROVE | config.schema.json:503; types.go:25 EvidenceCapsConfig with PerHarness |
+
+### Summary
+
+Stage A1 lands cleanly: shared `internal/evidence` package with caps, clamping, section fitting, diff decomposition, strategy helpers, telemetry struct, canonical truncation marker, pre-dispatch overflow class constants, and the `evidence_caps` config section with project + per-harness override resolution. Defaults are permissive as specified, package has no external imports beyond stdlib so it's safely importable from cmd/agent/server, and config→evidence dependency is one-way. Test coverage exists for every exported primitive plus a YAML-loaded per-harness override test.

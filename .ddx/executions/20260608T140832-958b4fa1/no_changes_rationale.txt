@@ -1,0 +1,2 @@
+status: open
+reason: cd cli && go test ./internal/agent/... ./cmd/... -count=1 is still red with broad preexisting/internal-agent and cmd failures unrelated to the audit-field plumbing, so the bead cannot be closed as verified in this pass.

@@ -1,0 +1,19 @@
+---
+## Review: ddx-b2ce2335 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Apply tokens to all six listed views | APPROVE | Commit 4b7f73e1 touches all six target files (documents/+page, documents/[...path], plugins/+page, plugins/[name], providers/+page, providers/[name]) |
+| 2 | Surface tokens (fg-ink, fg-muted, bg-surface, border-line) | APPROVE | documents/+page.svelte:17,22 — `text-fg-ink`, `text-fg-muted`, `border-border-line`, `bg-bg-surface` replace gray scales |
+| 3 | Label-caps table headers | APPROVE | documents/+page.svelte:23-24 — `text-label-caps font-label-caps uppercase tracking-wide` on `<th>` |
+| 4 | Sharp containers (no rounded-lg) | APPROVE | plugins/+page.svelte:350 — article container drops `rounded-lg`; same pattern across diff |
+| 5 | Status badge utilities | APPROVE | plugins/+page.svelte:102-104 — `statusClass` returns `badge-status-closed/in-progress/open` |
+| 6 | Doc CSS vars for prose rendering | APPROVE | documents/[...path]/+page.svelte included in restyle commit (39 lines changed) per git stat |
+
+### Summary
+
+Clean, consistent token migration across all six target views. Gray-scale Tailwind utilities are systematically replaced with semantic tokens, sharp containers, label-caps metadata, and badge-status utilities — matching the executions/commits views as specified. No scope creep; commit is self-contained behind the `[ddx-b2ce2335]` trailer.

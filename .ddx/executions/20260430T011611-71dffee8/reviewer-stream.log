@@ -1,0 +1,17 @@
+---
+## Review: ddx-a0cf398b iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | New bead created with route-status title | APPROVE | .ddx/beads.jsonl: ddx-6036e1bc, title "ddx agent route-status: consume upstream RouteDecision.Candidates + typed no-viable-candidate error", parent=ddx-23978824 |
+| 2 | References upstream agent-53f38d95 satisfied | APPROVE | bead description: "Upstream dependency agent-53f38d95 — satisfied" |
+| 3 | Commit mutating .ddx/beads.jsonl | APPROVE | commit c9a1e608: "1 file changed, 1 insertion(+)" on .ddx/beads.jsonl |
+| 4 | ddx-05b4cc9d noted as independent/non-blocking | APPROVE | bead description "Independence note": "ddx-05b4cc9d ... is independent of this work and not blocked by this bead" |
+
+### Summary
+
+Mechanical follow-up bead filed cleanly. New bead ddx-6036e1bc is parented under ddx-23978824 (providers UI) with appropriate labels (feat-006, routing, follow-up), references the satisfied upstream agent-53f38d95 dep, and explicitly calls out ddx-05b4cc9d as independent and non-blocking. The diff shown to the reviewer was the evidence-only commit (0c765565), but the result_rev (c9a1e608) carries the actual .ddx/beads.jsonl mutation as required.

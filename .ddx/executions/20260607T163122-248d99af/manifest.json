@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260607T163122-248d99af",
+  "bead_id": "ddx-4e1b5dd6",
+  "base_rev": "4a3ea560020d7b07bd86f37b1761a996c8dfa080",
+  "created_at": "2026-06-07T16:31:38.485387465Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4e1b5dd6",
+    "title": "docs: resolve TP-002 historical versus active status",
+    "description": "PROBLEM\nTP-002 says it is historical but also marks itself active. That contradiction makes it unclear whether test coverage gaps in the old React-stack plan are current obligations or retained historical notes.\n\nROOT CAUSE\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:17 says the plan is historical and points to ADR-002 v2 for the current stack.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:18 says `Status: Active`.\n- Deferred UI cases remain listed later in the same plan, including close/reopen/drag-drop rows around :152-154.\n\nPROPOSED FIX\nUpdate TP-002 status/header language so historical content is explicitly superseded, or split any still-current test obligations into a current-stack plan. Keep the change small and do not rewrite the historical body unnecessarily.\n\nNON-SCOPE\nDo not implement UI close/reopen/drag-drop features. Do not rewrite ADR-002 or the current Svelte stack docs unless a direct reference needs updating.",
+    "acceptance": "1. docs/helix/03-test/test-plans/TP-002-server-web-ui.md no longer says both Historical and Status: Active without explanation.\n2. Any still-current TP-002 obligations are pointed to a current-stack plan or explicitly scoped as retained historical reference.\n3. `rg -n \"Historical.*Status: Active|Status: Active\" docs/helix/03-test/test-plans/TP-002-server-web-ui.md` has no contradictory hit.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-4ac4da95",
+    "labels": [
+      "phase:iterate",
+      "area:docs",
+      "area:test",
+      "kind:chore",
+      "spec-drift"
+    ],
+    "metadata": {
+      "spec-id": "TP-002",
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 2983171)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T11:27:45Z"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-002",
+      "path": "docs/helix/03-test/test-plans/TP-002-server-web-ui.md",
+      "title": "Test Plan: DDx Server and Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260607T163122-248d99af",
+    "prompt": ".ddx/executions/20260607T163122-248d99af/prompt.md",
+    "manifest": ".ddx/executions/20260607T163122-248d99af/manifest.json",
+    "result": ".ddx/executions/20260607T163122-248d99af/result.json",
+    "checks": ".ddx/executions/20260607T163122-248d99af/checks.json",
+    "usage": ".ddx/executions/20260607T163122-248d99af/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-4e1b5dd6-20260607T163122-248d99af"
+  },
+  "prompt_sha": "19e3ed1504be939edaa7fae286528f95cf4203b1584b257ccc5c717f6c3079c3"
+}

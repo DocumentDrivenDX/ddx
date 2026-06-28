@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260527T190623-2a5ed707",
+  "bead_id": "ddx-d67f124e",
+  "base_rev": "156a5f83117c8f31617f1deab271827cc3b80e26",
+  "created_at": "2026-05-27T19:06:54.406783636Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-d67f124e",
+    "title": "ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints",
+    "description": "PROBLEM\nUnder warn-only quality mode, a schema-mismatch or other systemic pre-claim intake fault produces the SAME warn fingerprint on every candidate (observed Fizeau 2026-05-18: fingerprint 15155a1c... repeated across distinct bead_ids). The drain loop keeps polling (loop.idle every ~50s) and looks alive, but never claims anything. A 100% identical-fingerprint failure rate is silently masked by warn-only policy; the operator has no signal short of tailing the agent-loop JSONL.\n\nCONTEXT / WHERE\nPre-claim warn decisions are emitted with a stable fingerprint by readinessDecisionFingerprint (cli/internal/agent/readiness_decision.go:23-39), surfaced in the pre_claim_intake.warn event body['fingerprint']. The drain loop lives in cli/internal/agent/execute_bead_loop.go; the pre-claim intake hook returns PreClaimIntakeResult and the loop already tracks per-bead counters such as consecutive_ladder_exhaustions (execute_bead_loop.go:5348-5398) as a model for cross-iteration accounting.\n\nPROPOSED FIX\nAdd a cross-iteration counter in the drain loop keyed by the pre-claim warn fingerprint. When the same warn fingerprint is produced on N (default 5, configurable) consecutive pre-claim warn outcomes across distinct candidate bead_ids, the loop must:\n  - emit a single operator-attention event (kind/event consistent with existing operator-attention emission in execute_bead_loop.go, e.g. around lines 4974/5026) carrying the fingerprint and ONE example payload/detail, and\n  - stop looping silently (break the drain / surface a terminal operator-attention state) rather than continuing to poll.\nReset the counter when a different fingerprint appears or a claim succeeds.\n\nNON-SCOPE\nDo not change the decoder (separate child ddx-606fe854), the rolling claim-success-rate signal (separate child), the CI schema gate, or README docs. Only the consecutive-identical-fingerprint escalation + guard.",
+    "acceptance": "1. The drain loop tracks consecutive pre-claim warn outcomes by fingerprint and, after N (default 5) consecutive outcomes with the same fingerprint, emits exactly one operator-attention event containing the fingerprint and a single example detail/payload, then stops looping instead of continuing to poll.\n2. The threshold N is configurable (constant or config field) with a documented default of 5; the counter resets when a different fingerprint is observed or a claim succeeds.\n3. A test in cli/internal/agent (e.g. TestDrainLoop_EscalatesAfterConsecutiveIdenticalPreClaimWarnFingerprint) injects a pre-claim intake hook that returns the same warn fingerprint for N successive candidates and asserts (a) the operator-attention event is emitted once with the fingerprint, and (b) the loop terminates / does not issue further claim attempts.\n4. A negative test asserts that alternating/differing fingerprints below the threshold do NOT escalate.\n5. cd cli \u0026\u0026 go test ./internal/agent/... green\n6. lefthook run pre-commit passes",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:workers",
+      "area:pre-claim",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T19:06:00.04501973Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:06:21.896120915Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T190623-2a5ed707",
+    "prompt": ".ddx/executions/20260527T190623-2a5ed707/prompt.md",
+    "manifest": ".ddx/executions/20260527T190623-2a5ed707/manifest.json",
+    "result": ".ddx/executions/20260527T190623-2a5ed707/result.json",
+    "checks": ".ddx/executions/20260527T190623-2a5ed707/checks.json",
+    "usage": ".ddx/executions/20260527T190623-2a5ed707/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-d67f124e-20260527T190623-2a5ed707"
+  },
+  "prompt_sha": "b615854901bd4c40d18d82e6eac036b1476f7a17c818b798353deae76fe79adf"
+}

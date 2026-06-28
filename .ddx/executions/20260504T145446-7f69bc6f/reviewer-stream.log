@@ -1,0 +1,21 @@
+All 8 ACs are satisfied: ADR-023 exists with the 5 required sections and Proposed status; FEAT-004 has "Authoring quality lint" section with rubric/waiver/cross-link; FEAT-010 has "Quality hooks" with PreDispatchLintHook, PostAttemptTriageHook, and OutcomeReason; FEAT-011 replaces the stale "exactly one skill" phrasing with the nested model and lists all 5 shipped paths; cross-links to ddx-06b77652, ddx-f339c399, bead-authoring-template.md, and both audits are present; conventional commit ends with the bead id; grep confirms all 4 files reference ADR-023.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ADR-023 created with all 5 required sections (Policy, Staged rollout, Waiver model, Fail-open, Recovery UX) at Proposed status; FEAT-004/010/011 amendments add the lint, quality-hooks, and nested-skill sections with proper cross-links; commit format and grep verification both pass.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "FEAT-011 retains the sentence 'DDx ships exactly one root skill tree' which echoes the old wording but now correctly qualifies it with nested workflow skills — not stale, just worth noting.",
+      "location": "docs/helix/01-frame/features/FEAT-011-skills.md:201"
+    },
+    {
+      "severity": "info",
+      "summary": "ADR-023 references audit2 path '.ddx/executions/20260504T030000-audit2/...' — verify this evidence directory actually exists in the repo; if not, the cross-link will be dead.",
+      "location": "docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md:170"
+    }
+  ]
+}
+```

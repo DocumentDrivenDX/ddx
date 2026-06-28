@@ -1,0 +1,21 @@
+---
+## Review: .execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d37e1915 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Add GET /api/docs/changed?since=<ref> REST route | BLOCK | — diff contains only `.ddx/executions/.../manifest.json` and `result.json`; no server/route code |
+
+### Summary
+
+The diff shows only execution-evidence artifacts (manifest.json, result.json) under `.ddx/executions/`. No HTTP handler, route registration, or test for `GET /api/docs/changed` is present. There is nothing to evaluate against the AC.
+
+### Findings
+
+- No route handler added (expected something like `cli/internal/server/http/...` registering `GET /api/docs/changed` and parsing `?since=<ref>`).
+- No test added (recent commit `d1b467ff test: add HTTP test for GET /api/docs/changed REST route` is referenced as `result_rev`, but its changes are not in this diff under review).
+- No wiring to the existing `ddx_doc_changed` MCP logic to share implementation.
+- Manifest events show a prior iteration was BLOCKed for the same reason (evidence-only diff); current iteration repeats the pattern.

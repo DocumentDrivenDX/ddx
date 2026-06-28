@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Production wiring (server.go:4637 sets Resolver.Federation only when s.hub != nil; hubFederationProvider implements Spokes/FanOut) was already in place. This bead adds the missing integration test that boots Server.New + EnableHubMode, registers a spoke via /api/federation/register, posts federationNodes via /graphql, and asserts the spoke surfaces — plus a hub-off path test. All 4 AC items satisfied.",
+  "findings": [
+    {"severity": "info", "summary": "Adapter and Resolver injection were landed in an earlier commit (ab8eb6f8); this bead only added the wire-path coverage test, which matches the bead's stated motivation.", "location": "cli/internal/server/server.go:4637"}
+  ]
+}
+```

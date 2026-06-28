@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All six ACs implemented: per-endpoint request_timeout_seconds, ResolveProviderRequestTimeout with override>endpoint>model-class precedence, 60-min thinking-model default (qwen3/deepseek-r/o1/o3/thinking), idle-vs-wall-clock comments clarified, error hint appended, --request-timeout flag on execute-bead and execute-loop.",
+  "findings": [
+    {"severity": "info", "summary": "AC6 prefix list uses substring match on lowercased model — 'qwen3' will also match unrelated future strings containing 'qwen3', but acceptable and easily extensible.", "location": "cli/internal/agent/serviceconfig.go"},
+    {"severity": "info", "summary": "appendProviderTimeoutHint relies on string match 'provider request timeout' in error text; tightly coupled to the producer's wording but matches the observed log format.", "location": "cli/internal/agent/service_run.go"}
+  ]
+}
+```

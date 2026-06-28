@@ -1,0 +1,13 @@
+verification_command: cd cli && go test ./cmd/... -run TestReadmeDocumentsPreClaimIntakeContract
+
+This bead documents the pre-claim intake contract, failure-class mapping, and silent-idle diagnosis logic. All acceptance criteria are satisfied:
+
+1. README.md contains the complete "Pre-claim Intake and Silent-Idle Diagnosis" section (lines 45-88)
+2. TestReadmeDocumentsPreClaimIntakeContract in cli/cmd/readme_preclaim_intake_test.go passes
+3. lefthook run pre-commit passes
+
+No code commits are required because:
+- The bead depends on four code-change sibling beads that have already landed
+- The implemented features are already present in the codebase
+- The documentation accurately reflects the current shipped behavior
+- The AC are satisfied entirely by documentation review and test verification

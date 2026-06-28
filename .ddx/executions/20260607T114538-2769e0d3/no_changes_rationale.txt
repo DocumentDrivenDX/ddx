@@ -1,0 +1,2 @@
+status: blocked
+reason: `lefthook run pre-commit` fails because the repo-wide `go test -short -race ./cmd` step has unrelated existing cmd-suite failures after the shared-binary refactor, including `ac_test.go`, `bead_acceptance_test.go`, `work_plan_test.go`, and `work_test.go`. Targeted validation for this bead passes (`go test -run 'TestE2E' ./cmd/` and `go test -run 'Test(Worker_RealAttemptEvents_FlowToServer|SharedWorkerprobeBinaryBuildsOnce)$' ./internal/agent/workerprobe`), but the hook does not complete cleanly on the current tree.

@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` still fails outside the decomposed-parent changes, with broad pre-existing cmd-suite failures and one remaining internal/agent cancellation integration failure. The Niflheim decomposed-parent-focused regression tests pass.

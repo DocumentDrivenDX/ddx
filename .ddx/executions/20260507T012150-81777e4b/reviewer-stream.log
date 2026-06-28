@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata under .ddx/executions and contains no edits to FEAT-014/FEAT-016 or any evidence that the doc-audit acceptance criterion was satisfied.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No feature-spec files were changed, so there is no implementation evidence that FEAT-014 and FEAT-016 gained explicit cross-references to MET artifacts.",
+      "location": ".ddx/executions/20260507T012150-81777e4b/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The added result metadata claims success but does not include any audit output or artifact demonstrating that `ddx doc audit` was clean.",
+      "location": ".ddx/executions/20260507T012150-81777e4b/manifest.json:1"
+    }
+  ]
+}
+```

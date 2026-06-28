@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution result metadata file and contains no code, tests, or decisions log changes, so none of the acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No production code changes are included for the five flagged symbols, so there is no evidence that any symbol was wired into the production call graph or deleted.",
+      "location": ".ddx/executions/20260506T205538-12817547/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log is not part of the diff, so the per-symbol WIRE|DELETE|PENDING record required by the acceptance criteria cannot be verified.",
+      "location": ".ddx/executions/20260506T205538-12817547/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence in the diff of deadcode output cleanup or `cd cli && go test ./...` passing, so the verification criteria are unmet.",
+      "location": ".ddx/executions/20260506T205538-12817547/result.json:1"
+    }
+  ]
+}
+```

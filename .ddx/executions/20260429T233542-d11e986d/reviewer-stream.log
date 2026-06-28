@@ -1,0 +1,22 @@
+---
+## Review: .execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-3fbadf19 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Add ddx_worker_list MCP tool | BLOCK | — diff contains only execution evidence, no MCP tool code |
+| 2 | Add ddx_worker_show MCP tool | BLOCK | — diff contains only execution evidence, no MCP tool code |
+| 3 | Add ddx_worker_log MCP tool  | BLOCK | — diff contains only execution evidence, no MCP tool code |
+
+### Summary
+
+The diff under review (`a234fdbf`) only adds `manifest.json` and `result.json` execution-evidence artifacts under `.ddx/executions/20260429T233542-d11e986d/`. No MCP tool registration, handler, or test code is present, so the acceptance criteria cannot be evaluated as implemented.
+
+### Findings
+
+- No changes under `cli/internal/mcp/` (or wherever `ddx_*` MCP tools are registered) — `ddx_worker_list`, `ddx_worker_show`, `ddx_worker_log` are not declared, registered, or wired to the existing HTTP worker endpoints (`GET /api/agent/workers`, `/api/agent/workers/{id}`, `/api/agent/workers/{id}/log`).
+- No tests added for the three tools (e.g., MCP tool coverage tests akin to the prior `ce6663d0` test commit).
+- The merged result_rev `ce6663d0` is referenced as a successful test commit, but this review's diff is `a234fdbf` (evidence only). If the actual implementation landed elsewhere, re-run the review against the implementation commit; based on the diff provided, the work is not present.

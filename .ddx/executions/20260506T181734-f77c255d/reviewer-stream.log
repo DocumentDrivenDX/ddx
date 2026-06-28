@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution result artifact and does not modify any governing spec files named in the bead, so none of the documentation acceptance criteria are implemented or reviewable as satisfied.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Only `.ddx/executions/.../result.json` was added; no changes were made to ADR-023, FEAT-004, FEAT-010, FEAT-011, or TD-031, so AC1-AC6 are not implemented.",
+      "location": ".ddx/executions/20260506T181734-f77c255d/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "Because no normative documentation files were edited, the requested terminology alignment and legacy-term cleanup cannot be evaluated as completed.",
+      "location": "docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md:50"
+    },
+    {
+      "severity": "warn",
+      "summary": "AC8 requires `lefthook run pre-commit` to pass, but the submitted diff includes no evidence of that verification.",
+      "location": ".ddx/executions/20260506T181734-f77c255d/result.json:1"
+    }
+  ]
+}
+```

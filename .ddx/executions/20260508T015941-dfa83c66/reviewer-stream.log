@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "AC5 is violated: the chore evidence-add commit (3c6a49add) deletes the cost-cap-consumers.md audit file that the implementation commit (b95ae19c1) added at .ddx/executions/20260508T015941-dfa83c66/. After land, the audit deliverable required by AC5 is no longer in the tree at the run-id path.",
+  "findings": [
+    { "severity": "block", "summary": "AC5 fails — audit report .ddx/executions/<run-id>/cost-cap-consumers.md was added in b95ae19c1 but removed in 3c6a49add; HEAD no longer contains the file at run-id 20260508T015941-dfa83c66, and only stale copies remain under earlier attempt directories.", "location": ".ddx/executions/20260508T015941-dfa83c66/cost-cap-consumers.md" },
+    { "severity": "info", "summary": "AC1–AC4 code changes (BudgetStop wiring, chargeReviewCost return value, new TestStopCondition_Budget* tests) were already landed via the earlier commit c357188870; the implementation commit under review (b95ae19c1) only added the audit markdown, so the gating tests do exist in tree.", "location": "cli/internal/agent/execute_bead_loop_stop_test.go" },
+    { "severity": "warn", "summary": "Land coordinator evidence-add step appears to have stripped the in-repo audit artifact; if this is a recurring finalization path for execute-bead, AC5-style deliverables under the run-id directory will keep being lost.", "location": ".ddx/executions/20260508T015941-dfa83c66/" }
+  ]
+}
+```

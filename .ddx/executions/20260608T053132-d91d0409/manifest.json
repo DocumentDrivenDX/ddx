@@ -1,0 +1,255 @@
+{
+  "attempt_id": "20260608T053132-d91d0409",
+  "bead_id": "ddx-8dd19492",
+  "base_rev": "f7435de28b2e204810af3108b969c8d032467687",
+  "created_at": "2026-06-08T05:31:41.094303151Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8dd19492",
+    "title": "bead/axon: add WebSocket subscription integration smoke test",
+    "description": "PROBLEM\nTD-030 requires a live GraphQL subscription path so DDx can subscribe to Axon changeEvents for bead and bead-event updates. The current test suite in cli/internal/bead/axon_backend_test.go covers CRUD, deps, events, and import/export, but there is no subscription smoke test yet.\n\nROOT CAUSE\ncli/internal/bead/axon_backend_test.go:131-179 verifies the split event collection, but nothing in the package opens a WebSocket subscription and asserts that changeEvents are delivered in order. That leaves the live-update path unexercised.\n\nPROPOSED FIX\n- Add an integration test in cli/internal/bead/axon/ that opens the subscription endpoint, performs a small bead mutation sequence, and asserts the expected changeEvents arrive.\n- Reuse the generated Axon client and subscription transport from the client-scaffolding bead.\n- Keep the test isolated and deterministic so it can run in the normal package suite.\n\nNON-SCOPE\n- Core backend CRUD logic.\n- Config selection.\n- Package-wide backend matrix work.",
+    "acceptance": "1. TestAxonSubscription_ChangeEventsStream or TestAxonSubscription_ReceivesBeadMutations is added and passes.\n2. The subscription smoke test uses the generated Axon client and a WebSocket transport.\n3. cd cli \u0026\u0026 go test ./internal/bead/axon/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "blocked-on-upstream:axon-05c1019d",
+      "blocked-on-upstream:axon-82b6f7b2",
+      "kind:feature",
+      "phase:2",
+      "reconciled:no-changes-state"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T164739-a33aec7f\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":4533604,\"output_tokens\":29071,\"total_tokens\":4562675,\"cost_usd\":0,\"duration_ms\":278545,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=4562675 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent work",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=ea616762add0f929c6e23d62cebcbcace2f1fe8e\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T12:57:33-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=8307\noutput_bytes=0\nelapsed_ms=4200",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review-error",
+          "source": "ddx agent work",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=ea616762add0f929c6e23d62cebcbcace2f1fe8e\nbase_rev=993a7ad0e6b7386fc6ed62d2213c1ae6aed5d13b",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T181743-e9d18262\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":312742,\"output_tokens\":4928,\"total_tokens\":317670,\"cost_usd\":0,\"duration_ms\":51496,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=317670 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx agent work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\nresult_rev=3258419cba4b4f5736fbe3fee49e046e7402b07a\nbase_rev=3258419cba4b4f5736fbe3fee49e046e7402b07a\nretry_after=2026-05-06T00:18:39Z",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T235342-f9f337d1\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":631727,\"output_tokens\":6802,\"total_tokens\":638529,\"cost_usd\":0,\"duration_ms\":67677,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=638529 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=608509b8b2cfe6161172e26d83f0d21401ab5317\n\nreviewer: review-error: unparseable: reviewer output: unparseable JSON verdict: no JSON object found (raw output 66 bytes; see .ddx/executions/20260505T235458-cd152686)\nharness=claude\nmodel=opus\ninput_bytes=12000\noutput_bytes=66\nelapsed_ms=48759",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review-error",
+          "source": "ddx agent work",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=608509b8b2cfe6161172e26d83f0d21401ab5317\nbase_rev=b474c58c2ecbc0c6ec1afb992cbec813d87d5635",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T005342-25c9db34\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":537028,\"output_tokens\":4688,\"total_tokens\":541716,\"cost_usd\":0,\"duration_ms\":50802,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=541716 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=4ad6dd1f64fdca95153095e1ccdaa21b81764823\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T20:59:45-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=14318\noutput_bytes=0\nelapsed_ms=4124",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review-error",
+          "source": "ddx agent work",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=4ad6dd1f64fdca95153095e1ccdaa21b81764823\nbase_rev=724dfcc5991bc65c200cff1186aecc316702f861",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T025034-b66956fb\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":302393,\"output_tokens\":3416,\"total_tokens\":305809,\"cost_usd\":0,\"duration_ms\":47360,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=305809 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=ed2cda8062053522303da0fb6575ff07978695e8\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T22:56:35-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=16470\noutput_bytes=0\nelapsed_ms=4114",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review-error",
+          "source": "ddx agent work",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=ed2cda8062053522303da0fb6575ff07978695e8\nbase_rev=127f40f80ef0b0b8f9742a58db9c3eccb0c164f7",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T052810-b7542421\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":332947,\"output_tokens\":4454,\"total_tokens\":337401,\"cost_usd\":0,\"duration_ms\":42360,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=337401 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=aa26a2772eb0e2cdfd03c6a9eb4b0bece9b56824\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T01:34:07-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=18769\noutput_bytes=0\nelapsed_ms=4065",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review-error",
+          "source": "ddx agent work",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=aa26a2772eb0e2cdfd03c6a9eb4b0bece9b56824\nbase_rev=9d62e3342b056d3793bd63d318ec46cafbccba3f",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T065333-e7ad8a12\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":723220,\"output_tokens\":5838,\"total_tokens\":729058,\"cost_usd\":0,\"duration_ms\":73441,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=729058 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=07f54152aaa4d08f38f92d3f959fe67dae2bc5c6\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T03:00:00-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=21065\noutput_bytes=0\nelapsed_ms=4108",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review-error",
+          "source": "ddx agent work",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=07f54152aaa4d08f38f92d3f959fe67dae2bc5c6\nbase_rev=0c5017bd5c71c4538e8f5152c873bdf5e8ecde2d",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "success"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-11T17:48:36.693787907Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "Design convergence on bead backend interfaces (commit 05d13d2f8); rescope under new gating bead ddx-c6317784."
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.461743808Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"hidden_external_blocker: Atomic integration-test scope with concrete verification and a file:line root cause, but the bead notes say the design hold is still active until the consolidated spec package is reviewed and committed; with upstream Axon blockers still labeled, the claim is externally blocked.\",\"fingerprint\":\"13e4ff4c34987f064c998730f88f68f555f6fc9461f81ea94426fe7531d7cd81\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"13e4ff4c34987f064c998730f88f68f555f6fc9461f81ea94426fe7531d7cd81\"}",
+          "created_at": "2026-06-08T05:29:27.299065666Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T053132-d91d0409",
+    "prompt": ".ddx/executions/20260608T053132-d91d0409/prompt.md",
+    "manifest": ".ddx/executions/20260608T053132-d91d0409/manifest.json",
+    "result": ".ddx/executions/20260608T053132-d91d0409/result.json",
+    "checks": ".ddx/executions/20260608T053132-d91d0409/checks.json",
+    "usage": ".ddx/executions/20260608T053132-d91d0409/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8dd19492-20260608T053132-d91d0409"
+  },
+  "prompt_sha": "f261a2f91e45b660524fe06469b273e94fe1de166177b0600fd44dfc4816b204"
+}

@@ -1,0 +1,17 @@
+---
+## Review: ddx-8b197027 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner references | APPROVE | cli/cmd/agent_execute_bead_test.go:871-965 — both removed from the function body |
+| 2 | Dispatches through real git + script harness | APPROVE | Uses `git init`, `runGit`, `agent.NewRunner(agent.Config{})`, and `--harness script` with a directive file |
+| 3 | `go test -run '^TestExecuteBeadMergePreservesContext$'` green | APPROVE | result.json records `outcome=task_succeeded`, `exit_code=0`; land merged to 3e0ec1f1 (pre-commit hook runs tests) |
+| 4 | No other test in the file modified | APPROVE | Diff is scoped to the one function (86+/11-, surrounding tests untouched) |
+
+### Summary
+
+Clean migration. Replaces the double-fake with a real-git repo plus the script harness emitting two real commits, and strengthens assertions to prove context preservation (both worker commits reachable from main, both files materialize). Scope is tight to the single test.

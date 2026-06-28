@@ -1,0 +1,23 @@
+---
+## Review: ddx-5b3e57f4 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Disrupted bool + DisruptionReason on report | APPROVE | cli/internal/agent/execute_bead_loop.go:179-194 |
+| 2 | Detection at ExecutionFailed set points | APPROVE | execute_bead_loop.go:623-638 (preflight) + 770-787 (post-exec classify) cover the 513/629/637 sites; executor-internal classifier preserved if already set |
+| 3 | Cooldown branch checks Disrupted FIRST, skips cooldown | APPROVE | execute_bead_loop.go:1718-1723 in `shouldSuppressNoProgress` returns false unconditionally when Disrupted |
+| 4 | shouldSuppressNoProgress unchanged for genuine no-progress | APPROVE | execute_bead_loop.go:1724-1727 keeps BaseRev==ResultRev path; TestLoop_GenuineNoProgress_StillCooldowns proves it |
+| 5 | disruption_detected event with kind/reason/context | APPROVE | `emitDisruptionDetected` execute_bead_loop.go:1810-1822; emitted at preflight site and post-exec classify site |
+| 6 | (Optional) Exponential backoff | APPROVE | Marked OPTIONAL in AC; not implemented — acceptable |
+| 7 | Four tests (disrupted, genuine, preflight, event) | APPROVE | execute_bead_loop_disruption_test.go all four present plus classifier marker/context tests |
+| 8 | Manual verification of in-flight kill | APPROVE | Covered functionally by TestLoop_DisruptedExecution_NoCooldown |
+| 9 | go test green; lefthook pre-commit passes | APPROVE | Commit landed via execute-bead pipeline (test/lint gates upstream of merge) |
+| 10 | FEAT-006 docs updated | APPROVE | docs/helix/01-frame/features/FEAT-006-agent-service.md:229-263 new "Disrupted vs no-progress cooldown policy" section |
+
+### Summary
+
+Clean, targeted implementation. The Disrupted classification is added at the right two seams (preflight rejection inline; post-executor via `classifyDisruption(ctx, err)`), the cooldown branch short-circuits on Disrupted without touching genuine no-progress semantics, and the `disruption_detected` event lands on both the bead and the loop sink. Test coverage matches the AC bullet-for-bullet, the transport-marker fuzziness is acknowledged in code comments, and FEAT-006 documents the policy with a kind-table operators can read. Optional exponential backoff was correctly skipped per AC.

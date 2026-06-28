@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260527T081509-e35ffbb8",
+  "bead_id": "ddx-ec2d3c1b",
+  "base_rev": "6280ab457188ec9c810d80db280025c05cb453a1",
+  "created_at": "2026-05-27T08:15:17.018333142Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ec2d3c1b",
+    "title": "execute-bead: land step must independently verify the merged tree builds/tests before accepting — agents --no-verify-bypass the gate and land broken code",
+    "description": "PROBLEM\nThe execute-bead land path can report success after merging a worker result without independently verifying the merged tree, so a bypassed hook or stale local state can still land broken code.\n\nROOT CAUSE\ncli/internal/agent/execute_bead_orchestrator.go:247-327 evaluates pre-merge gates and then delegates to the landing advancer, but it does not run an independent post-merge build/test verification before returning a merged outcome. The land helper also allows `--no-merge` preservation and the evidence commit path uses `--no-verify`, so hook bypass is already part of the surrounding flow.\n\nPROPOSED FIX\nAdd a land-time verification step that checks the merged tree directly before accepting the result, and only report a merged/landed outcome when that verification passes. On failure, preserve the result and surface a blocked or preserved outcome instead of accepting broken code.\n\nNON-SCOPE\nDo not change the worker execution harness, decomposition flow, or unrelated commit-trailer logic.",
+    "acceptance": "1. TestLandBeadResult_RequiresIndependentVerificationBeforeMergedOutcome fails when the merged tree does not pass the required verification gate and preserves the result instead of reporting success.\n2. TestSubmitWithPreMergeChecks_StillHonorsBypassedHooksButDoesNotSkipLandVerification covers the bypass path and proves the new land-time verification still runs.\n3. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestLandBeadResult_RequiresIndependentVerificationBeforeMergedOutcome|TestSubmitWithPreMergeChecks_StillHonorsBypassedHooksButDoesNotSkipLandVerification' -count=1 passes.\n4. cd cli \u0026\u0026 go test ./internal/agent/... passes.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "autonomy-keystone"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"missing_root_cause_or_current_state: This is a single-slice land-path bug, not a split candidate, but the bead is not executable as written because it lacks a concrete root cause anchor and any acceptance or verification gate. The fix is safely refinable into a standalone implementation prompt.\",\"changed_fields\":[\"description\",\"acceptance\"],\"before\":{\"description_bytes\":7,\"description_sha256\":\"570fa0928b3800e5b3a3c726e4443eabd80d569483ee7023bc89eba23f46de2c\",\"acceptance_sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"after\":{\"description_bytes\":1006,\"acceptance_bytes\":668,\"description_sha256\":\"e180d686d0d5c340973c19eb2cbede8e20cdf364ba16f6584dec0f66c45969b0\",\"acceptance_sha256\":\"d30c80f2bd84829092c83aafd0eff71f30349452a62f8e913952273416b541f6\"}}",
+          "created_at": "2026-05-27T08:14:58.693119513Z",
+          "kind": "intake-rewritten",
+          "source": "ddx work",
+          "summary": "description,acceptance"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T081509-e35ffbb8",
+    "prompt": ".ddx/executions/20260527T081509-e35ffbb8/prompt.md",
+    "manifest": ".ddx/executions/20260527T081509-e35ffbb8/manifest.json",
+    "result": ".ddx/executions/20260527T081509-e35ffbb8/result.json",
+    "checks": ".ddx/executions/20260527T081509-e35ffbb8/checks.json",
+    "usage": ".ddx/executions/20260527T081509-e35ffbb8/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ec2d3c1b-20260527T081509-e35ffbb8"
+  },
+  "prompt_sha": "8e7a844dee6e8624a990b7e62710f53967a8c184c4b9f2c5f34cb49cb67af05c"
+}

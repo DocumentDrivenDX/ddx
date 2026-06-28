@@ -1,0 +1,4 @@
+orchestrator_action: decompose
+status: open
+reason: Bead ddx-70a432b5 was previously decomposed into child beads ddx-17388615, ddx-1664e1d2, ddx-f7c9159f. Execute children individually; parent closes when all children are closed.
+child_ids: ddx-17388615, ddx-1664e1d2, ddx-f7c9159f

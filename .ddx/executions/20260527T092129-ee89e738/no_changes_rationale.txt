@@ -1,0 +1,10 @@
+status: open
+orchestrator_action: decompose
+reason: Decomposed into child beads for phased implementation
+
+Child beads:
+- ddx-606fe854: decoder verdict bool/string/absent
+- ddx-d67f124e: consecutive-fingerprint escalation
+- ddx-977e1a7f: claim-success-rate signal
+- ddx-c5d485c9: CI schema gate
+- ddx-757a3344: docs

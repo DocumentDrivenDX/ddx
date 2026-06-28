@@ -1,0 +1,5 @@
+All AC items addressed: stat cards → text-headline-md, badges → text-label-caps, info button → text-label-caps, table cells → explicit text-body-sm.
+
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"All AC met: summary card numbers use text-headline-md, status/billing badges and info tooltip buttons use text-label-caps, and table cells now carry explicit text-body-sm/text-mono-code instead of inheriting text-sm.","findings":[]}
+```

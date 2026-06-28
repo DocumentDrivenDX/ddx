@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260611T194806-407ec20a",
+  "bead_id": "ddx-3af1c1a6",
+  "base_rev": "19f97c95e00b700a4d3874dc48462fe736a79598",
+  "created_at": "2026-06-11T19:48:16.862209193Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3af1c1a6",
+    "title": "D: Dependencies (ctx) + Queue helpers + Operations + remove 3 *Store queue methods (TD-027 §6, §14)",
+    "description": "# PROBLEM\n`*Store` exposes 3 dependency-graph methods (`DepAdd`, `DepRemove`, `DepTree`) and 3 queue-ordering methods (`QueueTop`, `QueueMove`, `QueueClear`). Per TD-027 §6 the dep methods belong on `BeadDependencyReader`/`BeadDependencyWriter` sub-interfaces (signature-only change — ctx added). Queue ordering is operator-driven workflow; per TD-027 §14 it belongs in `ops/queue/` helpers with typed `Operation` values.\n\n# ROOT CAUSE\n`cli/internal/bead/store.go` exposes these 6 methods. Foundation declared the `BeadDependencyReader`/`BeadDependencyWriter` interfaces but ctx isn't yet on `*Store`'s dep methods. `BeadQueue` isn't an interface in TD-027 — queue ops are workflow concerns that live as helpers.\n\n# PROPOSED FIX\n\n## Dependencies (signature-only)\n\n1. Update `*Store.DepAdd(ctx, id, depID)`, `DepRemove(ctx, id, depID)`, `DepTree(ctx, rootID)` to take ctx.\n2. Compile-time assertions: `var _ BeadDependencyReader = (*Store)(nil)`, `var _ BeadDependencyWriter = (*Store)(nil)`.\n3. Thread ctx through callers. Narrow field types opportunistically (e.g., `ddx bead dep tree` CLI handler can narrow to `BeadDependencyReader`).\n\n## Queue (helper-migration; methods removed)\n\n4. Add named `Operation` types to `cli/internal/bead/operation.go`:\n   - `QueueSetTop{}` — move bead to top of queue (sparse rank ordering).\n   - `QueueSetPosition{Position int}` — operator move-to-position.\n   - `QueueClearOp{}` — remove queue rank.\n5. Create `cli/internal/bead/ops/queue/queue.go`:\n   - `Top(ctx, l, id) error` — wraps `QueueSetTop{}`.\n   - `Move(ctx, l, id, position int) error` — wraps `QueueSetPosition`.\n   - `Clear(ctx, l, id) error` — wraps `QueueClearOp{}`.\n6. Migrate callers (operator queue manipulation in `cli/cmd/bead.go` queue subcommands) from `*Store.QueueTop`/`QueueMove`/`QueueClear` → `ops/queue/` helpers.\n7. Remove `*Store.QueueTop`, `QueueMove`, `QueueClear`.\n\n# NON-SCOPE\n- Dependency cycle detection — handled at higher layer.\n- Queue rank renormalization algorithm — internal to ops/queue; sparse-rank logic remains as-is.\n- Other concerns — separate beads.\n- Module boundary lockdown — `ddx-74452926`.\n\n# Acceptance criteria\n\n1. `*Store.DepAdd`, `DepRemove`, `DepTree` take ctx. Compile-time assertions for `BeadDependencyReader` and `BeadDependencyWriter` compile.\n2. `cli/internal/bead/operation.go` declares `QueueSetTop`, `QueueSetPosition{Position}`, `QueueClearOp` types with `Apply(b *Bead) error` impls. Tests: `TestOperation_QueueSetTop_AssignsTopRank`, `TestOperation_QueueSetPosition_RespectsBucket`, `TestOperation_QueueClearOp_RemovesRank`.\n3. `cli/internal/bead/ops/queue/` package exists with helpers + tests: `TestOpsQueue_Top_MovesBeadToFront`, `TestOpsQueue_Move_PreservesPriorityBucket`, `TestOpsQueue_Clear_RemovesOperatorOverride`.\n4. `*Store` no longer exposes `QueueTop`, `QueueMove`, `QueueClear`. Verified by grep.\n5. Caller files no longer reference these methods on `*Store` outside the bead package.\n6. Queue-ordering invariants (SD-004 §\"Ready queue\" / queue derivation) preserved — operator overrides apply within a priority bucket; explicit rank wins over missing rank within bucket. Test: `TestQueueOrdering_OperatorRankWithinBucket`.\n7. `cd cli \u0026\u0026 go test ./...` is green.\n8. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:workflow, area:dep, kind:refactor, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: ddx-c6317784.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:bead",
+      "area:dep",
+      "area:workflow",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.442678219Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260611T194806-407ec20a",
+    "prompt": ".ddx/executions/20260611T194806-407ec20a/prompt.md",
+    "manifest": ".ddx/executions/20260611T194806-407ec20a/manifest.json",
+    "result": ".ddx/executions/20260611T194806-407ec20a/result.json",
+    "checks": ".ddx/executions/20260611T194806-407ec20a/checks.json",
+    "usage": ".ddx/executions/20260611T194806-407ec20a/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-3af1c1a6-20260611T194806-407ec20a"
+  },
+  "prompt_sha": "b730d103c703c95721700bdcf10bed8e9add794b7427d726655caa63bcc89aa9"
+}

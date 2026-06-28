@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence (manifest.json, result.json) for an attempt. No implementation of ADR-004 — no collection abstraction, archive, attachments sidecar, or migration tool. AC items 2–5 are unmet.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes implementing collection abstraction or active+archive split (AC2)", "location": ".ddx/executions/20260502T114559-db0755dd/" },
+    { "severity": "block", "summary": "No read-through support for archived beads in list/show/ready/blocked/work (AC3)", "location": ".ddx/executions/20260502T114559-db0755dd/" },
+    { "severity": "block", "summary": "No bd/br interchange changes or test evidence (AC4)", "location": ".ddx/executions/20260502T114559-db0755dd/" },
+    { "severity": "block", "summary": "No migration tool (ddx bead migrate-archive) implemented (AC5)", "location": ".ddx/executions/20260502T114559-db0755dd/" },
+    { "severity": "block", "summary": "Child beads status not demonstrated closed in this diff (AC1)", "location": ".ddx/executions/20260502T114559-db0755dd/" }
+  ]
+}
+```

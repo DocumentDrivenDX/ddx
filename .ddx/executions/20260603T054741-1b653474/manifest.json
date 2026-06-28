@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260603T054741-1b653474",
+  "bead_id": "ddx-d73e4b08",
+  "base_rev": "3f1d5d248f25edb10c6c37ca7b695eaacfb626d2",
+  "created_at": "2026-06-03T05:47:49.53758005Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d73e4b08",
+    "title": "registry: resolve global plugin tier and enforce project-over-global lookup precedence",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a; foundational layer for sibling install/init/update beads)\n\nRuntime plugin/skill/persona lookup assumes per-project installs only. There is no resolver for the global tier and no defined precedence when a plugin exists in more than one tier. Sibling beads adding `ddx install --global`, `ddx init --global`, and `ddx update --global` all depend on this resolution layer existing first.\n\nROOT CAUSE\n- Lookup resolves only ddxroot.Path()/plugins/\u003cname\u003e (in-tree: \u003cproject\u003e/.ddx/plugins/\u003cname\u003e; convention: ${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e). There is no ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e resolver in the registry package, and no precedence chain combining project, global, and baked-in tiers.\n\nPROPOSED FIX\n1. Add a GlobalPluginDir(name) resolver returning ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/, routed through the ddx-home resolution agreed in ddx-06cbaa90 (do not hardcode ~/.local/share — honor XDG_DATA_HOME override).\n2. Implement the runtime lookup precedence used by every plugin/skill/persona consumer:\n   a. project tier — ddxroot.Path()/plugins/\u003cname\u003e/ (in-tree \u003cproject\u003e/.ddx/plugins/\u003cname\u003e/ or the convention-mode XDG project dir) if present;\n   b. global tier — ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ otherwise;\n   c. baked-in binary fallback — only for the default `ddx` plugin.\n3. Expose the resolved tier (project|global|baked-in) so `ddx doctor` (sibling bead) can report which tier answered.\n\nNON-SCOPE\n- Adding the `--global` CLI flags themselves (sibling install/init/update beads).\n- Removing the existing per-project install (both modes coexist).\n- Migrating any legacy ~/.config/ddx paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution): the global tier path and the project tier path both route through ddxroot.Path() and the new ${XDG_DATA_HOME}/ddx/global/ root; both must be agreed before this lands.\n\nGOVERNING ARTIFACTS\n- Epic ddx-602ae31a, Principle 2.\n- CLAUDE.md \"Persona System\" three-layer precedence note (project → global → baked-in) — this bead implements it in code; the documentation edit is owned by the sibling spec bead.",
+    "acceptance": "1. TestPluginLookup_PrefersProjectOverGlobal asserts that when the same plugin exists in both the project tier (ddxroot.Path()/plugins/\u003cname\u003e) and the global tier (${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e), the resolver returns the project copy.\n2. TestPluginLookup_FallsBackToGlobal asserts that when the project copy is absent but the global copy exists, the resolver returns the global copy; and that for the default `ddx` plugin with neither present, the baked-in fallback is returned.\n3. TestGlobalPluginDir_HonorsXDGDataHome asserts GlobalPluginDir resolves under ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e and respects an overridden XDG_DATA_HOME env var rather than a hardcoded home path.\n4. cd cli \u0026\u0026 go test ./internal/registry/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "kind:feature",
+      "phase:3"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-d73e4b08)\",\"fingerprint\":\"86a4f06700fb5e9893ff20326568386dba68c598bbfe4f7005dde164bc1fae23\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"86a4f06700fb5e9893ff20326568386dba68c598bbfe4f7005dde164bc1fae23\"}",
+          "created_at": "2026-06-03T05:47:23.955831915Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T054741-1b653474",
+    "prompt": ".ddx/executions/20260603T054741-1b653474/prompt.md",
+    "manifest": ".ddx/executions/20260603T054741-1b653474/manifest.json",
+    "result": ".ddx/executions/20260603T054741-1b653474/result.json",
+    "checks": ".ddx/executions/20260603T054741-1b653474/checks.json",
+    "usage": ".ddx/executions/20260603T054741-1b653474/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d73e4b08-20260603T054741-1b653474"
+  },
+  "prompt_sha": "47f4e3ea092903c3987330b4afd8e3e414e89cf190adcbc919dbd381f15fa277"
+}

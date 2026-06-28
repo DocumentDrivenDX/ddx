@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Run detail page renders layer-appropriate fields (work: queueInputs/stopCondition/child tries; try: bead link, revisions, worktree, merge outcome, checks, child runs; run: power, harness/provider/model, tokens, cost, duration, output, evidence). Breadcrumbs include grandparent for run-layer via additional parent fetch. SvelteKit <a href> links yield client-side routing and preserve back-button to filtered list URL.",
+  "findings": [
+    { "severity": "info", "summary": "Run-layer breadcrumb does an extra GraphQL roundtrip to fetch grandparent; could be combined into a single nested query to reduce latency.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/[runId]/+page.ts:79" }
+  ]
+}
+```

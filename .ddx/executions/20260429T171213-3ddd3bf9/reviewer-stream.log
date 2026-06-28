@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review only contains execution evidence artifacts (manifest.json, result.json) for the epic attempt. No code, spec, or test changes are present to evaluate against the epic's acceptance criteria (all 5 child beads closed, grep gate clean, repo dogfoods committed project-local trees).",
+  "findings": [
+    { "severity": "block", "summary": "Diff contains no implementation changes—only execution evidence files. Cannot verify child beads 0-4 are closed with passing AC.", "location": ".ddx/executions/20260429T171213-3ddd3bf9/" },
+    { "severity": "block", "summary": "Cannot confirm final grep gate (no hits for ~/.ddx/plugins, ~/.agents/skills, ~/.claude/skills outside FEAT-015 history/CHANGELOG) from this diff.", "location": "repo-wide" },
+    { "severity": "block", "summary": "Cannot confirm repo dogfoods the change (committed .agents/skills/, .claude/skills/, .ddx/plugins/) from this diff.", "location": "repo-root" }
+  ]
+}
+```

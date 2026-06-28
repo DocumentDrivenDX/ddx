@@ -1,0 +1,245 @@
+{
+  "attempt_id": "20260608T062957-7b49d53c",
+  "bead_id": "ddx-3fd19af1",
+  "base_rev": "0f6995b5d4e5334286dad311ddb0ba4b860b1b45",
+  "created_at": "2026-06-08T06:30:51.946126969Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-3fd19af1",
+    "title": "migrate bead store core APIs to ctx-first signatures",
+    "description": "PROBLEM\nThe foundation bead for TD-027 split the bead storage migration into caller-facing and package-local slices, but the current `ddx-464feba2` child still bundles the Store API migration together with a repo-wide caller sweep. The local `cli/internal/bead` package work is still a valid, self-contained slice: `cli/internal/bead/backend.go` already declares ctx-first interfaces, while `cli/internal/bead/store.go` still exposes the legacy zero-arg methods (`Init`, `ReadAll`, `Get`, `Create`, `Update`, `Close`, `GenID`).\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/bead/backend.go:74-100` declares the ctx-first foundation interfaces.\n- `cli/internal/bead/store.go:140-1181` still exposes the legacy no-ctx Store methods.\n- `ddx-464feba2` was blocked because the broader caller migration exceeds that child slice.\n\nPROPOSED FIX\nUpdate only the core bead package surface so the Store methods in `cli/internal/bead/store.go` accept `ctx context.Context` as first parameter for the foundational non-event methods, and keep the verification local to `cli/internal/bead/...`. Do not touch the external caller sweep in this bead. Update or add the store/package tests needed to prove the local API still behaves correctly after the signature change.\n\nNON-SCOPE\n- Caller migration in `cli/cmd`, `cli/internal/agent`, `cli/internal/server`, `cli/internal/escalation`, and metrics packages.\n- Event method ctx threading (`AppendEvent`, `Events`, `EventsByKind`).\n- Removing workflow helper methods beyond the foundational signatures this bead changes.\n\nACCEPTANCE\n1. The foundational Store methods in `cli/internal/bead/store.go` take `ctx context.Context` first: `Init`, `ReadAll`, `ReadAllFiltered`, `Get`, `GetWithArchive`, `Create`, `Update`, `Close`, and `GenID`.\n2. `cd cli \u0026\u0026 go test ./internal/bead/...` passes.\n3. `lefthook run pre-commit` passes.\n4. Any tests added or updated in `cli/internal/bead/` are named and deterministic, with no caller-package changes in this bead.",
+    "labels": [
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-16T04:51:05.315282637Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260516T043007-7ac09885\",\"harness\":\"claude\",\"model\":\"opus\",\"input_tokens\":53,\"output_tokens\":26527,\"total_tokens\":26580,\"cost_usd\":3.1411672499999996,\"duration_ms\":1251919,\"exit_code\":0}",
+          "created_at": "2026-05-16T04:51:05.356780024Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=26580 cost_usd=3.1412 model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"opus\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260516T043007-7ac09885\",\"bead_id\":\"ddx-3fd19af1\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-16T04:51:05.749843329Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=opus harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "status=proposed\nreason=bead AC1+AC3 contradict the explicit non-scope; needs operator re-scoping Findings (worktree base-rev 86de1c4af, .ddx/executions/20260516T043007-7ac09885): 1. Current state of the foundational Store methods (cli/internal/bead/store.go): Init(args ...any) error                                  // line 149 GenID(args ...any) (string, error)                       // line 167 ReadAll(args ...any) ([]Bead, error)                     // line 182 ReadAllFiltered(args ...any) ([]Bead, error)             // line 224 Create(args ...any) error                                // line 518 Get(args ...any) (*Bead, error)                          // line 598 Update(args ...any) error                                // line 627 Close(args ...any) error                                 // line 1426 And in archive.go: GetWithArchive(id string) (*Bead, error)                 // line 172 Each variadic method extracts ctx via storeCallContext(args) and accepts either `s.Init()` or `s.Init(context.Background())` today. 2. AC1 requires these methods to take `ctx context.Context` as a typed first parameter (matching the BeadEventReader / BeadQueries shape already in cli/internal/bead/backend.go:91-114). Any concrete signature satisfying AC1 — `Init(ctx context.Context) error`, `Init(ctx context.Context, args ...any) error`, etc. — rejects the current zero-arg `s.Init()` callsites that exist in external packages. 3. The bead's PROPOSED FIX and NON-SCOPE explicitly forbid touching external callers (\"Do not touch the external caller sweep in this bead\"; \"NON-SCOPE: Caller migration in cli/cmd, cli/internal/agent, cli/internal/server, cli/internal/escalation, and metrics packages.\") and AC4 requires \"no caller-package changes in this bead.\" 4. AC3 requires `lefthook run pre-commit` to pass, which runs `go build -buildvcs=false -v ./...` from cli/ (lefthook.yml:122-129). That build covers every package in the module, including all the external caller packages NON-SCOPE forbids touching. 5. Concrete external breakage if AC1 is implemented today (`grep -rE '\\b(store|s)\\.(Init|Create|Update|Get|Close|ReadAll|GenID|GetWithArchive|ReadAllFiltered)\\(' cli/ --include='*.go'`): - 174 Go files reference these Store methods. - 73 distinct files outside cli/internal/bead/ use the zero-arg `store.Init()` form (e.g. cli/cmd/ac_test.go:37, cli/cmd/bead_human_test.go:20, cli/internal/agent/..., cli/internal/server/...). - Production-code stragglers without ctx exist too: cli/cmd/bead.go:414  s.GetWithArchive(args[0]) cli/cmd/bead.go:1281 s.Close(id) cli/internal/agent/execute_bead_loop.go:4485 store.Get(id) cli/internal/agent/execute_bead_loop.go:4811 store.Update(beadID, ...) `go build ./...` and the lefthook go-build hook will fail at every one of those callsites the instant Init/Get/Update/Close/ReadAll/GenID/ GetWithArchive/ReadAllFiltered become non-variadic ctx-first. There is no signature shape that satisfies AC1 while preserving all current call patterns (Go does not allow same-name method overloads on a single receiver type). 6. Step 0 size envelope is also exceeded for the only resolution that preserves AC1+AC3: the necessary mechanical caller sweep crosses ~170 files in five packages (cmd, internal/agent, internal/server, internal/attemptmetrics, internal/agentmetrics) — well past the \"~500 lines across ~5+ files in unrelated packages\" guardrail. That is exactly the sweep that NON-SCOPE excludes, and the parent split (TD-027 / ddx-464feba2) was rejected for the same reason. Operator action requested: Re-scope this bead to one of: (a) Add the caller-package migration to scope (delete the NON-SCOPE block and AC4's \"no caller-package changes\"). This becomes the original TD-027 sweep that previously failed as too large; if pursued, expect a multi-file diff across cli/cmd, cli/internal/agent, cli/internal/server, cli/internal/attemptmetrics, cli/internal/agentmetrics. (b) Replace AC3 with a narrower verification (e.g. \"go test ./internal/bead/... and go vet ./internal/bead/... pass\"), and explicitly accept that `go build ./...` and lefthook pre-commit will be red until follow-up caller-migration beads land. The follow-up beads would then re-establish AC3 once the sweep is complete. (c) Replace AC1 with an additive shape that does not rename or retype the existing variadic methods — e.g. \"add new ctx-first Store methods with distinct names (InitCtx / GetCtx / …) so the legacy variadic surface stays in place during the migration\", then a follow-up bead deletes the variadic methods after the caller sweep finishes. This satisfies the spirit of TD-027 (introducing the typed ctx-first surface in the bead package first) without breaking the build outside the package. No code changes were made on this attempt. Request was triaged strictly against the bead body — no /tmp scratch files, no work outside the worktree.\nsuggested_action=review and accept, split, block, or cancel this proposed work",
+          "created_at": "2026-05-16T04:51:05.820176946Z",
+          "kind": "no_changes_operator_required",
+          "source": "ddx work",
+          "summary": "no_changes_operator_required"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: proposed\nreason: bead AC1+AC3 contradict the explicit non-scope; needs operator re-scoping\n\nFindings (worktree base-rev 86de1c4af, .ddx/executions/20260516T043007-7ac09885):\n\n1. Current state of the foundational Store methods (cli/internal/bead/store.go):\n     Init(args ...any) error                                  // line 149\n     GenID(args ...any) (string, error)                       // line 167\n     ReadAll(args ...any) ([]Bead, error)                     // line 182\n     ReadAllFiltered(args ...any) ([]Bead, error)             // line 224\n     Create(args ...any) error                                // line 518\n     Get(args ...any) (*Bead, error)                          // line 598\n     Update(args ...any) error                                // line 627\n     Close(args ...any) error                                 // line 1426\n   And in archive.go:\n     GetWithArchive(id string) (*Bead, error)                 // line 172\n   Each variadic method extracts ctx via storeCallContext(args) and accepts\n   either `s.Init()` or `s.Init(context.Background())` today.\n\n2. AC1 requires these methods to take `ctx context.Context` as a typed first\n   parameter (matching the BeadEventReader / BeadQueries shape already in\n   cli/internal/bead/backend.go:91-114). Any concrete signature satisfying\n   AC1 — `Init(ctx context.Context) error`, `Init(ctx context.Context, args ...any) error`,\n   etc. — rejects the current zero-arg `s.Init()` callsites that exist in\n   external packages.\n\n3. The bead's PROPOSED FIX and NON-SCOPE explicitly forbid touching external\n   callers (\"Do not touch the external caller sweep in this bead\";\n   \"NON-SCOPE: Caller migration in cli/cmd, cli/internal/agent,\n   cli/internal/server, cli/internal/escalation, and metrics packages.\")\n   and AC4 requires \"no caller-package changes in this bead.\"\n\n4. AC3 requires `lefthook run pre-commit` to pass, which runs\n   `go build -buildvcs=false -v ./...` from cli/ (lefthook.yml:122-129).\n   That build covers every package in the module, including all the\n   external caller packages NON-SCOPE forbids touching.\n\n5. Concrete external breakage if AC1 is implemented today\n   (`grep -rE '\\b(store|s)\\.(Init|Create|Update|Get|Close|ReadAll|GenID|GetWithArchive|ReadAllFiltered)\\(' cli/ --include='*.go'`):\n     - 174 Go files reference these Store methods.\n     - 73 distinct files outside cli/internal/bead/ use the zero-arg\n       `store.Init()` form (e.g. cli/cmd/ac_test.go:37,\n       cli/cmd/bead_human_test.go:20, cli/internal/agent/...,\n       cli/internal/server/...).\n     - Production-code stragglers without ctx exist too:\n         cli/cmd/bead.go:414  s.GetWithArchive(args[0])\n         cli/cmd/bead.go:1281 s.Close(id)\n         cli/internal/agent/execute_bead_loop.go:4485 store.Get(id)\n         cli/internal/agent/execute_bead_loop.go:4811 store.Update(beadID, ...)\n   `go build ./...` and the lefthook go-build hook will fail at every one\n   of those callsites the instant Init/Get/Update/Close/ReadAll/GenID/\n   GetWithArchive/ReadAllFiltered become non-variadic ctx-first. There is\n   no signature shape that satisfies AC1 while preserving all current\n   call patterns (Go does not allow same-name method overloads on a\n   single receiver type).\n\n6. Step 0 size envelope is also exceeded for the only resolution that\n   preserves AC1+AC3: the necessary mechanical caller sweep crosses ~170\n   files in five packages (cmd, internal/agent, internal/server,\n   internal/attemptmetrics, internal/agentmetrics) — well past the\n   \"~500 lines across ~5+ files in unrelated packages\" guardrail. That\n   is exactly the sweep that NON-SCOPE excludes, and the parent split\n   (TD-027 / ddx-464feba2) was rejected for the same reason.\n\nOperator action requested:\n\n  Re-scope this bead to one of:\n\n  (a) Add the caller-package migration to scope (delete the NON-SCOPE\n      block and AC4's \"no caller-package changes\"). This becomes the\n      original TD-027 sweep that previously failed as too large; if\n      pursued, expect a multi-file diff across cli/cmd,\n      cli/internal/agent, cli/internal/server,\n      cli/internal/attemptmetrics, cli/internal/agentmetrics.\n\n  (b) Replace AC3 with a narrower verification (e.g. \"go test\n      ./internal/bead/... and go vet ./internal/bead/... pass\"), and\n      explicitly accept that `go build ./...` and lefthook pre-commit\n      will be red until follow-up caller-migration beads land. The\n      follow-up beads would then re-establish AC3 once the sweep is\n      complete.\n\n  (c) Replace AC1 with an additive shape that does not rename or\n      retype the existing variadic methods — e.g. \"add new ctx-first\n      Store methods with distinct names (InitCtx / GetCtx / …) so the\n      legacy variadic surface stays in place during the migration\",\n      then a follow-up bead deletes the variadic methods after the\n      caller sweep finishes. This satisfies the spirit of TD-027\n      (introducing the typed ctx-first surface in the bead package\n      first) without breaking the build outside the package.\n\nNo code changes were made on this attempt. Request was triaged\nstrictly against the bead body — no /tmp scratch files, no work\noutside the worktree.\nresult_rev=86de1c4af53756b734ad140cde3d260de5d1c922\nbase_rev=86de1c4af53756b734ad140cde3d260de5d1c922\noutcome_reason=no_changes",
+          "created_at": "2026-05-16T04:51:05.889445147Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "",
+          "body": "{\"accepted_fingerprint\":\"\",\"accepted_prompt_fingerprint\":\"\",\"from_status\":\"proposed\",\"operator_required\":true,\"prompt_fingerprint\":\"09856c6d43c0aaae4afa35dd6485b8f71942b35c4b3b0a85cf0ad892e69a26e3\",\"reason\":\"set lifecycle status\",\"source\":\"ddx bead update\",\"to_status\":\"open\"}",
+          "created_at": "2026-06-02T00:11:19.816112169Z",
+          "kind": "triaged",
+          "source": "ddx bead update",
+          "summary": "operator accepted proposed bead"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-06-02T00:13:17.042242734Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260602T001317-18b51b41\",\"bead_id\":\"ddx-3fd19af1\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-06-02T00:43:17Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-06-02T00:43:47.148067573Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-02T00:45:30.543160724Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ac1 + ac3 + non-scope coherence: typed ctx-first signatures break external callers; lefthook go-build covers full module; non-scope forbids touching those callers: AC1 (typed ctx-first signatures on Init/GenID/ReadAll/ReadAllFiltered/Get/GetWithArchive/Create/Update/Close), AC3 (lefthook run pre-commit passes, which runs go build ./... across the full module), and NON-SCOPE (no caller changes in cli/cmd, cli/internal/agent, cli/internal/server, cli/internal/escalation, metrics packages) are mutually exclusive. Any signature change that satisfies AC1 immediately breaks ~1319 external call sites that currently invoke the variadic forms; lefthook's go-build hook covers the full module so AC3 cannot pass until those callers are updated — which NON-SCOPE and AC4 explicitly forbid. The prior attempt confirmed this contradiction and identified three resolution paths, each requiring an operator scope decision before an agent can proceed.\",\"fingerprint\":\"72c5b653920d43d0c0fb34ede7be50929c5fcacbf71dfd10eb10b6f6275dfe58\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"72c5b653920d43d0c0fb34ede7be50929c5fcacbf71dfd10eb10b6f6275dfe58\"}",
+          "created_at": "2026-06-02T00:47:15.874030188Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260602T004715-18b51d1c\",\"bead_id\":\"ddx-3fd19af1\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-06-02T01:17:45Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-06-02T01:18:15.964675799Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-02T01:20:00.16446006Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260602T004728-1dfb822a\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":1,\"output_tokens\":70,\"total_tokens\":71,\"cost_usd\":0,\"duration_ms\":1839481,\"exit_code\":-1}",
+          "created_at": "2026-06-02T01:20:00.222825145Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=71 model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"bead_id\":\"ddx-3fd19af1\",\"count\":2,\"diagnosis\":\"bead wedged on 2 consecutive claims (\\u003e= threshold 2; last wedge \\\"progress_watchdog\\\"); stopped re-claiming and flagged for operator attention\",\"last_activity_at\":\"2026-06-02T01:18:15Z\",\"last_reason\":\"progress_watchdog\",\"reason\":\"consecutive_wedge\",\"threshold\":2}",
+          "created_at": "2026-06-02T01:20:12.815948963Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "consecutive_wedge"
+        },
+        {
+          "actor": "",
+          "body": "{\"accepted_fingerprint\":\"\",\"accepted_prompt_fingerprint\":\"\",\"from_status\":\"proposed\",\"operator_required\":true,\"prompt_fingerprint\":\"09856c6d43c0aaae4afa35dd6485b8f71942b35c4b3b0a85cf0ad892e69a26e3\",\"reason\":\"set lifecycle status\",\"source\":\"ddx bead update\",\"to_status\":\"open\"}",
+          "created_at": "2026-06-05T23:56:24.836857466Z",
+          "kind": "triaged",
+          "source": "ddx bead update",
+          "summary": "operator accepted proposed bead"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-3fd19af1)\",\"fingerprint\":\"484898b53a13ce56bd60c5c6c66782560a873d2bde4135d54ccbba1c5183f92f\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"484898b53a13ce56bd60c5c6c66782560a873d2bde4135d54ccbba1c5183f92f\"}",
+          "created_at": "2026-06-06T00:21:31.887039145Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T01:51:52.064330257Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T002336-9e239d42\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":1,\"output_tokens\":20,\"total_tokens\":21,\"cost_usd\":0,\"duration_ms\":4017823,\"exit_code\":-1}",
+          "created_at": "2026-06-06T01:51:52.201714856Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=21 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-3fd19af1\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-06T01:52:22.972121268Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"attempt failed while committing tracker metadata with git index write error (`fatal: unable to write new index file`), which is an infrastructure/commit failure rather than bead-owned implementation or verification evidence; newer reopen/triage events make prior operator-required scope notes historical for this attempt\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-06T01:53:29.197334708Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-06-06T01:53:29.33568539Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"1. The foundational Store methods in cli/internal/bead/store.go take ctx context.Context first: Init, ReadAll, ReadAllFiltered, Get, GetWithArchive, Create, Update, Close, and GenID.\",\"coverage\":\"Child 1 AC1 covers Init and GenID. Child 2 AC1-AC3 cover ReadAll, ReadAllFiltered, Get, and GetWithArchive. Child 3 AC1-AC2 cover Create, Update, and Close. Child 4 AC1-AC3 covers the final backend.go foundation-interface proof against the migrated Store surface.\"},{\"parent_ac\":\"2. cd cli \\u0026\\u0026 go test ./internal/bead/... passes.\",\"coverage\":\"Child 1 AC6, Child 2 AC7, Child 3 AC6, and Child 4 AC6 each require cd cli \\u0026\\u0026 go test ./internal/bead/... passes.\"},{\"parent_ac\":\"3. lefthook run pre-commit passes.\",\"coverage\":\"Child 1 AC7, Child 2 AC8, Child 3 AC7, and Child 4 AC7 each require lefthook run pre-commit passes.\"},{\"parent_ac\":\"4. Any tests added or updated in cli/internal/bead/ are named and deterministic, with no caller-package changes in this bead.\",\"coverage\":\"Named deterministic tests are covered by Child 1 AC4, Child 2 AC5, Child 3 AC4, and Child 4 AC3. The original no-caller-package-changes clause is non_scope for Children 1-3 because parent AC1 plus parent AC3 cannot both pass after changing Store signatures unless affected external callsites are migrated; Child 4 AC4 preserves the no-caller-package-change constraint after the sweeps close.\"},{\"parent_ac\":\"NON-SCOPE: Caller migration in cli/cmd, cli/internal/agent, cli/internal/server, cli/internal/escalation, and metrics packages.\",\"coverage\":\"non_scope: preserving this item makes parent AC1 and AC3 mutually unsatisfiable. Children 1-3 relax it only for callsites of the methods each child migrates; Child 4 preserves it completely.\"},{\"parent_ac\":\"NON-SCOPE: Event method ctx threading (AppendEvent, Events, EventsByKind).\",\"coverage\":\"Preserved in every child NON-SCOPE section.\"},{\"parent_ac\":\"NON-SCOPE: Removing workflow helper methods beyond the foundational signatures this bead changes.\",\"coverage\":\"Preserved in every child NON-SCOPE section.\"},{\"parent_ac\":\"Governing artifact reference: TD-027 / spec:TD-027.\",\"coverage\":\"Preserved in every child GOVERNING ARTIFACT section and labels array.\"},{\"parent_ac\":\"Dependency/reference ID: ddx-464feba2.\",\"coverage\":\"Preserved in every child PARENT/DEPS section as the parent/split source.\"}],\"child_ids\":[\"ddx-3e8ba14b\",\"ddx-cc298105\",\"ddx-38801c65\",\"ddx-c887a63f\"],\"rationale\":\"The failed attempt showed that changing Store methods to typed ctx-first signatures while forbidding caller-package edits cannot satisfy lefthook, because Go has no overloads and existing zero-argument or legacy-argument callsites stop compiling. The split therefore groups the migration by method family: setup/id, reads, mutations, and final interface assertions. Each method-family child can update only the callsites for its own method group, keep tests local to cli/internal/bead, run the parent verification gates, and avoid the repo-wide sweep that made ddx-464feba2 too large. The final child restores the original local-only constraint by proving the completed foundation contract after the callsite migrations have landed.\"}",
+          "created_at": "2026-06-06T02:27:25.633723885Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-3e8ba14b, ddx-cc298105, ddx-38801c65, ddx-c887a63f"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c887a63f (1 edge(s))\ndependencies→removed dangling ddx-cc298105 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.443331967Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 2 change(s)"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T06:29:55.197557788Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T050144-45f2bf32\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":637867,\"output_tokens\":2841,\"total_tokens\":640708,\"cost_usd\":0,\"duration_ms\":5280462,\"exit_code\":1}",
+          "created_at": "2026-06-08T06:29:55.275681611Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=640708 model=dflash"
+        }
+      ],
+      "needs-human-reason": "consecutive_wedge",
+      "needs-human-since": "2026-06-02T01:20:12Z",
+      "needs-human-source": "ddx work",
+      "needs-human-suggested-action": "investigate the repeated wedge (resolver hang / phase-empty heartbeats) and clear the operator-attention state once resolved",
+      "needs-human-summary": "bead wedged on 2 consecutive claims (\u003e= threshold 2; last wedge \"progress_watchdog\"); stopped re-claiming and flagged for operator attention",
+      "work-last-detail": "bead AC1+AC3 contradict the explicit non-scope; needs operator re-scoping Findings (worktree base-rev 86de1c4af, .ddx/executions/20260516T043007-7ac09885): 1. Current state of the foundational Store methods (cli/internal/bead/store.go): Init(args ...any) error                                  // line 149 GenID(args ...any) (string, error)                       // line 167 ReadAll(args ...any) ([]Bead, error)                     // line 182 ReadAllFiltered(args ...any) ([]Bead, error)             // line 224 Create(args ...any) error                                // line 518 Get(args ...any) (*Bead, error)                          // line 598 Update(args ...any) error                                // line 627 Close(args ...any) error                                 // line 1426 And in archive.go: GetWithArchive(id string) (*Bead, error)                 // line 172 Each variadic method extracts ctx via storeCallContext(args) and accepts either `s.Init()` or `s.Init(context.Background())` today. 2. AC1 requires these methods to take `ctx context.Context` as a typed first parameter (matching the BeadEventReader / BeadQueries shape already in cli/internal/bead/backend.go:91-114). Any concrete signature satisfying AC1 — `Init(ctx context.Context) error`, `Init(ctx context.Context, args ...any) error`, etc. — rejects the current zero-arg `s.Init()` callsites that exist in external packages. 3. The bead's PROPOSED FIX and NON-SCOPE explicitly forbid touching external callers (\"Do not touch the external caller sweep in this bead\"; \"NON-SCOPE: Caller migration in cli/cmd, cli/internal/agent, cli/internal/server, cli/internal/escalation, and metrics packages.\") and AC4 requires \"no caller-package changes in this bead.\" 4. AC3 requires `lefthook run pre-commit` to pass, which runs `go build -buildvcs=false -v ./...` from cli/ (lefthook.yml:122-129). That build covers every package in the module, including all the external caller packages NON-SCOPE forbids touching. 5. Concrete external breakage if AC1 is implemented today (`grep -rE '\\b(store|s)\\.(Init|Create|Update|Get|Close|ReadAll|GenID|GetWithArchive|ReadAllFiltered)\\(' cli/ --include='*.go'`): - 174 Go files reference these Store methods. - 73 distinct files outside cli/internal/bead/ use the zero-arg `store.Init()` form (e.g. cli/cmd/ac_test.go:37, cli/cmd/bead_human_test.go:20, cli/internal/agent/..., cli/internal/server/...). - Production-code stragglers without ctx exist too: cli/cmd/bead.go:414  s.GetWithArchive(args[0]) cli/cmd/bead.go:1281 s.Close(id) cli/internal/agent/execute_bead_loop.go:4485 store.Get(id) cli/internal/agent/execute_bead_loop.go:4811 store.Update(beadID, ...) `go build ./...` and the lefthook go-build hook will fail at every one of those callsites the instant Init/Get/Update/Close/ReadAll/GenID/ GetWithArchive/ReadAllFiltered become non-variadic ctx-first. There is no signature shape that satisfies AC1 while preserving all current call patterns (Go does not allow same-name method overloads on a single receiver type). 6. Step 0 size envelope is also exceeded for the only resolution that preserves AC1+AC3: the necessary mechanical caller sweep crosses ~170 files in five packages (cmd, internal/agent, internal/server, internal/attemptmetrics, internal/agentmetrics) — well past the \"~500 lines across ~5+ files in unrelated packages\" guardrail. That is exactly the sweep that NON-SCOPE excludes, and the parent split (TD-027 / ddx-464feba2) was rejected for the same reason. Operator action requested: Re-scope this bead to one of: (a) Add the caller-package migration to scope (delete the NON-SCOPE block and AC4's \"no caller-package changes\"). This becomes the original TD-027 sweep that previously failed as too large; if pursued, expect a multi-file diff across cli/cmd, cli/internal/agent, cli/internal/server, cli/internal/attemptmetrics, cli/internal/agentmetrics. (b) Replace AC3 with a narrower verification (e.g. \"go test ./internal/bead/... and go vet ./internal/bead/... pass\"), and explicitly accept that `go build ./...` and lefthook pre-commit will be red until follow-up caller-migration beads land. The follow-up beads would then re-establish AC3 once the sweep is complete. (c) Replace AC1 with an additive shape that does not rename or retype the existing variadic methods — e.g. \"add new ctx-first Store methods with distinct names (InitCtx / GetCtx / …) so the legacy variadic surface stays in place during the migration\", then a follow-up bead deletes the variadic methods after the caller sweep finishes. This satisfies the spirit of TD-027 (introducing the typed ctx-first surface in the bead package first) without breaking the build outside the package. No code changes were made on this attempt. Request was triaged strictly against the bead body — no /tmp scratch files, no work outside the worktree.",
+      "work-last-status": "no_changes_operator_required",
+      "work-no-changes-count": 1,
+      "work-suggested-action": "review and accept, split, block, or cancel this proposed work"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T062957-7b49d53c",
+    "prompt": ".ddx/executions/20260608T062957-7b49d53c/prompt.md",
+    "manifest": ".ddx/executions/20260608T062957-7b49d53c/manifest.json",
+    "result": ".ddx/executions/20260608T062957-7b49d53c/result.json",
+    "checks": ".ddx/executions/20260608T062957-7b49d53c/checks.json",
+    "usage": ".ddx/executions/20260608T062957-7b49d53c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3fd19af1-20260608T062957-7b49d53c"
+  },
+  "prompt_sha": "a9488f287bf2c6accfcfb5fd055aa30b50478773cf3bbb1d20c3cd3ea40f7ef0"
+}

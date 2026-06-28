@@ -1,0 +1,34 @@
+verification_command: cd cli && go test ./internal/lockmetrics/... ./internal/integration/...
+
+This is an umbrella/parent bead. Its six acceptance criteria were delivered by
+its five decomposed children, all now closed and merged onto the base revision
+(98bf55b012ef142fc643b1dd85c1acfc55f1dbc9):
+
+- ddx-329a08b8 (closed) — scope .git/index.lock and .ddx/.git-tracker.lock to
+  the git/tracker mutation window, never across the LLM subprocess.
+  Satisfies parent AC1 + AC2.
+- ddx-68f5623c (closed) — structured acquire/release events
+  (lock_name, operation, holder_pid, acquired_at, released_at, duration_ms) in
+  cli/internal/lockmetrics/lockmetrics.go (Event struct).
+  Satisfies parent AC3.
+- ddx-bfd6d9ae (closed) — configurable hold-time cap (DefaultIndexLockCap=10s,
+  DefaultTrackerLockCap=30s; overridable via DDX_LOCK_CAP_INDEX_MS /
+  DDX_LOCK_CAP_TRACKER_MS) with fail-fast force-release and lock-violation.json
+  evidence in cli/internal/lockmetrics/lockcap.go.
+  Satisfies parent AC4.
+- ddx-6650fdc9 (closed) — multi-worker integration test
+  (cli/internal/integration/lock_contention_test.go:
+  TestIntegration_MultiWorkerLockContention_5Workers, _P99IndexLockUnderCap,
+  _P99TrackerLockUnderCap, _NoOperatorTimeouts) proving 5 concurrent
+  `ddx work --watch` workers keep p99 hold times under cap with no operator
+  bead create/update/close timing out.
+  Satisfies parent AC5.
+- ddx-f0a70134 (closed) — "Lock Lifetime Contract" section in AGENTS.md, asserted
+  by TestDocs_LockContractSectionPresent.
+  Satisfies parent AC6.
+
+No source change is owed by the parent itself; the verification_command above
+re-runs the lockmetrics unit tests (AC3, AC4) and the integration suite (AC1,
+AC2, AC5, and the AC6 doc-presence test). Both packages passed locally
+(lockmetrics 0.68s, integration 11.3s). Exit 0 confirms all six ACs hold and
+the parent may close.

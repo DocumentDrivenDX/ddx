@@ -1,0 +1,73 @@
+{
+  "attempt_id": "20260613T220905-8121177b",
+  "bead_id": "ddx-ef9df563",
+  "base_rev": "03939ac3a9ea87c83c9e5f7cb8ea25d919ff7ecc",
+  "created_at": "2026-06-13T22:09:13.49224286Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ef9df563",
+    "title": "agent: type worker provider-process failures before generic failure",
+    "description": "PROBLEM\n\nUnderspecified worker/provider-process failures are a DDx correctness bug. DDx/FIZ is the abstraction that should keep work moving across provider availability and local configuration variance. If a provider executable is missing, a harness process exits early, model routing fails, or Fizeau returns a pre-dispatch/provider-boundary error, `ddx work` must classify it with a typed provider/process reason, record fallback/stop evidence, clean up any children, and continue when an alternate route is eligible. It must not surface a generic worker failure, raw \"routing under-specified\" text, or leave the bead/operator unable to tell whether this is provider_auth, provider_model_unavailable, provider_harness_unavailable, provider_connectivity, no_viable_provider, provider_config_invalid, or unknown_provider_failure.\n\nROOT CAUSE WITH FILE:LINE\n\n- `cli/internal/agent/provider_failure.go:1-17` defines the intended DDx/Fizeau boundary contract: generic untyped provider failures are product bugs, and each provider failure needs typed reason, retryability, fallback decision, and durable evidence.\n- `cli/internal/agent/agent_runner_service.go:140-142` still returns `fmt.Errorf(\"agent: execute: %w\", err)` for Fizeau `Execute` setup failures before the event stream exists; every caller must prove this error is classified and does not fall through as generic execution/worker failure.\n- `cli/internal/agent/agent_runner_service.go:337-385` bounds event-stream silence/tool loops, but provider-process startup/early-exit failures can occur before useful stream evidence, so they need a separate typed classification/cleanup path.\n- `cli/cmd/zero_config_work_test.go:15-27` documents the prior \"routing under-specified\" regression and explicitly avoids real provider dispatch; coverage must be extended from \"do not print under-specified\" to \"classify provider-process failure and choose fallback/stop semantics.\"\n- `cli/internal/agent/execute_bead_loop_escalation_aborted_test.go:18-60` and `:285-342` prove provider_connectivity fallback semantics after reports exist, but do not prove raw provider-process failures are converted into those reports before worker/operator surfaces see them.\n\nPROPOSED FIX\n\nAdd an end-to-end worker/process-boundary classification path for provider process startup, missing executable, early child exit, model-unavailable, under-specified routing, and Fizeau pre-dispatch errors. Normalize them through the provider failure taxonomy, write `ProviderFailureEvidence`, include requested/resolved harness/provider/model plus retryability and fallback_stop_reason, and ensure unpinned workers automatically retry eligible alternate routes while pinned workers stop loudly with hard_pin_exhausted. Ensure cleanup reaps provider-process children before the worker continues.\n\nNON-SCOPE\n\nDo not move model catalog/routing ownership out of Fizeau. Do not call real Claude/Codex/Gemini providers in tests. Do not silently widen explicit operator pins. Do not weaken existing provider_connectivity/no_viable_provider fallback tests.",
+    "acceptance": "1. `TestWorkProviderProcessMissingExecutableClassified` uses a fake service or fake provider process startup failure equivalent to `exec.ErrNotFound`; `ddx work --once` records `typed_failure=provider_harness_unavailable`, does not print raw \"routing under-specified\" or generic \"execution_failed\", unclaims the bead, and leaves no provider child processes.\n2. `TestWorkProviderProcessEarlyExitClassifiedWithEvidence` simulates a provider child that exits before emitting a final event; DDx records structured provider/process evidence including requested_harness, requested_provider, requested_model, typed_failure, retryable, fallback_attempted, fallback_stop_reason when applicable, exit_code/stderr excerpt or equivalent process detail, and cleanup_result.\n3. `TestWorkProviderModelUnavailableFallsBackWhenUnpinned` simulates model-not-found/model-unavailable from the first route; an unpinned worker records the failed route and retries an alternate eligible route without operator intervention.\n4. `TestWorkProviderFailureHonorsHardPins` pins harness/provider/model, simulates the same provider failure, and proves DDx does not widen the pin; it stops with `fallback_stop_reason=hard_pin_exhausted` and actionable operator output.\n5. `TestWorkStatusAndOperatorAttentionSurfaceTypedProviderFailure` proves `ddx work status --json` and operator-attention/evidence surfaces show the typed provider/process failure instead of an underspecified worker failure.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TestWorkProviderProcessMissingExecutableClassified|TestWorkProviderProcessEarlyExitClassifiedWithEvidence|TestWorkProviderModelUnavailableFallsBackWhenUnpinned|TestWorkProviderFailureHonorsHardPins|TestWorkStatusAndOperatorAttentionSurfaceTypedProviderFailure'` passes.\\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "provider-failure"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260613T214920-dd500381\",\"bead_id\":\"ddx-ef9df563\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-13T21:49:30.761490068Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"04c1255dd809b15d101dad03860fc7130ff1fddc\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"execute-bead context load: loading bead ddx-ef9df563 from worktree snapshot: bead: not found: ddx-ef9df563: loading bead ddx-ef9df563 from worktree snapshot: bead: not found: ddx-ef9df563\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"04c1255dd809b15d101dad03860fc7130ff1fddc\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-13T21:52:31.405472285Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-bead context load: loading bead ddx-ef9df563 from worktree snapshot: bead: not found: ddx-ef9df563: loading bead ddx-ef9df563 from worktree snapshot: bead: not found: ddx-ef9df563\npowerClass=standard\ndecision_audit={\"failure_class\":\"unknown\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=04c1255dd809b15d101dad03860fc7130ff1fddc\nbase_rev=04c1255dd809b15d101dad03860fc7130ff1fddc\nretry_after=2026-06-14T03:52:31Z\noutcome_reason=unknown",
+          "created_at": "2026-06-13T21:52:31.467054241Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"executable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"830fee434f7ba41c539615d5fc87f225ddaa78516f81a2e7158392914fdda398\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"830fee434f7ba41c539615d5fc87f225ddaa78516f81a2e7158392914fdda398\"}",
+          "created_at": "2026-06-13T22:07:03.142977098Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": -300,
+      "work-cooldown-base-rev": "04c1255dd809b15d101dad03860fc7130ff1fddc"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260613T220905-8121177b",
+    "prompt": ".ddx/executions/20260613T220905-8121177b/prompt.md",
+    "manifest": ".ddx/executions/20260613T220905-8121177b/manifest.json",
+    "result": ".ddx/executions/20260613T220905-8121177b/result.json",
+    "checks": ".ddx/executions/20260613T220905-8121177b/checks.json",
+    "usage": ".ddx/executions/20260613T220905-8121177b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ef9df563-20260613T220905-8121177b"
+  },
+  "prompt_sha": "b2cc1876695585c567e1db96078bd0baf9766c8aa37c138f1b42e979a6ec932d"
+}

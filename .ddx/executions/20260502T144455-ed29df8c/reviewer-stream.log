@@ -1,0 +1,16 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact. None of the six acceptance criteria (TD, axon backend implementation, migration tool, chaos_test passing, bd fallback doc, performance parity) are addressed.",
+  "findings": [
+    { "severity": "block", "summary": "No TD authored for axon-backend integration (AC1)", "location": "docs/" },
+    { "severity": "block", "summary": "No axon-backend implementation in cli/internal/bead/backend.go (AC2)", "location": "cli/internal/bead/backend.go" },
+    { "severity": "block", "summary": "No migration tool for beads.jsonl → axon (AC3)", "location": "cli/" },
+    { "severity": "block", "summary": "chaos_test.go not exercised against new backend (AC4)", "location": "cli/internal/bead/chaos_test.go" },
+    { "severity": "block", "summary": "No bd fallback documentation (AC5)", "location": "docs/" },
+    { "severity": "block", "summary": "No performance parity evidence (AC6)", "location": ".ddx/executions/20260502T144455-ed29df8c/" },
+    { "severity": "warn", "summary": "Only artifact in diff is an execution result.json; appears the bead was decomposed into children (per recent commit 7a9636dd) but the parent epic itself has no implementation evidence", "location": ".ddx/executions/20260502T144455-ed29df8c/result.json" }
+  ]
+}
+```

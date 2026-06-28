@@ -1,0 +1,28 @@
+status: open
+reason: Bead decomposed into child beads due to size and scope spanning multiple concerns (lock scoping, metrics, fail-fast, testing, documentation)
+orchestrator_action: decompose
+
+Child beads:
+- ddx-0b743e7e: Fix lock scoping - release locks before harness subprocess (AC 1, 2)
+- ddx-d8c98e4c: Add lock lifetime metrics and fail-fast enforcement (AC 3, 4) [depends on ddx-0b743e7e]
+- ddx-9465a062: Multi-worker integration test with p99 cap verification (AC 5) [depends on ddx-0b743e7e, ddx-d8c98e4c]
+- ddx-e46ef410: Documentation of lock-lifetime contract and observability (AC 6) [depends on ddx-0b743e7e, ddx-d8c98e4c]
+
+Rationale:
+The original bead combined:
+1. Lock refactoring across multiple code paths (tracker_lock.go, gitlock.go, execute_bead.go, *_land.go)
+2. New metrics infrastructure
+3. New fail-fast enforcement logic
+4. Comprehensive integration tests requiring fixture repo and multi-worker scenarios
+5. Documentation updates
+
+Total scope exceeded heuristic limits (~6 complex ACs touching 5+ files, mixing refactoring + instrumentation + tests + docs). Decomposed per step-0 guidance to allow parallel execution of independent child beads and clearer validation at each stage.
+
+Dependencies:
+- Lock scoping (ddx-0b743e7e) is prerequisite for all others
+- Metrics (ddx-d8c98e4c) depends on lock-scoping changes
+- Multi-worker test (ddx-9465a062) and docs (ddx-e46ef410) depend on both lock-scoping and metrics
+- Test and docs can execute in parallel once lock-scoping and metrics are complete
+
+Original parent bead: ddx-57c40485
+Reference incident: Fizeau AR-2026-05-17-repo (5 concurrent workers holding index.lock for 6+ minutes)

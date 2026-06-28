@@ -1,0 +1,25 @@
+---
+## Review: .execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | GET /api/beads/{id}/evidence HTTP route | BLOCK | — not found in diff |
+| 2 | GET /api/beads/{id}/cooldown HTTP route | BLOCK | — not found in diff |
+| 3 | GET /api/beads/{id}/routing HTTP route | BLOCK | — not found in diff |
+| 4 | ddx_bead_evidence MCP tool | BLOCK | — not found in diff |
+| 5 | ddx_bead_cooldown MCP tool | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only execution evidence artifacts (`manifest.json` and `result.json`) under `.ddx/executions/20260429T235731-b7a9889b/`. No HTTP route handlers, MCP tool registrations, or accompanying tests are present, so none of the acceptance criteria can be evaluated as implemented.
+
+### Findings
+
+- No changes under `cli/internal/server/` adding `/api/beads/{id}/evidence`, `/api/beads/{id}/cooldown`, or `/api/beads/{id}/routing` HTTP handlers or routes.
+- No changes under `cli/internal/mcp/` (or wherever MCP tools are registered) adding `ddx_bead_evidence` or `ddx_bead_cooldown` tools.
+- No HTTP/MCP tests added covering the new endpoints/tools (despite the prior commit message `e6c36568` claiming such coverage, this review's diff at `b67961b1` shows only evidence files).
+- Re-run implementation in a fresh worktree to actually produce the server + MCP code, then re-review.

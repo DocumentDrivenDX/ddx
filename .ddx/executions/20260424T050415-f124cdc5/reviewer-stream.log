@@ -1,0 +1,17 @@
+---
+## Review: ddx-0629ed12 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No refs to fakeExecuteBeadGit / fakeAgentRunner | APPROVE | cli/cmd/agent_execute_bead_test.go:1749-1823 — both removed; real `agent.NewRunner(agent.Config{})` + real git |
+| 2 | Dispatches through real-git harness + real landing | APPROVE | agent_execute_bead_test.go:1756-1775 real `runGit` init/commit; :1798 real `AgentRunnerOverride`; runs via `ddx agent execute-bead` which uses RealLandingGitOps in production path |
+| 3 | go test … -run …Preserves -count=1 green | APPROVE | execution result.json: outcome=task_succeeded, exit_code=0 (reviewer-side rerun blocked by permissions) |
+| 4 | No other test in file modified | APPROVE | commit 3a4248c8 stat: 1 file, hunks confined to TestExecuteBeadAgentErrorWithCommitsPreserves |
+
+### Summary
+
+Migration cleanly replaces both fakes with real git + the script harness driven by a directive file, and preserves every original assertion while strengthening them (preserve-ref resolution check, base-SHA inequality). Scope is tight to the single test, and the execution evidence records a successful run.

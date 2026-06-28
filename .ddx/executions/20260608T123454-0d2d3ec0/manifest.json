@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260608T123454-0d2d3ec0",
+  "bead_id": "ddx-d4817c9b",
+  "base_rev": "fc582a40bb86ef14abbe9876816d38bb69754ef3",
+  "created_at": "2026-06-08T12:35:07.429096839Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d4817c9b",
+    "title": "agent: park decomposed parents before retrying implementation",
+    "description": "PROBLEM\nA parent bead that has already been decomposed can still re-enter the worker as if it were an executable task. That keeps spending attempts on a structurally ineligible parent instead of moving on to its children.\n\nROOT CAUSE\n`cli/internal/agent/recovery_decompose.go:130-210` already marks decomposed children with `Parent=beadID` and sets the parent execution-eligible flag to false, but the main worker loop still has paths that continue past decomposition-like intake and retry handling. `cli/internal/agent/execute_bead_loop.go:2175-2315` handles some intake decomposition cases, and `cli/internal/agent/execute_bead_loop.go:3818-3840` continues processing other outcome branches without consistently parking a parent whose own `no_changes` rationale says to decompose.\n\nPROPOSED FIX\n- When the worker sees `mixed_commit_and_no_changes_rationale` with `orchestrator_action: decompose`, child IDs, and `outcome_reason=decomposed`, mark the parent execution-ineligible or proposed before another implementation attempt.\n- Do not schedule another implementation run or min-power escalation for that parent.\n- Keep the parent visible as a decomposition boundary, not as a retriable implementation failure.\n\nNON-SCOPE\n- Do not change child-bead content, land handling, or review gating in this child.\n- Do not alter the decomposer output format beyond what is needed to detect the decomposed-parent state.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_DecomposedParentIsExecutionIneligible` simulates `mixed_commit_and_no_changes_rationale` with `orchestrator_action: decompose`, child bead IDs, and `outcome_reason=decomposed`.\n2. The test asserts the parent is marked execution-ineligible/proposed or dependency-waiting according to policy and that no further implementation attempt or min-power escalation is scheduled.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'DecomposedParent' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T123454-0d2d3ec0",
+    "prompt": ".ddx/executions/20260608T123454-0d2d3ec0/prompt.md",
+    "manifest": ".ddx/executions/20260608T123454-0d2d3ec0/manifest.json",
+    "result": ".ddx/executions/20260608T123454-0d2d3ec0/result.json",
+    "checks": ".ddx/executions/20260608T123454-0d2d3ec0/checks.json",
+    "usage": ".ddx/executions/20260608T123454-0d2d3ec0/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d4817c9b-20260608T123454-0d2d3ec0"
+  },
+  "prompt_sha": "476dc63f5a3f853bdf889bc7a656b31909a7f30b34642ec0c0ffd525204a5466"
+}

@@ -1,0 +1,21 @@
+---
+## Review: ddx-d758f207 iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestExecuteBeadContextBudgetFromConfig passes | APPROVE | cli/cmd/agent_execute_bead_e2e_test.go:31 — full behavioral test loads real .ddx/config.yaml with `evidence_caps.context_budget: minimal`, drives dispatch via cobra factory, asserts the short "No governing references." marker is in the synthesized prompt and the long marker is absent |
+| 2 | `go test ./...` passes | REQUEST_CHANGES | commit message admits go-test pre-commit hook was skipped due to a "pre-existing TestBeadReviewCollapseGolden golden-file failure" — full suite was not verified green |
+
+### Summary
+
+The dispatch migration itself is clean and on-spec: `ExecuteBeadOptions{}` is replaced with `config.LoadAndResolve` + `ExecuteBeadRuntime` + `ExecuteBeadWithConfig`, durable knobs (Harness/Model/Provider/ModelRef/Effort/ContextBudget) move into `CLIOverrides`, runtime carries only per-invocation plumbing, and `ContextBudget` is wired through `Resolve()` with a fallback from `EvidenceCapsConfig`. The behavioral test is well-targeted (asserts on real prompt text rather than a synthetic telemetry event, exactly as SD-024 §Test coverage commitment requires). The reasons to hold this back are minor but worth fixing before approval.
+
+### Findings
+
+- **cli/cmd/agent_execute_bead.go:119** — `rcfg, _ := config.LoadAndResolve(projectRoot, ...)` silently discards the error. This is the production dispatch path; a malformed `.ddx/config.yaml` should surface, not be swallowed into a zero-ish `rcfg`. The other two SD-024 dispatch sites (CLI `ddx work`, server `runWorker`) handle this error — execute-bead should match. Wrap with a project-relative context message and return.
+- **AC #2** — commit explicitly notes go-test pre-commit hook was skipped. The "pre-existing unrelated failure" claim is plausible but unverified in this review (TestBeadReviewCollapseGolden is in `cli/cmd/`, the same package this bead modifies). Either: (a) confirm the golden failure reproduces on the parent commit `696e6279` and document that in the result, or (b) regenerate the golden and include it in the bead.
+- **MirrorCfg removal** — the diff drops `MirrorCfg: loadExecutionsMirrorConfig(projectRoot)` from the construction. SD-024 Stage 3 calls for wiring `ExecutionsConfig.Mirror` *through the resolved-config path*. Verify `ExecuteBeadWithConfig` now sources the mirror config from `rcfg` (not from the runtime struct and not via a re-load); if it doesn't, this is a behavior regression for users who set `executions.mirror` in config.

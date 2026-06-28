@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260606T034404-1815ce0c",
+  "bead_id": "ddx-33530e68",
+  "base_rev": "28bf72b960117f656870f0b00a9e4f06888d5304",
+  "created_at": "2026-06-06T03:44:16.715108513Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-33530e68",
+    "title": "agent: run post-land commands outside the main-git lock",
+    "description": "PROBLEM\nA post-land command can run while `.ddx/.git-tracker.lock` is held, blocking every other worker/operator mutation for up to the post-land command timeout. This violates the TP-021 lock-lifetime contract: arbitrary commands must not execute while the main-git lock is held.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_land.go:1208-1214 wraps all of `landLocked` in `withMainGitLock`.\n- cli/internal/agent/execute_bead_land.go:1291 and :1369 call `preserveIfPostLandGateFails` inside that locked flow.\n- cli/internal/agent/execute_bead_land.go:1445-1457 runs `PostLandCommand` with a 30 minute timeout.\n\nPROPOSED FIX\n- Refactor landing so post-land commands run after the main-git mutation lock is released, while preserving existing land/preserve semantics and evidence rewriting.\n- If a post-land command fails, reacquire the lock only for the short preserve/ref/index mutations needed to record that failure.\n- Add a channel-blocking post-land test proving another goroutine can acquire the main-git lock while the command is blocked.\n\nNON-SCOPE\n- Do not remove post-land command support.\n- Do not change the 30 minute post-land command timeout unless a separate spec updates it.",
+    "acceptance": "1. `TestChaos_PostLandCommandDoesNotHoldMainGitLock` blocks a post-land command and proves `withMainGitLock` can be acquired concurrently while the command is blocked.\n2. Existing post-land failure preservation tests still pass, including `TestLand_PostLandCommandFailurePreserves` or the current equivalent in `cli/internal/agent/execute_bead_land_test.go`.\n3. Fast-forward and merge landing tests still pass after the refactor.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestChaos_PostLandCommandDoesNotHoldMainGitLock|TestLand_.*PostLand|TestLand_.*FastForward|TestLand_.*Merge'` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "kind:bug",
+      "spec:TP-021",
+      "reliability",
+      "concurrency"
+    ],
+    "metadata": {
+      "spec-id": "TP-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-021",
+      "path": "docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md",
+      "title": "Test Plan: Multi-Worker `ddx try` Reliability"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T034404-1815ce0c",
+    "prompt": ".ddx/executions/20260606T034404-1815ce0c/prompt.md",
+    "manifest": ".ddx/executions/20260606T034404-1815ce0c/manifest.json",
+    "result": ".ddx/executions/20260606T034404-1815ce0c/result.json",
+    "checks": ".ddx/executions/20260606T034404-1815ce0c/checks.json",
+    "usage": ".ddx/executions/20260606T034404-1815ce0c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-33530e68-20260606T034404-1815ce0c"
+  },
+  "prompt_sha": "ecda0b0b0374088e82756e9cd38ef5972dda23f5b0336f5c182ecb34a8c65d75"
+}

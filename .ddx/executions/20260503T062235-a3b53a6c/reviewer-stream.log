@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review contains only an execution evidence result.json file. No source code changes for the cancel endpoint, worker poll, or tests are present to evaluate against any acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No implementation diff: only .ddx/executions/.../result.json is changed. Cannot verify AC1-7 (cancel endpoint, mid-attempt poll, preserved_for_review emission, idempotency, unit tests, integration test).", "location": ".ddx/executions/20260503T062235-a3b53a6c/result.json" }
+  ]
+}
+```

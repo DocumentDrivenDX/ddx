@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json evidence file. No GraphQL schema, resolver, cache, or tests are present to evaluate against any of the 5 AC items.",
+  "findings": [
+    { "severity": "block", "summary": "AC1 (agentMetrics in GraphQL schema) not evaluable — no schema changes in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "AC2 (4 groupBy axes) not evaluable — no resolver code in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "AC3 (3 windows) not evaluable — no resolver code in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "AC4 (revision-keyed cache) not evaluable — no cache implementation in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "AC5 (per-axis tests) not evaluable — no tests in diff", "location": "(missing)" }
+  ]
+}
+```

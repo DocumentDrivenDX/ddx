@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260528T115752-52998c6b",
+  "bead_id": "ddx-a0ce517e",
+  "base_rev": "18a1f88877124299fadd98b0a9ebfe5ae1aac831",
+  "created_at": "2026-05-28T11:58:01.541557492Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a0ce517e",
+    "title": "Story 16.3c: Restore efficacyRows p95 under 300ms perf target",
+    "description": "PROBLEM\nThe full-repo `cd cli \u0026\u0026 go test ./...` gate (parent AC 4) fails because the efficacy-rows query has regressed past its perf target: p95 measured at 431ms against a 300ms ceiling.\n\nROOT CAUSE\n- cli/internal/server/graphql/efficacy_sessions_test.go:160 `TestEfficacyRowsDateFilterAndPerfTargets` exercises the date-filtered efficacyRows resolver and asserts a p95 perf target; current p95 = 431ms against the 300ms ceiling, so the efficacyRows aggregation/date-filter path in internal/server/graphql has regressed.\n\nPROPOSED FIX\n- Profile the efficacyRows resolver and its date-filter aggregation; restore p95 under 300ms (e.g. push date filtering down to the scan, avoid recomputing aggregates per row, reuse warmed indexes).\n- Do not relax the perf assertion; the target is the contract.\n\nNON-SCOPE\n- Frontend e2e, spec-doc, and audit-event work (sibling/parent beads).\n- The server GetBeadSnapshot and internal/agent timeout regressions (sibling beads 16.3b / 16.3d).\n- New auth or role-based access control.",
+    "acceptance": "1. cli/internal/server/graphql/efficacy_sessions_test.go:160 `TestEfficacyRowsDateFilterAndPerfTargets` passes with efficacyRows p95 \u003c= 300ms.\n2. `cd cli \u0026\u0026 go test ./internal/server/graphql/...` is green.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-84d6da52",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "decomposed",
+      "area:graphql",
+      "kind:perf"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T115752-52998c6b",
+    "prompt": ".ddx/executions/20260528T115752-52998c6b/prompt.md",
+    "manifest": ".ddx/executions/20260528T115752-52998c6b/manifest.json",
+    "result": ".ddx/executions/20260528T115752-52998c6b/result.json",
+    "checks": ".ddx/executions/20260528T115752-52998c6b/checks.json",
+    "usage": ".ddx/executions/20260528T115752-52998c6b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-a0ce517e-20260528T115752-52998c6b"
+  },
+  "prompt_sha": "3f712caada7893cb6821fc7ae16073e8c813a73ad8b1bd01d92b3646ebe2f66b"
+}

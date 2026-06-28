@@ -1,0 +1,18 @@
+---
+## Review: ddx-6d331bd3 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | RSCH-001..010 exist | APPROVE | docs/helix/00-discover/research/RSCH-001..010-*.md all present |
+| 2 | Each has correct depends_on REF-NNN | APPROVE | Frontmatter REF lists match mapping (e.g., RSCH-009 → REF-026/011/012/010 at lines 6-9) |
+| 3 | Each is 300-500 words | APPROVE | wc -w: 418–496 words per file |
+| 4 | `ls ... \| wc -l` returns 10 | APPROVE | Glob returns exactly 10 files |
+| 5 | No broken depends_on edges | APPROVE | All cited REF-NNN match the mapping in the bead description |
+
+### Summary
+
+All ten RSCH artifacts are present, sized within the 300–500 word target, and carry frontmatter `depends_on` edges matching the prescribed REF mapping. Implementation cleanly satisfies every acceptance criterion.

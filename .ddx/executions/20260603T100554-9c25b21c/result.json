@@ -1,0 +1,43 @@
+{
+  "bead_id": "ddx-7043796a",
+  "attempt_id": "20260603T100554-9c25b21c",
+  "base_rev": "527b4aa27db2ad7486e060e60a2429c3f0d419b4",
+  "result_rev": "7cd4e23c2d6f90d07ae1465db90a4dd9e432230f",
+  "implementation_rev": "7cd4e23c2d6f90d07ae1465db90a4dd9e432230f",
+  "landed_rev": "7cd4e23c2d6f90d07ae1465db90a4dd9e432230f",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260603T100554-9c25b21c/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260603T100554-9c25b21c",
+      "result_rev": "7cd4e23c2d6f90d07ae1465db90a4dd9e432230f",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-25adf61c",
+  "duration_ms": 797684,
+  "tokens": 46787,
+  "cost_usd": 1.9993344999999996,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260603T100554-9c25b21c",
+  "prompt_file": ".ddx/executions/20260603T100554-9c25b21c/prompt.md",
+  "manifest_file": ".ddx/executions/20260603T100554-9c25b21c/manifest.json",
+  "result_file": ".ddx/executions/20260603T100554-9c25b21c/result.json",
+  "usage_file": ".ddx/executions/20260603T100554-9c25b21c/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-03T10:06:03.099679423Z",
+  "finished_at": "2026-06-03T10:19:20.784439753Z"
+}

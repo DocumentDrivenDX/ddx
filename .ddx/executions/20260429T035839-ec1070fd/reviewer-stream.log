@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "drain_regression_test.go reproduces the 4-endpoint + gemini/minimax overrides config with empty spec, asserts ≤1 executor invocation (vs historical 19), handles gemini-binary by stubbing executor at loop boundary (documented), and runs in default go test ./....",
+  "findings": [
+    { "severity": "info", "summary": "Test stubs executor at the loop boundary instead of using a real harness binary; rationale documented in the file header. This is a sound choice — guards the dispatch/loop regression rather than the harness runner.", "location": "cli/internal/agent/drain_regression_test.go:38" },
+    { "severity": "info", "summary": "Belt-and-braces assertions on ResolveProfileLadder/ResolveTierModelRef call counters add useful future-proofing beyond the literal AC.", "location": "cli/internal/agent/drain_regression_test.go:152" }
+  ]
+}
+```

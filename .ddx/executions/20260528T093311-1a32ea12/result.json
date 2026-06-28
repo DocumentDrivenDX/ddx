@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-b4edab35",
+  "attempt_id": "20260528T093311-1a32ea12",
+  "base_rev": "74cda5d3bf1b452d3bc1a2ba989651fc5b9812dd",
+  "result_rev": "74cda5d3bf1b452d3bc1a2ba989651fc5b9812dd",
+  "outcome": "task_no_changes",
+  "status": "no_changes",
+  "detail": "no_changes",
+  "no_changes_rationale": "verification_command: cd /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b4edab35-20260528T093311-1a32ea12/cli \u0026\u0026 go test ./cmd/... -run \"TestBeadReview\" -timeout=30s \u0026\u0026 go test ./internal/agent/... -run \"TestBeadReviewProse|TestRunPostMergeReviewIgnoresProseFindingsForClosure\" -timeout=30s",
+  "session_id": "eb-64b64e03",
+  "duration_ms": 1803287,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "failure_mode": "no_changes",
+  "execution_dir": ".ddx/executions/20260528T093311-1a32ea12",
+  "prompt_file": ".ddx/executions/20260528T093311-1a32ea12/prompt.md",
+  "manifest_file": ".ddx/executions/20260528T093311-1a32ea12/manifest.json",
+  "result_file": ".ddx/executions/20260528T093311-1a32ea12/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-28T09:33:22.646898097Z",
+  "finished_at": "2026-05-28T10:03:25.934482713Z"
+}

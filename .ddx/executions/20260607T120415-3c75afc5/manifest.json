@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260607T120415-3c75afc5",
+  "bead_id": "ddx-bb803b68",
+  "base_rev": "a2a58589f58e6989ac06afc7985f91fd9aefbe1e",
+  "created_at": "2026-06-07T12:04:52.514019462Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-bb803b68",
+    "title": "test-scrub: build the e2e/probe CLI binary once via TestMain+sync.Once",
+    "description": "PROBLEM/ROOT CAUSE: cmd/e2e_test.go:25,183,239 (three tests) + cmd/e2e_smoke_test.go:29 each run `go build` of the full CLI; internal/agent/workerprobe/probe_integration_test.go:44 builds again. Each full build is several seconds, repeated.\n\nPROPOSED FIX: In cmd, add a package-level sync.Once-guarded builder (or TestMain) that builds the ddx binary once to a temp path and exposes it; replace the per-test `go build` calls with the shared path. Same for workerprobe.\n\nNON-SCOPE: same binary, just built once. Behavior/coverage preserved.",
+    "acceptance": "1. `go build` of the CLI is invoked at most once per package run (assert via a build-count counter behind the Once, or by elapsed: the 2nd/3rd e2e tests each \u003c2s).\n2. TestE2E_BasicWorkflow, TestE2E_TemplateWithVariables, TestE2E_UpdateWorkflow, TestE2ESmokeJourney still pass against the shared binary — coverage preserved.\n3. cd cli \u0026\u0026 go test -run 'TestE2E' ./cmd/ green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "kind:test",
+      "test-suite-scrub",
+      "throughput",
+      "phase:iterate"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-07T12:04:10.808352719Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260607T114538-2769e0d3\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":4215434,\"output_tokens\":29582,\"total_tokens\":4245016,\"cost_usd\":0,\"duration_ms\":768886,\"exit_code\":0}",
+          "created_at": "2026-06-07T12:04:10.903006749Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4245016 model=gpt-5.4-mini"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T120415-3c75afc5",
+    "prompt": ".ddx/executions/20260607T120415-3c75afc5/prompt.md",
+    "manifest": ".ddx/executions/20260607T120415-3c75afc5/manifest.json",
+    "result": ".ddx/executions/20260607T120415-3c75afc5/result.json",
+    "checks": ".ddx/executions/20260607T120415-3c75afc5/checks.json",
+    "usage": ".ddx/executions/20260607T120415-3c75afc5/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-bb803b68-20260607T120415-3c75afc5"
+  },
+  "prompt_sha": "f26e113e905630faa48830e26f68ddd1282dcb7070985a628aa3530a34e5e9dc"
+}

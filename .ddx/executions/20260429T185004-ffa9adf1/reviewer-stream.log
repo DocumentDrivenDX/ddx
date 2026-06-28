@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Bead has no explicit acceptance criteria. Prior commit ebeb2464 produced the audit doc; this diff adds execution evidence (manifest + result) for the successful run.",
+  "findings": [
+    { "severity": "info", "summary": "Diff contains only execution metadata; the actual audit deliverable was committed in ebeb2464 referenced by result_rev.", "location": ".ddx/executions/20260429T185004-ffa9adf1/result.json" }
+  ]
+}
+```

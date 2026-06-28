@@ -1,0 +1,2 @@
+status: blocked
+reason: `cd cli && go test ./...` fails in the existing tree before any bead-scope change. The failures are broad and concentrated in `cli/cmd` (for example `TestAcRun_*`, `TestBeadArchiveSizeTrigger`, `TestWorkPlan_*`, and `TestWork_*`), so they appear unrelated to the parent-ancestor decomposition regression this bead targets. `lefthook run pre-commit` was not run because the required test gate is already red.

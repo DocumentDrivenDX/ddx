@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata. It does not modify FEAT-006, FEAT-008, FEAT-022, the new TD, or AGENTS.md, and it provides no clean doc-audit evidence, so the acceptance criteria are not met.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No spec or AGENTS.md files were changed. The patch only adds execution artifacts, so AC1-AC3 are not implemented in this diff.",
+      "location": ".ddx/executions/20260507T010531-d0f4bf60/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence of a clean `ddx doc audit`; prior execution notes in the manifest state the audit remained blocked by unrelated duplicate-id and missing-dependency issues.",
+      "location": ".ddx/executions/20260507T010531-d0f4bf60/manifest.json:1"
+    }
+  ]
+}
+```

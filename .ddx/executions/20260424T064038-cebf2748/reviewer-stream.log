@@ -1,0 +1,18 @@
+---
+## Review: ddx-2513f08c iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Overview entry at top of sidebar, routes to project home | APPROVE | cli/internal/server/frontend/src/lib/components/NavShell.svelte:30 — prepended `{ page: '', label: 'Overview', ... }`; href derivation at :47 emits base path when page is empty |
+| 2 | Entry is active when URL matches project home exactly | APPROVE | NavShell.svelte:115 — exact match branch `pathname === href || pathname === href + '/'` used when `exact` flag set |
+| 3 | DDx brand is an anchor → project home if selected, else `/` | APPROVE | NavShell.svelte:54-58 `brandHref` derived; :73 replaces `<span>` with `<a href={brandHref}>` |
+| 4 | Playwright covers Overview click from /beads and brand click from /sessions | APPROVE | e2e/navigation.spec.ts:176-193 — TC-008 covers both flows, asserts URL and queue summary |
+| 5 | No regression to existing sidebar entries | APPROVE | NavShell.svelte:31-40 — original entries preserved; non-exact entries keep `startsWith` active logic |
+
+### Summary
+
+Clean, minimal implementation matching the proposed direction. Sidebar gets an Overview entry with correct exact-match active styling, brand becomes a context-aware link, and a dedicated Playwright test covers both navigation paths.

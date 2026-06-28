@@ -1,0 +1,21 @@
+The diff confirms both target files were restyled with token classes (mono-code IDs, status-* tokens, bg-surface, border-line, label-caps, text-fg-ink/muted). No formal AC list, so I evaluate against the description bullets.
+
+---
+## Review: ddx-312503d6 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Apply tokens to workers/+layout.svelte | APPROVE | workers/+layout.svelte:192-200 — stateClass switched to text-status-running/open/failed and text-fg-muted; surrounding panels use bg-bg-surface + border-border-line |
+| 2 | Worker list: mono-code IDs | APPROVE | workers/+layout.svelte:~385,397 — `font-mono-code text-mono-code` applied to ID and currentBead cells |
+| 3 | Status indicators using CSS vars | APPROVE | workers/+layout.svelte:194-202 — text-status-running / text-status-open / text-status-failed |
+| 4 | bg-surface cards | APPROVE | workers/+layout.svelte:213,284,350 — bg-bg-surface replaces bg-blue-50/bg-gray-50/bg-red-50 on panels, forms, alerts |
+| 5 | Detail view: label-caps field headers | APPROVE | workers/+layout.svelte form labels and table headers use `text-label-caps font-label-caps uppercase tracking-wide`; commit message confirms same applied to [workerId]/+page.svelte (148 lines changed) |
+| 6 | border-line sections | APPROVE | workers/+layout.svelte:213,284,353 — border-border-line on panels/forms/alerts/table wrapper |
+
+### Summary
+
+Both target files were restyled to the design-token system, replacing hard-coded Tailwind palette colors (blue/gray/red/green) with semantic tokens (bg-surface, border-line, text-status-*, text-fg-ink/muted, label-caps, mono-code). Worker IDs are now monospace tokens, status text uses CSS-var-driven status colors, and field headers use the label-caps treatment. Implementation matches the description fully.

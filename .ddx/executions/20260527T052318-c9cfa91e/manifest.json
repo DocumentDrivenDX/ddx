@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260527T052318-c9cfa91e",
+  "bead_id": "ddx-d514ed6a",
+  "base_rev": "02fd28a05cc042cba93589fc8f50ac60755773c1",
+  "created_at": "2026-05-27T05:23:25.56147123Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d514ed6a",
+    "title": "ddx work --watch: warn on low claim-success-rate over a rolling window",
+    "description": "PROBLEM\nWhen `ddx work --watch` cannot make progress on a full queue, it looks healthy from the outside — it emits loop.idle every idle-interval and keeps polling — but claims nothing. In the parent incident (ddx-f9ddaa68), 23 ready beads sat unclaimed for 30+ minutes while the worker logged loop.idle on a ~50s cadence. The operator had no top-level signal that claim throughput had collapsed; silent idle on a full queue is a stuck state masquerading as healthy.\n\nROOT CAUSE\nThe drain loop tracks consecutive idle cycles on an identical pre-claim blocker (preClaimIdleEscalationThreshold=5, cli/internal/agent/execute_bead_loop.go:3314, escalated at cli/internal/agent/execute_bead_loop.go:1338-1349, ddx-df77e668) but has no notion of claim SUCCESS RATE across a rolling window of attempts. A loop that claims beads which then fail (no_changes/error), or that skips for varied reasons that never repeat the same blocker detail, never trips the same-blocker idle escalation and produces no operator-visible throughput warning. The `ddx work` flag surface (cli/cmd/work.go:88-89) exposes only --watch and --idle-interval. Post-hoc analysis exists (cli/cmd/work_analyze.go) but computes reviewer FP/FN rates from logs, not a live claim-success rate.\n\nPROPOSED FIX\n1. Track a rolling window of the last N claim attempts (default 10) in the drain loop (cli/internal/agent/execute_bead_loop.go), recording for each whether it produced a successful claim+attempt vs a skip/claim-failure.\n2. When the success rate over a full window drops below a configurable threshold (default 0.0, i.e. a full window of non-successes), emit one operator-visible stderr warning to runtime.Log and one structured loop event (reusing the operator-attention/loop event path next to the idle escalation at cli/internal/agent/execute_bead_loop.go:1338-1349) per below-threshold crossing — not every idle cycle. A subsequent success clears the warned state.\n3. Add flags --claim-rate-window (default 10) and --claim-rate-threshold (default 0.0) to cli/cmd/work.go, threaded into the loop runtime.\n\nNON-SCOPE\nDo NOT remove or alter the existing same-blocker idle escalation (preClaimIdleEscalationThreshold, ddx-df77e668) — this is a complementary signal, not a replacement. Do NOT add a persisted metrics store or GraphQL field; stderr plus the existing loop EventSink is sufficient. Do NOT touch the readiness schema gate (sibling child). Governing artifacts: FEAT-010 / ADR-023. Dependencies: none.\n\nAC\n1. The drain loop maintains a rolling window (size configurable, default 10) of recent claim-attempt outcomes classified as success vs non-success.\n2. When success rate over a full window is below the configured threshold (default 0.0), the loop emits exactly one operator-visible stderr warning and one structured loop event per below-threshold crossing; it does not re-warn every idle cycle.\n3. `ddx work` exposes --claim-rate-window and --claim-rate-threshold flags (cli/cmd/work.go) defaulting to 10 and 0.0.\n4. TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold injects non-successful claim attempts filling the window and asserts the warning + event fire once; a subsequent success resets the warned state.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... green\n6. lefthook run pre-commit passes",
+    "acceptance": "1. The drain loop maintains a rolling window (size configurable, default 10) of recent claim-attempt outcomes classified as success vs non-success.\n2. When success rate over a full window is below the configured threshold (default 0.0), the loop emits exactly one operator-visible stderr warning and one structured loop event per below-threshold crossing; it does not re-warn every idle cycle.\n3. `ddx work` exposes --claim-rate-window and --claim-rate-threshold flags (cli/cmd/work.go) defaulting to 10 and 0.0.\n4. TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold injects non-successful claim attempts filling the window and asserts the warning + event fire once; a subsequent success resets the warned state.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... green\n6. lefthook run pre-commit passes",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T052318-c9cfa91e",
+    "prompt": ".ddx/executions/20260527T052318-c9cfa91e/prompt.md",
+    "manifest": ".ddx/executions/20260527T052318-c9cfa91e/manifest.json",
+    "result": ".ddx/executions/20260527T052318-c9cfa91e/result.json",
+    "checks": ".ddx/executions/20260527T052318-c9cfa91e/checks.json",
+    "usage": ".ddx/executions/20260527T052318-c9cfa91e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d514ed6a-20260527T052318-c9cfa91e"
+  },
+  "prompt_sha": "359b11754aaab158d49b51e97fcf15365be4b344b14e48bba9685d6c30f3e0b9"
+}

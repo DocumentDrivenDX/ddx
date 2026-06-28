@@ -1,0 +1,25 @@
+---
+## Review: ddx-b6cf025c iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Nav indicator visible everywhere | APPROVE | `cli/internal/server/frontend/src/lib/components/NavShell.svelte:21,68` mounts `DrainIndicator`; component at `DrainIndicator.svelte:76-91` renders idle/active states with link to workers route |
+| 2 | Live updates (≤2s state, ≤5s ready) | REQUEST_CHANGES | `DrainIndicator.svelte:69` uses a 3s `setInterval`; AC explicitly asks the indicator to be "backed by the existing worker-progress subscription" — not wired, and 3s poll can exceed the 2s worker-state bound |
+| 3 | Summary query (cheap) | APPROVE | `resolver_feat008.go:290-319` adds `QueueAndWorkersSummary`, uses `store.Ready()` (no N·M scan), returns zeros on unknown project; schema at `schema.graphql:1591-1606,2366-2373` |
+| 4 | Overview count control (+/- buttons) | APPROVE | `workers/+layout.svelte:209-252` drain-count panel with count, `+ Add worker`, `− Remove worker` (confirm-gated via `window.confirm` at line 163), help text at 226 |
+| 5 | default_spec + max_count safety rail | APPROVE | `config/types.go:21-34` types; `graphql_adapters.go:84-108,149-181` honours default_spec and enforces max_count server-side; `+layout.svelte:65-72` disables add button with `at workers.max_count limit` tooltip; resolver surfaces cap at `resolver_feat008.go:314-318`; tests in `workers_config_test.go` and `queue_and_workers_summary_test.go` |
+| 6 | Playwright add/remove/transition flow | APPROVE | `e2e/workers.spec.ts:660-686` asserts "Queue: 3 ready" → "1 worker · 3 ready" → "2 workers · 3 ready" → back to "1 worker · 3 ready" after remove, then navigates to `/beads` at 689 to assert indicator persistence; max_count test at 693-737 |
+| 7 | No regressions | APPROVE | Existing Start-worker form (`+layout.svelte:282-347`) and per-row Stop (`:411-418`) preserved; `workerProgress` subscription intact at `:75-91` |
+| 8 | Cross-references respected | APPROVE | Uses existing `GetWorkersGraphQL`/`store.Ready()` paths; no re-implementation of per-worker lifecycle or `workersByProject` filter |
+
+### Summary
+
+Implementation is substantively complete and addresses the prior iteration's review findings: max_count is now plumbed through GraphQL and wired to the `+ Add worker` `disabled`/`title` bindings, and the e2e asserts the full indicator transition sequence. The one gap is AC #2: the DrainIndicator polls on a 3s interval instead of subscribing to `workerProgress`, which can miss the "≤2s on worker start/finish" bound and ignores the AC's explicit "backed by the existing worker-progress subscription" requirement.
+
+### Findings
+
+- **`DrainIndicator.svelte:75-85`** — poll-only refresh via 3s `setInterval`. AC #2 requires subscription-driven updates (`subscribeWorkerProgress`) so worker-state changes reflect within 2s. Add a `workerProgress` subscription (filtered to the current project) that triggers `refresh(projectId)` on every event, keeping the 3s poll only as a backstop for ready-bead count changes.

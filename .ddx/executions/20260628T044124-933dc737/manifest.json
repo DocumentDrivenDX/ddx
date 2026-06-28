@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260628T044124-933dc737",
+  "bead_id": "ddx-0f29e87a",
+  "base_rev": "3d0e3a8616b6fca915fe00fb80d47e0792affaf4",
+  "created_at": "2026-06-28T04:41:43.513589555Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0f29e87a",
+    "title": "cleanup: reap only stale DDx-owned attempt process groups",
+    "description": "PROBLEM\n`ddx cleanup --apply` can delete stale DDx execution files, but it cannot terminate stale DDx-owned attempt-descendant process groups that are provably orphaned. Heavy leftover processes can continue burning CPU or holding ports after their original attempt is gone.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execution_cleanup.go:230-527` applies file cleanup for stale temp dirs, worktrees, scratch roots, stale run-state files, evidence dirs, logs, worker dirs, and refs, but contains no safe process-group termination path.\n- `cli/internal/agent/execution_cleanup.go:110-138` has no process reaping counts or warnings in `ExecutionCleanupSummary`, so apply mode cannot report terminated, preserved, blocked, or unsafe process groups.\n- `cli/internal/agent/orphan_harness_reaper.go:82-100` and `cli/internal/agent/orphan_harness_reaper.go:155-168` intentionally gate startup harness reaping on top-level harness names and dead bead lease owners; that does not cover descendant process groups whose harness root has already exited.\n- `cli/internal/agent/executor_unix.go:10-29` sets process group and parent-death attributes for normal harness children, which cleanup can use only when stale ownership and liveness evidence prove the group is DDx-owned and safe to reap.\n\nPROPOSED FIX\nExtend execution cleanup apply mode with an injectable process-group killer and conservative stale ownership checks. Apply may terminate only process groups associated with the current project's DDx execution root where run-state cleanup liveness is expired or missing, the recorded owner PID is gone, the worktree is under the current project execution root, and no live worker sidecar or active registered worktree owns it. Preserve live run-state, live worker sidecar, active registered worktree, other-project processes, and any uncertain candidate. Prefer graceful terminate followed by bounded kill where feasible. Surface blocked warnings instead of silently deleting files when a process is detected but cannot be killed safely.\n\nIN-SCOPE FILES\n- `cli/internal/agent/execution_cleanup.go` and adjacent new platform-specific process cleanup files/tests.\n- `cli/internal/workerstatus/*` or `cli/internal/agent/orphan_harness_reaper*` only for reused process-scanning helpers, not broad rewrites.\n- `docs/helix/01-frame/features/FEAT-010-task-execution.md` and `docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md` only if this child changes the documented cleanup contract.\n\nNON-SCOPE\n- Do not edit Niflheim.\n- Do not duplicate `ddx-e0de6369`; that bead owns `.ddx/harness-sessions/` scratch ignore/prune behavior.\n- Do not duplicate `ddx-bbea954f`; that bead owns dirty timeout worktree edit preservation before cleanup deletion.\n- Do not replace the existing parent-death/process-group fixes from `ddx-0d7d5f0e`, `ddx-3113d524`, or `ddx-418c3849`.\n- Do not implement a general-purpose port scanner or host process manager. Port conflict recovery here comes only from safely reaping stale DDx-owned attempt process groups.\n- Do not kill processes outside the current project's DDx execution root, processes tied to live run-state/worker liveness, active registered worktrees, or non-DDx user workloads.\n\nGOVERNING ARTIFACTS\n- `spec:FEAT-010`\n- `spec:SD-025`\n\nPARENT AND DEPS\nParent: `ddx-3106674f` (multi-worker reliability and Niflheim local gates).\nDeps: none.",
+    "acceptance": "1. Add `TestExecutionCleanupManager_ApplyReapsOnlyStaleAttemptProcessGroups` using injected scanner/killer fakes where needed, proving `--apply` terminates only stale DDx-owned attempt process groups.\n2. Add `TestExecutionCleanupManager_ApplyPreservesLiveAndForeignProcessGroups` proving live run-state, live worker sidecar, active registered worktree, other-project processes, and uncertain candidates are preserved with operator-visible warnings when appropriate.\n3. Add `TestExecutionCleanupManager_ApplyTerminatesGracefullyThenBoundedKill` or an equivalent assertion proving the killer uses graceful terminate before bounded kill when a process group remains alive.\n4. Existing process-reaper tests remain green: `cd cli \u0026\u0026 go test ./internal/agent/... -run 'OrphanHarness|Executor|DockerCloneBackend_ProcessGroupCleanup' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'ExecutionCleanupManager_Apply.*Process|ProcessReap|AttemptDescendant|OrphanHarness|Executor|DockerCloneBackend_ProcessGroupCleanup' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "queue-rank": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260628T044124-933dc737",
+    "prompt": ".ddx/executions/20260628T044124-933dc737/prompt.md",
+    "manifest": ".ddx/executions/20260628T044124-933dc737/manifest.json",
+    "result": ".ddx/executions/20260628T044124-933dc737/result.json",
+    "checks": ".ddx/executions/20260628T044124-933dc737/checks.json",
+    "usage": ".ddx/executions/20260628T044124-933dc737/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-0f29e87a-20260628T044124-933dc737"
+  },
+  "prompt_sha": "1b9ec80613e66149252bc83024da8ffc65de982b6c3b91b67ac0ada3bdfd7fb0"
+}

@@ -1,0 +1,16 @@
+## Review: ddx-768cf4ab iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | FEAT-003 updated with new IA structure | APPROVE | docs/helix/01-frame/features/FEAT-003-website.md:73-85 — new IA tree block added |
+| 2 | Lists all new top-level concept pages | APPROVE | FEAT-003-website.md:38-40 — software-factory.md and run-architecture.md listed |
+| 3 | Notes principle taxonomy (10 domain pages) | APPROVE | FEAT-003-website.md:42-53 — 10 principles enumerated; deep pages at `/docs/principles/<slug>/` |
+| 4 | ddx doc audit passes on FEAT-003 | APPROVE | Implicit via successful execution result (status=success); structural sections (Overview/Requirements/IA) preserved |
+
+### Summary
+
+The FEAT-003 spec update cleanly captures the new IA: software-factory homepage sub-claim, `/why` with 10 principle summaries, `/docs/principles/<slug>/` deep pages, the two new concept pages, lineage/factory framing, Dun removal, and quorum de-emphasis. Content stance and IA tree make the deltas explicit and reviewable.

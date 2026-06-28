@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Both RunOptions composite literals removed; replaced with AgentRunRuntime threaded through new dispatchViaResolvedConfig seam. Build and agent tests pass per merge into main.",
+  "findings": [
+    {"severity": "warn", "summary": "dispatchReviewRun discards LoadAndResolve error; if config load fails, downstream rcfg accessors on a zero-value sealed ResolvedConfig will panic per SD-024 sentinel design. Consider propagating the error.", "location": "cli/internal/agent/execute_bead_review.go:694"}
+  ]
+}
+```

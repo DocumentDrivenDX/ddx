@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260608T130908-76812e43",
+  "bead_id": "ddx-01aa7b18",
+  "base_rev": "efe8b786661ebf62e397bcf7f0a03f1be0d7e1ca",
+  "created_at": "2026-06-08T13:09:20.268372638Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-01aa7b18",
+    "title": "agent: keep non-semantic failures from raising min power",
+    "description": "PROBLEM\nThe worker still treats non-semantic retry classes, including repeated pre-claim system-unready warnings, as if they were the same as acceptance failures. That can raise the requested min power or profile even though a stronger model cannot fix the underlying problem.\n\nROOT CAUSE\n`cli/internal/agent/failclass/failclass.go:103-142` already defines the normative boundary: only `OutcomeGenuineFailure` escalates, while dirty worktree, transport, quota, auth, setup, timeout, and merge-conflict outcomes do not. In the worker loop, however, the retry/escalation decision is not consistently reduced to that typed table before min-power/profile selection, so system warnings and structural failures can still drift into the escalation path.\n\nPROPOSED FIX\n- Wire the retry classifier into the worker path that chooses the next requested min power or profile.\n- Treat repeated pre-claim system-unready warnings as operator attention or same-tier retry, not escalation.\n- Keep decomposed-parent outcomes, land coordination failures, and dirty generated DDx evidence out of the min-power escalation path.\n- Allow only semantic acceptance/review failures to raise min power/profile.\n\nNON-SCOPE\n- Do not change review gating or land reconciliation mechanics in this child.\n- Do not alter the low-level failure-class enum unless the worker path needs the typed mapping.",
+    "acceptance": "1. `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile.\n2. Land coordination, repeated pre-claim system warnings, decomposed-parent outcomes, and dirty generated DDx evidence do not raise min power.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'RetryEscalation|Preclaim' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T130908-76812e43",
+    "prompt": ".ddx/executions/20260608T130908-76812e43/prompt.md",
+    "manifest": ".ddx/executions/20260608T130908-76812e43/manifest.json",
+    "result": ".ddx/executions/20260608T130908-76812e43/result.json",
+    "checks": ".ddx/executions/20260608T130908-76812e43/checks.json",
+    "usage": ".ddx/executions/20260608T130908-76812e43/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-01aa7b18-20260608T130908-76812e43"
+  },
+  "prompt_sha": "3c98e0aa0d8de83174378ef4d720344bc4743317781793f56503ad27eba487ae"
+}

@@ -1,0 +1,98 @@
+{
+  "attempt_id": "20260602T162512-3cc92020",
+  "bead_id": "ddx-6190edc6",
+  "base_rev": "a0d43339c77db774a88b9ce6ccf76c5bb866fa62",
+  "created_at": "2026-06-02T16:25:23.94194325Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6190edc6",
+    "title": "execute-bead: record fizeau-resolved route in liveness so the watchdog stops false-killing no-pin attempts (D1)",
+    "description": "PROBLEM\nIn the recommended \"let fizeau route\" mode (no --harness/--model/--profile pin), the worker's liveness record keeps harness/model/route EMPTY for the whole attempt: liveness.SetAttempt is called once pre-dispatch with the REQUESTED (empty) pins and never updated with the route fizeau resolves mid-stream. The progress watchdog (cli/internal/agent/work/watchdog.go:50 phaseEmpty) treats harness==\"\"\u0026\u0026model==\"\"\u0026\u0026route==\"\" as a wedge; at the 30-min Running budget it cancels the HEALTHY attempt, which trips the consecutive-wedge guard (threshold 2) and parks the bead to operator-attention. This is the dominant false-wedge (16 beads carry needs-human-reason=consecutive_wedge). fizeau v0.14.41 already fixed the routing-side codex false-reject; this is the ddx-side half.\n\nROOT CAUSE\ncli/internal/agent/execute_bead_loop.go:2440 calls liveness.SetAttempt(candidate.ID, provAttemptID, PhaseRunning, profile, harness, model, profile, 0) — the 4th arg (route) is \"profile\" (with no profile pin it is \"\"), harness/model are the empty requested pins. fizeau emits the resolved route in-stream as agentlib.ServiceRoutingDecisionData (Harness/Provider/Model), decoded in drainServiceEventsWithRenderer at cli/internal/agent/agent_runner_service.go:257 (no-watchdog fast path) AND :388 (drain-watchdog path), but nothing propagates it back to the loop's liveness reporter (set up at execute_bead_loop.go:1116).\n\nPROPOSED FIX (the watchdog is already correct in spirit — it resets when a non-empty route field appears; only the route is never recorded)\n1. Add to cli/internal/agent/work/liveness.go: func (r *SidecarLivenessReporter) UpdateRoute(beadID, harness, model, route string), guarded on r.rec.CurrentBead==beadID, overwriting only non-empty fields, same mutex discipline as SetAttempt.\n2. Add field to AgentRunRuntime (cli/internal/agent/types.go): OnRouteResolved func(harness, provider, model string).\n3. In drainServiceEventsWithRenderer (agent_runner_service.go), add an onRouteResolved callback param, invoke it in BOTH \"case decoded.RoutingDecision != nil\" branches (:257 and :388) with decoded.RoutingDecision.Harness/Provider/Model. Update both callers: service_run.go:294 passes runtime.OnRouteResolved; agent_runner_service.go:150 (runAgentViaService / ddx run) passes nil.\n4. Thread the callback from the loop to where AgentRunRuntime is built (execute_bead.go:1666 runRuntime): pass OnRouteResolved through agenttry.AttemptOpts -\u003e Executor -\u003e execute_bead. In the loop near execute_bead_loop.go:2440 set it to func(h,p,m string){ liveness.UpdateRoute(candidate.ID, h, m, p) }. Also fix the SetAttempt 4th arg so route is not \"profile\".\n5. Do NOT change phaseEmpty or LastActivityAt logic: OnTick advances LastActivityAt unconditionally (wall-clock, liveness.go:87-97); resetting the watchdog on heartbeat-advance would DISABLE it (reintroduces the 80-min wedge). The fix is recording the route, nothing else.\n\nNON-SCOPE: D1b/D1c/D1d/D2/D3 are separate beads. Do not weaken the watchdog or consecutive-wedge guard.\n\nACCEPTANCE\n1. TestSidecarLiveness_UpdateRoute (cli/internal/agent/work/liveness_test.go): after SetAttempt(bead,...,route=\"\",harness=\"\",model=\"\"), UpdateRoute(bead,\"fiz\",\"sonnet-4.6\",\"anthropic\") makes Snapshot() report non-empty Harness/Model/Route; CurrentBead mismatch is a no-op; empty args do not blank existing values.\n2. Test asserts OnRouteResolved fires once with the resolved triple in BOTH drainServiceEventsWithRenderer branches (no-watchdog + drain-watchdog) before Final — stub a ServiceEvent channel emitting RoutingDecision then Final.\n3. Watchdog test: an attempt with populated route fields past the 30-min Running budget is NOT flagged wedged (progressWatchdog.observe returns fired=false); the existing all-empty frozen case still fires.\n4. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/agent/work/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "spec:FEAT-004",
+      "fail-open-contract"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"executable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"830fee434f7ba41c539615d5fc87f225ddaa78516f81a2e7158392914fdda398\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"830fee434f7ba41c539615d5fc87f225ddaa78516f81a2e7158392914fdda398\"}",
+          "created_at": "2026-06-02T15:40:13.619257237Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260602T154013-18b54dd7\",\"bead_id\":\"ddx-6190edc6\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-06-02T16:10:43Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-06-02T16:11:13.740784926Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-02T16:14:09.394594417Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260602T154218-e7375718/0\",\"cycle_index\":0,\"attempt_id\":\"20260602T154218-e7375718\",\"base_rev\":\"b216ad239d2d31188ab614a382670ec894ef889d\",\"result_rev\":\"9050ca219bc7c5e3a6ad40925716257143005f44\"}",
+          "created_at": "2026-06-02T16:14:09.545726353Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "erik",
+          "body": "name=production-reachability\nstatus=error\nmessage=check \"production-reachability\" failed to start: context canceled",
+          "created_at": "2026-06-02T16:14:12.549652841Z",
+          "kind": "checks-blocked",
+          "source": "ddx work",
+          "summary": "pre-merge check \"production-reachability\" returned error"
+        },
+        {
+          "actor": "erik",
+          "body": "check_name=production-reachability\nstatus=error\nexit_code=-1\nattempt_id=20260602T154218-e7375718\nbase_rev=b216ad239d2d31188ab614a382670ec894ef889d\nresult_rev=9050ca219bc7c5e3a6ad40925716257143005f44\nevidence_dir=/Users/erik/Projects/ddx/.ddx/executions/20260602T154218-e7375718/checks\nmessage=check \"production-reachability\" failed to start: context canceled\noutput=check \"production-reachability\" failed to start: context canceled",
+          "created_at": "2026-06-02T16:14:12.549652841Z",
+          "kind": "pre_merge_check_failed",
+          "source": "ddx work",
+          "summary": "pre-merge checks blocked check=production-reachability status=error"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-02T16:14:43.759834248Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        }
+      ],
+      "work-consecutive-wedges": {
+        "at": "2026-06-02T16:11:13Z",
+        "count": 1,
+        "last_reason": "progress_watchdog"
+      }
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260602T162512-3cc92020",
+    "prompt": ".ddx/executions/20260602T162512-3cc92020/prompt.md",
+    "manifest": ".ddx/executions/20260602T162512-3cc92020/manifest.json",
+    "result": ".ddx/executions/20260602T162512-3cc92020/result.json",
+    "checks": ".ddx/executions/20260602T162512-3cc92020/checks.json",
+    "usage": ".ddx/executions/20260602T162512-3cc92020/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6190edc6-20260602T162512-3cc92020"
+  },
+  "prompt_sha": "6bdbdddca54c3f249cca63c44e5c01b0d2ffc3392980ee086baa104964cfe851"
+}

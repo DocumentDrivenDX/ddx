@@ -1,0 +1,17 @@
+---
+## Review: ddx-9815ef2f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:2844–2933 — both fakes removed from this test |
+| 2 | Dispatches through real git + script harness | APPROVE | agent_execute_bead_test.go:2847–2887 — inline real-git `runGit` w/ GIT_* scrub; `--harness script` with directive file; `AgentRunnerOverride = agent.NewRunner(agent.Config{})` |
+| 3 | Test passes `go test -run ^TestExecuteBeadPromptIsXMLTagged$` | APPROVE | .ddx/executions/20260424T061930-57121602/result.json — outcome `task_succeeded`, exit 0 |
+| 4 | No other test in file modified | APPROVE | git show 041fae82 — single hunk bounded to the target test body; 58+/23- in one file |
+
+### Summary
+
+Clean, scope-respecting migration. The fakes are gone, `baseSHA` now comes from real HEAD rather than the canned `aaaa1111cafe`, and the prompt assertions run against the actual synthesized prompt file produced by the real ExecuteBead pipeline. The test uses an inline `runGit` helper with GIT_* scrubbed rather than `newScriptHarnessRepo`/`runGitInteg`, which is acceptable under AC2's "or equivalent real-git harness" and keeps blast radius at a single test.

@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution artifact and contains no code or test changes, so none of the backend-matrix acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "The only changed file is an execution result artifact; there are no changes to the bead package test helpers or chaos tests, so AC1-AC4 are not implemented or reviewable from this diff.",
+      "location": ".ddx/executions/20260506T193549-dfafc1a1/result.json:1"
+    }
+  ]
+}
+```

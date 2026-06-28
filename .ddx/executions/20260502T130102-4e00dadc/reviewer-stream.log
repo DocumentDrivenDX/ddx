@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "FEAT-008 spec gains a single AC line covering WCAG AA >=3:1 non-text contrast for graph edges and arrowheads in both themes; only that file was modified.",
+  "findings": []
+}
+```

@@ -1,0 +1,26 @@
+---
+## Review: ddx-7de0ce80 iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Per-card in-flight tracking | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:56` — uses per-plugin maps/sets and disables busy buttons |
+| 2 | Worker-driven refresh | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:225` — subscribes to worker progress and refreshes on terminal phase |
+| 3 | Fallback polling | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:217` — starts delayed polling; `plugins.spec.ts:340` covers dropout |
+| 4 | In-flight visual state | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:376` — spinner/status text; buttons disabled at lines 457 and 475 |
+| 5 | Failure surfacing | REQUEST_CHANGES | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:247` — failure path refreshes plugins before marking failure, so it does not preserve the pre-dispatch status/version |
+| 6 | Concurrent dispatch | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:317` — renders multiple worker links; `plugins.spec.ts:372` asserts two concurrent workers |
+| 7 | No extra refetch overhead | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:184` — refresh uses `PLUGINS_LIST_QUERY` only |
+| 8 | Playwright e2e | APPROVE | `cli/internal/server/frontend/e2e/plugins.spec.ts:284` — success case; `plugins.spec.ts:314` — failure case |
+| 9 | No regressions | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:294` — ConfirmDialog install path uses same `dispatchPlugin` tracking |
+
+### Summary
+
+Most acceptance criteria are implemented, including per-card worker tracking, worker subscriptions, fallback polling, concurrent workers, and Playwright coverage. The remaining issue is the failure path: it refreshes from the backend before surfacing failure, which can violate the requirement that the card keep its pre-dispatch status/version on worker failure.
+
+### Findings
+
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, `handleWorkerTerminal`: on failure phases, the function calls `refreshPlugins()` before `clearInFlight()` and `workerFailures.set(...)`. Preserve the stored `dispatchSnapshots` state for that plugin on failure, or skip/apply refresh only for success phases, so a failed worker cannot make the card appear successfully updated.

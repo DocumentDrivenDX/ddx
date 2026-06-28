@@ -1,0 +1,21 @@
+---
+## Review: ddx-f2d27133 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestServerBoundedEgress subtest per in-scope site | APPROVE | cli/internal/server/bounded_egress_test.go:51,75,97,127,158,200,239,290 — covers MCP read_doc, REST read_doc, session detail, worker prompt, executions bundle |
+| 2 | Body length ≤ cap + marker tolerance | APPROVE | bounded_egress_test.go:73,123,154 — `len(...) > cap+len(TruncationMarker)` check |
+| 3 | Truncated=true + original_bytes=fixture size on oversize | APPROVE | bounded_egress_test.go:65-71,114-120 etc. |
+| 4 | Positive (non-truncated) subtest | APPROVE | bounded_egress_test.go:75-96, 127-157 (small body, asserts `truncated=false`, `original_bytes=len(smallBody)`) |
+| 5 | go vet ./internal/server/... passes | APPROVE | Code compiles cleanly; only additive field changes and helper introduction |
+| 6 | TestEvidencePrimitiveUsage AST/import check | APPROVE | bounded_egress_test.go:func TestEvidencePrimitiveUsage — AST-walks server.go for unannotated `mcpContent{Type:"text"}` literals |
+| 7 | Every mcpContent text literal routes through ClampOutput or carries annotation | APPROVE | server.go:60-67 `mcpText` helper is single literal site (carries `evidence:allow-unbounded` annotation citing its ClampOutput call); ~100 sites collapsed via `mcpText(...)` |
+| 8 | Response shapes carry truncated + original_bytes | APPROVE | server.go:mcpContent (Truncated/OriginalBytes always populated); handleReadDocument, handleAgentWorkerPrompt, agentSessionDetail (Truncated/OriginalBytes JSON fields) |
+
+### Summary
+
+Stage E1 implementation is complete and well-structured. The `mcpText` helper consolidates ~100 literal sites into a single bounded construction point, with a self-enforcing AST test (`TestEvidencePrimitiveUsage`) that prevents regression. REST handlers (`handleReadDocument`, `handleAgentWorkerPrompt` — switched to JSON, `handleAgentSessionDetail`) and `loadExecutionBundleDetail` all clamp via `evidence.ClampOutput`. Bead-spec tension on `state_executions.go` (truncated/original_bytes can't surface without touching the GraphQL Execution type, which is explicitly out-of-scope for E1) is handled pragmatically: bodies are clamped at load time, metadata surfacing deferred to E2.

@@ -1,0 +1,22 @@
+---
+## Review: ddx-edbfa046 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `type ExecuteBeadLoopOptions` removed | APPROVE | [cli/internal/agent/execute_bead_loop.go](/Users/erik/Projects/ddx/cli/internal/agent/execute_bead_loop.go:18) defines `ExecuteBeadLoopRuntime`, and `git grep -n "type ExecuteBeadLoopOptions " 73d201f628a7416dc2e5c69f0da7e5d1984ff331 -- cli` returned 0 matches. |
+| 2 | all `ExecuteBeadLoopOptions` refs removed | APPROVE | [cli/cmd/agent_cmd.go](/Users/erik/Projects/ddx/cli/cmd/agent_cmd.go:2042) and [cli/internal/server/workers.go](/Users/erik/Projects/ddx/cli/internal/server/workers.go:900) now call `worker.Run(..., rcfg, agent.ExecuteBeadLoopRuntime{...})`, and `git grep -n "ExecuteBeadLoopOptions" 73d201f628a7416dc2e5c69f0da7e5d1984ff331 -- cli` returned 0 matches. |
+| 3 | `cd cli && go build ./...` passes | APPROVE | `cd cli && go build ./...` completed successfully when rerun with writable cache `GOCACHE=/tmp/ddx-gocache-go-build`; the renamed entrypoint is present at [cli/internal/agent/execute_bead_loop.go](/Users/erik/Projects/ddx/cli/internal/agent/execute_bead_loop.go:229). |
+| 4 | `cd cli && go test ./...` passes | BLOCK | Local rerun did not pass in this harness: [cli/cmd/agent_check_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_check_test.go:12) panicked via `httptest.NewServer`, and [cli/cmd/agent_providers_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_providers_test.go:34) attempts network-dependent setup. The diff/evidence provided does not include a check artifact proving `go test ./...` passed on the implementation commit. |
+
+### Summary
+
+The code cleanup itself is in place: the legacy struct is gone, the loop method has been renamed to `Run`, and call sites were updated to the `ResolvedConfig + ExecuteBeadLoopRuntime` signature. The only blocker is the final AC: there is no durable evidence in the supplied diff that `cd cli && go test ./...` passed, and a local rerun in this harness does not pass.
+
+### Findings
+
+- BLOCK: The acceptance item `cd cli && go test ./... passes` is not substantiated by the supplied execution evidence. The execution directory for attempt `20260425T220004-1249030c` does not contain a `checks.json` or similar artifact proving test success on commit `73d201f628a7416dc2e5c69f0da7e5d1984ff331`.
+- BLOCK: A local rerun of `cd cli && go test ./...` does not pass in this environment, failing in [cli/cmd/agent_check_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_check_test.go:12) / [cli/cmd/agent_providers_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_providers_test.go:34). If the intended AC is “tests pass in a normal developer environment,” that needs to be attached as explicit evidence to the bead.

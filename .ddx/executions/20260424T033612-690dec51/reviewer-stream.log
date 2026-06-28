@@ -1,0 +1,23 @@
+---
+## Review: ddx-3984a48e iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No bare exec.Command("git") in cli/cmd/ (except tests) | REQUEST_CHANGES | cli/cmd/init.go:307,314,326,711 still use bare `exec.Command("git", ...)` |
+| 2 | All existing cli/cmd/ tests pass | APPROVE | result.json:outcome=task_succeeded, exit_code=0 |
+
+### Summary
+
+The eight listed files (agent_cmd.go, agent_workers.go, bead.go, bead_review.go, checkpoint.go, doc.go, log.go, status.go) were migrated cleanly to `gitpkg.Command(ctx, dir, ...)`. However, the AC wording ("No bare exec.Command(\"git\"...) in cli/cmd/ except in test helpers") is broader than the file list in the description: `init.go` has four bare calls that were not migrated and is not excluded like `install.go` is.
+
+### Findings
+
+- `cli/cmd/init.go:307` — `gitAdd := exec.Command("git", "add", ...)` not migrated to `gitpkg.Command`.
+- `cli/cmd/init.go:314` — `gitCommit := exec.Command("git", "commit", ...)` not migrated.
+- `cli/cmd/init.go:326` — `gitWorktreeCfg := exec.Command("git", "config", ...)` not migrated.
+- `cli/cmd/init.go:711` — `gitCmd := exec.Command("git", "rev-parse", "--git-dir")` not migrated.
+- Either migrate these four callsites in `init.go`, or amend the bead AC/description to explicitly exclude `init.go` alongside `install.go`.

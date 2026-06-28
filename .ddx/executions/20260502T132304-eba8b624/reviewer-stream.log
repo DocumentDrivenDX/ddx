@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review contains only execution evidence (manifest.json, result.json) for the attempt. No frontend source changes are present, so none of the four AC items can be evaluated from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No frontend code changes in the reviewed diff — cannot verify server-side search wiring", "location": ".ddx/executions/20260502T132304-eba8b624/" },
+    { "severity": "block", "summary": "No evidence of debounce (200ms) implementation in diff", "location": "n/a" },
+    { "severity": "block", "summary": "No evidence of stale-response drop logic in diff", "location": "n/a" },
+    { "severity": "block", "summary": "No tests covering correctness past page 1 in diff", "location": "n/a" }
+  ]
+}
+```

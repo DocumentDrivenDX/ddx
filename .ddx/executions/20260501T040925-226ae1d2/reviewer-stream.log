@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution evidence files (manifest.json, result.json) under .ddx/executions/. No actual implementation changes (cross-link UI code, runs.spec.ts e2e test) are visible in the provided diff, so none of the 6 AC items can be verified.",
+  "findings": [
+    { "severity": "block", "summary": "No UI changes for bead↔run, run↔artifact, or artifact↔run cross-links visible in diff", "location": "cli/internal/server/frontend/src/routes/" },
+    { "severity": "block", "summary": "runs.spec.ts e2e test not present in diff", "location": "cli/internal/server/frontend/e2e/runs.spec.ts" },
+    { "severity": "info", "summary": "Diff only includes execute-bead manifest/result evidence; actual code changes from result_rev 44c5014a are not in the reviewable diff", "location": ".ddx/executions/20260501T040925-226ae1d2/" }
+  ]
+}
+```

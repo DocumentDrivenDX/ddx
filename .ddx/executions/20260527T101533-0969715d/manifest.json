@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260527T101533-0969715d",
+  "bead_id": "ddx-e582c37a",
+  "base_rev": "acf4bea8cbbafea099a7ade53f7662745e7f9819",
+  "created_at": "2026-05-27T10:15:40.632849252Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e582c37a",
+    "title": "fix docker-clone backend: place docker harness invocation under cleanup control",
+    "description": "PROBLEM\nThe docker-clone attempt backend can leave nested execute-bead harness work outside the same process-group cleanup guarantees as the worktree/local-clone executor path. Even if graceful worker cleanup runs, the docker invocation and containerized harness tree may survive unless the docker process and container lifecycle are explicitly tied to the worker.\n\nROOT CAUSE (file:line)\n- cli/internal/agent/attempt_backend.go:293 spawns `exec.CommandContext(ctx, \"docker\", ...)` without `cmdSetProcessGroup`, so the docker CLI process is not placed in the executor process group.\n- Worktree/local-clone backends at cli/internal/agent/attempt_backend.go:120-122 and cli/internal/agent/attempt_backend.go:182-184 share the executor path at cli/internal/agent/executor.go:156 and receive `Setpgid` handling.\n- cli/internal/agent/executor_unix.go:20-25 can only kill process groups it configured; it cannot reliably reach a docker command/container tree that was spawned outside that setup.\n\nPROPOSED FIX\nApply process-group setup to the docker-clone backend's docker invocation and add explicit container cleanup if needed, such as `--rm` plus cleanup-time container stop/kill. Ensure worker context cancellation, graceful shutdown, and abnormal parent-death handling cover the docker CLI process and do not leave the nested harness running in a container.\n\nNON-SCOPE\n- Graceful SIGINT/SIGTERM shutdown already works for the existing executor path through executor.go:231-255; do not regress it.\n- The harness-runner-internal leak in fizeau is covered by fizeau-50b6f055; this child bead is only the DDx orchestrator-to-harness-child boundary.\n- Linux `Pdeathsig` executor hardening is covered by a separate child bead from this decomposition.\n- Startup orphan reaping is covered by a separate child bead from this decomposition.\n\nCROSS-REF\n- fizeau-50b6f055: fizeau harness-runner process-group cleanup.\n- ddx-8f2e0ebf: lease release / operator-attention.",
+    "acceptance": "1. `TestDockerCloneBackendConfiguresProcessGroupForDockerCommand` verifies the docker-clone backend applies the same process-group setup contract to the `docker` invocation at cli/internal/agent/attempt_backend.go:293 as other execute-bead harness paths.\n2. `TestDockerCloneBackendTerminatesContainerOnWorkerCancellation` verifies context cancellation or graceful worker shutdown stops the docker CLI process and the associated containerized harness tree.\n3. `TestDockerCloneBackendParentDeathCleanupDocumentedOrEnforced` verifies abnormal parent-death behavior for docker-clone is either enforced through parent-death/process-group/container cleanup or has a documented justification if container teardown already guarantees it.\n4. `TestExecutorGracefulSignalStillTerminatesHarnessTree` or an equivalent regression guard remains green so normal SIGINT/SIGTERM cleanup behavior is not regressed.\n5. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-93d2ac52",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "observability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T10:15:21.178778523Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T101533-0969715d",
+    "prompt": ".ddx/executions/20260527T101533-0969715d/prompt.md",
+    "manifest": ".ddx/executions/20260527T101533-0969715d/manifest.json",
+    "result": ".ddx/executions/20260527T101533-0969715d/result.json",
+    "checks": ".ddx/executions/20260527T101533-0969715d/checks.json",
+    "usage": ".ddx/executions/20260527T101533-0969715d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-e582c37a-20260527T101533-0969715d"
+  },
+  "prompt_sha": "1a13bfb3e4ab597eca8767bfc1ff51208dde4f6c92fdaea0fb2b01bdb94b3a56"
+}

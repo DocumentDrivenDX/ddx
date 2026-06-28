@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All four ACs satisfied: triage package with TriagePolicy/FailureMode/Action/Decide; default review_block ladder matches parent AC; top-level triage block in schema, NewConfig, and ResolvedConfig.TriagePolicy(); unit tests cover ladder, defaults, schema, and override.",
+  "findings": [
+    {"severity": "info", "summary": "Schema and YAML use nested `triage.policies.<mode>` while bead description said `triage: block`; nested form is cleaner and still satisfies AC#3.", "location": "cli/internal/config/schema/config.schema.json:556"}
+  ]
+}
+```

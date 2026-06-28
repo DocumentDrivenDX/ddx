@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All raw size classes (text-xl, text-sm, text-xs, text-base) replaced with semantic tokens; chip classes use text-label-caps; font-mono columns use font-mono-code/text-mono-code; h2 uses text-headline-md.",
+  "findings": []
+}
+```

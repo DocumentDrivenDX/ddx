@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./internal/registry/... -run "TestPluginLookup_PrefersProjectOverGlobal|TestPluginLookup_FallsBackToGlobal"

@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "website/content/why/_index.md exists with all five narrative beats; four primitives (artifacts, beads, tracked execution via `ddx work`, skills) named in DDx-only language; only `ddx work` referenced for execution; six-principle physics exposition present; no HELIX methodology concepts.",
+  "findings": []
+}
+```

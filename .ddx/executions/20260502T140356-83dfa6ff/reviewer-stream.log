@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ADR-021 satisfies all four AC: alternatives section rejects synchronous in-process Execute; trust model is requireTrusted (localhost OR ts-net WhoIs) plus per-project allowlist; CSRF, DNS rebinding (added this iter), and XSS vectors all documented in the threat model.",
+  "findings": [
+    { "severity": "info", "summary": "This iteration only added the DNS rebinding paragraph (commit 32ee71b6); rest of ADR was landed in prior iterations.", "location": "docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md:192" }
+  ]
+}
+```

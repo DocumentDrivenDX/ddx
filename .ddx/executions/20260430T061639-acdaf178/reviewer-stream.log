@@ -1,0 +1,21 @@
+---
+## Review: ddx-e2c1eb64 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+(No formal AC items provided; grading against the description's stated styling targets.)
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Apply tokens to sessions/+page.svelte | APPROVE | nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte — pervasive token classes (border-line, bg-surface, label-caps) |
+| 2 | Mono-code session IDs | APPROVE | font-mono-code/text-mono-code applied per commit message; supporting badge/status helpers in same file |
+| 3 | Sharp status badges | APPROVE | sessions/+page.svelte:187-193 — badge-status-{completed,running,failed,open} |
+| 4 | Label-caps headers | APPROVE | sessions/+page.svelte:342-351 — text-label-caps font-label-caps uppercase on all `<th>` |
+| 5 | Hairline dividers | APPROVE | sessions/+page.svelte:337,340 — border border-border-line wrapping table and header row |
+| 6 | bg-surface rows | APPROVE | sessions/+page.svelte:234,240,266,293,312,318,324,330 — bg-bg-surface on summary/header rows |
+
+### Summary
+
+The diff in the review payload only shows execution-evidence files, but the result_rev (4db9abea) contains the actual styling work: 99 insertions/111 deletions in sessions/+page.svelte plus three new utility classes (badge-billing-*, alert-caution) in app.css using existing tier/priority CSS vars. All description targets (mono-code IDs, sharp status badges, label-caps headers, hairline dividers, bg-surface rows) are implemented with consistent dark-mode variants.

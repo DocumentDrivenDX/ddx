@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no CLI, doctor diagnostics, classification logic, or docs are present to evaluate against AC1–AC5.",
+  "findings": [
+    { "severity": "block", "summary": "No reset CLI implementation visible in diff (AC1)", "location": ".ddx/executions/20260429T162702-2c963978/result.json" },
+    { "severity": "block", "summary": "No doctor/route-status diagnostic output changes visible (AC2)", "location": ".ddx/executions/20260429T162702-2c963978/result.json" },
+    { "severity": "block", "summary": "No exclusion logic for no-viable-provider/config errors visible (AC3)", "location": ".ddx/executions/20260429T162702-2c963978/result.json" },
+    { "severity": "block", "summary": "No documentation under docs/ added or modified (AC4)", "location": ".ddx/executions/20260429T162702-2c963978/result.json" },
+    { "severity": "block", "summary": "Diff insufficient to verify post-reset behavior (AC5)", "location": ".ddx/executions/20260429T162702-2c963978/result.json" }
+  ]
+}
+```

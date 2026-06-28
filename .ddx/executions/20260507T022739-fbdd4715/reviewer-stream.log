@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no implementation or evidence for the required reachability cleanup, deadcode result, tests, or decisions log.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes are present for any of the 15 listed symbols in internal/testutils, so AC1-AC3 are not implemented or reviewable from this diff.",
+      "location": ".ddx/executions/20260507T022739-fbdd4715/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log at .ddx/executions/<run-id>/decisions.md is not included, so AC5 is unmet.",
+      "location": ".ddx/executions/20260507T022739-fbdd4715/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence in the diff of successful deadcode output or `cd cli && go test ./...`, so AC3 and AC4 cannot be verified.",
+      "location": ".ddx/executions/20260507T022739-fbdd4715/result.json:1"
+    }
+  ]
+}
+```

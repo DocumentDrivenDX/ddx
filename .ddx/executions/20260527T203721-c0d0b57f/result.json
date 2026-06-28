@@ -1,0 +1,16 @@
+{
+  "bead_id": "ddx-a93ca369",
+  "attempt_id": "20260527T203721-c0d0b57f",
+  "base_rev": "f71c3f7c2fd44328b389282a4156f86186dc8900",
+  "result_rev": "f71c3f7c2fd44328b389282a4156f86186dc8900",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "loading bead ddx-a93ca369 from worktree snapshot: bead: not found: ddx-a93ca369",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "loading bead ddx-a93ca369 from worktree snapshot: bead: not found: ddx-a93ca369",
+  "project_root": "/home/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "started_at": "0001-01-01T00:00:00Z",
+  "finished_at": "0001-01-01T00:00:00Z"
+}

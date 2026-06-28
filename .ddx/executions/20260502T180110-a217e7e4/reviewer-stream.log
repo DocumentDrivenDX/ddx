@@ -1,0 +1,21 @@
+---
+## Review: ddx-89bc2db4 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Fan-out is parallel | APPROVE | fanout.go:229-263 — goroutine per spoke under WaitGroup |
+| 2 | Max-concurrency enforced | APPROVE | fanout.go:226,249 — semaphore cap; test fanout_test.go:159 |
+| 3 | Per-node timeout; slow doesn't block others | APPROVE | fanout.go:329 context.WithTimeout; test fanout_test.go:107 |
+| 4 | Partial result + per-node error map | APPROVE | fanout.go:266-289; test fanout_test.go:71 |
+| 5 | Version-incompatible spokes skipped, logged | APPROVE | fanout.go:295-301,234; test fanout_test.go:226 |
+| 6 | Capability filter | APPROVE | fanout.go:302-316; test fanout_test.go:277 |
+| 7 | Offline (transport) vs stale distinction | APPROVE | fanout.go:353-369 timeout vs offline; test fanout_test.go:307 |
+| 8 | Unit + chaos tests cover all above | APPROVE | fanout_test.go:343 mid-response disconnect; 71 dead spoke; 107 slow spoke |
+
+### Summary
+
+Clean, well-structured implementation. `FanOutClient.Execute` correctly fans out in parallel, enforces a semaphore-based concurrency cap and a per-node `context.WithTimeout`, returns partial results with separate maps for responses, errors, skipped, and status updates. Outcome taxonomy (OK/Offline/Timeout/HTTPError/Skipped) cleanly distinguishes transport failure (→ StatusOffline) from per-node timeout (no status flip, preserves stale) and HTTP errors (transport worked, no flip). Tests cover all chaos scenarios specified: dead spoke, slow spoke, mid-response disconnect, version-incompat, capability gap, plus payload/error-handling smoke tests.

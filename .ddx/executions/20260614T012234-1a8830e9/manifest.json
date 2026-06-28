@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260614T012234-1a8830e9",
+  "bead_id": "ddx-6f25c87f",
+  "base_rev": "8cf331746aa171e8810c57b8da05c5832158ecd1",
+  "created_at": "2026-06-14T01:22:42.644785057Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6f25c87f",
+    "title": "sync: push current HEAD to origin/main from non-main branches",
+    "description": "PROBLEM\n\nDogfood on 2026-06-14 reproduced a false ddx sync failure immediately after successfully pushing HEAD to origin/main. The worktree was on dogfood/provider-failure-20260613 with HEAD and origin/main both at c0b72bd30028e8daa8f9775adc6d57f540f12ac7, but `ddx sync` fetched, merged origin/main, then failed twice with non-fast-forward. This makes the required sync-after-land step unreliable whenever the operator works from a non-main branch that tracks origin/main.\n\nROOT CAUSE WITH FILE:LINE\n\n- cli/cmd/sync.go:198-200 documents and executes `git push origin main`. In git, that pushes the local branch named `main`, not the current HEAD. When the current branch is a dogfood/work branch and local `main` is stale, sync pushes stale local main and gets a legitimate remote rejection even though the checked-out branch is already aligned with origin/main.\n- cli/cmd/sync.go:201-210 treats any rejected/non-fast-forward output as retryable, then as terminal after the second identical stale-branch push, without comparing current HEAD to origin/main after fetch.\n- cli/cmd/sync_test.go:188-221 covers double push failure, but does not cover the non-main-branch success case where current HEAD equals origin/main and local main is stale.\n\nPROPOSED FIX\n\nChange sync push semantics to publish the checked-out commit to origin/main explicitly, e.g. `git push origin HEAD:main`, or otherwise resolve the current HEAD ref and push that SHA/ref to main. Before retrying or aborting on non-fast-forward, fetch and compare `rev-parse HEAD` with `rev-parse origin/main`; if already equal, treat sync as success and clear any failure marker. Add regression coverage using fake git responses for stale local main plus aligned HEAD/origin/main.\n\nNON-SCOPE\n\nDo not introduce force-push, rebase, squash, or no-verify behavior. Do not change execute-bead merge policy. Do not make sync manage arbitrary non-DDx dirty files.",
+    "acceptance": "1. TestSync_PushesCurrentHEADToOriginMainWhenOnNonMainBranch proves sync uses `git push origin HEAD:main` or an equivalent current-HEAD refspec rather than `git push origin main`.\n2. TestSync_NonFastForwardButHeadAlreadyEqualsOriginMainTreatsAsSuccess simulates push rejection followed by fetch where `rev-parse HEAD` equals `rev-parse origin/main`; sync exits 0 and removes `.ddx/sync-failure.json`.\n3. TestSync_DoublePushFailAborts still passes for a real remote divergence where HEAD and origin/main differ after fetch.\n4. A local dogfood reproduction from a non-main branch aligned with origin/main runs `ddx sync` successfully after the fix.\n5. `cd cli \u0026\u0026 go test ./cmd -run 'TestSync_PushesCurrentHEADToOriginMainWhenOnNonMainBranch|TestSync_NonFastForwardButHeadAlreadyEqualsOriginMainTreatsAsSuccess|TestSync_DoublePushFailAborts' -count=1` passes.\\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:cli",
+      "area:sync",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "dogfood"
+    ],
+    "metadata": {
+      "queue-rank": -690
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260614T012234-1a8830e9",
+    "prompt": ".ddx/executions/20260614T012234-1a8830e9/prompt.md",
+    "manifest": ".ddx/executions/20260614T012234-1a8830e9/manifest.json",
+    "result": ".ddx/executions/20260614T012234-1a8830e9/result.json",
+    "checks": ".ddx/executions/20260614T012234-1a8830e9/checks.json",
+    "usage": ".ddx/executions/20260614T012234-1a8830e9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6f25c87f-20260614T012234-1a8830e9"
+  },
+  "prompt_sha": "ba1d63af69950bb1c545f82c268b1ccdefef4dd8d44aaf1b84fc19a2e7b622a4"
+}

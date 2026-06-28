@@ -1,0 +1,70 @@
+{
+  "attempt_id": "20260608T141353-ad7592a4",
+  "bead_id": "ddx-cdd1a0b2",
+  "base_rev": "fff54de86ebf157bf095b33521a338cff57b08d4",
+  "created_at": "2026-06-08T14:14:16.142811289Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-cdd1a0b2",
+    "title": "Enforce execute-bead review evidence before success close",
+    "description": "PROBLEM\nNiflheim success-path attempts were recorded with `cycle_trace.final_decision=\"success\"` while `cycle_trace.review_result={}`. That lets `ddx work` close or treat a candidate as quality-approved without enforceable per-AC review evidence, violating docs/dev/engineering-principles.md:39-45 and FEAT-010 task-execution reliability.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_loop.go:3042-3138` treats a success disposition/status as closeable once candidate-cycle review/landing allows success, while the old post-merge review is optional.\n- `cli/internal/agent/execute_bead_review_test.go:799-823` explicitly proves a worker with `Reviewer: nil` can skip review and close the bead.\n- `cli/internal/agent/execute_bead_review.go:168-193` defines `ReviewResult` with optional fields and no invariant that rejects `{}` on a success path.\n\nPROPOSED FIX\nAdd self-contained Niflheim-style review fixtures or table-driven cases under `cli/internal/agent/...` for empty review success. Enforce a success-path invariant: unless review is explicitly skipped with a durable `runtime.NoReview` or valid `review:skip` reason, review output must include a non-empty verdict/classification plus per-AC evidence or documented reason and routing/session metadata when available. Empty review output must produce `review_error` or operator-attention and must not close the bead.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related: `ddx-e1a576a7`, `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineering-principles.md:39-45.",
+    "acceptance": "1. `TestExecuteBeadWorker_NiflheimEvidence_EmptyReviewResultCannotClose` adds a self-contained Niflheim evidence case where a non-skipped success path has `cycle_trace.review_result={}` or an equivalent empty `ReviewResult`; it asserts the bead does not close and records `review_error` or operator-attention with a non-empty reason.\n2. `TestExecuteBeadWorker_NiflheimEvidence_NilReviewerRequiresExplicitSkip` updates nil-reviewer behavior so `Reviewer: nil` only permits close when a durable no-review/skip reason is present; without that reason it fails review gating.\n3. `TestExecuteBeadResult_NiflheimEvidence_ReviewDecisionAudit` proves result JSON/event bodies for empty-review and explicit-skip paths include `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, review status/verdict or explicit skip reason, and enough review classification detail to audit the decision.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|EmptyReviewResult|NilReviewer|ReviewDecisionAudit' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-cdd1a0b2\",\"fingerprint\":\"7b2a862c88158d5fd8a75619e5066edda707c254938405043ee0eea35239351a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"7b2a862c88158d5fd8a75619e5066edda707c254938405043ee0eea35239351a\"}",
+          "created_at": "2026-06-08T14:08:28.255174293Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T14:13:50.339770521Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T141020-92467c29\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":52980,\"output_tokens\":378,\"total_tokens\":53358,\"cost_usd\":0,\"duration_ms\":186742,\"exit_code\":1}",
+          "created_at": "2026-06-08T14:13:50.41244591Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=53358 model=dflash"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T141353-ad7592a4",
+    "prompt": ".ddx/executions/20260608T141353-ad7592a4/prompt.md",
+    "manifest": ".ddx/executions/20260608T141353-ad7592a4/manifest.json",
+    "result": ".ddx/executions/20260608T141353-ad7592a4/result.json",
+    "checks": ".ddx/executions/20260608T141353-ad7592a4/checks.json",
+    "usage": ".ddx/executions/20260608T141353-ad7592a4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cdd1a0b2-20260608T141353-ad7592a4"
+  },
+  "prompt_sha": "6d5f73ff71948a0951f68e61472a96b7e527f553a9153a98bf2f55caa60e9d5b"
+}

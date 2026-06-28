@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no code, test, or decisions-log changes, so none of the acceptance criteria for internal/metric reachability can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No production code changes are present for the 14 listed symbols in `internal/metric`, so there is no evidence that any symbol was wired into the call graph or deleted.",
+      "location": ".ddx/executions/20260506T182545-950e34a5/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log file is not included in the diff, so there is no per-symbol WIRE/DELETE/PENDING record required by the acceptance criteria.",
+      "location": ".ddx/executions/20260506T182545-950e34a5/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "No test output or related artifact changes are included to substantiate deadcode-clean status for `internal/metric` or `cd cli && go test ./...` passing.",
+      "location": ".ddx/executions/20260506T182545-950e34a5/result.json:1"
+    }
+  ]
+}
+```

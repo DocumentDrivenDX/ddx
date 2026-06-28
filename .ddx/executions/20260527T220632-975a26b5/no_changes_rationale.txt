@@ -1,0 +1,28 @@
+status: open
+reason: system disk space exhaustion preventing pre-commit checks and commit
+
+All implementation work is complete and code compiles successfully. The blocker is
+a system infrastructure issue (no space left on device) that prevents:
+1. Running the full test suite via lefthook
+2. Committing changes to git
+
+What was completed:
+1. Added Notes field to preClaimIntakePromptEnvelope
+2. Updated buildPreClaimIntakePrompt() to populate notes
+3. Updated 5 copies of bead-lifecycle SKILL.md with instructions about discounting stale blockers
+4. Added 2 regression tests that verify the behavior
+5. Code compiles successfully (go-build hook passed)
+6. New tests pass and meet all acceptance criteria
+
+Files changed:
+- cli/internal/agent/preclaim_intake_hook.go (1 struct field added, 1 assignment added)
+- cli/internal/agent/execute_bead_intake_test.go (1 import added, 2 tests added)
+- library/skills/ddx/bead-lifecycle/SKILL.md (6 lines added to reason #7 and before AC)
+- cli/internal/skills/ddx/bead-lifecycle/SKILL.md (6 lines added)
+- cli/internal/registry/defaultplugin/library/skills/ddx/bead-lifecycle/SKILL.md (6 lines added)
+- .agents/skills/ddx/bead-lifecycle/SKILL.md (project-local, not in repo)
+- .claude/skills/ddx/bead-lifecycle/SKILL.md (project-local, not in repo)
+
+All staged and ready to commit once disk space is available.
+
+verification_command: cd /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-60e4dc97-20260527T220632-975a26b5 && git diff --cached --stat && git commit -m "readiness: discount stale external blockers when notes clear them [ddx-60e4dc97]"

@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260603T021346-e9546a57",
+  "bead_id": "ddx-4c58ea3e",
+  "base_rev": "f791c51acf85ad88229bf6b142fbe7232b4888fb",
+  "created_at": "2026-06-03T02:13:53.827959828Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4c58ea3e",
+    "title": "init/doctor: --global umbrella setup, lazy project init, and two-layer doctor reporting",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nFirst-time machine setup needs an umbrella `ddx init --global` that installs the default ddx plugin globally and wires agent-tier links, while plain `ddx init` must create only the project workspace and lazy-resolve plugins (preferring project over global) rather than eagerly installing. `ddx doctor` must surface both install layers so operators can see where the skill resolves from. The ddx-validate pre-commit hook (ddx-777f4a09, already landed) must keep scoping skill checks to staged skill files regardless of install location.\n\nROOT CAUSE\n- cli/cmd/init.go:75 dispatches to initGlobal (init.go:318) when --global is set; initGlobal installs the bundled default ddx plugin into ${XDG_DATA_HOME}/ddx/global/plugins/ddx (init.go:320), creates symlinks ~/.claude/skills/ddx and ~/.agents/skills/ddx into that dir (init.go:336), and writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults (init.go:351, writeGlobalConfig init.go:362).\n- Plain `ddx init` (no flag) must create \u003cproject\u003e/.ddx/ and NOT write plugins/ — plugins lazy-resolve via the registry resolver, preferring the project copy over global.\n- cli/cmd/doctor.go:421-448 computes globalPath/projectPath and the projectStatus \"lazy-resolves-to-global\" (doctor.go:436-444) and prints the \"Global Install (...) — \u003cstatus\u003e\" and \"Project Install (...) — \u003cstatus\u003e\" lines (doctor.go:447-448).\n- Before this, `ddx init` bundled plugin install with manifest creation, there was no global setup command, and doctor reported only a single install layer.\n\nPROPOSED FIX\n1. `ddx init --global` installs the default ddx plugin globally, creates ~/.claude/skills/ddx and ~/.agents/skills/ddx links into ${XDG_DATA_HOME}/ddx/global/plugins/ddx, and writes the global config with convention defaults.\n2. `ddx init` (no flag) creates \u003cproject\u003e/.ddx/ and does NOT install plugins; first use lazy-resolves from the project layer, falling back to global.\n3. `ddx doctor` renders two lines: \"Global Install (${XDG_DATA_HOME}/ddx/global/plugins/ddx) — ok|missing\" and \"Project Install (\u003cprojectRoot\u003e/plugins/ddx) — ok|missing|lazy-resolves-to-global\".\n4. The ddx-validate pre-commit hook continues to run skill-related validation only when skill files are staged, regardless of whether the install is global or project-scoped.\n\nNON-SCOPE\n- Does NOT remove the per-project install path (both layers coexist).\n- Does NOT migrate legacy ~/.config/ddx paths.\n- Does NOT add agent-harness skill paths beyond Claude Code and Codex.\n- Plugin content writing for non-init installs is owned by the install child beads.\n\nDEPS\nddx-06cbaa90 (ddx home resolution) — global setup routes through ddxroot.GlobalDir(), project init through ddxroot.Path(). Governing epic: ddx-602ae31a (Principle 2). Related: ddx-777f4a09 (ddx-validate hook, landed).",
+    "acceptance": "1. TestInitGlobal_CreatesAgentTierLinks asserts ~/.claude/skills/ddx and ~/.agents/skills/ddx point into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/.\n2. TestInitProject_DoesNotInstallPlugins asserts `ddx init` (in-project) does not write to plugins/ — plugins lazy-resolve from global.\n3. A Test* in cli/cmd/doctor_test.go asserts doctor renders both the \"Global Install (...)\" and \"Project Install (...)\" lines with the correct ok|missing|lazy-resolves-to-global statuses (doctor_test.go:273,276).\n4. A test asserts the ddx-validate pre-commit hook runs skill validation only when skill files are staged, independent of install location.\n5. The SKILL.md \"How this skill works\" install-locations note is updated in this bead's commit.\n6. cd cli \u0026\u0026 go test ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:config",
+      "area:plugin",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T021346-e9546a57",
+    "prompt": ".ddx/executions/20260603T021346-e9546a57/prompt.md",
+    "manifest": ".ddx/executions/20260603T021346-e9546a57/manifest.json",
+    "result": ".ddx/executions/20260603T021346-e9546a57/result.json",
+    "checks": ".ddx/executions/20260603T021346-e9546a57/checks.json",
+    "usage": ".ddx/executions/20260603T021346-e9546a57/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-4c58ea3e-20260603T021346-e9546a57"
+  },
+  "prompt_sha": "6ab23c14d723d50dcab6e2c090bea5b87e65dbd0b26bef0a49c523810866edd2"
+}

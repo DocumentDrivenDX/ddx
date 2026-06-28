@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json). No changes to cli/internal/agent/service_run.go. RunViaService/RunViaServiceWith/runFixtureHarnessViaRunner not deleted; RunOptions field not removed. AC unmet.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes in diff — service_run.go untouched, legacy entry points still present", "location": "cli/internal/agent/service_run.go" },
+    { "severity": "block", "summary": "Acceptance requires RunOptions field removed from service_run.go; diff shows no such removal", "location": "cli/internal/agent/service_run.go" },
+    { "severity": "info", "summary": "Prior attempt notes flagged blocking dependencies (B22d-f/g) on live callers in compare_adapter.go and dispatch.go; deletion is not yet mechanical", "location": "cli/internal/agent/compare_adapter.go" }
+  ]
+}
+```

@@ -1,0 +1,30 @@
+---
+## Review: ddx-0a33bc5f iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Source change to sessions index | BLOCK | — no resolver changes in diff |
+| 2 | Schema parity, optional new filters | BLOCK | — no GraphQL schema changes in diff |
+| 3 | Fixture + baseline recorded | BLOCK | — no fixture or baseline in diff |
+| 4 | First-pass perf targets met | BLOCK | — no benchmarks in diff |
+| 5 | DB-decision protocol | BLOCK | — not applicable yet, but no perf data to evaluate |
+| 6 | Completeness test (superset assertion) | BLOCK | — no tests in diff |
+| 7 | Freshness (2s visibility) | BLOCK | — no integration test in diff |
+| 8 | Playwright smoke | BLOCK | — no e2e test in diff |
+| 9 | Cross-reference with ddx-2ceb02fa | BLOCK | — no bead notes or stub documentation in diff |
+
+### Summary
+
+The diff contains only execution evidence metadata (`result.json`) recording that an agent ran for ~17 minutes at $8.53. None of the nine acceptance criteria are addressed — no resolver rewrite, no fixture, no tests, no schema changes, no dead-code removal. The implementation work either was not produced or was not merged.
+
+### Findings
+
+- **No resolver changes.** `cli/internal/server/graphql/resolver_feat008.go` is untouched. AC1 requires `EfficacyRows` to read from the sharded sessions index and remove `efficacyFingerprint`, `buildEfficacySnapshot`, `attemptsFromEvidence`, and `efficacyMemo`.
+- **No fixture or benchmarks.** AC3/AC4 require a ≥10k-row fixture across 2+ shards with baseline latency measurements. Nothing seeds data or measures performance.
+- **No tests of any kind.** AC6 (completeness/superset), AC7 (freshness), and AC8 (Playwright smoke) all require new test files. None are present.
+- **No schema changes.** AC2 requires optional `since`, `until`, `projectId` filter args on the GraphQL query. No `.graphql` or resolver signature changes appear.
+- **The result.json itself reports `task_succeeded`**, but the merge commit (`41fa9657`) it references only contains "test(efficacy): add real-backend HTTP smoke + align UI fixture" per git log — suggesting partial work may exist on a branch that wasn't included in this diff. The next agent should check whether commit `41fa9657` contains unreflected work, or whether the execution truly produced no implementation.

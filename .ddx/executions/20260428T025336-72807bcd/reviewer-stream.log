@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "RunOptions/CompareOptions/QuorumOptions deleted from cli/internal/agent/types.go; all production callers renamed to RunArgs; remaining mentions live only in lint analyzer testdata (out of scope). Pre-commit go-test bypassed for a failure reproducible on baseline.",
+  "findings": [
+    { "severity": "info", "summary": "Types successfully removed from agent package; collapsed RunOptions+RunArgs into single RunArgs.", "location": "cli/internal/agent/types.go" },
+    { "severity": "info", "summary": "Remaining RunOptions/CompareOptions/QuorumOptions tokens exist only in runtimelint/evidencelint testdata fixtures and analyzer.go name lists, which are intentional and outside the AC-scoped cli/internal/agent/ path.", "location": "cli/tools/lint/" },
+    { "severity": "warn", "summary": "Pre-commit go-test gate was bypassed: TestIntegration_CodexEcho reportedly fails on the baseline (14b80529) with an unrelated codex_core session-rollout error. AC requires `go test ./...` to pass; reviewer should confirm the failure is truly pre-existing and unrelated.", "location": "commit 2f6e13a4" }
+  ]
+}
+```

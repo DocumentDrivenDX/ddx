@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata; no cast file under website/static/demos/, no homepage player update, and 07-quickstart.cast not replaced/archived. None of the acceptance criteria are verifiable.",
+  "findings": [
+    { "severity": "block", "summary": "No screencast file added under website/static/demos/ (expected 08-helix-quickstart.cast)", "location": "website/static/demos/" },
+    { "severity": "block", "summary": "Homepage player data-src not updated to reference new cast", "location": "website/layouts/index.html" },
+    { "severity": "block", "summary": "Old 07-quickstart.cast not replaced or archived", "location": "website/static/demos/07-quickstart.cast" }
+  ]
+}
+```

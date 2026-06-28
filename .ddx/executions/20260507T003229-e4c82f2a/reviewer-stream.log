@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata. It contains no code, no decisions log, and no verification artifacts showing the six `internal/escalation` symbols were wired or deleted, so the bead's acceptance criteria are not satisfied or reviewable.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation files are changed. The diff provides no evidence that any of the six unreachable `internal/escalation` symbols were wired into production reachability or deleted.",
+      "location": ".ddx/executions/20260507T003229-e4c82f2a/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log `.ddx/executions/<run-id>/decisions.md` is absent from the diff, so the per-symbol WIRE|DELETE|PENDING record required by AC5 is missing.",
+      "location": ".ddx/executions/20260507T003229-e4c82f2a/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no deadcode output or test output in the diff, so AC3 and AC4 are unverified. The execution metadata alone does not demonstrate zero remaining dead symbols in `internal/escalation` or a green `cd cli && go test ./...` run.",
+      "location": ".ddx/executions/20260507T003229-e4c82f2a/result.json:1"
+    }
+  ]
+}
+```

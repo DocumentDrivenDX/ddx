@@ -1,0 +1,20 @@
+All criteria check out. The untracked files in working tree are pre-existing artifacts not part of this commit's diff.
+
+---
+## Review: ddx-a812e176 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | docs/resources/ contains only README.md stub | APPROVE | docs/resources/README.md created; tracked originals deleted in 04f48c1d (rename) |
+| 2 | references/ has REF-001..REF-004 with normalized frontmatter | APPROVE | docs/helix/00-discover/references/REF-001..004 with id/title/kind/source_url/source_author/accessed/summary/tags |
+| 3 | AC-AGENT-001 and AC-AGENT-002 preserved under research/ | APPROVE | docs/helix/00-discover/research/AC-AGENT-001-...md and AC-AGENT-002-...md retain ddx.id |
+| 4 | Tests updated and pass | APPROVE | graphql_documents_test.go:132,188,219,265,311 and documents.spec.ts:217,284,286 updated to new paths |
+| 5 | No stale `docs/resources/[a-z]` references in tracked files | APPROVE | `git ls-files | xargs grep` returns 0 matches (excluding README) |
+
+### Summary
+
+Migration is complete and correct: all four references received REF-NNN IDs with normalized frontmatter, both AC-AGENT research-synthesis docs were preserved with their existing ddx IDs, the README stub points forward, and all known cross-references (Go test, Playwright e2e, SD-022 row 11) were updated. Note: the working tree shows the original `docs/resources/*.md` files as untracked — these are environmental artifacts (likely re-emerged from a worktree/checkout side-effect) and not part of this commit; the tracked migration itself is clean.

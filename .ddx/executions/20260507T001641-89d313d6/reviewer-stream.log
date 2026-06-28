@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution artifacts under .ddx/executions and contains no changes to the implementation or tests required to satisfy the epic-closure acceptance criteria, so the bead cannot be approved.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes were made in the scoped implementation files (`cli/internal/bead/store.go`, `cli/internal/agent/execute_bead_loop.go`, `cli/cmd/agent_cmd.go`) or the cited tests, so AC1-AC4 are not implemented and AC5-AC6 cannot be validated.",
+      "location": ".ddx/executions/20260507T001641-89d313d6/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The changed-files set consists only of execution metadata artifacts, which is insufficient evidence for the required queue classification, closure-evaluation path, output changes, or test coverage.",
+      "location": ".ddx/executions/20260507T001641-89d313d6/result.json:1"
+    }
+  ]
+}
+```

@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 8 unreachable symbols handled: 7 deleted, IsCanonicalStatus wired into Store.validateBead. decisions.md present at .ddx/executions/<run-id>/decisions.md with one line per symbol. Implementation matches AC1-AC5.",
+  "findings": [
+    { "severity": "info", "summary": "Reviewed-diff only contained execution artifacts (manifest.json, result.json); the source-code changes are in commit 73fe2495 (referenced as result_rev). Verified separately via git show.", "location": ".ddx/executions/20260504T005534-03f6c03f/result.json" },
+    { "severity": "info", "summary": "IsCanonicalStatus correctly replaces inline status switch in validateBead, providing a single predicate over CanonicalStatuses.", "location": "cli/internal/bead/store.go:1806" },
+    { "severity": "info", "summary": "Deletions are justified in decisions.md — all 7 deleted symbols had no production callers; speculative APIs without consumers.", "location": ".ddx/executions/20260504T005534-03f6c03f/decisions.md" }
+  ]
+}
+```

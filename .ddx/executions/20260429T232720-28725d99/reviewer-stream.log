@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Diff under review is execution evidence (manifest/result) for the bead. The actual doc change landed in 1ac80f6b per result.json. No acceptance criteria specified; labels and task scope match.",
+  "findings": []
+}
+```

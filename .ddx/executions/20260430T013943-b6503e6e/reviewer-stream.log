@@ -1,0 +1,19 @@
+## Review: ddx-d8a6a621 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Wire DESIGN.md tokens into Tailwind v4 config | BLOCK | Diff only contains execution evidence JSON; no frontend/tailwind changes |
+
+### Summary
+
+The provided diff (commit 96b40ea4) contains only `.ddx/executions/...` manifest and result JSON files. There are no changes to `cli/internal/server/frontend/tailwind.config.js`, no DESIGN.md export artifact, and no token wiring. The actual implementation commit (00ddabd9, referenced as `result_rev`) is not part of this review's diff, so the wiring cannot be verified here.
+
+### Findings
+
+- No modifications to `cli/internal/server/frontend/tailwind.config.js` (or Tailwind v4 `@theme` CSS) are present in the reviewed diff.
+- No evidence of running `bunx @google/design.md export --format tailwind` or of an exported theme JSON being committed.
+- The reviewed commit is purely execution-evidence bookkeeping; the substantive change appears to live in commit `00ddabd9` ("feat(frontend): wire DESIGN.md tokens into Tailwind v4 config") which was not included in the diff. Re-run review against `00ddabd9` to evaluate the actual wiring.

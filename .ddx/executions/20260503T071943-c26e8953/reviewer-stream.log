@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 4 AC met: legacy /sessions and /executions return 302 with Sunset/Deprecation headers (verified by TestRunsRedirectSessionsAndExecutions), NavShell drops both tabs, and internal links in workers/commits pages updated to /runs.",
+  "findings": [
+    { "severity": "info", "summary": "Redirect coverage includes query-param preservation (harness) and exec- prefix normalization for detail routes — solid test coverage.", "location": "cli/internal/server/runs_redirect_test.go" },
+    { "severity": "info", "summary": "NavShell removes Sessions/Executions entries and unused Terminal/PlayCircle icon imports.", "location": "cli/internal/server/frontend/src/lib/components/NavShell.svelte" }
+  ]
+}
+```

@@ -1,0 +1,93 @@
+{
+  "attempt_id": "20260607T141049-c394d88d",
+  "bead_id": "ddx-e1295cce",
+  "base_rev": "1d449d58c2b1281efa0f87c5c1f92642b6e1b597",
+  "created_at": "2026-06-07T14:11:21.553481018Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e1295cce",
+    "title": "test-scrub: make the server worker-exit wait deterministic and bounded (30s -\u003e ~5s)",
+    "description": "PROBLEM/ROOT CAUSE: internal/server/workers_resolve_route_test.go:174 waits up to 30*time.Second (waitForWorkerExit, internal/server/workers_test.go:282, 50ms poll). On the resolveRouteFailingService error path it burned the full 30s and FAILED under load. The worker should reach FinishedAt promptly on a failed route.\n\nPROPOSED FIX: Confirm the failing-route worker path sets FinishedAt deterministically; reduce the deadline to ~5s and/or replace polling with a completion signal/channel from the WorkerManager. Do NOT change the assertion that ResolveRoute is never called for a pinned profile/model.\n\nNON-SCOPE: keep the routinglint ResolveRoute-not-called assertion intact.",
+    "acceptance": "1. TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel completes \u003c5s and passes deterministically (run -count=3).\n2. It still asserts ResolveRoute was not invoked — coverage preserved.\n3. cd cli \u0026\u0026 go test -run TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel -count=3 ./internal/server/ green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "area:server",
+      "kind:test",
+      "test-suite-scrub",
+      "phase:iterate"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-07T13:33:38.434058166Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260607T131756-543a27bd\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":3568952,\"output_tokens\":25666,\"total_tokens\":3594618,\"cost_usd\":0,\"duration_ms\":732302,\"exit_code\":0}",
+          "created_at": "2026-06-07T13:33:38.528975582Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=3594618 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260607T131756-543a27bd\",\"bead_id\":\"ddx-e1295cce\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-07T13:33:44.252248884Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=retryable internal/server package gate failures block pre-commit in this environment. The bead-specific regression test passes (`go test -run TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel -count=3 ./internal/server`), but the hook-equivalent package run (`CGO_ENABLED=1 SKIP_INTEGRATION_TESTS=true go test -short -race -timeout 30m ./internal/server`) fails across many unrelated server tests before commit can be made.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-06-07T13:33:44.46337704Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: retryable internal/server package gate failures block pre-commit in this environment. The bead-specific regression test passes (`go test -run TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel -count=3 ./internal/server`), but the hook-equivalent package run (`CGO_ENABLED=1 SKIP_INTEGRATION_TESTS=true go test -short -race -timeout 30m ./internal/server`) fails across many unrelated server tests before commit can be made.\nresult_rev=6a47a052ef701c169d31168d99390d4fabdfc484\nbase_rev=6a47a052ef701c169d31168d99390d4fabdfc484\nretry_after=2026-06-07T13:38:44Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-07T13:33:44.721229718Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: restore project root mutation: fatal: .git/index: index file smaller than expected: exit status 128\",\"fingerprint\":\"2f991b1ad180baa50ddf7da21b77e75b39fa23794b055fd0f432b35466181119\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2f991b1ad180baa50ddf7da21b77e75b39fa23794b055fd0f432b35466181119\"}",
+          "created_at": "2026-06-07T14:08:46.245869625Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-last-detail": "retryable internal/server package gate failures block pre-commit in this environment. The bead-specific regression test passes (`go test -run TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel -count=3 ./internal/server`), but the hook-equivalent package run (`CGO_ENABLED=1 SKIP_INTEGRATION_TESTS=true go test -short -race -timeout 30m ./internal/server`) fails across many unrelated server tests before commit can be made.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-06-07T13:38:44Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "retryable internal/server package gate failures block pre-commit in this environment. The bead-specific regression test passes (`go test -run TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel -count=3 ./internal/server`), but the hook-equivalent package run (`CGO_ENABLED=1 SKIP_INTEGRATION_TESTS=true go test -short -race -timeout 30m ./internal/server`) fails across many unrelated server tests before commit can be made.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T141049-c394d88d",
+    "prompt": ".ddx/executions/20260607T141049-c394d88d/prompt.md",
+    "manifest": ".ddx/executions/20260607T141049-c394d88d/manifest.json",
+    "result": ".ddx/executions/20260607T141049-c394d88d/result.json",
+    "checks": ".ddx/executions/20260607T141049-c394d88d/checks.json",
+    "usage": ".ddx/executions/20260607T141049-c394d88d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-e1295cce-20260607T141049-c394d88d"
+  },
+  "prompt_sha": "2bcba9502065dce9516e6978b2eb161e0dec04c6ea8c3da6ee806068282eae12"
+}

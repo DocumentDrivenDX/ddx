@@ -1,0 +1,15 @@
+---
+## Review: ddx-217666e0 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No bare git exec.Command in execute_bead.go | APPROVE | cli/internal/agent/execute_bead.go — 0 matches for `exec.Command.*"git"`; 21 `git.Command(` callsites present; internal/git import added |
+| 2 | Tests in cli/internal/agent/ pass; build green | APPROVE | Diff is a clean 24-/24+ 1:1 symbol swap in a single file; parent commit already uses `git.Command` elsewhere. Sandbox blocked local `go test` re-run, but static evidence shows no signature drift |
+
+### Summary
+
+Clean, mechanical migration: all 21 `exec.CommandContext(ctx, "git", …)` callsites were replaced with `git.Command(ctx, dir, …)` and the `internal/git` import was added. Diff is 24 insertions / 24 deletions in a single file, matching the scope promised by the bead.

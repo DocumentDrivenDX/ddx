@@ -1,0 +1,15 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence artifacts (manifest.json, result.json under .ddx/executions/). No changes to FEAT-004, FEAT-008, FEAT-010, or ADR-024. None of ACs 1-5 are implemented.",
+  "findings": [
+    { "severity": "block", "summary": "AC1 not met: FEAT-004-beads.md is not modified to define needs_human lane state, metadata keys, worker-skip semantics, or ready/status count behavior.", "location": "docs/helix/01-frame/features/FEAT-004-beads.md" },
+    { "severity": "block", "summary": "AC2 not met: FEAT-008-web-ui.md is not modified to add user stories for the Beads list Needs review filter or bead detail review-resolution panel.", "location": "docs/helix/01-frame/features/FEAT-008-web-ui.md" },
+    { "severity": "block", "summary": "AC3 not met: FEAT-010-task-execution.md is not modified to specify terminal review needs_human unclaim semantics versus retry/escalate behavior.", "location": "docs/helix/01-frame/features/FEAT-010-task-execution.md" },
+    { "severity": "block", "summary": "AC4 not met: ADR-024 is not modified to align review-manual-required and review_spec_gap with the operator-attention lane.", "location": "docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md" },
+    { "severity": "block", "summary": "AC5 not met: the five required metadata keys (needs-human-reason/since/source/suggested-action/summary) are not introduced in any spec.", "location": "docs/helix/" },
+    { "severity": "warn", "summary": "result.json reports outcome=task_succeeded, but the diff has no spec content. The success classification appears to disagree with the actual change set.", "location": ".ddx/executions/20260507T041229-53c2b467/result.json" }
+  ]
+}
+```

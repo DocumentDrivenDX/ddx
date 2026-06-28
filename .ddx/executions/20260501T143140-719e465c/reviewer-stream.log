@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no changes to IntegrityPanel.svelte. None of the AC items (badge-status-blocked removal, neutral ID chip, semantic button styles, diff text dark variants, text-error usage, headline typography) can be evaluated as implemented.",
+  "findings": [
+    { "severity": "block", "summary": "No modifications to src/lib/components/IntegrityPanel.svelte in the diff", "location": "src/lib/components/IntegrityPanel.svelte" },
+    { "severity": "block", "summary": "Only a new execution result.json was added; acceptance criteria untouched", "location": ".ddx/executions/20260501T143140-719e465c/result.json" }
+  ]
+}
+```

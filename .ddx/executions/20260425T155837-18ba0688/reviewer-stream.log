@@ -1,0 +1,16 @@
+---
+## Review: ddx-67599511 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestNoProgressCooldownFromConfig passes against real config.yaml | APPROVE | cli/internal/agent/execute_bead_loop_resolvers_e2e_test.go:30 — loads real .ddx/config.yaml with 47m, calls config.LoadAndResolve + RunWithConfig, asserts RetryAfter ∈ [before+47m, after+47m] and persisted store cooldown |
+| 2 | TestMaxNoChangesBeforeCloseFromConfig passes against real config.yaml | APPROVE | cli/internal/agent/execute_bead_loop_resolvers_e2e_test.go:118 — config sets max=2, asserts bead stays open after iter 1 and closes via already_satisfied on iter 2 |
+| 3 | go test ./... passes | APPROVE | execution result.json: outcome=task_succeeded, exit_code=0; commit also patches config.schema.json so the new keys validate |
+
+### Summary
+
+Clean Stage-1 e2e implementation: both tests load actual `.ddx/config.yaml`, route through `config.LoadAndResolve` + `RunWithConfig` (production path, no injected options), and assert observable loop behavior — RetryAfter timestamps for the cooldown branch, bead closure with `already_satisfied` for the count-based adjudication branch. The non-default values (47m, threshold=2) ensure a green test cannot be explained by hardcoded defaults. The bonus schema fix in `config.schema.json` is in-scope since the resolvers from bead 4 would otherwise be unreachable through real fixtures.

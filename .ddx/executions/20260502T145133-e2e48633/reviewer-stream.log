@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "TD-030-axon-bead-backend.md created with required frontmatter (depends_on: ADR-004, SD-004, FEAT-004), all four locked decisions baked in verbatim, deferred defaults adopted, source plan cited as background, and required sections (schema/operation mapping, deployment, concurrency, migration, test plan) present.",
+  "findings": [
+    { "severity": "info", "summary": "TD content lives in commit 5740627f; review diff only shows execution evidence files. Verified TD via git show.", "location": "docs/helix/02-design/technical-designs/TD-030-axon-bead-backend.md" }
+  ]
+}
+```

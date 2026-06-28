@@ -1,0 +1,2 @@
+status: open
+reason: cd cli && go test ./internal/agent/... ./cmd/... -count=1 fails in unrelated existing cmd/integration tests (bead fixtures and harness-dependent cases), so the bead cannot be certified green from this worktree pass yet.

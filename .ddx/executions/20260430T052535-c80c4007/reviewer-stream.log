@@ -1,0 +1,24 @@
+---
+## Review: ddx-14813e9d iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | border-collapse hairlines on table | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte:406 — `border-collapse` added to `<table>` |
+| 2 | mono-code ID column with accent-lever | APPROVE | +layout.svelte:438 (`font-mono text-xs text-lever`) + app.css:174 (`.text-lever`) |
+| 3 | label-caps status badges (sharp, tint+border) | APPROVE | +layout.svelte:464 (`inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide`, no rounded-* → sharp) + app.css `.badge-status-*` classes with surface+border tokens |
+| 4 | priority P0 = error color | APPROVE | +layout.svelte:299 `priorityClass` returns `text-priority-p0` when priority===0; app.css:`.text-priority-p0` |
+| 5 | No functional changes | APPROVE | Diff is CSS classes + class helpers only; query/sort/selection logic untouched |
+| 6 | Playwright `beads` e2e run + snapshots updated | BLOCK | No `*.spec.ts` or snapshot files in commit; instructions required `bun run test:e2e -- --grep 'beads'` with `--update-snapshots` after a visual restyle |
+
+### Summary
+
+Visual restyle is implemented cleanly and matches the description: hairlines, lever-toned mono ID, sharp tinted/bordered uppercase status badges, and P0 error coloring, with no behavior changes. However, the bead explicitly required running the `beads` Playwright e2e and updating snapshots after a visual change — no snapshot updates appear in the diff, so visual regressions cannot be considered verified.
+
+### Findings
+
+- Snapshot updates missing: a visual restyle of the beads table will invalidate any Playwright screenshot baselines for the beads list. The commit contains zero changes under `cli/internal/server/frontend/` test/snapshot directories. Re-run `bun run test:e2e -- --grep 'beads' --update-snapshots` from `cli/internal/server/frontend/`, commit the regenerated `*-snapshots/` PNGs, and confirm the run is green.
+- Minor (not blocking): the `default` branch of `statusBadgeClass` falls back to `badge-status-open`, which would silently mis-label any unknown future status as "open" styling. Consider a neutral fallback class instead.

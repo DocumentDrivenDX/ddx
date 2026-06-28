@@ -1,0 +1,151 @@
+{
+  "attempt_id": "20260608T084726-bbbbd382",
+  "bead_id": "ddx-9b78b617",
+  "base_rev": "96d038031296c18aa3bed953090e2b21eba8d93c",
+  "created_at": "2026-06-08T08:47:58.488809558Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-9b78b617",
+    "title": "code-health: split ExecuteBeadWorker.Run loop body into a runIteration m: part 2",
+    "description": "PROBLEM\nParent bead ddx-f2a366db is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM/ROOT CAUSE: cli/internal/agent/execute_bead_loop.go:1133 ExecuteBeadWorker.Run is 2,473 LOC — pre-loop setup (:1133-:1499) plus the entire iteration loop (for { at :1500). The loop body has comment-delimited phases that are natural extraction seams (candidate selection :1500-1799, wedge-guard+atomic-claim :1840-1958, intake :2012, lint gate :2452, dispatch+watchdog :2559-2741, post-attempt classification :2742+).\n\nPROPOSED FIX: STRICTLY MECHANICAL hoist (no behavior change): extract the loop body into (w *ExecuteBeadWorker) runIteration(ctx, loopState, ...) (iterationOutcome, error), leaving Run as setup + for { runIteration(...) }. Introduce a small loopState/iterationOutcome struct for the values currently closed over. The phase helper functions mostly already exist further down the file.\n\nNON-SCOPE: do NOT also extract the dispatch/post-attempt sub-phases here (separate follow-up); do NOT touch ExecuteBeadWithConfig; no behavior/event/ordering change.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- cd cli \u0026\u0026 go test ./internal/agent/... green (existing loop/worker tests unchanged).\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. cd cli \u0026\u0026 go test ./internal/agent/... green (existing loop/worker tests unchanged).\n2. lefthook run pre-commit passes.",
+    "parent": "ddx-f2a366db",
+    "labels": [
+      "area:agent",
+      "kind:refactor",
+      "code-health",
+      "phase:iterate",
+      "hot-file",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9b78b617)\",\"fingerprint\":\"3090d0908e51fd2ef4395c160bc5f84c714a2a2c5a4557cac56db65edd4aa81a\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3090d0908e51fd2ef4395c160bc5f84c714a2a2c5a4557cac56db65edd4aa81a\"}",
+          "created_at": "2026-06-08T04:25:21.378114395Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T04:52:26.273669694Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T042724-6cf00a16\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":9626210,\"output_tokens\":34321,\"total_tokens\":9660531,\"cost_usd\":0,\"duration_ms\":1492969,\"exit_code\":0}",
+          "created_at": "2026-06-08T04:52:26.337788608Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=9660531 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260608T042724-6cf00a16/0\",\"cycle_index\":0,\"attempt_id\":\"20260608T042724-6cf00a16\",\"base_rev\":\"fcc83440e784dec6e3b64191f71496e1e4b3c8bc\",\"result_rev\":\"0ec34f6dbc8ef2a11f565a07083be9860cb8d398\"}",
+          "created_at": "2026-06-08T04:52:26.399912233Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9b78b617\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-08T04:53:23.320693829Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"decode_warnings\":[{\"field\":\"recommended_action\",\"warning\":\"unknown recommended_action\",\"raw_excerpt\":\"retry_with_rollback\"}],\"detail\":\"pre-execute-bead checkpoint: listing skip-worktree paths: exit status 128\",\"malformed\":true,\"rationale\":\"The execution failed at the pre-execute-bead checkpoint when listing skip-worktree paths (exit status 128), indicating a transient git state or repository integrity issue rather than a failure in the agent's code generation or execution logic. The git command likely encountered a corrupted index, concurrent access, or other transient filesystem/repository condition. A retry with a clean git state should resolve this.\",\"recommended_action\":\"retry_with_rollback\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-08T04:56:10.765101304Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: retry_with_rollback (warnings=1)"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: listing skip-worktree paths: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-06-08T04:56:10.828480868Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: empty output\",\"fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\"}",
+          "created_at": "2026-06-08T07:22:15.791801894Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T07:51:04.59966219Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T072418-8ed95ea2\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":175257,\"output_tokens\":880,\"total_tokens\":176137,\"cost_usd\":0,\"duration_ms\":1585850,\"exit_code\":1}",
+          "created_at": "2026-06-08T07:51:04.683814532Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=176137 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T08:22:50.847686197Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T075107-a5eed2c2\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":217620,\"output_tokens\":1980,\"total_tokens\":219600,\"cost_usd\":0,\"duration_ms\":1871794,\"exit_code\":1}",
+          "created_at": "2026-06-08T08:22:50.939051395Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=219600 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T08:47:24.481453552Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T082717-1f73f650\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":130945,\"output_tokens\":983,\"total_tokens\":131928,\"cost_usd\":0,\"duration_ms\":1186010,\"exit_code\":1}",
+          "created_at": "2026-06-08T08:47:24.552041414Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=131928 model=dflash"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T084726-bbbbd382",
+    "prompt": ".ddx/executions/20260608T084726-bbbbd382/prompt.md",
+    "manifest": ".ddx/executions/20260608T084726-bbbbd382/manifest.json",
+    "result": ".ddx/executions/20260608T084726-bbbbd382/result.json",
+    "checks": ".ddx/executions/20260608T084726-bbbbd382/checks.json",
+    "usage": ".ddx/executions/20260608T084726-bbbbd382/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9b78b617-20260608T084726-bbbbd382"
+  },
+  "prompt_sha": "7cf2bb7d7e69f05f763acf3982ddd8a4495819c0a43b918ec409f9047152b6f9"
+}

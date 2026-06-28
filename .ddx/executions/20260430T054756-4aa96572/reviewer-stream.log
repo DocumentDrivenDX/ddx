@@ -1,0 +1,23 @@
+---
+## Review: ddx-0e5e9ca0 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Token class swap on overview/node pages | BLOCK | — diff contains only execution evidence JSON, no source changes |
+| 2 | Section hairlines added | BLOCK | — no CSS/component changes visible in diff |
+| 3 | Headline typography scale applied | BLOCK | — no typography changes visible in diff |
+| 4 | Playwright overview tests pass + snapshots updated | BLOCK | — no test or snapshot changes in diff |
+
+### Summary
+
+The diff under review (`e0f2201f`) contains only `.ddx/executions/...` manifest and result JSON — no source, style, or snapshot changes. The actual restyle commit referenced by `result_rev` (`ff5659be`) is not part of this diff, so none of the bead's stated work can be verified here. Cannot evaluate implementation quality or correctness from execution evidence alone.
+
+### Findings
+
+- Diff scope is wrong: only `.ddx/executions/20260430T054756-4aa96572/manifest.json` and `result.json` are present. The restyle commit `ff5659be style: restyle overview and node pages` (visible in recent git log) is what should be under review.
+- Re-run review against `ff5659be` (the `result_rev`) or the merge range that includes it, so the actual token-class swaps, hairline additions, headline scale changes, and Playwright snapshot updates can be graded.
+- No Playwright artifacts (updated PNG snapshots, test file diffs) are present in this diff to confirm `bun run test:e2e -- --grep 'overview' --update-snapshots` was run.

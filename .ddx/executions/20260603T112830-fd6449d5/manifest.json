@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260603T112830-fd6449d5",
+  "bead_id": "ddx-1da4f39f",
+  "base_rev": "70f69e71427c5949ecf38c1b4bc09253e9baca1c",
+  "created_at": "2026-06-03T11:28:38.000755186Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1da4f39f",
+    "title": "global install surface: ddx install --global and ddx update --global write the machine-wide plugin tree + agent-tier links",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a, slice 2 of 4)\n\nOperators who want one Claude Code / Codex install per machine need a `--global` surface so a plugin is written once to the machine-wide tree and linked into the home-level harness skill directories, available across every project without per-project setup.\n\nROOT CAUSE\n- `runInstall` (cli/cmd/install.go:54) reads the `--global` flag (install.go:49,57) and routes target resolution through `resolveInstallDirs(global)` (install.go:184). When global is true it sets `installRoot = ddxroot.GlobalDir()` and skill dirs to `~/.agents/skills` and `~/.claude/skills` (install.go:185-192); state file selection is via `selectInstallState(global)` (install.go:202-215). Local installs route the same way in `installLocal` (install.go:358, global branch install.go:450-507).\n- Update: `performGlobalUpdate` (cli/cmd/update.go:300) operates exclusively on `${XDG_DATA_HOME}/ddx/global/` via `registry.InstallPackage(adjustedPkg, ddxroot.GlobalDir())` (update.go:337) and saves the global state (update.go:346); the `--global` flag is parsed in `extractUpdateOptions` (update.go:395) into `UpdateOptions.Global` (update.go:35) and dispatched from `runUpdate` (update.go:65).\n\nPROPOSED FIX\nEnsure `ddx install \u003cname\u003e --global` writes the plugin to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates symlink-or-copy entries under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e`, and does NOT touch the project's `.claude/skills` / `.agents/skills`. Ensure `ddx update --global` updates only the global plugin tree and global state, never the project tree. Expose `--global` consistently on the plugin query surface (`ddx plugin list` / `installed`).\n\nNON-SCOPE\n- The no-flag project install in either mode (slice 3).\n- `ddx init --global` first-time setup and doctor reporting (slice 4).\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- Slice 1 (plugin lookup precedence) — global installs are resolved via `ResolvePlugin`'s global layer.\n- ddx-06cbaa90 (ddx home resolution) — depends on `ddxroot.GlobalDir()`.",
+    "acceptance": "1. `TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier` (cli/cmd/install_global_test.go:184) asserts `ddx install \u003cname\u003e --global --silent` writes to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates symlink-or-copy entries under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e`, while leaving the project `.claude/skills` and `.agents/skills` untouched.\n2. `TestInstallGlobal_WritesXDGAndAgentTierLinks` (install_global_test.go:48) asserts the same XDG + agent-tier link layout for AC1.\n3. `TestUpdateGlobal_UpdatesGlobalNotProject` (cli/cmd/update_test.go:211) asserts `ddx update --global` updates only the global plugin tree and leaves the project install untouched.\n4. cd cli \u0026\u0026 go test ./cmd/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "parent:ddx-602ae31a",
+      "dep:ddx-06cbaa90"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T112830-fd6449d5",
+    "prompt": ".ddx/executions/20260603T112830-fd6449d5/prompt.md",
+    "manifest": ".ddx/executions/20260603T112830-fd6449d5/manifest.json",
+    "result": ".ddx/executions/20260603T112830-fd6449d5/result.json",
+    "checks": ".ddx/executions/20260603T112830-fd6449d5/checks.json",
+    "usage": ".ddx/executions/20260603T112830-fd6449d5/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-1da4f39f-20260603T112830-fd6449d5"
+  },
+  "prompt_sha": "95b9dc24e1b10a12079de583727b14032f336a91c3917fe36fbc96b98da65cac"
+}

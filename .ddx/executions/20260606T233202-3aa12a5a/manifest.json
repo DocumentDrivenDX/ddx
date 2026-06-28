@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260606T233202-3aa12a5a",
+  "bead_id": "ddx-b2a61330",
+  "base_rev": "7e71e058fab48d0b68b4dc858b8c410032779301",
+  "created_at": "2026-06-06T23:32:14.235236863Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b2a61330",
+    "title": "agent: serialize post-land main-worktree checkout-sync under the main-git lock (stop source leaking into the main checkout)",
+    "description": "PROBLEM: In a 2-worker drain, source edits (cli/cmd/bead.go [M], cli/cmd/bead_create_dep_test.go [D], cli/internal/bead/store.go [M], cli/internal/bead/store_test.go [M]) were left DIRTY in the MAIN checkout, wedging the clean-tree guard ~12x (workers refuse to start). The leaked content was a DUPLICATE of already-landed ctx-first work (ddx-38801c65/b85090ae), i.e. it escaped worktree isolation via the land path.\n\nROOT CAUSE: the post-land main-worktree checkout-sync runs OUTSIDE the main-git lock. cli/internal/agent/execute_bead_land.go:1434-1436 calls syncWorkTreeToHeadGuarded(gitOps, wd=projectRoot, syncFromRev, ...) AFTER the withMainGitLock(\"land_post_land_finalize\") block closes at execute_bead_land.go:1430. The sync does `git diff --name-only \u003csyncFromRev\u003e HEAD` (execute_bead_land.go:420; syncFromRev=prep.currentTip captured pre-land at line 1428) then `git checkout-index -f` (line 466) into the main checkout. A SIBLING worker advancing refs/heads/main between the unlocked diff and the unlocked checkout makes the path-set and the materialized index disagree -\u003e duplicate dirty source. TP-021 Contract item 3 (docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md:39-41) ALREADY lists the main-worktree index sync as a window that must be under the main-git lock; the code violates it. (LandRequest.WorktreeDir = projectRoot, so wd==main checkout and syncOperatorAfterLand is true: execute_bead_land.go:1856, :1250.)\n\nPROPOSED FIX: Move BOTH syncWorkTreeToHeadGuarded calls (post-land-failure branch ~execute_bead_land.go:1398-1400 and the finalize branch ~1434-1436) INSIDE their respective withMainGitLock blocks, so the changed-path diff and the checkout-index write run under one lock acquisition with HEAD pinned (no sibling can advance refs/heads/main mid-sync). Keep readTreeHeadWithRetry intact. Operator-chosen approach: full diff+checkout under the lock (preferred). Land Bead \"evidence-out-of-lock\" alongside so this slightly-wider window stays under the cap.\n\nNON-SCOPE: the slow evidence add+commit (separate sibling bead removes it from the lock); the dirty-root loop escalation (separate bead); build-asset leaks (ddx-b320e794).",
+    "acceptance": "1. New TestChaos_ConcurrentLandCheckoutSyncDoesNotDirtyMainCheckout (execute_bead_land_test.go): two concurrent landLocked calls landing overlapping source paths against one shared main checkout; assert `git status --porcelain` is empty in the main checkout after both settle.\n2. New TestLandLockSurface_CheckoutSyncRunsInsideMainGitLock: a fake gitOps whose SyncWorkTreeToHead asserts the main-git lock is held when invoked; fails if the sync runs unlocked.\n3. Existing TestLand_SyncCleanCheckoutStillUpdatesFiles, TestLand_SyncDeferredWhenOperatorCheckoutDirtyOverlap, TestLand_PreserveRecoveryDoesNotSyncDirtyProjectRoot still pass.\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestChaos_ConcurrentLandCheckoutSyncDoesNotDirtyMainCheckout|TestLandLockSurface_CheckoutSyncRunsInsideMainGitLock|TestLand_Sync|TestLand_PreserveRecoveryDoesNotSyncDirtyProjectRoot' -count=1 green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "area:git",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:TP-021",
+      "spec:FEAT-010",
+      "incident:source-leak-wedge"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-06-06T23:29:59.038369005Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": -2
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T233202-3aa12a5a",
+    "prompt": ".ddx/executions/20260606T233202-3aa12a5a/prompt.md",
+    "manifest": ".ddx/executions/20260606T233202-3aa12a5a/manifest.json",
+    "result": ".ddx/executions/20260606T233202-3aa12a5a/result.json",
+    "checks": ".ddx/executions/20260606T233202-3aa12a5a/checks.json",
+    "usage": ".ddx/executions/20260606T233202-3aa12a5a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b2a61330-20260606T233202-3aa12a5a"
+  },
+  "prompt_sha": "0600f197cee0031b711eee99054b6a444f16c3d65a77050ba63585436cadc1dd"
+}

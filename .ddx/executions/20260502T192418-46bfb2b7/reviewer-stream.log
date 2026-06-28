@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "fizeau bumped 0.9.29→0.10.0; symbol-resolution file references ServiceExecuteRequest.Role/CorrelationID, RouteRequest.Role/CorrelationID, ServiceRoutingActual.Power, RouteDecision.Power. Strictly additive; AC1–5 satisfied.",
+  "findings": [
+    { "severity": "info", "summary": "AC5 names ExecuteRequest.Role; commit uses ServiceExecuteRequest.Role, the DDx-facing public type — equivalent and documented in the file comment.", "location": "cli/internal/agent/fizeau_v0_10_symbols.go:10" }
+  ]
+}
+```

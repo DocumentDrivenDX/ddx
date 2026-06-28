@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260607T114538-2769e0d3",
+  "bead_id": "ddx-bb803b68",
+  "base_rev": "3aad7a3cddf431c5d697a2d2bb8c6cfa51cb92d7",
+  "created_at": "2026-06-07T11:45:58.62684986Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bb803b68",
+    "title": "test-scrub: build the e2e/probe CLI binary once via TestMain+sync.Once",
+    "description": "PROBLEM/ROOT CAUSE: cmd/e2e_test.go:25,183,239 (three tests) + cmd/e2e_smoke_test.go:29 each run `go build` of the full CLI; internal/agent/workerprobe/probe_integration_test.go:44 builds again. Each full build is several seconds, repeated.\n\nPROPOSED FIX: In cmd, add a package-level sync.Once-guarded builder (or TestMain) that builds the ddx binary once to a temp path and exposes it; replace the per-test `go build` calls with the shared path. Same for workerprobe.\n\nNON-SCOPE: same binary, just built once. Behavior/coverage preserved.",
+    "acceptance": "1. `go build` of the CLI is invoked at most once per package run (assert via a build-count counter behind the Once, or by elapsed: the 2nd/3rd e2e tests each \u003c2s).\n2. TestE2E_BasicWorkflow, TestE2E_TemplateWithVariables, TestE2E_UpdateWorkflow, TestE2ESmokeJourney still pass against the shared binary — coverage preserved.\n3. cd cli \u0026\u0026 go test -run 'TestE2E' ./cmd/ green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "kind:test",
+      "test-suite-scrub",
+      "throughput",
+      "phase:iterate"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T114538-2769e0d3",
+    "prompt": ".ddx/executions/20260607T114538-2769e0d3/prompt.md",
+    "manifest": ".ddx/executions/20260607T114538-2769e0d3/manifest.json",
+    "result": ".ddx/executions/20260607T114538-2769e0d3/result.json",
+    "checks": ".ddx/executions/20260607T114538-2769e0d3/checks.json",
+    "usage": ".ddx/executions/20260607T114538-2769e0d3/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-bb803b68-20260607T114538-2769e0d3"
+  },
+  "prompt_sha": "32a021584426bba3278341300963077617329f0bb32162e1b990f438e265f1fe"
+}

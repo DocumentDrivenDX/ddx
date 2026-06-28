@@ -1,0 +1,10 @@
+All three AC items addressed correctly.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All three AC items implemented: WS banner uses text-label-caps + font-label-caps, brand uses text-headline-md, Node label uses text-body-sm. No raw text-xs/text-base remain in NavShell.",
+  "findings": []
+}
+```

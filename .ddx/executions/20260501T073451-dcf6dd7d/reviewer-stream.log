@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json). No website/features/ content changes are present to evaluate against the acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No changes to website/content/features/ or related files; cannot verify single-page anchors, Persona System removal, artifact-graph lead framing, maturity badges, or screenshot links", "location": "website/" }
+  ]
+}
+```

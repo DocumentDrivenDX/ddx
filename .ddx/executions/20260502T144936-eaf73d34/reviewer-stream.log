@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata files (manifest.json, result.json) under .ddx/executions/. No source changes implement approve/cancel mutations, per-project allowlist, or auto-approve flag. None of the four AC items can be evaluated.",
+  "findings": [
+    { "severity": "block", "summary": "AC1: No operatorPromptApprove/operatorPromptCancel mutation implementation present in diff.", "location": ".ddx/executions/20260502T144936-eaf73d34/result.json" },
+    { "severity": "block", "summary": "AC2: No per-project allowlist enforcement code present.", "location": ".ddx/executions/20260502T144936-eaf73d34/result.json" },
+    { "severity": "block", "summary": "AC3: No auto-approve flag restricted to configured-localhost identity present.", "location": ".ddx/executions/20260502T144936-eaf73d34/result.json" },
+    { "severity": "block", "summary": "AC4: No tests covering happy or denied paths present.", "location": ".ddx/executions/20260502T144936-eaf73d34/result.json" }
+  ]
+}
+```

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no changes to workers/+layout.svelte. Cannot verify any AC item (text-lever removal, accent-lever ID column, headline token, text-body-sm, text-error).",
+  "findings": [
+    { "severity": "block", "summary": "No source changes to src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte present in diff", "location": "src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte" },
+    { "severity": "block", "summary": "Diff only adds an execution metadata file; insufficient to evaluate acceptance criteria", "location": ".ddx/executions/20260501T143640-a371c3f3/result.json" }
+  ]
+}
+```

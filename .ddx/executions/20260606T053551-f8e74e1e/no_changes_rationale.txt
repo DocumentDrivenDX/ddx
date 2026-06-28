@@ -1,0 +1,2 @@
+status: open
+reason: retryable - `go test ./... -count=1` is still red in `internal/bead` with `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` failing on p95 lock hold budget (30.34ms > 30.00ms). The failure reproduces in isolation and appears unrelated to the agent-side mixed-commit cooldown change.

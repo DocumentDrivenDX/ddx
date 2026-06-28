@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "nodeColorClass now returns semantic .node-stale/.node-missing/.node-fresh utilities backed by design-token CSS variables; raw amber/red/green removed. Label uses text-body-sm in place of 12px. Light/dark handled via tokens.",
+  "findings": []
+}
+```

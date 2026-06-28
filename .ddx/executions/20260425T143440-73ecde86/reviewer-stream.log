@@ -1,0 +1,20 @@
+Wiring is in place at agent_cmd.go:2015. All four tests exist. Prior REQUEST_CHANGES was about missing wiring; this iter adds it.
+
+---
+## Review: ddx-70c1d2e2 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestReviewErrorTaxonomy — 4 classes | APPROVE | internal/agent/execute_bead_review_taxonomy_test.go:20 — context_overflow/provider_empty/unparseable/transport subtests |
+| 2 | TestBoundedReviewRetry — 3 cases | APPROVE | internal/agent/execute_bead_review_retry_test.go:52,116,176 — Nth/reset/no-budget cases (incl. --no-merge & execution-failed) |
+| 3 | §13 invariant preserved | APPROVE | internal/agent/execute_bead_review_failure_modes_test.go present and not modified |
+| 4 | TestReviewMaxRetriesConfig + loop respects override | APPROVE | internal/config/review_max_retries_test.go:15; cmd wiring at cli/cmd/agent_cmd.go:2015 (`ReviewMaxRetries: cfg.ResolveReviewMaxRetries()`) closes the prior gap |
+| 5 | review-manual-required body has class/count/rev | APPROVE | execute_bead_review_retry_test.go:92-97 asserts failure_class, attempt_count, result_rev fields |
+
+### Summary
+
+Iter 1 fixes the wiring gap that triggered the prior REQUEST_CHANGES: `cfg.ResolveReviewMaxRetries()` is now passed into `ExecuteBeadLoopOptions` from `runAgentExecuteLoop`, completing YAML→options→worker plumbing. All four required tests are present and assert the documented event-body fields and retry-budget scoping.

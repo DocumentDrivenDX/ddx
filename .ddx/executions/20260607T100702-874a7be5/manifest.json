@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260607T100702-874a7be5",
+  "bead_id": "ddx-831c69fa",
+  "base_rev": "cc78e125ecdb2fbb07a6bf722890cb54f81414af",
+  "created_at": "2026-06-07T10:07:15.717551938Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-831c69fa",
+    "title": "epic-autoclose: recurse closure up the full parent chain for nested epics",
+    "description": "PROBLEM: walkUpClosureCandidate (cli/internal/bead/store.go:1639-1697) is single-hop by explicit design (comment store.go:1638: \"Single-hop only; does not chase the grandparent\"). An epic-of-epics (Diagnose has a dedicated ReasonEpicOfEpic, diagnose.go:106-116) whose last leaf closes will auto-close the immediate parent epic but leave the GRANDPARENT epic open until an unrelated second close happens to fire. Operator decision: closure must RECURSE the full ancestor chain so one leaf-close settles the entire nested-epic chain in a single operation.\n\nROOT CAUSE: the deliberate single-hop design in walkUpClosureCandidate (store.go:1683 closes the parent but never recurses to parent.Parent).\n\nPROPOSED FIX: When walkUpClosureCandidate closes a parent epic (store.go:1683), RECURSE to parent.Parent using the existing visited set (store.go:1682) to bound recursion and prevent cycles. Apply the same cancelled-as-terminal + all-cancelled-cancels semantics at each level. Update FEAT-004 to state the nested-epic convergence guarantee (one child-close settles the full ancestor chain). Depends on the CloseWithEvidence walk-up bead so both the manual and factory close paths inherit recursion.\n\nNON-SCOPE: idle-loop/reconcile beads (they converge via re-scan anyway, but the recursion makes them prompt).",
+    "acceptance": "1. TestWalkUpClosure_RecursesToGrandparentEpic: epic A -\u003e epic B -\u003e leaf child; closing the leaf auto-closes B then A in one close operation, each with its own epic_auto_close event.\n2. TestWalkUpClosure_StopsAtOpenAncestor: a three-level chain where the grandparent has another OPEN child stops recursion at the grandparent (it stays open).\n3. TestWalkUpClosure_CycleGuardTerminates: a malformed parent cycle does not infinite-loop (visited set bounds it).\n4. FEAT-004 states the nested-epic convergence guarantee.\n5. cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestWalkUpClosure' green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "area:bead",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:FEAT-004",
+      "epic-autoclose"
+    ],
+    "metadata": {
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 2983171)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T11:03:03Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T100702-874a7be5",
+    "prompt": ".ddx/executions/20260607T100702-874a7be5/prompt.md",
+    "manifest": ".ddx/executions/20260607T100702-874a7be5/manifest.json",
+    "result": ".ddx/executions/20260607T100702-874a7be5/result.json",
+    "checks": ".ddx/executions/20260607T100702-874a7be5/checks.json",
+    "usage": ".ddx/executions/20260607T100702-874a7be5/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-831c69fa-20260607T100702-874a7be5"
+  },
+  "prompt_sha": "0b9160e47e3419673ce5b1fc0ffb2d736ba34e3896f72e8391a6dd1e1e3523f8"
+}

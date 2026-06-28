@@ -1,0 +1,4 @@
+status: open
+orchestrator_action: decompose
+reason: bead spans tracker validation, decomposition runtime, doctor repair, work-loop remediation, dispatch severity, and lifecycle docs/regression; split into child beads instead of implementing in one pass
+children: ddx-b85090ae, ddx-1bcb9827, ddx-f9bb7327, ddx-0836dde5, ddx-4173d55c, ddx-e5511c6b

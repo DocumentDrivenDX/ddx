@@ -1,0 +1,34 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The patch only adds execution artifacts under .ddx/executions and makes no changes to the required FEAT/ADR spec documents, so none of the bead acceptance criteria are implemented or reviewable.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes were made to FEAT-004, so the needs_human lane state, metadata keys, worker-skip semantics, and ready/status count behavior required by AC1 and AC5 are not implemented.",
+      "location": "docs/helix/01-frame/features/FEAT-004-beads.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No changes were made to FEAT-008, so the Beads list Needs review filter and bead-detail review-resolution panel required by AC2 are not specified.",
+      "location": "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No changes were made to FEAT-010, so the required needs_human review-lane semantics for terminal review outcomes versus retry/escalate behavior in AC3 are not implemented.",
+      "location": "docs/helix/01-frame/features/FEAT-010-task-execution.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No changes were made to ADR-024, so the operator-attention lane alignment for review-manual-required and review_spec_gap required by AC4 is missing.",
+      "location": "docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md"
+    },
+    {
+      "severity": "block",
+      "summary": "The diff contains only execution manifest/result artifacts, which do not implement or demonstrate any of the spec updates or the pre-commit verification required by AC6.",
+      "location": ".ddx/executions/20260507T025728-4481ae09/manifest.json"
+    }
+  ]
+}
+```

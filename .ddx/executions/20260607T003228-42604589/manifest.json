@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260607T003228-42604589",
+  "bead_id": "ddx-177a20c4",
+  "base_rev": "de04d018588963a96f75f2214dbf8432a1e7fac9",
+  "created_at": "2026-06-07T00:32:42.912220557Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-177a20c4",
+    "title": "agent: move evidence directory staging+commit out of the land_post_land_finalize main-git lock",
+    "description": "PROBLEM: land_post_land_finalize held the main-git lock up to 4m37s (retries=12) under 2 workers, blocking the sibling that entire time (also observed: land_ref_update hold=20-24s, durable_audit hold=19s). 4m37s is 9.2x the 30s TP-021 tracker cap.\n\nROOT CAUSE: withMainGitLock(\"land_post_land_finalize\", ...) at cli/internal/agent/execute_bead_land.go:1404 wraps landEvidence (execute_bead_land.go:1417), which does  of the whole per-attempt evidence directory (StageDir, execute_bead_land.go:756-768) + On branch main\nYour branch is ahead of 'origin/main' by 1 commit.\n  (use \"git push\" to publish your local commits)\n\nnothing to commit, working tree clean (CommitStaged, :771-789) INSIDE the lock. Large evidence dirs (multi-GB per ddx-274943fc) on a large repo make this dominate the hold. ddx-33530e68 moved post-land COMMANDS out of the lock (runPostLandCommand now unlocked at :1375); ddx-3d5678fc moved attempt PREP out of pre_dispatch_commits; NEITHER touched the evidence add+commit — it is the third slow op still locked.\n\nPROPOSED FIX: Perform the evidence  (and evidence working-tree writes) in the private finalization worktree (landingFinalizationWorktree, execute_bead_land.go:1052) OUTSIDE the lock; reacquire withMainGitLock only for the short ref-advancing publish (the evidence commit's ref update / result.NewTip). Preserve preserveAfterEvidenceFailure semantics (execute_bead_land.go:1467) by briefly reacquiring the lock for the preserve/revert ref writes on failure.\n\nNON-SCOPE: the checkout-sync lock window (sibling bead L1); cap enforcement (sibling bead); worktree cleanup (ddx-274943fc).",
+    "acceptance": "1. New TestChaos_PostLandEvidenceCommitDoesNotHoldMainGitLock (execute_bead_land_test.go): inject a blocking/slow evidence stage; assert another goroutine acquires .ddx/.git-tracker.lock while the stage is blocked.\n2. New TestPerformance_LandPostLandFinalizeLockHoldUnderCap: record land_post_land_finalize lock-hold for a fixture with a representative evidence dir; assert hold \u003c 30s.\n3. Existing evidence-landing tests pass (TestLand_*Evidence, TestChaos_PostLandCommandDoesNotHoldMainGitLock).\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestChaos_PostLandEvidenceCommitDoesNotHoldMainGitLock|TestPerformance_LandPostLandFinalizeLockHoldUnderCap|TestLand_.*Evidence' -count=1 green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "area:git",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:TP-021",
+      "prevention:ddx-33530e68",
+      "incident:land-lock-hold"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"bead_id\":\"ddx-177a20c4\",\"detail\":\"resource_exhausted\",\"status\":\"resource_exhausted\"}",
+          "created_at": "2026-06-07T00:25:52.055202733Z",
+          "kind": "resource-exhausted",
+          "source": "ddx work",
+          "summary": "resource exhausted after cleanup; stopping work loop"
+        },
+        {
+          "actor": "erik",
+          "body": "resource_exhausted\npowerClass=standard\noutcome_reason=unknown",
+          "created_at": "2026-06-07T00:25:52.13972845Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "resource_exhausted"
+        }
+      ],
+      "queue-rank": 0
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T003228-42604589",
+    "prompt": ".ddx/executions/20260607T003228-42604589/prompt.md",
+    "manifest": ".ddx/executions/20260607T003228-42604589/manifest.json",
+    "result": ".ddx/executions/20260607T003228-42604589/result.json",
+    "checks": ".ddx/executions/20260607T003228-42604589/checks.json",
+    "usage": ".ddx/executions/20260607T003228-42604589/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-177a20c4-20260607T003228-42604589"
+  },
+  "prompt_sha": "e13f3496fbb0ddac779816dab876b05e314359ddc0da74cf1fe6ffa31609f01e"
+}

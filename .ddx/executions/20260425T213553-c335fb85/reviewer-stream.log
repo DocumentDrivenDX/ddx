@@ -1,0 +1,19 @@
+---
+## Review: ddx-dd7fce7e iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestReviewRetryThresholdFromConfigCLI passes; closes on attempt 5, no manual-required | APPROVE | cli/cmd/agent_execute_loop_e2e_test.go:42-151 — config.LoadAndResolve reads real `.ddx/config.yaml` with `review_max_retries: 5`; uses `testfixtures.ReviewFailureRunner{FailUntilCall: 4}`; asserts 4 review-error events, 1 APPROVE, 0 review-manual-required, bead status "closed". CLI dispatch correctly migrated at cli/cmd/agent_cmd.go:2018-2050. |
+| 2 | `go test ./...` passes | REQUEST_CHANGES | `.ddx/executions/20260425T213553-c335fb85/cmd_failures_pre_post.txt` documents 7 pre-existing failures (TestBeadReviewCollapseGolden, US028–US034, TestInstallationPerformance) — identical pre/post bead. Strict AC ("passes") not literally met; pre-commit was bypassed via `LEFTHOOK_EXCLUDE=go-test`. |
+
+### Summary
+
+The CLI dispatch migration to `LoadAndResolve` + `RunWithConfig` is correctly implemented and the iter-1 follow-up properly surfaces the load error (avoiding the SD-024 sealed-construction panic) and stops the session-log tailer on the failure path. AC #1 is solidly proven by the new behavioral e2e test. AC #2 is not literally met because the cmd package has 7 pre-existing failing tests; the evidence file demonstrates these are byte-identical pre/post and environmental (missing `cli/build/ddx`, golden-drift), but the merge bypasses lefthook's go-test gate rather than scoping the AC explicitly.
+
+### Findings
+
+- AC #2 strict reading: pre-existing failures in `cmd/` (TestBeadReviewCollapseGolden golden drift; TestAcceptance_US028/029/030/031/034; TestInstallationPerformance) cause `go test ./...` to fail. The evidence file argues these are unrelated and identical before/after — accept that argument or scope the AC, but a downstream bead should either (a) restore a green tree or (b) explicitly amend the AC to exclude the documented environmental tests so future beads aren't forced to keep `LEFTHOOK_EXCLUDE=go-test` as standard practice.

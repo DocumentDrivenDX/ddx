@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260527T190023-6271cb20",
+  "bead_id": "ddx-f49ec1fb",
+  "base_rev": "27e8a44dbd9157b5702987f60821d4c76f45c9c4",
+  "created_at": "2026-05-27T19:00:47.396398875Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f49ec1fb",
+    "title": "cleanup: reap expired run-state for dead worker PIDs",
+    "description": "PROBLEM\n`ddx cleanup --apply` can leave an expired per-attempt run-state file behind and continue treating the corresponding attempt worktree as live even after the worker process is gone. This keeps the project checkout dirty (`?? .ddx/run-state/`) and prevents reliable follow-up workers until an operator manually deletes the stale file.\n\nOBSERVED EVIDENCE\nIn `/home/erik/Projects/niflheim`, a canceled `ddx work --once` left `.ddx/run-state/20260521T071245-feb2ad20.json` with `pid: 4109595`, `refreshed_at: 2026-05-21T07:12:48Z`, and `expires_at: 2026-05-21T07:14:48Z`. After the process was gone and the expiry time had passed, `ddx cleanup --apply` reported `removed_run_state_files: 0` and still classified `/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-niflheim-439a49ae-20260521T071245-feb2ad20` as `preserved_live_attempt` with message `matched live run-state`.\n\nROOT CAUSE WITH FILE:LINE\n`cli/cmd/execute_loop_shared.go:616-623` only treats run-state freshness/expiry as the liveness predicate for cleanup preservation. It does not require the recorded `RunState.PID` to still be alive when deciding that an expired/dead attempt should be preserved. `cli/cmd/cleanup_test.go:77-180` covers run-state cleanup in simpler cases but does not reproduce an expired per-attempt run-state whose PID is dead while the worktree still matches that run-state.\n\nPROPOSED FIX\nMake cleanup treat a per-attempt run-state as live only when both conditions hold: the lease is fresh/non-expired and the recorded worker PID is still alive. Expired run-state files for dead PIDs must be removed, and matching attempt worktrees must be eligible for stale cleanup. Keep live active attempts protected.\n\nNON-SCOPE\n- Changing work status enrichment for live workers.\n- Changing worker heartbeat cadence.\n- Deleting completed evidence bundles.\n- Reworking global temp-root cleanup across projects.\n\nIN-SCOPE FILES\n- `cli/cmd/execute_loop_shared.go`\n- `cli/cmd/cleanup_test.go`\n- Adjacent cleanup/startup-housekeeping tests if needed.",
+    "acceptance": "1. Add a regression test that writes `.ddx/run-state/\u003cattempt\u003e.json` for a dead PID with `expires_at` in the past, creates the matching attempt worktree, runs cleanup with `--apply`, and asserts the run-state file is removed.\n2. The same test asserts the matching stale attempt worktree is no longer classified as `preserved_live_attempt` solely because an expired run-state file existed.\n3. Add or preserve a live-PID regression test proving a fresh run-state for a live worker still protects its worktree.\n4. `cd cli \u0026\u0026 go test ./cmd -run 'TestCleanup.*RunState|TestWorktreeStillLive' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:cleanup",
+      "area:execution",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260527T190023-6271cb20",
+    "prompt": ".ddx/executions/20260527T190023-6271cb20/prompt.md",
+    "manifest": ".ddx/executions/20260527T190023-6271cb20/manifest.json",
+    "result": ".ddx/executions/20260527T190023-6271cb20/result.json",
+    "checks": ".ddx/executions/20260527T190023-6271cb20/checks.json",
+    "usage": ".ddx/executions/20260527T190023-6271cb20/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-f49ec1fb-20260527T190023-6271cb20"
+  },
+  "prompt_sha": "adce86c37e5977477d4d694a2929802d2b48442e1bbb84644c19eb29f191f4a7"
+}

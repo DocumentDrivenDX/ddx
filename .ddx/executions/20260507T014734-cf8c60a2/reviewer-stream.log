@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata files. It contains no implementation changes, no decisions log, and no verification artifacts demonstrating the internal/escalation symbols were wired or deleted or that tests/deadcode passed.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No production code changes are present, so there is no evidence that any of the six listed `internal/escalation` symbols were wired into the reachable call graph or deleted.",
+      "location": ".ddx/executions/20260507T014734-cf8c60a2/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log `.ddx/executions/<run-id>/decisions.md` is not included, so the per-symbol WIRE/DELETE/PENDING decisions cannot be reviewed.",
+      "location": ".ddx/executions/20260507T014734-cf8c60a2/manifest.json:1377"
+    },
+    {
+      "severity": "block",
+      "summary": "No deadcode output or test results are provided, so acceptance criteria requiring zero remaining dead symbols in `internal/escalation` and `cd cli && go test ./...` passing are not verifiable.",
+      "location": ".ddx/executions/20260507T014734-cf8c60a2/result.json:1"
+    }
+  ]
+}
+```

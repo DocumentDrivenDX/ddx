@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260607T041832-0ddf5e84",
+  "bead_id": "ddx-7e3501f5",
+  "base_rev": "942ad3b209e3e6b671ed362e7d11f9d6544f2ed0",
+  "created_at": "2026-06-07T04:18:44.549416885Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7e3501f5",
+    "title": "test-scrub: gate chaos/property/perf-budget suites behind testing.Short() so per-bead drains use go test -short",
+    "description": "PROBLEM/ROOT CAUSE: Only 21 test files honor -short; the ~90s+ internal/bead/{chaos_test.go,chaos2_test.go,property_test.go,store_perf_test.go} and several agent/graphql integration files ignore it, so `go test -short ./...` doesn't speed up the heavy packages. Per-bead drains run the full chaos/property/perf suites every time.\n\nPROPOSED FIX: Add `if testing.Short() { t.Skip(\"full-run only\") }` to the chaos, property, and store-perf tests in internal/bead (and the not-short-honoring integration tests in agent/graphql). Switch the per-bead worker drain test-gate to `go test -short` (full run stays in CI, which does NOT pass -short). Keep the backend-matrix (forEachChaosBackend, chaos_test.go:61) coverage — it's gated (skipped on fast path), not removed.\n\nNON-SCOPE: do NOT delete any chaos/property/backend-matrix coverage; CI must still run them.",
+    "acceptance": "1. cd cli \u0026\u0026 go test -short ./internal/bead/... skips the chaos/property/perf tests and finishes \u003c10s; the non-skipped bead unit tests still run.\n2. cd cli \u0026\u0026 go test ./internal/bead/... (no -short) still runs ALL chaos/property/perf tests — full CI coverage preserved.\n3. TestChaos_*, TestProperty_*, TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget report --- SKIP under -short and --- PASS without it.\n4. The per-bead/worker drain test-gate invocation uses -short.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "kind:test",
+      "test-suite-scrub",
+      "throughput",
+      "phase:iterate"
+    ],
+    "metadata": {
+      "queue-rank": -2
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T041832-0ddf5e84",
+    "prompt": ".ddx/executions/20260607T041832-0ddf5e84/prompt.md",
+    "manifest": ".ddx/executions/20260607T041832-0ddf5e84/manifest.json",
+    "result": ".ddx/executions/20260607T041832-0ddf5e84/result.json",
+    "checks": ".ddx/executions/20260607T041832-0ddf5e84/checks.json",
+    "usage": ".ddx/executions/20260607T041832-0ddf5e84/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7e3501f5-20260607T041832-0ddf5e84"
+  },
+  "prompt_sha": "840b876992778a829547bdf7b8e4abe60cdde409e588a4a42c51077807a57b35"
+}

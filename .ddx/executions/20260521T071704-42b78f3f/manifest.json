@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260521T071704-42b78f3f",
+  "bead_id": "ddx-3ca21378",
+  "base_rev": "c1484521e5a635d950e6c984a3b05b0fd18f1d50",
+  "created_at": "2026-05-21T07:17:12.672001879Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3ca21378",
+    "title": "bead-lifecycle: add operator_override signal to intake.blocked entries",
+    "description": "PROBLEM\nWhen readiness honors a prior operator promotion and skips a downgrade, the intake.blocked entry it writes is indistinguishable from any other warning. Operators cannot tell that readiness deliberately deferred to a prior acceptance.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go:2784-2815 constructs the intake.blocked entry without an operator_override boolean; the sibling-guard branch that detected operator promotion does not propagate that signal into the appended entry.\n\nPROPOSED FIX\nExtend the intake.blocked entry schema with an operator_override boolean. Plumb the sibling-guard's operator-promotion determination into the entry construction site so operator_override=true is written when readiness skipped a downgrade because the bead was operator-promoted, and false otherwise. Consume the operator-promotion detection function provided by the sibling implementation bead.\n\nNON-SCOPE\n- rule_fingerprint field and dedup (sibling child bead).\n- `ddx bead show` rendering (sibling child bead).\n- Adding new readiness rules or changing rule evaluation logic.\n- Changing the readiness terminal flow itself.\n- Updating FEAT-010/ADR-023 policy text.\n- Fizeau concrete route selection, model ranking, provider fallback, or profile catalog behavior.\n- Rewriting execute-bead branch merge policy.\n- Changing post-attempt review terminal outcomes that already carry concrete evidence for operator action.\n\nPARENT/DEPS\nParent: ddx-cc0641a7. Depends on the sibling implementation bead for the operator-promotion detection function it consumes.",
+    "acceptance": "1. TestIntakeBlockedSetsOperatorOverrideTrue asserts operator_override=true on entries written when readiness skipped a downgrade because the bead was operator-promoted.\n2. TestIntakeBlockedSetsOperatorOverrideFalse asserts operator_override=false on entries written when no operator promotion was in effect.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/...` green.\n4. `lefthook run pre-commit` passing.",
+    "parent": "ddx-bf971663",
+    "labels": [
+      "adr:023",
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:observability",
+      "kind:feature",
+      "phase:2",
+      "spec:FEAT-010",
+      "td:027",
+      "td:031"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260521T071704-42b78f3f",
+    "prompt": ".ddx/executions/20260521T071704-42b78f3f/prompt.md",
+    "manifest": ".ddx/executions/20260521T071704-42b78f3f/manifest.json",
+    "result": ".ddx/executions/20260521T071704-42b78f3f/result.json",
+    "checks": ".ddx/executions/20260521T071704-42b78f3f/checks.json",
+    "usage": ".ddx/executions/20260521T071704-42b78f3f/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-3ca21378-20260521T071704-42b78f3f"
+  },
+  "prompt_sha": "cf7c7e33f42c6a63f06aebaa63b9a3f373d0b45639b73e9dde065aec938c55ce"
+}

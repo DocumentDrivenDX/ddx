@@ -1,0 +1,20 @@
+---
+## Review: ddx-d1d7ca17 iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestReviewRetryThresholdFromConfigServer passes | APPROVE | cli/internal/server/workers_e2e_test.go:36 — exercises StartExecuteLoop→runWorker against real on-disk `.ddx/config.yaml` with `review_max_retries: 5`, asserts close-on-attempt-5 and zero `review-manual-required` events. Wires through the production `BeadWorkerFactory` seam. |
+| 2 | `cd cli && go test ./...` passes | REQUEST_CHANGES | Commit message admits go-test stage was skipped via `LEFTHOOK_EXCLUDE`; cmd package has pre-existing failures (TestBeadReviewCollapseGolden + installation tests). Not caused by this bead but AC text is unambiguous. |
+
+### Summary
+
+Server dispatch migration to `LoadAndResolve` + `RunWithConfig` is implemented cleanly at `cli/internal/server/workers.go:874-908`: `CLIOverrides` carry spec fields as overrides over on-disk config, `ExecuteBeadLoopRuntime` holds only plumbing, fresh per-request load (no cache) — matches SD-024 §Dispatch site code shape exactly. The behavioral e2e test is the right shape: real YAML, real loop, deterministic fixture via `BeadWorkerFactory`, asserts observable behavior (close + event log) rather than telemetry breadcrumbs. The only blocker against a clean APPROVE is AC #2's literal `go test ./...` requirement, which the implementer sidestepped citing pre-existing failures.
+
+### Findings
+
+- **`workers.go:892` swallows `LoadAndResolve` error**: `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` discards the error silently. If config is malformed the worker will run on a zero-value `ResolvedConfig` and (per SD-024 §1 sealed-construction) panic on first accessor. Either propagate the error to the worker record (preferred) or document why a load failure should hard-panic. Minor — not in AC but worth fixing before merge.
+- **AC #2 not literally met**: pre-existing failures in `cli/cmd` (golden drift, installation tests requiring built binary) prevent `go test ./...` from passing. Either (a) confirm independently that base commit `e56ee4d3` exhibits the same failures and waive AC #2, or (b) gate this bead behind a small fix that restores green. Recommend confirming (a) and explicitly waiving rather than re-running this bead.

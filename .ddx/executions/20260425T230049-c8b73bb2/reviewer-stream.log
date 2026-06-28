@@ -1,0 +1,21 @@
+---
+## Review: ddx-a8eaef0a iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `rg 'type ExecuteBeadOptions ' cli/` returns 0 | APPROVE | [cli/internal/agent/execute_bead.go](/Users/erik/Projects/ddx/cli/internal/agent/execute_bead.go:95) — `ExecuteBeadRuntime` now starts where the legacy `ExecuteBeadOptions` type used to be, and [cli/internal/agent/execute_bead.go](/Users/erik/Projects/ddx/cli/internal/agent/execute_bead.go:547) shows only `ExecuteBeadWithConfig`; the legacy exported `ExecuteBead` function is gone. |
+| 2 | `cd cli && go build ./...` passes | BLOCK | — no build output or check artifact is present in the submitted diff/evidence; [.ddx/executions/20260425T230049-c8b73bb2/result.json](/Users/erik/Projects/ddx/.ddx/executions/20260425T230049-c8b73bb2/result.json:14) only proves the overall agent attempt exited 0. |
+| 3 | `cd cli && go test ./...` passes | BLOCK | — no test output or check artifact is present in the submitted diff/evidence; `.ddx/executions/20260425T230049-c8b73bb2/checks.json` is absent, and [result.json](/Users/erik/Projects/ddx/.ddx/executions/20260425T230049-c8b73bb2/result.json:14) does not prove `go test ./...` ran or passed. |
+
+### Summary
+
+The code change itself appears aligned with the cleanup goal: the legacy `ExecuteBeadOptions` type and exported `ExecuteBead` entrypoint have been retired in favor of the config-driven runtime path. The submission blocks on verification evidence, because the recorded execution bundle does not prove the required `go build` and `go test` commands were run successfully.
+
+### Findings
+
+- `cli/internal/agent/execute_bead.go`: the implementation change is present, but the acceptance contract also requires `cd cli && go build ./...` and `cd cli && go test ./...` to pass, and the submitted evidence bundle contains no command logs or check artifact demonstrating either command.
+- `.ddx/executions/20260425T230049-c8b73bb2/`: add explicit verification evidence for the two required commands, or include a recorded checks artifact; `result.json` only shows the agent process succeeded, which is insufficient to validate the build/test AC items.

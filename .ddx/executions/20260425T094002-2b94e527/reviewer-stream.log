@@ -1,0 +1,33 @@
+## Review: ddx-23978824 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Unified view (harnessStatuses, async probes, <500ms) | BLOCK | Diff contains only `.ddx/executions/.../{manifest,result}.json` — no resolver or UI changes |
+| 2 | Usage + quota fields, sparkline, nullable | BLOCK | No source code in diff |
+| 3 | Trend detail route w/ overlay + projection | BLOCK | No source code in diff |
+| 4 | Perf fixture ≥1k rows + p95 targets | BLOCK | No perf fixture in diff |
+| 5 | Design one-pager in docs/helix/02-design/ | BLOCK | No docs in diff |
+| 6 | No regressions to CLI commands / defaultRouteStatus | BLOCK | Cannot evaluate without implementation diff |
+| 7 | Cross-ref handling for ddx-2ceb02fa dependency | BLOCK | Cannot evaluate without implementation diff |
+
+### Summary
+
+The submitted diff at commit `946ec98e` contains only execution bookkeeping (`manifest.json` + `result.json`) under `.ddx/executions/20260425T094002-2b94e527/`. The actual implementation at `result_rev=f912445f` is not part of this review's diff range. This is the same scope problem flagged in iterations against `7da22459` and `c334d94e`.
+
+### Findings
+
+- **Diff scope wrong.** Re-extract using `git diff f8939169..f912445f` (base_rev → result_rev from `result.json`) and re-submit. The current diff range only covers the post-merge bookkeeping commit.
+- **Prior iteration findings still outstanding** — when the correct diff is reviewed, the next agent must verify these were addressed (per reviewer at 2026-04-23T05:50:09Z and 2026-04-24T03:14:08Z):
+  - `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte` — polling/subscription so rows patch within 5s (AC1)
+  - `cli/internal/server/graphql/resolver_providers.go:102` — async `defaultRouteStatus` or removal from initial query (AC1)
+  - `resolver_providers.go:488` `QuotaFromRateLimitSignal` — wired into Claude/Codex live call sites (AC2)
+  - 7-day sparkline rendering in list rows when ≥6 hourly buckets exist (AC2) — note: commit `f912445f` title says "inline 24h sparkline in unified endpoints list" which suggests progress here
+  - Nullable usage instead of zero-valued pointers at `resolver_providers.go:412` (AC2)
+  - Quota ceiling rendered as chart overlay, not trailing text, in `providers/[name]/+page.svelte` (AC3)
+  - Replace mocked `providerTrend` in `agent-endpoints.e2e.ts:137` with seeded-fixture assertion (AC3)
+  - Perf fixture ≥1,000 rows / ≥5 endpoints with p95 assertions under `cli/internal/server/graphql` or `.../perf` (AC4)
+  - Design one-pager under `docs/helix/02-design/` (AC5)

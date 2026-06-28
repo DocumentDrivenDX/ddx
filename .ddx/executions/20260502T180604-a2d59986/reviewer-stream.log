@@ -1,0 +1,18 @@
+---
+## Review: ddx-586d9431 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Schema additions: federationNodes/Beads/Runs/Projects | APPROVE | cli/internal/server/graphql/schema.graphql:2826-2942 — 4 Query fields + 4 types defined |
+| 2 | Each row exposes node_id, project_id, project_url, write_capability/status | APPROVE | schema.graphql FederatedBead/Run/Project all carry nodeId/projectId/projectUrl/writeCapability/status; resolver_federation.go:80-103,138-161,193-216 populate them |
+| 3 | Resolvers wired to B14.6a fan-out | APPROVE | resolver_federation.go:25-32 FederationProvider interface; FanOut calls at lines 67,124,180 use federation.FanOutClient |
+| 4 | Integration tests against 2 mocked spokes verify shape, partial-result, version-skew | APPROVE | resolver_federation_test.go: TestFederation_QueryShape_TwoHealthySpokes, plus partial-result and version-skew tests (file is 486 lines, three test functions) |
+| 5 | Local query types unchanged (parallel-ship) | APPROVE | schema.graphql diff only adds new types/fields; no modifications to existing beads/runs/projects queries |
+
+### Summary
+
+Federation surface is implemented cleanly: a FederationProvider interface decouples resolvers from the registry, fan-out reuses the B14.6a client, routing metadata is consistently attached to each row, and the synthetic `@identity:*` capability is filtered. Tests cover all four queries against two mock httptest spokes including partial-result and version-skew rendering. Local schema is untouched per parallel-ship requirement.

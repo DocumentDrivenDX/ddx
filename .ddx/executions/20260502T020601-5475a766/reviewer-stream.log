@@ -1,0 +1,18 @@
+All ACs verified. No `Dun` matches in target dirs; product-vision updated to two-layer DDx+HELIX; glossary entry removed.
+
+---
+## Review: ddx-b12e4593 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `rg "\bDun\b" website/content/ docs/helix/` returns no matches | APPROVE | rg run on working tree returned zero matches |
+| 2 | product-vision three-layer stack → DDx + HELIX, no third | APPROVE | docs/helix/00-discover/product-vision.md:46-56 — table now lists only Platform/DDx and Workflow/HELIX; section retitled "Platform and Workflow" |
+| 3 | Glossary has no Dun entry | APPROVE | website/content/docs/concepts/glossary.md — `## Dun` section deleted; "Three-Layer Stack" entry replaced with "Platform and Workflow" |
+
+### Summary
+
+Clean execution. Dun removed from all targeted surfaces, the three-layer framing collapsed to two layers consistently across product-vision, glossary, principles, and feature specs, and incidental references (e.g., cost-tiered ladder) generalized to "deterministic checks" rather than name-dropping a replacement.

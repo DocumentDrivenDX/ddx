@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` fails broadly in `cli/cmd` with unrelated missing-bead and missing-temp-store fixture errors; the new review-gating regressions in `internal/agent` pass, but the required full package gate is not green in this worktree.

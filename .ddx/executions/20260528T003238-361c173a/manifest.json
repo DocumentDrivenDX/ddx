@@ -1,0 +1,682 @@
+{
+  "attempt_id": "20260528T003238-361c173a",
+  "bead_id": "ddx-52d1c006",
+  "base_rev": "e865ef39ea4f2d44b8a06f41a25916ab3f985e76",
+  "created_at": "2026-05-28T00:32:47.139213523Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-52d1c006",
+    "title": "Lock readiness_checks JSON schema in a shared location with a CI drift gate",
+    "description": "PROBLEM\nSchema drift between the readiness-check producer (prompt/harness) and the pre_claim_intake consumer caused the verdict=bool failure that idled the entire fizeau queue (Fizeau 2026-05-18). One side emitted verdict as bool, the other parsed it as string. Without a single source of truth referenced by both sides and a CI gate, the same class of silent drift recurs.\n\nROOT CAUSE\nProducer and consumer historically encoded the readiness_checks contract independently; there was no shared schema enforced across both. The consumer decoder lives in cli/internal/agent/preclaim_intake_hook.go and the verdict field is decoded at cli/internal/agent/preclaim_intake_hook.go:77-125; nothing pins the producer to the same contract.\n\nPROPOSED FIX (parent proposed-fix B)\nDefine the readiness_checks JSON schema in a shared location at cli/internal/agent/schema/readiness-checks.schema.json (readiness_checks as a JSON array; each item has reason, verdict as oneOf boolean|string|null, evidence, checkable_before_attempt). Reference it from the consumer via a constant readinessChecksSchemaPath at cli/internal/agent/preclaim_intake_hook.go:21 and from the producer prompt. Add a test that validates representative payloads (verdict bool, string, and null) against the schema and fails on drift between the code contract and the schema file.\n\nDEPENDS ON\nThe pre-claim intake decoder child (verdict coercion to a canonical readinessVerdict type) must land first, because the schema's canonical verdict forms are defined there.\n\nNON-SCOPE\n- Decoder coercion implementation (sibling decoder child; this is its dependency).\n- Warn-fingerprint escalation (sibling child).\n- claim-rate operator signal (sibling child).\n- README documentation (sibling child).\n\nCROSS-REF\nGoverning artifact: AR-2026-05-17 follow-up beads. Adjacent silent-failure bugs: ddx-57c40485, ddx-8f2e0ebf.",
+    "acceptance": "1. readiness_checks JSON schema is defined at cli/internal/agent/schema/readiness-checks.schema.json with verdict as oneOf boolean|string|null, and is the single source of truth both producer and consumer reference; verified by TestReadinessChecksSchema in cli/internal/agent/readiness_schema_test.go.\n2. The consumer decoder references the shared schema path constant (readinessChecksSchemaPath, cli/internal/agent/preclaim_intake_hook.go:21) and drift between the code contract and the schema fails TestReadinessChecksSchema.\n3. cd cli \u0026\u0026 go test ./internal/agent/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:pre-claim",
+      "area:execute-bead",
+      "kind:reliability",
+      "observability",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/attachments/ddx-2d44cb4f/events.jsonl, .ddx/attachments/ddx-f2f89aa8/events.jsonl, .ddx/beads.jsonl, .ddx/metrics/attempts.jsonl)\",\"fingerprint\":\"5142baf9ad4aeb8c9d075f3957a081fd9285dd2ce3ab4b559e01eb5658724da7\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5142baf9ad4aeb8c9d075f3957a081fd9285dd2ce3ab4b559e01eb5658724da7\"}",
+          "created_at": "2026-05-27T11:10:05.721994855Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T11:15:50.406898617Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T111021-272e34d4\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":135,\"output_tokens\":6146,\"total_tokens\":6281,\"cost_usd\":0.24119800000000002,\"duration_ms\":320344,\"exit_code\":0}",
+          "created_at": "2026-05-27T11:15:50.459306472Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=6281 cost_usd=0.2412 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T111021-272e34d4\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T11:15:52.399673577Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-27T11:15:52.503367163Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-27T11:15:52.58847085Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=standard\nresult_rev=d34f7c127c685db92e17b601096da4c1685c8c01\nbase_rev=d34f7c127c685db92e17b601096da4c1685c8c01\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-27T11:15:52.631669903Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .crush/skills/nano-banana-pro-openrouter)\",\"fingerprint\":\"1578e45aa884a6f5f4e3b10befdbd987c6bde6fcd7067ea754deb3e0c1f359bd\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"1578e45aa884a6f5f4e3b10befdbd987c6bde6fcd7067ea754deb3e0c1f359bd\"}",
+          "created_at": "2026-05-27T11:34:56.140374896Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T11:53:28.447680868Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T113507-ee01f47d\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":485,\"output_tokens\":19637,\"total_tokens\":20122,\"cost_usd\":0.6799147000000003,\"duration_ms\":1076732,\"exit_code\":0}",
+          "created_at": "2026-05-27T11:53:28.507130125Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=20122 cost_usd=0.6799 model=haiku"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"explicit hard dependency blocks implementation: Bead is well-scoped and the fix direction is sound, but execution is blocked by an explicit hard dependency ('decoder coercion child must land first') that prevents implementation without external work. Additionally, producer-side integration points are unspecified (which prompt file to modify), and schema scope is implicit rather than explicit. Prior attempt yielded no changes, likely due to the blocking dependency.\",\"fingerprint\":\"10ab0009ea61c3f237f81d0f1a13333885a8edb020d5a78ef1527245fcd820af\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"10ab0009ea61c3f237f81d0f1a13333885a8edb020d5a78ef1527245fcd820af\"}",
+          "created_at": "2026-05-27T18:10:35.092112133Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"circular dependency with sibling decoder child: Bead has clear scope and AC but unresolved circular dependency with the sibling decoder child. Description states 'The pre-claim intake decoder child... must land first, because the schema's canonical verdict forms are defined there,' yet the bead is tasked with creating the schema as the 'single source of truth.' Circular: decoder defines canonical forms, schema should reflect them, but schema is supposed to be the authority both reference. Also, prior attempt produced 'no_changes' with no rationale, suggesting the agent encountered ambiguity or blockers. Tractability of the mechanical work (schema file, constant, test, prompt reference) is medium, but readiness to execute is blocked on dependency clarity.\",\"fingerprint\":\"aa4aa182d9d8fa9936d9a6c75f7811c453776658c9e694cc95128f4b84c8e153\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"aa4aa182d9d8fa9936d9a6c75f7811c453776658c9e694cc95128f4b84c8e153\"}",
+          "created_at": "2026-05-27T18:12:42.480524292Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Schema structure is clearly specified (JSON array with reason, verdict as oneOf bool|string|null, evidence, checkable_before_attempt). Implementation is straightforward: create schema file, add test validating schema against code contract, reference in consumer. However, AC#2 requires proving no drift between code contract and schema, which assumes the decoder child's canonical types are final. Prior no_changes attempt likely hit this blocker.\",\"fingerprint\":\"70cbe0049c2b3234aedc825ed9a68da5f28c242809c801412aa4eef52333efea\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"70cbe0049c2b3234aedc825ed9a68da5f28c242809c801412aa4eef52333efea\"}",
+          "created_at": "2026-05-27T18:14:13.847842475Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-05-27T18:15:36.882971443Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"ready_to_claim\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"fd54cbb984c3a50c02365a00e9c1583b48eea59689e3a48e2ff49d38ff8aaa46\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"fd54cbb984c3a50c02365a00e9c1583b48eea59689e3a48e2ff49d38ff8aaa46\"}",
+          "created_at": "2026-05-27T18:17:19.273197805Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"blocked_by_dependency\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"6f588747c6fc69f05ca6ac6d859d2a9f9a116dc71dffc13101555df2707abe52\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"6f588747c6fc69f05ca6ac6d859d2a9f9a116dc71dffc13101555df2707abe52\"}",
+          "created_at": "2026-05-27T18:18:40.292637462Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-05-27T18:20:04.205191146Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"hard dependency: decoder child bead with canonical verdict forms not referenced or confirmed landed: Bead explicitly declares hard dependency ('must land first') on decoder child bead to define canonical verdict forms in schema. Producer prompt reference location and required changes are unspecified (says 'from the producer prompt' but no file path, current behavior, or edit specification). Prior attempt produced no_evidence_produced, suggesting agent encountered blocker rather than executable ambiguity. Operator must either: (1) link decoder child bead ID and confirm landed, (2) inline canonical verdict forms and producer prompt edits explicitly, or (3) release from dependency if schema can be created with current code and updated post-decoder.\",\"fingerprint\":\"a87cc1fafef11c98c02b3c4536a2550b1348c0efd3bfe67230344c6a110c66f8\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"a87cc1fafef11c98c02b3c4536a2550b1348c0efd3bfe67230344c6a110c66f8\"}",
+          "created_at": "2026-05-27T18:23:27.881997502Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"blocking dependency must land first: Bead has clear intent (lock schema to prevent drift) and numbered AC, but prior no_changes failure combined with explicit blocking dependency and multiple implementation ambiguities make it unsafe to claim without clarification. The blocking decoder-child dependency must be confirmed landed; producer-prompt reference is unspecified; schema validation approach and test-file location lack detail.\",\"fingerprint\":\"21e433f99548699bcd9e9075e907712172a33175876f7a824d743d4dd3231820\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"21e433f99548699bcd9e9075e907712172a33175876f7a824d743d4dd3231820\"}",
+          "created_at": "2026-05-27T18:24:47.289460273Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"blocking dependency ambiguity: Bead is blocked on an ambiguous/undeclared dependency. The description states 'must land first' but prior attempt was no_changes with no_evidence_produced, suggesting the blocking condition was encountered. The dependency claim is also logically unclear: the schema file itself (JSON contract) is independent of Go decoder implementation; the decoder would *consume* the schema, not precede it. Clarification required on: (1) whether the dependency is real (if so, has the decoder child bead been created and is it blocked?), (2) whether this bead is actually downstream of the decoder, or if schema + consumer update can proceed independently.\",\"fingerprint\":\"7e0693cc4d7f407d3ecf2cfe99ee198d7b2658d1a1621d56a5a597b5b63ce641\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"7e0693cc4d7f407d3ecf2cfe99ee198d7b2658d1a1621d56a5a597b5b63ce641\"}",
+          "created_at": "2026-05-27T18:29:43.880440219Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"blocking dependency not yet satisfied: Bead explicitly depends on an upstream decoder child (verdict coercion to readinessVerdict type) that must land first. Without that sibling, the agent cannot determine the canonical verdict forms to embed in the schema. The dependency is a hard blocker preventing execution. Prior attempt's no_changes status likely reflects this same blocker. Once the decoder lands and the canonical verdict type is defined, this becomes an easy, atomic mechanical task (create schema file, add reference constant, add drift-validation test).\",\"fingerprint\":\"826cf817ce3293643544757571143fb6e573d4f244a97b5eb2133241065e97a6\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"826cf817ce3293643544757571143fb6e573d4f244a97b5eb2133241065e97a6\"}",
+          "created_at": "2026-05-27T18:31:07.796486255Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decoder-child dependency not formalized as a blocking bead id: Bead is otherwise well-specified (clear file paths, named test, specific acceptance criteria) but has two blocking issues: (1) prior attempt produced no_changes with no diagnostic rationale, creating risk of silent failure recurrence; (2) dependency on the pre-claim decoder child is mentioned informally in prose but not formalized as a blocking bead ID. Both must be clarified before dispatch.\",\"fingerprint\":\"889dc79b48357a76fac05895ef0467b890e498db738cadbf2ed065e807e6e4e7\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"889dc79b48357a76fac05895ef0467b890e498db738cadbf2ed065e807e6e4e7\"}",
+          "created_at": "2026-05-27T18:34:34.479364661Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"explicit dependency on sibling decoder child must be satisfied first: Bead has an explicit hard dependency on a sibling decoder child ('verdict coercion to canonical readinessVerdict type') that must land first. Description states the schema's canonical forms are defined in that sibling. Prior attempt resulted in no_changes without rationale, likely indicating this blocker prevented work. Additionally, 'reference from producer prompt' is ambiguous: does not specify which file, and it is unclear how a text prompt mechanically references a JSON schema file (documentation, code validation, or instruction text).\",\"fingerprint\":\"882deef11a6c20c4c104b7f165b2160acd16f00e66c6f571a838a69622b751e0\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"882deef11a6c20c4c104b7f165b2160acd16f00e66c6f571a838a69622b751e0\"}",
+          "created_at": "2026-05-27T18:39:36.024173421Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T18:46:11.187475492Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale; index-lock owner: live owner pid 695411 (lock age 4s): exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-27T18:47:36.320671644Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T18:47:36.377574265Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale; index-lock owner: live owner pid 695411 (lock age 4s): exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-27T18:47:36.491497007Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T18:49:53.221045257Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"Execution failed at the tracker-commit stage with outcome_reason=lock_contention: another live git process (pid 695411, lock age 4s) held /home/erik/Projects/ddx/.git/index.lock, so staging/committing the tracker hit 'unable to write new index file: exit status 128'. This is transient git index-lock contention from concurrent ddx-server access, not a defect in the bead or the agent's work — the attempt never produced or rejected changes on its merits. Release the claim and retry once the lock clears.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T18:51:35.686429486Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-27T18:51:35.774180458Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\"}",
+          "created_at": "2026-05-27T19:16:19.500561506Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:20:12.963610228Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T191724-dc419300\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":114,\"output_tokens\":4712,\"total_tokens\":4826,\"cost_usd\":0.2045583,\"duration_ms\":140525,\"exit_code\":0}",
+          "created_at": "2026-05-27T19:20:13.03377268Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4826 cost_usd=0.2046 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T191724-dc419300\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T19:20:15.33619973Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-27T19:20:15.470473266Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-27T19:20:15.593397276Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=standard\nresult_rev=a144e9608910baf160e85273e0d04e4605dc4dd8\nbase_rev=a144e9608910baf160e85273e0d04e4605dc4dd8\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-27T19:20:15.664932017Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-05-27T19:35:31.514645709Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:41:46.47839011Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T193554-01a71e9b\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":142,\"output_tokens\":5871,\"total_tokens\":6013,\"cost_usd\":0.23322525000000002,\"duration_ms\":342233,\"exit_code\":0}",
+          "created_at": "2026-05-27T19:41:46.533328912Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=6013 cost_usd=0.2332 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T193554-01a71e9b\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T19:41:48.602014279Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-27T19:41:48.706108864Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-27T19:41:48.804322722Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=standard\nresult_rev=9b02a1ab4ef2c57ab62ea6b5209e5ff36492fdd4\nbase_rev=9b02a1ab4ef2c57ab62ea6b5209e5ff36492fdd4\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-27T19:41:48.854510217Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead is well-specified with clear root cause (file:line cited), concrete proposed fix (exact paths and constant names), verifiable acceptance criteria (named test functions and commands). Problem statement references governing artifacts and related silent-failure bugs. Prior execution failures (no_evidence_produced, lock contention, transport) appear environmental rather than bead-clarity issues. Bead is executable as written.\",\"fingerprint\":\"409c720c520d0f364579456455be97ab4e9050bc3302aa3c9b2c5b301b99a16f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"409c720c520d0f364579456455be97ab4e9050bc3302aa3c9b2c5b301b99a16f\"}",
+          "created_at": "2026-05-27T19:45:55.933119128Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260527T194556-18b383c4\",\"bead_id\":\"ddx-52d1c006\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-05-27T20:16:26Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-05-27T20:16:26.037545427Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T20:23:41.239597643Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T194618-cc680c96\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":7,\"output_tokens\":1,\"total_tokens\":8,\"cost_usd\":0,\"duration_ms\":1594102,\"exit_code\":143}",
+          "created_at": "2026-05-27T20:23:41.303100721Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=8 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T20:24:31.208757129Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead has clear intent and achievable scope but contains blocking ambiguities and missing dependency link. The hard dependency on the decoder sibling is stated in prose but not linked via deps field, making it impossible for an agent to verify readiness or know when to claim. Test design (AC #2) is underspecified: unclear how test observes 'code contract' or whether it uses reflection, schema validation, or golden-file comparison. Producer prompt reference is vague ('reference it from the producer prompt'—which prompt file, which section?). Prior five failed attempts show pattern of no evidence produced or git contention; bead may require explicit worktree isolation to avoid contention with concurrent ddx-server processes, but ACs do not state this. Rewrite can resolve these without changing semantics.\",\"fingerprint\":\"cd8cfafaa2975164c977dd9673667ff86b3a490dc8a8355c1da4fbb05b3bdd41\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"cd8cfafaa2975164c977dd9673667ff86b3a490dc8a8355c1da4fbb05b3bdd41\"}",
+          "created_at": "2026-05-27T20:25:35.410818397Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T20:46:13.222764718Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T202549-572f4b0b\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":9,\"output_tokens\":314,\"total_tokens\":323,\"cost_usd\":0.45910464999999984,\"duration_ms\":1199969,\"exit_code\":0}",
+          "created_at": "2026-05-27T20:46:13.276783216Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=323 cost_usd=0.4591 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T202549-572f4b0b\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-27T20:46:17.587591435Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-27T20:46:17.68527844Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-27T20:46:17.784863819Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=standard\nresult_rev=9abb2a38607bde0fb061a8b4fb463e75836b965e\nbase_rev=9abb2a38607bde0fb061a8b4fb463e75836b965e\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-27T20:46:17.833887113Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"producer prompt file location not specified: Bead is well-structured with explicit file paths for schema (cli/internal/agent/schema/readiness-checks.schema.json), test (readiness_schema_test.go with TestReadinessChecksSchema), and consumer updates (preclaim_intake_hook.go:77-125). Root cause is clearly cited. However, the 'producer prompt' location is unspecified—bead states 'reference it from the producer prompt' without naming which file (e.g., cli/internal/agent/execute_bead.go, library/prompts/execute-bead.md, harness prompt template). Three prior no_changes attempts (all standard powerClass, no_evidence_produced) suggest agents stalled at this ambiguity. Narrow fix needed: specify the producer prompt file and location where schema reference should be added.\",\"fingerprint\":\"c3e10a74ac621367483fb4581034f394cac8062e2991d3838f13cca30010cda5\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"c3e10a74ac621367483fb4581034f394cac8062e2991d3838f13cca30010cda5\"}",
+          "created_at": "2026-05-27T21:19:05.105229819Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T21:30:24.403748818Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T211916-6012ee6e\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":9,\"output_tokens\":227,\"total_tokens\":236,\"cost_usd\":0.31856375000000003,\"duration_ms\":659496,\"exit_code\":0}",
+          "created_at": "2026-05-27T21:30:24.499776145Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=236 cost_usd=0.3186 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T211916-6012ee6e\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-27T21:30:27.165074012Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-27T21:30:27.32292728Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-27T21:30:27.450362535Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=cheap\nresult_rev=d4b41bef9c0aa681cbb47f6b3922a1f61597320f\nbase_rev=d4b41bef9c0aa681cbb47f6b3922a1f61597320f\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-27T21:30:27.514681558Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"executable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"830fee434f7ba41c539615d5fc87f225ddaa78516f81a2e7158392914fdda398\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"830fee434f7ba41c539615d5fc87f225ddaa78516f81a2e7158392914fdda398\"}",
+          "created_at": "2026-05-27T23:18:21.630925189Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T23:22:12.063540647Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"Attempt ended at the tracker-commit step with 'fatal: unable to write new index file: exit status 128', a git index write/lock-contention failure (consistent with concurrent ddx-server access), not a bead defect or implementation regression. Per the triage contract, git index lock contention is a recoverable infrastructure failure; retrying the same bead after the contention clears can plausibly succeed.\",\"recommended_action\":\"release_claim_wait_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T23:23:17.325375096Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_wait_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-05-27T23:23:17.397221357Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway\",\"fingerprint\":\"c63725637a9913ddce00e011be60eea8b2b81be343ece9ea787ea628b79ef89d\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"c63725637a9913ddce00e011be60eea8b2b81be343ece9ea787ea628b79ef89d\"}",
+          "created_at": "2026-05-28T00:11:37.91523166Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"vidar\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T00:17:38.990449262Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=vidar model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T001220-a350f67b\",\"harness\":\"fiz\",\"provider\":\"vidar\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":19997,\"output_tokens\":314,\"total_tokens\":20311,\"cost_usd\":0,\"duration_ms\":294281,\"exit_code\":1}",
+          "created_at": "2026-05-28T00:17:39.100864685Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=20311 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"vidar\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"requested_min_power\":6,\"actual_power\":5}",
+          "created_at": "2026-05-28T00:24:49.62083679Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=vidar model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T001742-90f52969\",\"harness\":\"fiz\",\"provider\":\"vidar\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":4067,\"output_tokens\":113,\"total_tokens\":4180,\"cost_usd\":0,\"duration_ms\":413896,\"exit_code\":1}",
+          "created_at": "2026-05-28T00:24:49.705448376Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4180 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"vidar\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"requested_min_power\":7,\"actual_power\":5}",
+          "created_at": "2026-05-28T00:29:32.340367374Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=vidar model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T002453-94223183\",\"harness\":\"fiz\",\"provider\":\"vidar\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":4071,\"output_tokens\":84,\"total_tokens\":4155,\"cost_usd\":0,\"duration_ms\":245160,\"exit_code\":1}",
+          "created_at": "2026-05-28T00:29:32.437837983Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4155 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"requested_min_power\":8,\"actual_power\":5}",
+          "created_at": "2026-05-28T00:30:17.843886284Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T002935-ae0fb50d\",\"bead_id\":\"ddx-52d1c006\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T00:30:19.866581143Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T00:30:20.04233593Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=standard\nresult_rev=2f8023612d622f493629bedb3e2556ae80875a36\nbase_rev=2f8023612d622f493629bedb3e2556ae80875a36\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T00:30:20.09921643Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: restore project root mutation: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"fingerprint\":\"e78d55ebdff03e512d4431933fddf53ff5edc49bf32d33415af03c9d21722ba5\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e78d55ebdff03e512d4431933fddf53ff5edc49bf32d33415af03c9d21722ba5\"}",
+          "created_at": "2026-05-28T00:32:18.031903621Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-28T00:30:19Z",
+          "count": 1,
+          "endpoint": "http://bragi:1234/v1/chat/completions",
+          "model": "qwen3.5-27b",
+          "provider": "bragi",
+          "reason": "provider_connectivity",
+          "timeout_class": "bad gateway"
+        }
+      ],
+      "work-no-changes-count": 5
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T003238-361c173a",
+    "prompt": ".ddx/executions/20260528T003238-361c173a/prompt.md",
+    "manifest": ".ddx/executions/20260528T003238-361c173a/manifest.json",
+    "result": ".ddx/executions/20260528T003238-361c173a/result.json",
+    "checks": ".ddx/executions/20260528T003238-361c173a/checks.json",
+    "usage": ".ddx/executions/20260528T003238-361c173a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-52d1c006-20260528T003238-361c173a"
+  },
+  "prompt_sha": "b5d2ad0c6e83dce25790dfa784ad6ad21f86a31357a10c1781b4b10e86467a32"
+}

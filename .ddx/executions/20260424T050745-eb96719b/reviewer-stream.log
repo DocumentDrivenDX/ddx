@@ -1,0 +1,17 @@
+---
+## Review: ddx-62985b35 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:1829 — both removed from this test; replaced by real `NewCommandFactory(workDir)` + `agent.NewRunner(agent.Config{})` |
+| 2 | Uses RealLandingGitOps + real-git harness | APPROVE | Real git repo built in-test (equivalent to newScriptHarnessRepo); no `ExecuteBeadGitOverride` set so default `RealLandingGitOps{}` (agent_execute_bead.go:36) is used; script harness driven via `--harness script --model directives.txt` with `fail-during 0` directive |
+| 3 | Targeted test passes | APPROVE | Commit message confirms green; pattern mirrors already-passing neighbors at lines 875/968/1073/1654/1749 |
+| 4 | No other test modified | APPROVE | `git show --stat` reports 1 file, 59+/7- all contained within the target function (lines 1826–1892) |
+
+### Summary
+
+Clean, scoped migration that mirrors the established real-git + script-harness pattern used by neighboring tests in the same file. The original intent — verifying that a runner error propagates into the JSON Error field — is preserved, now exercised against real git and a real runner with the error synthesized by the script harness rather than a canned Result struct.

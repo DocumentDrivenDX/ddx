@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260527T111021-272e34d4",
+  "bead_id": "ddx-52d1c006",
+  "base_rev": "d34f7c127c685db92e17b601096da4c1685c8c01",
+  "created_at": "2026-05-27T11:10:29.864763994Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-52d1c006",
+    "title": "Lock readiness_checks JSON schema in a shared location with a CI drift gate",
+    "description": "PROBLEM\nSchema drift between the readiness-check producer (prompt/harness) and the pre_claim_intake consumer caused the verdict=bool failure that idled the entire fizeau queue (Fizeau 2026-05-18). One side emitted verdict as bool, the other parsed it as string. Without a single source of truth referenced by both sides and a CI gate, the same class of silent drift recurs.\n\nROOT CAUSE\nProducer and consumer historically encoded the readiness_checks contract independently; there was no shared schema enforced across both. The consumer decoder lives in cli/internal/agent/preclaim_intake_hook.go and the verdict field is decoded at cli/internal/agent/preclaim_intake_hook.go:77-125; nothing pins the producer to the same contract.\n\nPROPOSED FIX (parent proposed-fix B)\nDefine the readiness_checks JSON schema in a shared location at cli/internal/agent/schema/readiness-checks.schema.json (readiness_checks as a JSON array; each item has reason, verdict as oneOf boolean|string|null, evidence, checkable_before_attempt). Reference it from the consumer via a constant readinessChecksSchemaPath at cli/internal/agent/preclaim_intake_hook.go:21 and from the producer prompt. Add a test that validates representative payloads (verdict bool, string, and null) against the schema and fails on drift between the code contract and the schema file.\n\nDEPENDS ON\nThe pre-claim intake decoder child (verdict coercion to a canonical readinessVerdict type) must land first, because the schema's canonical verdict forms are defined there.\n\nNON-SCOPE\n- Decoder coercion implementation (sibling decoder child; this is its dependency).\n- Warn-fingerprint escalation (sibling child).\n- claim-rate operator signal (sibling child).\n- README documentation (sibling child).\n\nCROSS-REF\nGoverning artifact: AR-2026-05-17 follow-up beads. Adjacent silent-failure bugs: ddx-57c40485, ddx-8f2e0ebf.",
+    "acceptance": "1. readiness_checks JSON schema is defined at cli/internal/agent/schema/readiness-checks.schema.json with verdict as oneOf boolean|string|null, and is the single source of truth both producer and consumer reference; verified by TestReadinessChecksSchema in cli/internal/agent/readiness_schema_test.go.\n2. The consumer decoder references the shared schema path constant (readinessChecksSchemaPath, cli/internal/agent/preclaim_intake_hook.go:21) and drift between the code contract and the schema fails TestReadinessChecksSchema.\n3. cd cli \u0026\u0026 go test ./internal/agent/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:pre-claim",
+      "area:execute-bead",
+      "kind:reliability",
+      "observability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/attachments/ddx-2d44cb4f/events.jsonl, .ddx/attachments/ddx-f2f89aa8/events.jsonl, .ddx/beads.jsonl, .ddx/metrics/attempts.jsonl)\",\"fingerprint\":\"5142baf9ad4aeb8c9d075f3957a081fd9285dd2ce3ab4b559e01eb5658724da7\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5142baf9ad4aeb8c9d075f3957a081fd9285dd2ce3ab4b559e01eb5658724da7\"}",
+          "created_at": "2026-05-27T11:10:05.721994855Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T111021-272e34d4",
+    "prompt": ".ddx/executions/20260527T111021-272e34d4/prompt.md",
+    "manifest": ".ddx/executions/20260527T111021-272e34d4/manifest.json",
+    "result": ".ddx/executions/20260527T111021-272e34d4/result.json",
+    "checks": ".ddx/executions/20260527T111021-272e34d4/checks.json",
+    "usage": ".ddx/executions/20260527T111021-272e34d4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-52d1c006-20260527T111021-272e34d4"
+  },
+  "prompt_sha": "85d94bd438a7933ee8a4f06cd8e6e614be1e6b0f7aee22cdb552b1cd5b63be60"
+}

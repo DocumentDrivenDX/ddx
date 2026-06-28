@@ -1,0 +1,22 @@
+---
+## Review: ddx-ee2cd434 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg returns 0 matches outside retiring type defs | BLOCK | 40+ matches remain, including in-scope file `cli/internal/agent/prompt_ingress_oversize_test.go:78,85,112` and many production sites (`runner.go`, `compare_adapter.go`, `execute_bead.go`, `service_run.go`, `grade.go`, `cmd/agent_cmd.go:1460`, `server/server.go:1913,3786`, `internal/exec/store.go:201`). Plus untouched test files `session_index_test.go`, `models_test.go`, `virtual_test.go`, `claude_stream_test.go`, and BuildArgs sites in `agent_test.go`. |
+| 2 | `cd cli && go test ./...` passes | REQUEST_CHANGES | Not verified in this review (could not run). Commit only edits 3 test files; likely compiles, but AC depends on full tree. |
+
+### Summary
+
+The bead author migrated only the high-level `r.Run` / `RunViaService` test sites in three files and explicitly carved out everything else as "out of scope for bead 21" — but the AC was written as a binary, repo-wide grep that this work does not satisfy. The bead description's in-scope list explicitly names `prompt_ingress_oversize_test.go`, yet three `RunOptions{` literals remain there. Either the AC needs revision to reflect the actual bead-21 carve-out, or the migration must be extended.
+
+### Findings
+
+- **AC#1 unmet, in-scope file**: `cli/internal/agent/prompt_ingress_oversize_test.go` lines 78, 85, 112 still construct `RunOptions{...}`. The bead description lists this file as in-scope; commit message reclassifies it as out-of-scope without updating the AC.
+- **AC#1 broader scope**: The criterion as written ("0 matches… outside the type definitions about to be retired") is global. If the intent was test-only and high-level-Run-only, the AC text needs to be narrowed (e.g., "0 matches in `agent_test.go`, `runner_test.go`, `script_test.go`") and the bead reopened with that AC, or the remaining test sites (`session_index_test.go`, `models_test.go`, `virtual_test.go`, `claude_stream_test.go`, BuildArgs callers in `agent_test.go`) must be migrated.
+- **Test-suite confirmation missing**: No evidence in the diff or execution manifest that `go test ./...` was run against the post-merge tree. Recommend the next worker either re-confirm or include it in evidence.
+- **Path forward**: simplest fix is splitting follow-up beads for (a) `prompt_ingress_oversize_test.go`, (b) remaining `*_test.go` RunOptions sites, (c) production-code migration, then closing this bead with a narrower AC. As-is, the AC's grep gate fails on the current tree.

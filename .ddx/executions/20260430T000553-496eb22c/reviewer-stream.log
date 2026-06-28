@@ -1,0 +1,18 @@
+---
+## Review: ddx-2589e256 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | --harness plumbs to ResolveRoute; typed gate err verbatim | APPROVE | cli/cmd/agent_cmd.go:361-389 plumbs Harness; agent_run_overrides_e2e_test.go:`TestRunHarnessFlagPlumbsToResolveRouteAndSurfacesTypedError` asserts ErrUnknownProvider surfaces |
+| 2 | --model plumbs; lowest-cost pick | APPROVE | agent_cmd.go RouteRequest.Model wired; `TestRunModelFlagPlumbsToResolveRouteAndPicksLowestCost` seeds 3 candidates and asserts cheapest wins |
+| 3 | ErrHarnessModelIncompatible / clean dispatch branches | APPROVE | `TestRunHarnessModelIncompatibleSurfacesTypedError` + `TestRunHarnessModelCompatibleDispatchesCleanly` cover both; errors.As verifies typed surfacing |
+| 4 | --profile local --harness claude → upstream err verbatim | APPROVE | `TestRunProfilePinConflictSurfacesUpstreamErrorUnmodified` asserts `err.Error() == upstreamErr.Error()` (no wrapping) |
+| 5 | ddx work shares plumbing | APPROVE | runAgentExecuteLoop in agent_cmd.go:1871 now calls newAgentServiceForRun + ResolveRoute with Harness/Model/Provider; `TestWorkSharesSameRoutingPlumbing` exercises via `ddx work --local --once` |
+
+### Summary
+
+Implementation cleanly removes the prior "skip ResolveRoute when harness pinned" branch and routes all run/work invocations through ResolveRoute with full (Profile, Harness, Model, Provider) plumbing. Upstream typed errors are returned verbatim (no `fmt.Errorf("...: %w", ...)` wrapping on the routing error path), satisfying the D5 contract. Test seam via `SetAgentServiceFactoryForTest` is appropriately scoped, and the five e2e tests map 1:1 to the ACs.

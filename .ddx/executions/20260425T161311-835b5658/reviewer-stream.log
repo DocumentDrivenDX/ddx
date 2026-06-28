@@ -1,0 +1,16 @@
+---
+## Review: ddx-aef3fdad iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | ~11 ExecuteBeadLoopOptions{ literals remain | APPROVE | execute_bead_loop_test.go — grep shows 12 remaining (within "~11") |
+| 2 | go test ./internal/agent/... passes | APPROVE | result.json: outcome=task_succeeded, exit_code=0 (could not re-run locally; permission denied) |
+| 3 | go test ./... passes | APPROVE | result.json: task_succeeded across full suite per execute-bead checks |
+
+### Summary
+
+Mechanical migration is clean and consistent: each migrated callsite uses the `config.NewTestConfigForLoop` + `Resolve(TestLoopOverrides(...))` pattern and switches `Run`/`ExecuteBeadLoopOptions` to `RunWithConfig`/`ExecuteBeadLoopRuntime`. Concurrent test correctly builds two distinct rcfgs for the two assignees. Remaining 12 literals match the planned second-half split (bead 11b).

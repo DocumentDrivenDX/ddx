@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260613T145040-5872ca68",
+  "bead_id": "ddx-0be85773",
+  "base_rev": "a646db9fe2f86992e96523b92bf25481548ea666",
+  "created_at": "2026-06-13T14:50:48.806614483Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0be85773",
+    "title": "work: unify bead store resolution across queue commands",
+    "description": "PROBLEM\nIn a linked DDx worktree, `ddx bead show/export` reported ddx-d94f1857 as closed while `ddx work plan --json` still ranked the same bead as open and next claim. That can make a worker re-run already-completed work and breaks the queue as source of truth.\n\nROOT CAUSE WITH FILE:LINE\ncli/cmd/bead.go:286-320 resolves bead commands through beadWorkspaceRoot(), which calls git.FindNearestDDxWorkspace and can prefer a registered/master worktree. cli/cmd/work_plan.go:80-84 bypasses that path and opens bead.NewStore(resolveBeadStoreRoot(projectRoot)), which prefers the local in-tree .ddx if present. In dogfood on 2026-06-13, the global worktree registry master pointed at an old execute-bead temp path, so bead commands and work plan observed different physical stores.\n\nPROPOSED FIX\n- Centralize queue store resolution for all bead/work/status commands behind one project-aware helper.\n- Add a linked-worktree regression fixture where the local .ddx snapshot disagrees with the registered/master store and prove bead show, bead list, bead export, bead ready, work plan, and work status use the same store.\n- Add a diagnostic when the worktree registry master points at a missing execute-bead path or a path outside the current repository family.\n- Ensure the chosen store is visible in verbose/debug output so operators can identify split-brain state.\n\nNON-SCOPE\nDo not hand-edit .ddx/beads.jsonl as the fix. Do not remove convention-root support. Do not change bead lifecycle semantics beyond consistent store selection.",
+    "acceptance": "1. TestBeadAndWorkPlanUseSameStoreInLinkedWorktree seeds conflicting bead states in a linked worktree and the canonical store, then proves bead show/list/export/ready and work plan report the same lifecycle state for the same bead.\n2. TestWorkPlanDoesNotPreferStaleLocalSnapshotWhenCanonicalStoreExists covers the observed ddx-d94f1857 failure mode and proves a closed canonical bead is not returned as next claim from a stale local .ddx snapshot.\n3. TestStaleWorktreeMasterDiagnosticReportsMissingExecuteBeadPath seeds worktrees.json with an old .execute-bead-wt master path and proves ddx doctor or an equivalent store diagnostic reports it.\n4. cd cli \u0026\u0026 go test ./cmd/... ./internal/ddxroot/... ./internal/git/... -run 'TestBeadAndWorkPlanUseSameStoreInLinkedWorktree|TestWorkPlanDoesNotPreferStaleLocalSnapshotWhenCanonicalStoreExists|TestStaleWorktreeMasterDiagnosticReportsMissingExecuteBeadPath' passes.\n5. cd cli \u0026\u0026 go test ./cmd/... passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:work",
+      "area:beads",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: under-specified routing for harness=\\\"codex\\\": supply --model, --policy, or --min-power\",\"fingerprint\":\"305b9b3f070d4d3a78e7f3fa8f2d9d682ff6fc21873bf6899c42833b4d118b62\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"305b9b3f070d4d3a78e7f3fa8f2d9d682ff6fc21873bf6899c42833b4d118b62\"}",
+          "created_at": "2026-06-13T14:00:35.136356261Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-0be85773 (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"2594fca1cc9f6a9e285171020b2a5011d92909b761310a19be879150aa7cd538\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2594fca1cc9f6a9e285171020b2a5011d92909b761310a19be879150aa7cd538\"}",
+          "created_at": "2026-06-13T14:50:40.321433642Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 10,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260613T145040-5872ca68",
+    "prompt": ".ddx/executions/20260613T145040-5872ca68/prompt.md",
+    "manifest": ".ddx/executions/20260613T145040-5872ca68/manifest.json",
+    "result": ".ddx/executions/20260613T145040-5872ca68/result.json",
+    "checks": ".ddx/executions/20260613T145040-5872ca68/checks.json",
+    "usage": ".ddx/executions/20260613T145040-5872ca68/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0be85773-20260613T145040-5872ca68"
+  },
+  "prompt_sha": "116aee53da25e0df2742f3957828b7ba6dd9a2d1abe1275da98db23bdeba0482"
+}

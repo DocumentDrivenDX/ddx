@@ -1,0 +1,15 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 7 AC items implemented in commit 4f63a237: LintResult/TriageResult/FollowupBead in quality_hooks.go; both hook fields with correct signatures on ExecuteBeadLoopRuntime; OutcomeReason added with omitempty json tag; both named tests present; transient-reason suppression logic added without disturbing Disrupted/BaseRev/ResultRev semantics.",
+  "findings": [
+    { "severity": "info", "summary": "AC#1 satisfied: cli/internal/agent/quality_hooks.go defines LintResult, TriageResult, and FollowupBead with the documented fields.", "location": "cli/internal/agent/quality_hooks.go:1" },
+    { "severity": "info", "summary": "AC#2 satisfied: PreDispatchLintHook and PostAttemptTriageHook closures added with the exact signatures specified.", "location": "cli/internal/agent/execute_bead_loop.go:24" },
+    { "severity": "info", "summary": "AC#3 satisfied: OutcomeReason string added with `json:\"outcome_reason,omitempty\"`; Disrupted bool and DisruptionReason untouched.", "location": "cli/internal/agent/execute_bead_loop.go:265" },
+    { "severity": "info", "summary": "AC#4 satisfied: TestReport_OutcomeReason_Persists_BesideDisrupted asserts JSON includes disrupted/disruption_reason/outcome_reason and event Body contains outcome_reason=transport.", "location": "cli/internal/agent/execute_bead_loop_test.go:28" },
+    { "severity": "info", "summary": "AC#5 satisfied: TestSuppressNoProgress_HonorsTransientReasons iterates the five transient reasons and verifies non-transient reasons retain BaseRev==ResultRev suppression behavior.", "location": "cli/internal/agent/execute_bead_loop_test.go:46" },
+    { "severity": "info", "summary": "Try adapter round-trips OutcomeReason, preserving the existing JSON shape across the agent/try boundary.", "location": "cli/internal/agent/execute_bead_try_adapter.go:41" }
+  ]
+}
+```

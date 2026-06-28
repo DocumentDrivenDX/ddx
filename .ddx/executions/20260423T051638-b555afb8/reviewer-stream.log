@@ -1,0 +1,28 @@
+---
+## Review: ddx-7de0ce80 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Per-card in-flight tracking | BLOCK | — not found in diff |
+| 2 | Worker-driven refresh | BLOCK | — not found in diff |
+| 3 | Fallback polling | BLOCK | — not found in diff |
+| 4 | In-flight visual state | BLOCK | — not found in diff |
+| 5 | Failure surfacing | BLOCK | — not found in diff |
+| 6 | Concurrent dispatch | BLOCK | — not found in diff |
+| 7 | No extra refetch overhead | BLOCK | — not found in diff |
+| 8 | Playwright e2e | BLOCK | — not found in diff |
+| 9 | No regressions | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only an execution evidence file (`.ddx/executions/20260423T051638-b555afb8/result.json`) — a metadata record of the agent run itself. Zero application code was changed. None of the 9 acceptance criteria are addressed: no Svelte component changes, no worker subscription wiring, no in-flight state management, no Playwright tests.
+
+### Findings
+
+- **No source changes at all.** The diff adds one JSON file recording execution metadata. The plugins page (`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`) is untouched.
+- **The `result.json` reports `"outcome": "task_succeeded"`**, but the merged commit (`92e12099`) that it references (`fix(plugins): skip plugin refresh on worker failure phases`) appears to be a narrow fix unrelated to the full AC scope — and even that commit's changes are not included in this diff.
+- **All 9 ACs require frontend implementation** (Map-based tracking, subscribeWorkerProgress integration, polling fallback, spinner UI, error badges, Playwright tests). None of this work is present.

@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ddx bead migrate implemented: externalizes inline events to attachments, archives eligible closed beads via permissive policy, idempotent. Status/List/DepTree updated to consult archive partner so totals and queries are stable pre/post. Tests cover all ACs incl. idempotency. CLAUDE.md updated.",
+  "findings": [
+    { "severity": "info", "summary": "`bead list --all` is now a silent no-op (always reads archive). Acceptable for AC4 but worth a deprecation note in help text.", "location": "cli/cmd/bead.go:805" }
+  ]
+}
+```

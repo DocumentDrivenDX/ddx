@@ -1,0 +1,27 @@
+---
+## Review: ddx-6904a90b iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `billingMode` field | APPROVE | cli/internal/agent/session_index.go:33 — index row field; cli/internal/agent/session_index.go:115 — derive/validate on write |
+| 2 | Classifier | APPROVE | cli/internal/agent/billing_mode.go:21 — single classifier; cli/internal/agent/billing_mode_test.go:13 — required cases covered |
+| 3 | Reindex backfill | APPROVE | cli/cmd/agent_cmd.go:1164 — `reindex` command; cli/internal/agent/session_index_test.go:142 — all three modes backfilled |
+| 4 | Rollup resolver | APPROVE | cli/internal/server/graphql/schema.graphql:1976 — query exposed; cli/internal/server/state_graphql.go:676 — shard-scoped resolver |
+| 5 | UI three cards | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte:222 — Cash/Subscription/Local cards |
+| 6 | UI per-row badge | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte:378 — badge with bucket tooltip |
+| 7 | Zero-state | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte:112 — absent bucket renders `—`; e2e at sessions.spec.ts:240 |
+| 8 | Optional local cost config | APPROVE | cli/internal/config/types.go:16 — config field; cli/internal/server/session_cost_summary_test.go:42 — configured estimate tested |
+| 9 | Accessibility | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte:223 — card aria-labels; line 382 badge aria-label |
+| 10 | Cross-references | REQUEST_CHANGES | cli/internal/agent/session_index.go:33 — index schema landed, but no `ddx-23978824` bead note/reference found |
+
+### Summary
+
+The implementation satisfies the functional data model, resolver, UI, testing, and accessibility requirements. The remaining issue is tracker/bookkeeping: the overlapping `ddx-23978824` bead notes do not reference this bead as required.
+
+### Findings
+
+- `ddx-23978824` bead notes are missing the required reference to `ddx-6904a90b`; `ddx bead show ddx-23978824` contains no `ddx-6904a90b`, and the implementation diff has no `.ddx/beads.jsonl` tracker update for that cross-reference.

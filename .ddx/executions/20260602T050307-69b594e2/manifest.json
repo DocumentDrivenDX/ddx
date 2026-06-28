@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260602T050307-69b594e2",
+  "bead_id": "ddx-42c2c630",
+  "base_rev": "67fcd9afff6a5d544bbbd008da9065641cb9b67c",
+  "created_at": "2026-06-02T05:03:15.360515071Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-42c2c630",
+    "title": "init: stop project-local default plugin installation in plain ddx init",
+    "description": "PROBLEM\nPlain `ddx init` eagerly installs the default `ddx` plugin into every project. The intended model is that project init only creates `\u003cproject\u003e/.ddx/` and the project manifest; plugins should lazy-resolve from the global layer on first use.\n\nROOT CAUSE\n- cli/cmd/init.go:73 `runInit` currently routes plain init through eager plugin setup.\n- cli/cmd/init.go:271-284 calls `registry.InstallPackageFromFS(pkg, defaultplugin.FS(), workingDir)` unconditionally, producing `.ddx/plugins/ddx`, `.agents/skills/ddx`, and `.claude/skills/ddx` in the project.\n\nPROPOSED FIX\n1. Remove the default plugin install from the no-flag `ddx init` path.\n2. Keep project-local initialization of `\u003cproject\u003e/.ddx/` and the manifest intact.\n3. Ensure the no-flag path does not create or modify any project `plugins/` tree or agent-tier skill links.\n4. Leave actual plugin lookup to `registry.ResolvePlugin`, preferring project over global, from the sibling registry-resolver bead.\n\nNON-SCOPE\n- The resolver precedence itself (sibling bead: registry two-layer resolution).\n- install/update `--global` wiring (sibling bead).\n- `ddx doctor` reporting and spec/doc updates (sibling bead: doctor + specs).\n- Migrating any `~/.config/ddx/` legacy paths.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution).\n- sibling registry-resolver bead.\n\nPARENT\n- ddx-937de9fc.",
+    "acceptance": "1. `TestInitProject_DoesNotInstallPlugins` verifies that `ddx init` with no flag creates `\u003cproject\u003e/.ddx/` and the manifest but does not write `.ddx/plugins/ddx`, `.agents/skills/ddx`, `.claude/skills/ddx`, or any project-local `plugins/` tree.\n2. `TestInitProject_LeavesPluginsForLazyResolution` verifies the initialized project can lazy-resolve the default `ddx` plugin from the global layer through `registry.ResolvePlugin` when the sibling resolver behavior is present.\n3. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestInitProject_DoesNotInstallPlugins|TestInitProject_LeavesPluginsForLazyResolution'` passes.\n4. `cd cli \u0026\u0026 go test ./cmd/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-64ecd687",
+    "labels": [
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260602T050307-69b594e2",
+    "prompt": ".ddx/executions/20260602T050307-69b594e2/prompt.md",
+    "manifest": ".ddx/executions/20260602T050307-69b594e2/manifest.json",
+    "result": ".ddx/executions/20260602T050307-69b594e2/result.json",
+    "checks": ".ddx/executions/20260602T050307-69b594e2/checks.json",
+    "usage": ".ddx/executions/20260602T050307-69b594e2/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-42c2c630-20260602T050307-69b594e2"
+  },
+  "prompt_sha": "a9db5ce6b6a8afed03c8bcde1d631d6b2bc3469e8af8cee00255e5b9ccd0d64f"
+}

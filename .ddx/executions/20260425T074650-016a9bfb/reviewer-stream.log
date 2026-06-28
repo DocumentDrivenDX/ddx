@@ -1,0 +1,19 @@
+---
+## Review: ddx-46370e6b iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Go test exists | APPROVE | cli/internal/agent/execute_bead_env_isolation_test.go:107 — `TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched` |
+| 2 | Drives end-to-end (worktree/commit/preserve) | APPROVE | lines 145–159 — `ExecuteBead` + `LandBeadResult` with `NoMerge: true` (preserve-ref path) |
+| 3 | Contaminates env via `t.Setenv` | APPROVE | lines 137–139 — sets `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` |
+| 4 | Asserts bare repo byte-identical after | APPROVE | lines 170–177 (full snapshot diff) and 182–191 (explicit `config` byte check) |
+| 5 | Fails if a callsite reverts to bare `exec.Command("git",…)` | APPROVE | Snapshot diff captures any added/modified file under bareDir; commit msg notes manual verification by reverting `RealGitOps.WorktreeAdd` (test failed as expected) |
+| 6 | Runs under 60s | APPROVE | line 148 uses script harness with no-op `envIsoRunner`; no network; in-process; the test harness uses 60s timeout context implicitly via `t` |
+
+### Summary
+
+The test follows the bead's specified sketch closely: builds an outer bare repo, snapshots before, contaminates `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` via `t.Setenv`, drives `ExecuteBead` + `LandBeadResult` (preserve path) with a no-op runner that creates one file (so `SynthesizeCommit` fires), and asserts byte-for-byte equality of the bare repo plus an explicit config-bytes check. The commit message documents that the gate was validated by temporarily reverting `RealGitOps.WorktreeAdd` to bare `exec.Command("git", …)`, confirming the test fails when env-scrubbing is removed.

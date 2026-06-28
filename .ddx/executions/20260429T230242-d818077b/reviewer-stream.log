@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "checkPackageJSONLocations scans the three required dirs (/, website/, cli/internal/server/frontend/), reports node_modules missing or stale-vs-bun.lock with a `bun install` remediation, and is wired into runDoctor with unit tests covering branches.",
+  "findings": [
+    { "severity": "info", "summary": "Comment renumbers the legacy-symlinks check to 'Check 13' but no Check 12 exists; cosmetic.", "location": "cli/cmd/doctor.go:260" },
+    { "severity": "info", "summary": "Implementation is ~210 LoC (incl. tests) vs. ~100 LoC estimate in the bead; size is justified by the test coverage.", "location": "cli/cmd/doctor.go" },
+    { "severity": "info", "summary": "Optional `ddx init` summary mention of discovered package.json files was not added; the bead marks this as optional.", "location": "cli/cmd/init.go" }
+  ]
+}
+```

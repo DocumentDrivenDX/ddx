@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Default Playwright harness now boots ddx server from a copied temp fixture; fixtures contain open/closed/blocked beads and tiny library, no $HOME/~ refs, and demo config/spec untouched.",
+  "findings": [
+    { "severity": "info", "summary": "BASE_URL is https://127.0.0.1; relies on the embedded server's TLS plus ignoreHTTPSErrors. Verify the server actually serves TLS on this port when --tsnet=false; otherwise health probe would fail.", "location": "cli/internal/server/frontend/playwright.config.ts:14" },
+    { "severity": "info", "summary": "Fixture beads use a self-referential dependency (fx-003 depends_on fx-001 but issue_id is fx-003 — looks fine, just noting the schema usage).", "location": "cli/internal/server/frontend/e2e/fixtures/.ddx/beads.jsonl:3" }
+  ]
+}
+```

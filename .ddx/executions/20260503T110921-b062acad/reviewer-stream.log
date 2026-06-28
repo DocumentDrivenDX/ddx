@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result JSON files. No investigation report, no code fix to pre-flight routing, no new test, and no evidence of any AC item being addressed.",
+  "findings": [
+    { "severity": "block", "summary": "AC1 unmet: no investigation report at .ddx/executions/<run-id>/auto-routing-rejection.md in the diff", "location": ".ddx/executions/20260503T110921-b062acad/" },
+    { "severity": "block", "summary": "AC2 unmet: no code changes to DDx pre-flight; ServiceExecuteRequest construction not modified", "location": "cli/internal/agent/" },
+    { "severity": "block", "summary": "AC3 unmet: no structured per-candidate rejection reason added", "location": "cli/internal/agent/runner.go" },
+    { "severity": "block", "summary": "AC5 unmet: TestAutoRoute_BareWork_NoPreflightRejection not present", "location": "cli/internal/agent/" },
+    { "severity": "block", "summary": "Diff only includes attempt manifest/result; no source code modified despite result.json claiming task_succeeded", "location": ".ddx/executions/20260503T110921-b062acad/result.json" }
+  ]
+}
+```

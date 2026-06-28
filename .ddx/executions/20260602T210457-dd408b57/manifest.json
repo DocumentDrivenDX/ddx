@@ -1,0 +1,156 @@
+{
+  "attempt_id": "20260602T210457-dd408b57",
+  "bead_id": "ddx-84d6da52",
+  "base_rev": "1c291b064558a5e28a716930545418618cc47cb5",
+  "created_at": "2026-06-02T21:05:04.276838562Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-84d6da52",
+    "title": "Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 3",
+    "description": "PROBLEM\nParent bead ddx-70a432b5 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs are missing the documentation sections required to make the Story-16 run-detail page and its evidence browser official. Without spec updates, the run-detail page, trust boundary statement, and raw-transcript audit event are undocumented platform behaviors.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-*.md: missing a Run-detail-page subsection describing the trust boundary ('Anyone with project read access sees raw prompts, responses, stderr, tool args') and evidence browser whitelist (allowed extensions + 64KB cap).\n- docs/helix/01-frame/features/FEAT-010-*.md: Run resolver contract does not include prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, or normalized ToolCallEntry.\n- docs/helix/01-frame/features/FEAT-019-*.md: review surface does not point to /runs/[runId] deep page.\n- No 'raw transcript viewed' audit event exists in the server or schema.\n- Depends on ddx-f04faa86 (16.1 page) and ddx-4cd64068 (16.2 evidence tab).\n\nPROPOSED FIX\n- Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB; no Markdown rendering in evidence tab).\n- Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\n- Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\n- Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\n- Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\n\nNON-SCOPE\n- Frontend implementation (that is Story 16.1 and 16.2).\n- New auth or role-based access control beyond what the trust boundary statement documents.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n- bun run test:e2e green.\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n2. bun run test:e2e green.\n3. lefthook run pre-commit passes.\n4. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "ac-quality:needs-refinement",
+      "phase:2",
+      "story:16",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode readiness classification result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\"}",
+          "created_at": "2026-05-28T11:04:27.175006209Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T11:32:37.303223509Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T110440-503f6ddd\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":16,\"output_tokens\":517,\"total_tokens\":533,\"cost_usd\":0.82761415,\"duration_ms\":1666877,\"exit_code\":0}",
+          "created_at": "2026-05-28T11:32:37.367172681Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=533 cost_usd=0.8276 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260528T110440-503f6ddd\",\"bead_id\":\"ddx-84d6da52\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T11:32:43.631024465Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=pre-existing go test failures in unrelated packages block full compliance, but bead scope (frontend p95 e2e) is complete and verified passing. Details: - bun run test:e2e PASSED: Story16RunDetailFullStackP95 test confirmed passing (200 tool calls, 30 evidence files, single rAF render budget verified) - lefthook run pre-commit PASSED: all checks green - Frontend AC 1-3 VERIFIED as complete Blocker: cd cli \u0026\u0026 go test ./... fails with pre-existing performance regression failures in: - github.com/DocumentDrivenDX/ddx/internal/server: TestServerStateBeadSnapshotLatencyBudget (p95=72ms, want \u003c=50ms) - github.com/DocumentDrivenDX/ddx/internal/server/graphql: TestEfficacyRowsDateFilterAndPerfTargets (p95=431ms, want \u003c=300ms) - github.com/DocumentDrivenDX/ddx/internal/agent: timeout (600s) These failures are unrelated to frontend e2e work (Story 16.3 part 3 scope). No code changes were made to trigger them; they exist at the base revision. The failures appear to be pre-existing performance regressions in the GraphQL and agent packages, not frontend-related. Next: Recommend running the full test suite on main to confirm baseline status, or decomposing the go test AC if latency regressions need separate handling.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-05-28T11:32:43.732704185Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: pre-existing go test failures in unrelated packages block full compliance, but bead scope (frontend p95 e2e) is complete and verified passing.\n\nDetails:\n- bun run test:e2e PASSED: Story16RunDetailFullStackP95 test confirmed passing (200 tool calls, 30 evidence files, single rAF render budget verified)\n- lefthook run pre-commit PASSED: all checks green\n- Frontend AC 1-3 VERIFIED as complete\n\nBlocker: cd cli \u0026\u0026 go test ./... fails with pre-existing performance regression failures in:\n  - github.com/DocumentDrivenDX/ddx/internal/server: TestServerStateBeadSnapshotLatencyBudget (p95=72ms, want \u003c=50ms)\n  - github.com/DocumentDrivenDX/ddx/internal/server/graphql: TestEfficacyRowsDateFilterAndPerfTargets (p95=431ms, want \u003c=300ms)\n  - github.com/DocumentDrivenDX/ddx/internal/agent: timeout (600s)\n\nThese failures are unrelated to frontend e2e work (Story 16.3 part 3 scope). No code changes were made to trigger them; they exist at the base revision. The failures appear to be pre-existing performance regressions in the GraphQL and agent packages, not frontend-related.\n\nNext: Recommend running the full test suite on main to confirm baseline status, or decomposing the go test AC if latency regressions need separate handling.\nresult_rev=5332a89ff3b9696f371112f17e138bf5df453c6c\nbase_rev=5332a89ff3b9696f371112f17e138bf5df453c6c\nretry_after=2026-05-28T11:37:43Z\noutcome_reason=no_changes",
+          "created_at": "2026-05-28T11:32:43.89365005Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"1. p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\",\"coverage\":\"Story 16.3a AC1 — Story16RunDetailFullStackP95 drives the 200-tool-call/30-evidence-file dataset and asserts all tabs render and become interactive within one render frame.\"},{\"parent_ac\":\"2. bun run test:e2e green.\",\"coverage\":\"Story 16.3a AC2 — `cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e` is green.\"},{\"parent_ac\":\"3. lefthook run pre-commit passes.\",\"coverage\":\"Story 16.3a AC4 (primary); also enforced by Story 16.3b AC3, 16.3c AC3, and 16.3d AC3 — every child gates on `lefthook run pre-commit`.\"},{\"parent_ac\":\"4. cd cli \\u0026\\u0026 go test ./... passes.\",\"coverage\":\"Collectively restored by Story 16.3b AC1 (TestServerStateBeadSnapshotLatencyBudget p95\\u003c=50ms), 16.3c AC1 (TestEfficacyRowsDateFilterAndPerfTargets p95\\u003c=300ms), and 16.3d AC1+AC2 (internal/agent under 600s; full `go test ./...` green once b and c land) — these are the three pre-existing failing packages that block the full-repo gate.\"}],\"child_ids\":[\"ddx-4a53d763\",\"ddx-d61d990c\",\"ddx-a0ce517e\",\"ddx-1a0d4d26\"],\"rationale\":\"The parent bundled finished frontend p95 e2e work with a full-repo `go test ./...` gate that was failing on three pre-existing, unrelated regressions (server bead-snapshot latency 72ms\\u003e50ms, graphql efficacyRows 431ms\\u003e300ms, internal/agent 600s timeout) — exactly the no_changes blocker recorded in the failure history. Split into one frontend e2e child (parent AC 1-3) and three single-package perf/timeout fix children that together restore parent AC 4, so each is independently executable with a scoped, named-test verification gate.\"}",
+          "created_at": "2026-05-28T11:43:06.356234073Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-4a53d763, ddx-d61d990c, ddx-a0ce517e, ddx-1a0d4d26"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"title names spec updates and audit event; ac contains no check for either: Three independent blockers prevent safe dispatch. (1) Scope incoherence: the title promises spec updates for FEAT-008/010/019 and a raw-transcript-viewed audit event, but the four AC items contain no verifiable check for either; an agent cannot tell whether those items are in scope or not. (2) Structural duplication: the description contains two PROBLEM, two ROOT CAUSE, two PROPOSED FIX, and two NON-SCOPE blocks; the inner 'Implement only this child acceptance slice' clause narrows scope to p95/e2e only while the outer PROPOSED FIX and the title imply broader spec+audit work—the contradiction is semantic, not cosmetic. (3) AC 4 is a known pre-existing blocker: the prior attempt confirms cd cli \\u0026\\u0026 go test ./... fails with unrelated performance regressions (TestServerStateBeadSnapshotLatencyBudget p95=72ms vs \\u003c=50ms, TestEfficacyRowsDateFilterAndPerfTargets p95=431ms vs \\u003c=300ms, internal/agent timeout), meaning any agent that completes all frontend work will still produce a no_changes outcome.\",\"fingerprint\":\"e53789f46e16fc506a10ef5e5d968fcf84c2b8b9d3036f06a0c3c7a59ae8100b\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e53789f46e16fc506a10ef5e5d968fcf84c2b8b9d3036f06a0c3c7a59ae8100b\"}",
+          "created_at": "2026-06-02T18:09:37.602945455Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-02T18:24:34.976310434Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260602T180953-e45a8b52\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":3,\"output_tokens\":28,\"total_tokens\":31,\"cost_usd\":1.4506156000000001,\"duration_ms\":873200,\"exit_code\":0}",
+          "created_at": "2026-06-02T18:24:35.043327264Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=31 cost_usd=1.4506 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-84d6da52\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-02T18:24:53.693506715Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"The attempt failed at the tracker-commit step with 'fatal: unable to write new index file: exit status 128' — a local git index/lock environment fault, not a defect in the bead or the work product. No agent output was produced (cost shows 3 in / 28 out tokens) and the failure is transient, so releasing the claim and retrying is appropriate.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-02T18:25:33.81906448Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-06-02T18:25:33.895597589Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refine\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"4251568ced718c39f938384028b3db2c61d869d93c2a6ed411284efe47dcb4a8\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4251568ced718c39f938384028b3db2c61d869d93c2a6ed411284efe47dcb4a8\"}",
+          "created_at": "2026-06-02T21:02:54.523049479Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-last-detail": "pre-existing go test failures in unrelated packages block full compliance, but bead scope (frontend p95 e2e) is complete and verified passing. Details: - bun run test:e2e PASSED: Story16RunDetailFullStackP95 test confirmed passing (200 tool calls, 30 evidence files, single rAF render budget verified) - lefthook run pre-commit PASSED: all checks green - Frontend AC 1-3 VERIFIED as complete Blocker: cd cli \u0026\u0026 go test ./... fails with pre-existing performance regression failures in: - github.com/DocumentDrivenDX/ddx/internal/server: TestServerStateBeadSnapshotLatencyBudget (p95=72ms, want \u003c=50ms) - github.com/DocumentDrivenDX/ddx/internal/server/graphql: TestEfficacyRowsDateFilterAndPerfTargets (p95=431ms, want \u003c=300ms) - github.com/DocumentDrivenDX/ddx/internal/agent: timeout (600s) These failures are unrelated to frontend e2e work (Story 16.3 part 3 scope). No code changes were made to trigger them; they exist at the base revision. The failures appear to be pre-existing performance regressions in the GraphQL and agent packages, not frontend-related. Next: Recommend running the full test suite on main to confirm baseline status, or decomposing the go test AC if latency regressions need separate handling.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-retry-after": "2026-05-28T11:37:43Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "pre-existing go test failures in unrelated packages block full compliance, but bead scope (frontend p95 e2e) is complete and verified passing. Details: - bun run test:e2e PASSED: Story16RunDetailFullStackP95 test confirmed passing (200 tool calls, 30 evidence files, single rAF render budget verified) - lefthook run pre-commit PASSED: all checks green - Frontend AC 1-3 VERIFIED as complete Blocker: cd cli \u0026\u0026 go test ./... fails with pre-existing performance regression failures in: - github.com/DocumentDrivenDX/ddx/internal/server: TestServerStateBeadSnapshotLatencyBudget (p95=72ms, want \u003c=50ms) - github.com/DocumentDrivenDX/ddx/internal/server/graphql: TestEfficacyRowsDateFilterAndPerfTargets (p95=431ms, want \u003c=300ms) - github.com/DocumentDrivenDX/ddx/internal/agent: timeout (600s) These failures are unrelated to frontend e2e work (Story 16.3 part 3 scope). No code changes were made to trigger them; they exist at the base revision. The failures appear to be pre-existing performance regressions in the GraphQL and agent packages, not frontend-related. Next: Recommend running the full test suite on main to confirm baseline status, or decomposing the go test AC if latency regressions need separate handling.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260602T210457-dd408b57",
+    "prompt": ".ddx/executions/20260602T210457-dd408b57/prompt.md",
+    "manifest": ".ddx/executions/20260602T210457-dd408b57/manifest.json",
+    "result": ".ddx/executions/20260602T210457-dd408b57/result.json",
+    "checks": ".ddx/executions/20260602T210457-dd408b57/checks.json",
+    "usage": ".ddx/executions/20260602T210457-dd408b57/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-84d6da52-20260602T210457-dd408b57"
+  },
+  "prompt_sha": "2ed24d5fc74c80476aacb143c36b7c6ee5c065f806d2826206bfd70cd55e4e18"
+}

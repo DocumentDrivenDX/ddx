@@ -1,0 +1,12 @@
+All AC items satisfied: ADR-007 in `docs/helix/02-design/adr/`, FEAT-026 frame created, FEAT-020/021 amended with compatibility hooks only, naming convention documented in ADR-007, version-handshake compatibility matrix included.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ADR-007 committed with topology, authority, ts-net policy, plain-HTTP opt-out, write-routing, naming convention, and version-handshake matrix. FEAT-026 frame added; FEAT-020/021 amended with compatibility hooks only. All AC met.",
+  "findings": [
+    { "severity": "info", "summary": "Diff in review listing only shows execution evidence; the substantive doc changes landed in commit 6e386920 referenced by result.json", "location": "docs/helix/02-design/adr/ADR-007-federation-topology.md" }
+  ]
+}
+```

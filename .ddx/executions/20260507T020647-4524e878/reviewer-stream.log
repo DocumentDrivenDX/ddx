@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata and provides no TD document or audit evidence, so none of the acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 is not implemented in the submitted diff: no file under docs/helix/02-design/technical-designs/TD-<NNN>-artifact-search.md was added or modified.",
+      "location": ".ddx/executions/20260507T020647-4524e878/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 is not implemented or reviewable: the diff contains no technical design content defining search scope progression, size caps, binary handling, or performance budget.",
+      "location": ".ddx/executions/20260507T020647-4524e878/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3 is unsupported: the diff includes no evidence that `ddx doc audit` was run clean, only execution bookkeeping files.",
+      "location": ".ddx/executions/20260507T020647-4524e878/result.json:1"
+    }
+  ]
+}
+```

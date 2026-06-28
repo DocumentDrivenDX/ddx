@@ -1,0 +1,31 @@
+---
+## Review: ddx-23978824 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Deliverable 1 — Unified view | BLOCK | cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte:126 — one-shot query; no live row patch/requery |
+| 2 | Deliverable 2 — Usage + quota fields | BLOCK | cli/internal/server/graphql/resolver_providers.go:435 — harness quota only reads `HarnessInfo.Quota`, parsed headers are not wired |
+| 3 | Deliverable 3 — Trend detail | REQUEST_CHANGES | cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/[name]/+page.svelte:138 — detail route exists, but ceiling overlay is only text |
+| 4 | Perf posture | BLOCK | cli/internal/server/graphql/providers_unified_test.go:131 — usage test seeds 4 rows; no ≥1k/10k p95 perf fixture found |
+| 5 | Design note | APPROVE | docs/helix/02-design/agent-endpoints-unified-view.md:7 — records rename, row model, async strategy, quota sources |
+| 6 | No regressions | APPROVE | cli/internal/server/graphql/resolver_providers.go:102 — `defaultRouteStatus` resolver remains |
+| 7 | Cross-references | APPROVE | cli/internal/server/graphql/resolver_providers.go:398 — usage reads the sessions index |
+
+### Summary
+
+The implementation adds a useful unified schema and UI shell, but it does not satisfy the core async-refresh, quota, sparkline, or perf requirements. The largest recurring issue is that several acceptance points are documented or mocked but not wired into the runtime path.
+
+### Findings
+
+- **AC1 BLOCK:** `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte:onMount` performs a single GraphQL request and never polls, subscribes, or re-queries after `refreshProviderStatuses` completes, so rows cannot patch live within 5s of probe completion.
+- **AC1 BLOCK:** `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte:63` keeps `defaultRouteStatus` in the initial page query, and `cli/internal/server/graphql/resolver_providers.go:102` still resolves it synchronously, so the slow-load path is not fully removed.
+- **AC2 BLOCK:** `cli/internal/server/graphql/resolver_providers.go:435` only maps `HarnessInfo.Quota`; `QuotaFromRateLimitSignal` is explicitly “for future call sites” at `resolver_providers.go:488`, so Claude/Codex parsed headers do not populate harness quota rows.
+- **AC2 BLOCK:** `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte:350` renders only utilization or “not reported”; there is no 7-day sparkline in the list row when hourly buckets are available.
+- **AC2 BLOCK:** `cli/internal/server/graphql/resolver_providers.go:412` always returns a non-null usage object with zero-valued pointer fields, so missing usage data renders as `0 / 0` instead of null/`not reported`.
+- **AC3 REQUEST_CHANGES:** `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/[name]/+page.svelte:154` renders the quota ceiling as text below the chart, not as an overlay on the 7-day/30-day time series.
+- **AC3 REQUEST_CHANGES:** `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/agent-endpoints.e2e.ts:137` mocks `providerTrend`; there is no Playwright or server fixture proving seeded ascending usage plus a real quota produces the projection.
+- **AC4 BLOCK:** No provider-specific perf test or fixture was added under `cli/internal/server/graphql` or `cli/internal/server/perf` for ≥1,000 rows, ≥5 endpoints/harnesses, unified-list p95 ≤200ms, trend-detail p95 ≤400ms, or 10,000-row stretch behavior.

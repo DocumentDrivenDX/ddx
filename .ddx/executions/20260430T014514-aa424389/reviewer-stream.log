@@ -1,0 +1,20 @@
+---
+## Review: ddx-1848bbaa iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | 4 prompts at docs/helix/01-frame/visuals/tool-*.prompt.md | APPROVE | tool-tracker/doc-graph/execution/plugins.prompt.md all present |
+| 2 | Tracker: DAG + priority queue + ready/blocked/done states | APPROVE | tool-tracker.prompt.md:16-23 — DAG, priority queue column, three states |
+| 3 | Doc graph: depends_on + generated_by edges | APPROVE | tool-doc-graph.prompt.md:18-22 — solid blue depends_on, dashed purple generated_by |
+| 4 | Execution: three-layer run/try/work + worktree isolation | APPROVE | tool-execution.prompt.md:18-20 — nested layers; dashed worktree boundary at :19 |
+| 5 | Plugins: HELIX/Dun snap into shared core | APPROVE | tool-plugins.prompt.md:16-25 — sockets, HELIX/Dun snapped, generics dashed |
+| 6 | DESIGN.md tokens referenced (palette/typography) | APPROVE | each file's "Style constraints (DESIGN.md)" section enumerates lever blue #4878C6, fulcrum green, load purple, Inter/JetBrains Mono |
+| 7 | Sober/utilitarian register | APPROVE | each file specifies "patent figure", negative prompts forbid AI-gloss/3D/glow |
+
+### Summary
+
+All four prompt files are authored at the specified paths with the required metaphors (DAG+queue, dual-edge doc graph, three-layer nested execution with dashed worktree, plug-and-socket plugins). DESIGN.md palette and type tokens are consistently injected, and each file carries a sober/utilitarian negative prompt and per-file acceptance criteria.

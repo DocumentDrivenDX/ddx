@@ -1,0 +1,126 @@
+{
+  "attempt_id": "20260608T132855-3d4f2534",
+  "bead_id": "ddx-3a6f1ad6",
+  "base_rev": "be76e9cc83f64f8c039874efcaa24ae502406f39",
+  "created_at": "2026-06-08T13:29:16.37691954Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 10
+  },
+  "bead": {
+    "id": "ddx-3a6f1ad6",
+    "title": "agent: classify land coordination failures as reconciliation",
+    "description": "PROBLEM\nLanding failures that are really ref-lock, already-landed, or staged-evidence coordination issues still look like ordinary implementation failures to the worker. That causes fresh implementation reruns and the wrong retry lane instead of reconciliation or operator attention.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead_orchestrator.go:292-312` wraps every `LandingAdvancer` error as a generic `land advancer` failure, which loses whether the candidate was already landed, whether `refs/heads/main` could not be locked, or whether the landing worktree was dirty. `cli/internal/agent/execute_bead_report_test.go:57-62` only proves the current detail string records land failure; it does not distinguish the coordination class from implementation failure.\n\nPROPOSED FIX\n- Split land/ref/index/evidence-staging failures into explicit retry actions: reconcile, retry-land, or operator-attention.\n- If the candidate commit or merge is already landed or is an ancestor of the target, reconcile and continue without rerunning implementation.\n- If the landing worktree has staged generated evidence or DDx metadata, preserve or retry the land/evidence step according to local policy rather than escalating the model.\n\nNON-SCOPE\n- Do not change review gating, decomposition detection, or power escalation policy in this child.\n- Do not reimplement low-level tracker/index contention fixes owned by sibling work.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_LandCoordinationFailureDoesNotRerunImplementation` simulates both observed details (`cannot lock ref refs/heads/main` after a candidate/merge is already landed, and `landing worktree has staged changes after waiting 2s`) and asserts the action is reconcile/retry-land/operator-attention, not a fresh implementation run and not model escalation.\n2. The regression shows the worker preserves or reconciles land state instead of rerunning implementation when the land result is already effectively landed or blocked by dirty staged evidence.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'LandCoordination' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T11:20:29.620183985Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T111525-fada8140\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":93440,\"output_tokens\":391,\"total_tokens\":93831,\"cost_usd\":0,\"duration_ms\":293850,\"exit_code\":1}",
+          "created_at": "2026-06-08T11:20:29.704313649Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=93831 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T11:31:33.749356488Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T112033-271336dd\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":145262,\"output_tokens\":1714,\"total_tokens\":146976,\"cost_usd\":0,\"duration_ms\":614995,\"exit_code\":1}",
+          "created_at": "2026-06-08T11:31:33.823525907Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=146976 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":7}",
+          "created_at": "2026-06-08T12:44:32.176083131Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T113136-f9d2da5b\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":44433846,\"output_tokens\":117995,\"total_tokens\":44551841,\"cost_usd\":0,\"duration_ms\":3805543,\"exit_code\":0}",
+          "created_at": "2026-06-08T12:44:32.248042982Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=44551841 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=84.0\",\"fallback_chain\":[],\"requested_min_power\":8}",
+          "created_at": "2026-06-08T12:49:45.248169908Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=84.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T124436-041ede00\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=84.0\",\"input_tokens\":84455,\"output_tokens\":353,\"total_tokens\":84808,\"cost_usd\":0,\"duration_ms\":274428,\"exit_code\":1}",
+          "created_at": "2026-06-08T12:49:45.328240493Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=84808 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":9}",
+          "created_at": "2026-06-08T13:28:52.388279759Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T132855-3d4f2534",
+    "prompt": ".ddx/executions/20260608T132855-3d4f2534/prompt.md",
+    "manifest": ".ddx/executions/20260608T132855-3d4f2534/manifest.json",
+    "result": ".ddx/executions/20260608T132855-3d4f2534/result.json",
+    "checks": ".ddx/executions/20260608T132855-3d4f2534/checks.json",
+    "usage": ".ddx/executions/20260608T132855-3d4f2534/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3a6f1ad6-20260608T132855-3d4f2534"
+  },
+  "prompt_sha": "4b58a4824d3dc1453be8d9b2d53c1c8680d1ebfe71e3da6a2bc0cbb512960666"
+}

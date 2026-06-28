@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260611T152730-a555da66",
+  "bead_id": "ddx-bbea954f",
+  "base_rev": "890f85451598cc8cf4c644aafa667a575ec8084f",
+  "created_at": "2026-06-11T15:27:42.802562803Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bbea954f",
+    "title": "agent: preserve dirty timeout worktree edits before cleanup",
+    "description": "PROBLEM\nA Niflheim `ddx try niflheim-0a9b2e2a --harness codex --min-power 10` attempt (`20260608T053617-38725a29`) timed out after roughly 3h while the agent had many uncommitted source edits in the isolated execution worktree and an active focused e2e test. DDx wrote evidence with `result_rev` equal to `base_rev` (`588bb2d2f87f6e6879bc68e647b9eccdfd422f21`), no `preserve_ref`, committed only prompt/manifest/result evidence, and then removed the execution worktree. The implementation patch was lost. This contradicts the public/docs contract that failed or timed-out attempts are preserved as refs/worktrees for inspection.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead.go:1048-1111` runs the attempt backend under `dispatchCtx` and only inspects/synthesizes dirty worktree state after the backend returns control. A context deadline/cancel can produce a result with `ResultRev == BaseRev` even though the worktree contains uncommitted tracked/untracked implementation edits.\n- `cli/internal/agent/execute_bead.go:1207-1271` already synthesizes a commit for dirty worktrees when normal post-run flow reaches it, but timeout/cancel finalization has no guaranteed salvage step that runs before cleanup.\n- `cli/internal/agent/execute_bead.go:895-905` and `cli/internal/agent/execute_bead.go:1502-1513` remove non-success worktrees based only on outcome/preserve flag. They do not first check for dirty source/doc/test changes and write a preservation pointer.\n- `cli/internal/agent/execution_cleanup.go:376-430` removes stale registered DDx worktrees after liveness expires; the cleanup manager also lacks a dirty-worktree salvage guard before `WorktreeRemove`.\n- `cli/cmd/try.go:510-514` and `cli/cmd/execute_loop_shared.go:662-666` only print any partial result on cancel/deadline; they do not force a dirty-worktree preservation finalizer before returning the timeout error.\n\nPROPOSED FIX\n- Add a single dirty-attempt preservation helper in `cli/internal/agent` that runs before any timeout/cancel/failure cleanup can delete an execution worktree. It must detect tracked modifications, staged changes, and untracked source/doc/test files while continuing to ignore DDx-owned scratch such as run-state and harness-session sidecars.\n- On timeout/cancel with dirty implementation work, preserve the patch by one of these durable mechanisms before workspace deletion: (a) create a no-verify checkpoint commit in the attempt worktree and pin it under `refs/ddx/iterations/\u003cbead\u003e/\u003cattempt-or-time\u003e-\u003cbase\u003e`; (b) write a patch bundle under committed execution evidence and record its path; or (c) mark/preserve the worktree with cleanup metadata until an operator can inspect it. Prefer a stable commit/ref when possible.\n- Update `result.json`, durable attempt audit, and bead event bodies to record the preservation pointer (`preserve_ref`, `checkpoint_rev`, or `patch_bundle`) and enough recovery guidance to inspect/apply the saved work. If a checkpoint commit is used, `result_rev` must not remain equal to `base_rev`.\n- Make cleanup refuse to delete a registered execution worktree with dirty implementation changes unless preservation succeeded or the path is explicitly marked preserved. The refusal must surface a warning/operator-attention record rather than silently deleting the workspace.\n- Keep the existing successful clean paths unchanged: successful attempts land normally, clean no-output timeouts do not fabricate implementation refs, and DDx-owned scratch cleanup remains governed by `ddx-e0de6369`.\n\nNON-SCOPE\n- Do not edit Niflheim or attempt to reconstruct the lost `20260608T053617-38725a29` patch.\n- Do not duplicate `ddx-e0de6369`; that bead is about top-level `.ddx/harness-sessions/` scratch being ignored/pruned, not preserving dirty source edits inside an execution worktree.\n- Do not replace the land coordinator or redesign review gating. This bead is only the timeout/cancel/failure cleanup salvage guarantee for dirty uncommitted worktree edits.\n- Do not weaken detection of real dirty implementation files by broadly ignoring `.ddx/` or arbitrary generated paths.\n\nINTERSECTIONS\n- Parent: `ddx-3106674f` (multi-worker `ddx try` reliability and TP-021 local gates).\n- Related closed precedent: `ddx-45f6d738` and `ddx-feb60c1d` covered dirty worktree/no-commit synthesis in normal post-run flow; this bead covers the timeout/cancel cleanup path that can still lose dirty edits.\n- Related open non-duplicate: `ddx-e0de6369` covers harness-session scratch classification and cleanup.\n- No deps.",
+    "acceptance": "1. Add `TestExecuteBeadWithConfig_TimeoutDirtyWorktreePreservesPatch` (or equivalent) using a script/controlled runner that writes both tracked and untracked implementation files, blocks until context deadline/cancel, and proves DDx records a preservation pointer before cleanup.\n2. Add `TestExecuteLoopInterruptedAttempt_DirtyWorktreePreservationRecorded` (or equivalent) proving `ddx try`/`ddx work` timeout or cancellation emits result/evidence with `preserve_ref`, `checkpoint_rev`, or `patch_bundle`, and does not report the attempt as ordinary `no_changes` when dirty implementation files existed.\n3. Add `TestCleanupAttemptWorktree_DirtyTimeoutRequiresPreservationBeforeRemove` (or equivalent) proving the immediate cleanup path refuses to remove or first salvages a dirty execution worktree on non-success outcomes.\n4. Add `TestExecutionCleanupManager_PreservesDirtyRegisteredWorktreeUntilSalvaged` (or equivalent) proving stale registered worktree cleanup does not delete dirty implementation changes without a recorded preservation pointer.\n5. The preservation helper covers staged changes, unstaged tracked changes, and untracked implementation files; it continues to ignore DDx-owned scratch paths such as `.ddx/run-state/`, `.ddx/harness-sessions/`, and embedded execution private files.\n6. `result.json`, durable attempt audit, and bead events include the preservation pointer and recovery guidance. If DDx creates a checkpoint commit, `result_rev != base_rev`; if it writes a patch bundle, the bundle path is committed or otherwise durable before worktree deletion.\n7. Clean timeout/no-output attempts remain clean: no synthetic implementation ref/patch is created when the attempt worktree has no implementation dirt.\n8. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TimeoutDirtyWorktree|DirtyTimeout|InterruptedAttempt|CleanupAttemptWorktree|ExecutionCleanupManager|ExecuteBeadWithConfig' -count=1` passes.\n9. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n10. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "area:execute-bead",
+      "area:git",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "data-loss",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:TP-021"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260611T152730-a555da66",
+    "prompt": ".ddx/executions/20260611T152730-a555da66/prompt.md",
+    "manifest": ".ddx/executions/20260611T152730-a555da66/manifest.json",
+    "result": ".ddx/executions/20260611T152730-a555da66/result.json",
+    "checks": ".ddx/executions/20260611T152730-a555da66/checks.json",
+    "usage": ".ddx/executions/20260611T152730-a555da66/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-bbea954f-20260611T152730-a555da66"
+  },
+  "prompt_sha": "1e13a7808658928ea8d8902e0cb0e14c25165fd9fdd77cad8b1339e2c6514813"
+}

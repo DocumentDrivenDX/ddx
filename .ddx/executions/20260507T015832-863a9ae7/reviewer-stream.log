@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata files. It does not include code changes, a decisions log, or any evidence that the deadcode and go test acceptance criteria were satisfied.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 cannot be satisfied from this diff because neither `internal/federation/persistence.go` symbol is shown being wired into production reachability or deleted.",
+      "location": ".ddx/executions/20260507T015832-863a9ae7/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3 and AC4 are unsupported: the added files contain no deadcode RTA output and no `cd cli && go test ./...` results, so there is no evidence the required verification passed.",
+      "location": ".ddx/executions/20260507T015832-863a9ae7/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 is missing entirely: the required `.ddx/executions/<run-id>/decisions.md` file is not part of the diff.",
+      "location": ".ddx/executions/20260507T015832-863a9ae7/manifest.json:1"
+    }
+  ]
+}
+```

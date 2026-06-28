@@ -1,0 +1,20 @@
+---
+## Review: ddx-e869a89c iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | /federation route lists nodes with status badges | APPROVE | cli/internal/server/frontend/src/routes/federation/+page.svelte:73 — `data-testid="federation-status-badge"` per row |
+| 2 | Node-picker shows spokes | APPROVE | cli/internal/server/frontend/src/lib/components/NodePicker.svelte:1 (mounted in NavShell.svelte); queries federationNodes |
+| 3 | ?scope=federation toggles to federated* queries | APPROVE | beads/+page.ts:36 FEDERATED_BEADS_QUERY + scope branch; runs/+page.ts mirrored; UI toggle at beads/+page.svelte `data-testid="scope-toggle"` |
+| 4 | Per-row node badges visible | APPROVE | beads/+page.svelte:303 `data-testid="row-node-badge"` colored via federationBadgeClass |
+| 5 | Stale/offline/degraded distinct visual states | APPROVE | cli/internal/server/frontend/src/lib/federationStatus.ts:8 — distinct badge-status-* class per status; offline rows also opacity-60 in /federation |
+| 6 | Direct spoke URL link clickable on each row | APPROVE | federation/+page.svelte:108 `data-testid="federation-spoke-link"` anchor target=_blank to node.url |
+| 7 | Houdini types regenerated and committed | APPROVE | notes.md documents project does not use Houdini (no dep in package.json, no config); equivalent typed gql documents added next to each route, matching existing pattern |
+
+### Summary
+
+Implementation is clean and complete: a new `/federation` overview, a NodePicker in the nav shell, scope-toggled federated queries on both beads and runs lists, per-row colored node badges with spoke deep-links, and a shared `federationStatus.ts` mapping each status to a distinct visual treatment. The Houdini AC item was correctly identified as not applicable to this project (graphql-request + inline `gql` is the established pattern) and the implementer documented this in `.ddx/executions/.../notes.md`.

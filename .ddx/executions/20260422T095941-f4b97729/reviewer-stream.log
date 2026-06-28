@@ -1,0 +1,22 @@
+---
+## Review: ddx-250b570f iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | 0 axe violations on 6 routes x 2 modes | BLOCK | — no `checks.json` or a11y run output found in diff |
+| 2 | no hard-coded hex in src/ | BLOCK | — no `src/` audit evidence or code changes found in diff |
+| 3 | all screenshot baselines committed | BLOCK | — no screenshot baseline files or inventory found in diff |
+
+### Summary
+
+The diff only adds execution metadata and a success result file. It does not include the actual a11y check evidence, hard-coded hex audit evidence, or screenshot baseline verification needed to evaluate the acceptance criteria.
+
+### Findings
+
+- `.ddx/executions/20260422T095941-f4b97729/checks.json` is referenced by `manifest.json` but is not included in the diff, so the required 6 routes x 2 modes axe result evidence is missing.
+- `src/` is not changed or accompanied by an audit artifact, so the “no hard-coded hex” criterion cannot be verified.
+- No screenshot baseline files or baseline inventory are included, so the “all screenshot baselines committed” criterion cannot be verified.

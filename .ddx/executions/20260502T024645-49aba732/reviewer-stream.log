@@ -1,0 +1,17 @@
+---
+## Review: ddx-8a530449 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Sections for Core, Bead Tracker, Queue Work, Agent, Resources, Utilities | APPROVE | website/content/docs/cli/_index.md — six `## ` headings present matching CLAUDE.md |
+| 2 | Links to complete reference at /docs/cli/commands/ | APPROVE | _index.md:11 and trailing line — links to `/docs/cli/commands/` |
+| 3 | Front matter / comment notes hand-curated, do-not-regen | APPROVE | _index.md:4-8 front matter comment + HTML comment on line below |
+| 4 | `grep -c "^## " ... >= 6` | APPROVE | Six `## ` headings: Core, Bead Tracker, Queue Work, Agent Service, Resource Commands, Embedded Utilities (Global Flags makes 7) |
+
+### Summary
+
+The curated noun-verb reference cleanly mirrors CLAUDE.md's CLI Command Overview, links to the auto-generated tree, and is explicitly marked hand-curated in both YAML front matter and an HTML comment. All four acceptance criteria are met.

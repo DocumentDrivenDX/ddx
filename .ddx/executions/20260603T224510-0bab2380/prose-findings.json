@@ -1,0 +1,24 @@
+{
+  "ran": true,
+  "changed_docs": [
+    "docs/helix/02-design/adr/ADR-027-skill-install-topology.md"
+  ],
+  "findings": [
+    {
+      "file": "docs/helix/02-design/adr/ADR-027-skill-install-topology.md",
+      "line": 44,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    },
+    {
+      "file": "docs/helix/02-design/adr/ADR-027-skill-install-topology.md",
+      "line": 57,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    }
+  ]
+}

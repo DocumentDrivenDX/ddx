@@ -1,0 +1,112 @@
+{
+  "attempt_id": "20260603T024924-63e92980",
+  "bead_id": "ddx-937de9fc",
+  "base_rev": "168e9f5c4bc00e7e3e396998d6ccd4e557129d18",
+  "created_at": "2026-06-03T02:49:31.723436797Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-937de9fc",
+    "title": "skills/personas/plugins: install-to-agent vs install-in-project — and ddx plugin commands honor both",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nSkills, personas, and plugin content need to install in two distinct locations depending on operator intent:\n\n- **install-to-agent (global)**: written under the user's agent-tier paths (e.g. ~/.claude/skills/\u003cname\u003e, ~/.codex/skills/\u003cname\u003e, or the equivalent each harness reads). Skills and personas are then available across every project on the machine without per-project setup. Lives under ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ with symlinks/copies into the agent-tier paths.\n- **install-in-project**: written under ddxroot.Path()/plugins/\u003cname\u003e/. In in-tree mode that is \u003cproject\u003e/.ddx/plugins/\u003cname\u003e/; in convention mode that is ${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/. Either way the project-scoped agent paths point into it (e.g. \u003cproject\u003e/.claude/skills/ link target).\n\nToday `ddx install`, `ddx update`, `ddx plugin list`, and `ddx init` all assume per-project installs only. There is no `--global` surface. Operators who want a single Claude Code install per machine (the common case) must repeat the install for every project.\n\nROOT CAUSE\n- cli/cmd/install.go and cli/cmd/update.go target ddxroot.Path() unconditionally.\n- cli/cmd/init.go bundles plugin install with manifest creation.\n- The agent-tier paths (~/.claude/skills/...) are written only when the operator manually links them, or via the legacy install paths that were retired (per the user's `feedback_no_local_replace` and the home-directory-install retirement noted in CLAUDE.md).\n\nPROPOSED FIX\n\n1. Add `--global` flag to `ddx install`, `ddx update`, `ddx plugin list`, `ddx plugin show`. When set:\n   - Resolve target: ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/.\n   - Write the plugin content there.\n   - Create symlinks (or copies, OS-dependent) into the agent-tier skill paths the user's agents read: ~/.claude/skills/\u003cname\u003e, ~/.codex/skills/\u003cname\u003e, and any others the agent registry knows about.\n   - Skill discovery from a fresh shell finds the skill via the agent-tier path.\n\n2. Without `--global`, `ddx install` writes to ddxroot.Path()/plugins/\u003cname\u003e/ and links into \u003cproject\u003e/.claude/skills/\u003cname\u003e AND \u003cproject\u003e/.agents/skills/\u003cname\u003e. In convention mode (no \u003cproject\u003e/.ddx/) the project's agent-tier paths still point into the XDG project dir's plugins. In in-tree mode they point into \u003cproject\u003e/.ddx/plugins/.\n\n3. `ddx init --global` is the umbrella command for first-time setup: installs the default ddx plugin globally, creates agent-tier links, and writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults.\n\n4. `ddx init` (no flag) creates \u003cproject\u003e/.ddx/ and does NOT install plugins — plugins are lazy-resolved on first use, preferring the project install over global.\n\n5. Plugin lookup precedence at runtime:\n   - \u003cproject\u003e/.ddx/plugins/\u003cname\u003e/ (or ddxroot.Path()/plugins/\u003cname\u003e/ in convention mode) if present.\n   - ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ otherwise.\n   - Hardcoded baked-in fallback (the default ddx plugin only).\n\n6. The \"ddx-validate\" pre-commit hook (per ddx-777f4a09 already landed) must continue to scope its checks correctly: skill-related validation runs only when skill files are staged, regardless of install location.\n\n7. `ddx doctor` reports both install layers: \"Global Install (${XDG_DATA_HOME}/ddx/global/plugins/ddx) — ok | missing\" and \"Project Install (ddxroot.Path()/plugins/ddx) — ok | missing | lazy-resolves-to-global\".\n\nSPEC IMPACT (in addition to ddx-06cbaa90's spec updates):\n- docs/helix/02-design/adr/ADR-025-or-equivalent (skill install topology) — file or update.\n- library/skills/ddx/SKILL.md \"How this skill works\" section — document install locations.\n- library/skills/ddx/reference/agents.md (if exists) — document agent-tier paths.\n- CLAUDE.md \"Persona System\" section — document install precedence.\n\nNON-SCOPE\n- Removing the existing per-project install entirely (both modes coexist).\n- Migrating ~/.config/ddx/ legacy paths if any exist (likely none today).\n- Agent-harness path discovery beyond Claude Code and Codex (add others as those harnesses define their skill paths).\n\nDEPS\nddx-06cbaa90 (ddx home resolution) — install paths route through ddxroot.Path() AND the new ${XDG_DATA_HOME}/ddx/global/ path. Both must be agreed-on before this lands.",
+    "acceptance": "1. `ddx install \u003cname\u003e --global --silent` installs the plugin to ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ and creates a symlink or copy under ~/.claude/skills/\u003cname\u003e and ~/.agents/skills/\u003cname\u003e.\n2. `ddx install \u003cname\u003e` (no --global, in-tree mode) installs to \u003cproject\u003e/.ddx/plugins/\u003cname\u003e/ and creates project-tier links under \u003cproject\u003e/.claude/skills/\u003cname\u003e and \u003cproject\u003e/.agents/skills/\u003cname\u003e.\n3. `ddx install \u003cname\u003e` (no --global, convention mode) installs to ${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/ and creates project-tier links pointing into that XDG plugins/ path.\n4. TestPluginLookup_PrefersProjectOverGlobal asserts that when both paths have the plugin, the project copy wins.\n5. TestPluginLookup_FallsBackToGlobal asserts that when the project copy is missing, the global copy is used.\n6. TestInitGlobal_CreatesAgentTierLinks asserts ~/.claude/skills/ddx and ~/.agents/skills/ddx point into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/.\n7. TestInitProject_DoesNotInstallPlugins asserts `ddx init` (in-project) does not write to plugins/ — plugins lazy-resolve from global.\n8. TestUpdateGlobal_UpdatesGlobalNotProject asserts `ddx update --global` updates only the global plugin tree.\n9. TestUpdate_RespectsConventionVsInTreeMode asserts `ddx update` (no flag) updates the project install in whichever mode is active.\n10. ddx doctor's two new lines (\"Global Install\" and \"Project Install\") render correctly.\n11. cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... green.\n12. lefthook run pre-commit passes.\n13. Spec updates (ADR/skill-topology + CLAUDE.md Persona System) landed in this bead's commit.",
+    "parent": "ddx-602ae31a",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-02T01:48:17.508736688Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260602T014107-0c79f3d8\",\"harness\":\"claude\",\"model\":\"opus\",\"input_tokens\":4310,\"output_tokens\":27788,\"total_tokens\":32098,\"cost_usd\":2.1671485,\"duration_ms\":423944,\"exit_code\":0}",
+          "created_at": "2026-06-02T01:48:17.559152643Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=32098 cost_usd=2.1671 model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"opus\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260602T014107-0c79f3d8\",\"bead_id\":\"ddx-937de9fc\",\"estimated_difficulty\":\"hard\",\"rejected_route_pins\":null,\"requested_power_class\":\"smart\",\"requested_profile\":\"smart\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-02T01:48:19.256074063Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=hard powerClass=smart model=opus harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"1. `ddx install \\u003cname\\u003e --global --silent` installs the plugin to ${XDG_DATA_HOME}/ddx/global/plugins/\\u003cname\\u003e/ and creates a symlink or copy under ~/.claude/skills/\\u003cname\\u003e and ~/.agents/skills/\\u003cname\\u003e.\",\"coverage\":\"install/update bead AC 1 (TestInstallGlobal_WritesXDGAndAgentTierLinks)\"},{\"parent_ac\":\"2. `ddx install \\u003cname\\u003e` (no --global, in-tree mode) installs to \\u003cproject\\u003e/.ddx/plugins/\\u003cname\\u003e/ and creates project-tier links under \\u003cproject\\u003e/.claude/skills/\\u003cname\\u003e and \\u003cproject\\u003e/.agents/skills/\\u003cname\\u003e.\",\"coverage\":\"install/update bead AC 2 (TestInstallProject_InTreeLinks)\"},{\"parent_ac\":\"3. `ddx install \\u003cname\\u003e` (no --global, convention mode) installs to ${XDG_DATA_HOME}/ddx/projects/\\u003chost\\u003e/\\u003cowner\\u003e/\\u003crepo\\u003e/plugins/\\u003cname\\u003e/ and creates project-tier links pointing into that XDG plugins/ path.\",\"coverage\":\"install/update bead AC 3 (TestInstallProject_ConventionLinks)\"},{\"parent_ac\":\"4. TestPluginLookup_PrefersProjectOverGlobal asserts that when both paths have the plugin, the project copy wins.\",\"coverage\":\"registry-resolver bead AC 2 (TestPluginLookup_PrefersProjectOverGlobal)\"},{\"parent_ac\":\"5. TestPluginLookup_FallsBackToGlobal asserts that when the project copy is missing, the global copy is used.\",\"coverage\":\"registry-resolver bead AC 3 (TestPluginLookup_FallsBackToGlobal)\"},{\"parent_ac\":\"6. TestInitGlobal_CreatesAgentTierLinks asserts ~/.claude/skills/ddx and ~/.agents/skills/ddx point into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/.\",\"coverage\":\"init bead AC 1 (TestInitGlobal_CreatesAgentTierLinks)\"},{\"parent_ac\":\"7. TestInitProject_DoesNotInstallPlugins asserts `ddx init` (in-project) does not write to plugins/ — plugins lazy-resolve from global.\",\"coverage\":\"init bead AC 2 (TestInitProject_DoesNotInstallPlugins)\"},{\"parent_ac\":\"8. TestUpdateGlobal_UpdatesGlobalNotProject asserts `ddx update --global` updates only the global plugin tree.\",\"coverage\":\"install/update bead AC 4 (TestUpdateGlobal_UpdatesGlobalNotProject)\"},{\"parent_ac\":\"9. TestUpdate_RespectsConventionVsInTreeMode asserts `ddx update` (no flag) updates the project install in whichever mode is active.\",\"coverage\":\"install/update bead AC 5 (TestUpdate_RespectsConventionVsInTreeMode)\"},{\"parent_ac\":\"10. ddx doctor's two new lines (\\\"Global Install\\\" and \\\"Project Install\\\") render correctly.\",\"coverage\":\"doctor+specs bead AC 1 (TestDoctor_ReportsBothInstallLayers)\"},{\"parent_ac\":\"11. cd cli \\u0026\\u0026 go test ./cmd/... ./internal/registry/... green.\",\"coverage\":\"registry-resolver bead AC 5, install/update bead AC 6, init bead AC 3, doctor+specs bead AC 3 (collectively cover ./cmd/... and ./internal/registry/...)\"},{\"parent_ac\":\"12. lefthook run pre-commit passes.\",\"coverage\":\"registry-resolver bead AC 6, install/update bead AC 7, init bead AC 4, doctor+specs bead AC 4\"},{\"parent_ac\":\"13. Spec updates (ADR/skill-topology + CLAUDE.md Persona System) landed in this bead's commit.\",\"coverage\":\"doctor+specs bead AC 2\"}],\"child_ids\":[\"ddx-04566a8f\",\"ddx-06f820f4\",\"ddx-64ecd687\",\"ddx-c10d5af2\"],\"rationale\":\"Split along the dependency spine: a foundational runtime resolver (project→global→baked-in precedence + GlobalDir helper) that the other three consume; install/update command surface for the --global flag and the three install destinations; init topology for first-time global setup vs lazy project resolution; and a reporting/documentation child for ddx doctor plus all governing-artifact spec updates. Each child is independently testable with its own named Test* symbols and its own go-test + lefthook gates. Parent dep ddx-06cbaa90 and all parent non-scope items (no removal of per-project install, both modes coexist, no legacy ~/.config migration, harness discovery limited to Claude Code + Codex) are preserved in every relevant child. Parent gates AC 11/12 are distributed to all children; the ADR/SKILL.md/CLAUDE.md spec requirement (AC 13) lands in the doctor+specs child which sequences last.\"}",
+          "created_at": "2026-06-02T01:48:19.357015474Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-04566a8f, ddx-06f820f4, ddx-64ecd687, ddx-c10d5af2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"claude.md 'persona system' section lacks install precedence documentation (ac 13 gap): All five dependencies (ddx-06cbaa90, ddx-04566a8f, ddx-06f820f4, ddx-64ecd687, ddx-c10d5af2) are closed and their implementation is in place: install.go has --global at line 49, update.go routes through performGlobalUpdate(), init.go has initGlobal(), the registry has two-layer resolution in resolve.go, and ddx doctor reports both layers. ADR-027 (Accepted 2026-06-01), SKILL.md 'Install topology' section (lines 31-40), and reference/agents.md 'Install topology' section (lines 144-155) are all present. The only AC-stated spec gap is CLAUDE.md 'Persona System' section, which still describes personas/roles/bindings only, with no install precedence or agent-tier path documentation. An agent executing this bead as written would attempt to re-implement already-complete work across six files and produce spurious diffs or conflicts.\",\"fingerprint\":\"e5dd0df53b204b6c1dfb9b30aeab4770f7ad53436115b78091d293fd5a87a0d2\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e5dd0df53b204b6c1dfb9b30aeab4770f7ad53436115b78091d293fd5a87a0d2\"}",
+          "created_at": "2026-06-03T00:45:04.080899167Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-03T00:59:31.342911075Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260603T004518-bf0b0251\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":3,\"output_tokens\":42,\"total_tokens\":45,\"cost_usd\":0.8769716500000001,\"duration_ms\":840936,\"exit_code\":0}",
+          "created_at": "2026-06-03T00:59:31.414466046Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=45 cost_usd=0.8770 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260603T004518-bf0b0251\",\"bead_id\":\"ddx-937de9fc\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-03T00:59:36.129837374Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"1. ddx install --global installs to global plugins tree and links ~/.claude/skills + ~/.agents/skills\",\"coverage\":\"Child 'install/update: --global surface' AC1\"},{\"parent_ac\":\"2. ddx install (no --global, in-tree) installs to \\u003cproject\\u003e/.ddx/plugins and links project .claude/.agents skills\",\"coverage\":\"Child 'install/update: per-project install' AC1\"},{\"parent_ac\":\"3. ddx install (no --global, convention) installs to XDG projects plugins and links into that path\",\"coverage\":\"Child 'install/update: per-project install' AC2\"},{\"parent_ac\":\"4. TestPluginLookup_PrefersProjectOverGlobal\",\"coverage\":\"Child 'registry: plugin lookup precedence resolver' AC1\"},{\"parent_ac\":\"5. TestPluginLookup_FallsBackToGlobal\",\"coverage\":\"Child 'registry: plugin lookup precedence resolver' AC2\"},{\"parent_ac\":\"6. TestInitGlobal_CreatesAgentTierLinks\",\"coverage\":\"Child 'init/doctor' AC1\"},{\"parent_ac\":\"7. TestInitProject_DoesNotInstallPlugins\",\"coverage\":\"Child 'init/doctor' AC2\"},{\"parent_ac\":\"8. TestUpdateGlobal_UpdatesGlobalNotProject\",\"coverage\":\"Child 'install/update: --global surface' AC2\"},{\"parent_ac\":\"9. TestUpdate_RespectsConventionVsInTreeMode\",\"coverage\":\"Child 'install/update: per-project install' AC3\"},{\"parent_ac\":\"10. ddx doctor two new lines (Global Install / Project Install) render correctly\",\"coverage\":\"Child 'init/doctor' AC3\"},{\"parent_ac\":\"11. cd cli \\u0026\\u0026 go test ./cmd/... ./internal/registry/... green\",\"coverage\":\"resolver child AC5 (./internal/registry/...), and ./cmd/... gates in --global child AC3, per-project child AC4, init/doctor child AC6\"},{\"parent_ac\":\"12. lefthook run pre-commit passes\",\"coverage\":\"resolver child AC6, --global child AC4, per-project child AC5, init/doctor child AC7\"},{\"parent_ac\":\"13. Spec updates (ADR/skill-topology + CLAUDE.md Persona System) landed in this bead's commit\",\"coverage\":\"Child 'registry: plugin lookup precedence resolver' AC4 (ADR skill-install-topology + CLAUDE.md Persona System precedence); SKILL.md install-locations note in 'init/doctor' child AC5\"}],\"child_ids\":[\"ddx-2bb4e0a5\",\"ddx-b55fd606\",\"ddx-a7ca3f7b\",\"ddx-4c58ea3e\"],\"rationale\":\"Split along the four natural seams of the dual-location install design, each independently testable against existing/named Test symbols and grounded in real file:line anchors: (1) the runtime ResolvePlugin precedence resolver in internal/registry (the foundation every install surface feeds, owns the topology ADR + CLAUDE.md precedence spec); (2) the install-to-agent --global surface in install.go/update.go; (3) the install-in-project no-flag surface honoring in-tree vs convention mode; (4) the init umbrella (global setup + lazy project) plus two-layer doctor reporting and validate-hook scoping. Every parent NON-SCOPE item (no per-project removal, no ~/.config/ddx migration, no harness paths beyond Claude Code/Codex), the ddx-06cbaa90 dependency, and the ddx-602ae31a Principle-2 governing epic are repeated verbatim in each child. go test and lefthook gates are attached per child; the registry child carries ./internal/registry/... and the others carry ./cmd/... to jointly satisfy parent AC11.\"}",
+          "created_at": "2026-06-03T00:59:36.234362438Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-2bb4e0a5, ddx-b55fd606, ddx-a7ca3f7b, ddx-4c58ea3e"
+        }
+      ],
+      "work-no-changes-count": 2
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T024924-63e92980",
+    "prompt": ".ddx/executions/20260603T024924-63e92980/prompt.md",
+    "manifest": ".ddx/executions/20260603T024924-63e92980/manifest.json",
+    "result": ".ddx/executions/20260603T024924-63e92980/result.json",
+    "checks": ".ddx/executions/20260603T024924-63e92980/checks.json",
+    "usage": ".ddx/executions/20260603T024924-63e92980/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-937de9fc-20260603T024924-63e92980"
+  },
+  "prompt_sha": "a5b2ce6372b452659847e2f4e9e11ac786cda3a590e1e51f44823e94d5cdcdce"
+}

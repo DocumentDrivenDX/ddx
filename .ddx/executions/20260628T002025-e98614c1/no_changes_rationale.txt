@@ -1,0 +1,6 @@
+status: blocked
+reason: pre-existing unrelated red tests in cli/internal/agent prevent the required full-package acceptance sweep from passing
+details:
+- Passed: cd cli && go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|PreClaim|RetryEscalation|PreClaimDecisionAudit' -count=1
+- Failed: cd cli && go test ./internal/agent/... ./cmd/... -count=1
+- Failing tests observed: TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker, TestPreDispatchDirtyPreserveRequiresStableImplementationDirt, TestAttemptProviderChildrenAreRouteScoped

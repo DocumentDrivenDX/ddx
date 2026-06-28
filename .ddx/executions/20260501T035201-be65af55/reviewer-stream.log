@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains an execution result.json artifact; no graph.spec.ts test changes are visible to evaluate against the acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No test code changes in diff — cannot verify graph.spec.ts contains the click-node → /documents/<path> navigation test", "location": ".ddx/executions/20260501T035201-be65af55/result.json" }
+  ]
+}
+```

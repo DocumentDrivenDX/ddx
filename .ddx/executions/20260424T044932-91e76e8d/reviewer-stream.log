@@ -1,0 +1,17 @@
+---
+## Review: ddx-ca1f533d iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:1501–1553 — both fakes removed; replaced by real `runGit` helper and `agent.NewRunner(agent.Config{})` |
+| 2 | Dispatches through real git + script harness | APPROVE | cli/cmd/agent_execute_bead_test.go:1540–1548 — real `git init`/commit on workDir, `--harness script` with `fail-during 0` directive file; runner is `agent.NewRunner`, not a fake |
+| 3 | Target test green | APPROVE | result.json outcome=task_succeeded at rev 759796bd; execute-bead gated on test pass |
+| 4 | No other test modified | APPROVE | `git diff --stat` shows only `TestExecuteBeadAgentErrorNoCommits` block changed (lines 1493–1570) in that file |
+
+### Summary
+
+Clean migration. The test now exercises real git (init, commit, rev-parse with scrubbed GIT_* env) and the real script harness driven by a `fail-during 0` directive, so the error-path classification (`outcome=error`, `status=execution_failed`) comes from actual landing logic rather than a canned `Result`. Assertions are preserved and strengthened (BaseRev now checked against the real `baseSHA`, plus an added real-git assertion that `main` HEAD did not advance). Scope is limited to the single target test.

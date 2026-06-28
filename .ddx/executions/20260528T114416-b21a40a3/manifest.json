@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260528T114416-b21a40a3",
+  "bead_id": "ddx-4a53d763",
+  "base_rev": "ff2069f1ab6b4a64aa068adb96c2294597f34566",
+  "created_at": "2026-05-28T11:44:27.037819661Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4a53d763",
+    "title": "Story 16.3a: Run-detail p95 render-budget Playwright e2e",
+    "description": "PROBLEM\nThe Story-16 run-detail page lacks a cross-cutting end-to-end guard proving that a worst-case (p95) dataset renders every tab and becomes interactive within a single render frame. Without it, regressions in the run-detail page, evidence browser, or tool-trace view can ship undetected.\n\nROOT CAUSE\n- cli/internal/server/frontend/e2e/runs.spec.ts:1159-1164 declares `Story16RunDetailFullStackP95`, the cross-cutting guard that must drive a p95 dataset (200 tool calls, 30 evidence files) through the full prompt/response/tool-trace/evidence-list flow and assert single-frame interactivity. This child owns making that guard real and green.\n- Depends on ddx-f04faa86 (Story 16.1 run-detail page) and ddx-4cd64068 (Story 16.2 evidence tab); both must be landed for the page and evidence browser the guard exercises to exist.\n\nPROPOSED FIX\n- Implement/finish `Story16RunDetailFullStackP95` in cli/internal/server/frontend/e2e/runs.spec.ts so it loads a run with 200 tool calls and 30 evidence files, opens all tabs (prompt, response, stderr, tool-trace, evidence list), and asserts the page reaches interactive state within one requestAnimationFrame budget.\n- Use the existing run-detail page (Story 16.1) and evidence tab (Story 16.2) without modifying their component contracts.\n\nNON-SCOPE\n- Backend resolver, spec-doc (FEAT-008/010/019), and 'raw transcript viewed' audit-event work — owned by sibling/parent beads.\n- New auth or role-based access control beyond the documented trust boundary.\n- Do not implement parent acceptance criteria assigned to sibling child beads (the Go perf/timeout fixes for parent AC 4).",
+    "acceptance": "1. cli/internal/server/frontend/e2e/runs.spec.ts:1164 `Story16RunDetailFullStackP95` drives the p95 dataset (200 tool calls, 30 evidence files), opens every tab, and asserts all tabs render and become interactive within one render frame; the test passes.\n2. `cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e` is green.\n3. `cd cli \u0026\u0026 go test ./internal/server/frontend/...` is green.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-84d6da52",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "decomposed",
+      "area:frontend",
+      "kind:test"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T114416-b21a40a3",
+    "prompt": ".ddx/executions/20260528T114416-b21a40a3/prompt.md",
+    "manifest": ".ddx/executions/20260528T114416-b21a40a3/manifest.json",
+    "result": ".ddx/executions/20260528T114416-b21a40a3/result.json",
+    "checks": ".ddx/executions/20260528T114416-b21a40a3/checks.json",
+    "usage": ".ddx/executions/20260528T114416-b21a40a3/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-4a53d763-20260528T114416-b21a40a3"
+  },
+  "prompt_sha": "dd354794bd383335c885f5e68766c99b1031cef1b3007159f3f6e00b160c5206"
+}

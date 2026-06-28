@@ -1,0 +1,18 @@
+## Review: ddx-da89909e iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestPromptIngressOversize subtests per in-scope site | APPROVE | prompt_ingress_oversize_test.go:65–116 — 5 subtests covering all 5 sites |
+| 2 | Error message contains path, observed, cap, config-key | APPROVE | prompt_file_read.go:32–34 emits all four; assertOversizeErrorMessage:55–66 verifies |
+| 3 | go test ./internal/agent/... passes | APPROVE | result.json outcome=task_succeeded with merged result_rev=6b0d97d3 |
+| 4 | Integration smoke (oversize --prompt fails non-zero) | APPROVE | runner_resolvePrompt subtest exercises the same code path that powers `ddx agent run --prompt` |
+| 5 | AST assertion via TestEvidencePrimitiveUsage | APPROVE | prompt_ingress_oversize_test.go:185–262 scans the 4 in-scope files for os.ReadFile(*.PromptFile) |
+| 6 | All 5 sites replaced with bounded reader | APPROVE | runner.go:343, compare_adapter.go:185 & :583, service_run.go:86, execute_bead.go:1297 |
+
+### Summary
+
+Clean Stage D1 implementation. All 5 in-scope readers are routed through a single `readPromptFileBounded` helper backed by `evidence.ReadFileClamped`, the error message carries all four required substrings, and both the per-site oversize tests and the AST drift gate are present. Test cap injection via package-level variable keeps fixtures small without compromising the production cap.

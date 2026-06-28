@@ -1,0 +1,44 @@
+{
+  "bead_id": "ddx-f500c75b",
+  "attempt_id": "20260528T140646-d4f60f8a",
+  "base_rev": "fffe700df15e8fd6cbe1f3158bb94655e284c3d6",
+  "result_rev": "f04026ecec27540abc7ee172315588c6d9064b80",
+  "implementation_rev": "98a46bdaf1a0d91c4f432022cd18e6150ee17da0",
+  "landed_rev": "f04026ecec27540abc7ee172315588c6d9064b80",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "merged onto current tip",
+  "orchestrator_status": "success",
+  "reason": "merged onto current tip",
+  "candidate_ref": "refs/ddx/iterations/20260528T140646-d4f60f8a/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260528T140646-d4f60f8a",
+      "result_rev": "98a46bdaf1a0d91c4f432022cd18e6150ee17da0",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "haiku"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "claude",
+  "model": "haiku",
+  "session_id": "eb-6731f097",
+  "duration_ms": 608207,
+  "tokens": 18633,
+  "cost_usd": 0.83051955,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260528T140646-d4f60f8a",
+  "prompt_file": ".ddx/executions/20260528T140646-d4f60f8a/prompt.md",
+  "manifest_file": ".ddx/executions/20260528T140646-d4f60f8a/manifest.json",
+  "result_file": ".ddx/executions/20260528T140646-d4f60f8a/result.json",
+  "usage_file": ".ddx/executions/20260528T140646-d4f60f8a/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-28T14:06:57.510587267Z",
+  "finished_at": "2026-05-28T14:17:05.718147591Z"
+}

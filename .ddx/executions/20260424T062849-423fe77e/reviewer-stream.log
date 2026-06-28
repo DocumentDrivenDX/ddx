@@ -1,0 +1,17 @@
+---
+## Review: ddx-e9dca641 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Test no longer references fakeExecuteBeadGit/fakeAgentRunner | APPROVE | `cli/cmd/agent_execute_bead_gates_test.go:103-170` — only doc-comment mentions remain; live refs (lines 185/189) are inside the untouched sibling test |
+| 2 | Dispatches through real-git harness + RealLandingGitOps-equivalent | APPROVE | `cli/cmd/agent_execute_bead_gates_test.go:107-170` — real `git init`/commits via scrubbed-env `runGit`, real `agent.NewRunner(...)` with `--harness script`, base SHA pinned via `--from` |
+| 3 | `go test -run '^...Preserves$' -count=1` green | APPROVE | `.ddx/executions/20260424T062849-423fe77e/result.json` — `outcome=task_succeeded`, `exit_code=0` |
+| 4 | No other test in the file modified | APPROVE | `git diff c86f5c8f^ c86f5c8f` shows only the hunk at lines 100-150; sibling tests (incl. the one at line 185) untouched |
+
+### Summary
+
+Clean, scope-respecting migration. The Preserves test now drives the real `ExecuteBead → Land` pipeline against a fresh real-git repo and the `script` harness (with a directive file for the agent commit), exactly matching the bead's intent. The single-test scope limit was honored — fakes still exist in the file but only for the sibling test that this bead intentionally left alone.

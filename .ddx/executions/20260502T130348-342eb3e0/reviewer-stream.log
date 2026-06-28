@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence (manifest.json, result.json) — no source changes for sort dropdown, staleness chips, URL state, cursor reset, or e2e tests. Cannot verify any AC item from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No frontend source files changed; AC1 (sort dropdown + URL round-trip) not evaluable", "location": "cli/internal/server/frontend/" },
+    { "severity": "block", "summary": "No staleness chip implementation visible in diff (AC2)", "location": "cli/internal/server/frontend/" },
+    { "severity": "block", "summary": "No cursor-reset logic visible in diff (AC3)", "location": "cli/internal/server/frontend/" },
+    { "severity": "block", "summary": "No e2e test additions visible in diff (AC4)", "location": "cli/internal/server/frontend/" },
+    { "severity": "info", "summary": "result.json references result_rev d0a5dec0 which presumably contains the actual implementation, but it is not part of this review's diff", "location": ".ddx/executions/20260502T130348-342eb3e0/result.json" }
+  ]
+}
+```

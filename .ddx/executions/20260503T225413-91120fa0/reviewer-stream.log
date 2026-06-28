@@ -1,0 +1,16 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json) — no code changes to workers.go, no struct deletion, no test updates, no end-to-end test. None of ACs 1-6 are implemented; the attempt explicitly declined with a no_changes/needs-investigation rationale requesting decomposition.",
+  "findings": [
+    { "severity": "block", "summary": "AC1 not implemented: workers.go runWorker not modified to exec ddx work", "location": "cli/internal/server/workers.go" },
+    { "severity": "block", "summary": "AC2 not implemented: handleStartExecuteLoopWorker unchanged", "location": "cli/internal/server/server.go" },
+    { "severity": "block", "summary": "AC3 not implemented: ExecuteLoopWorkerSpec struct still present", "location": "cli/internal/server/workers.go" },
+    { "severity": "block", "summary": "AC4 not implemented: workers_test.go not updated", "location": "cli/internal/server/workers_test.go" },
+    { "severity": "block", "summary": "AC5 not implemented: no end-to-end test added invoking harness via new exec path", "location": "cli/internal/server/" },
+    { "severity": "block", "summary": "AC6 not demonstrated: no source changes means no meaningful test/lefthook gate run for the migration", "location": "cli/" },
+    { "severity": "info", "summary": "Attempt result is task_succeeded but the recorded event is a no_changes_needs_investigation with a decomposition proposal (children 7a/7b/7c). Parent bead remains unimplemented; orchestrator should file the proposed children rather than approve this attempt.", "location": ".ddx/executions/20260503T225413-91120fa0/manifest.json" }
+  ]
+}
+```

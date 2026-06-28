@@ -1,0 +1,19 @@
+---
+## Review: ddx-b56fdc74 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Replace gray-* borders/backgrounds with token classes | APPROVE | BeadForm.svelte:130,254 — `border-gray-300`/`dark:bg-gray-800` → `border-border-line`/`bg-bg-elevated` |
+| 2 | Replace rounded-* with rounded-none | APPROVE | BeadForm.svelte:130,138,254,261 — all `rounded-md` → `rounded-none` |
+| 3 | Replace blue/primary with accent-lever/accent-load | APPROVE | BeadForm.svelte:130,261 — focus rings and submit btn use `accent-lever` |
+| 4 | Status badge tint+border pattern per DESIGN.md | APPROVE | BeadForm.svelte:158-163 — `text-status-{status}` + CSS vars `--status-{status}-surface`/`-border` |
+| 5 | No functional changes | APPROVE | Diff is class/style-only; handlers and bindings unchanged |
+| 6 | Playwright snapshots updated | APPROVE | beads-kanban-{dark,light}-linux.png updated in commit |
+
+### Summary
+
+Token migration is clean and complete: all gray/blue Tailwind utilities are replaced with semantic tokens (`border-line`, `bg-elevated`, `fg-ink/muted`, `accent-lever`, `error`), corners are squared, and the status select gains the tint+border pattern via CSS custom properties. No behavioral changes; snapshot baselines refreshed.

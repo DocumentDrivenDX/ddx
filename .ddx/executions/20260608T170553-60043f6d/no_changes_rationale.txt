@@ -1,0 +1,2 @@
+status: blocked
+reason: `go test ./internal/agent/... ./cmd/... -count=1` is still red on unrelated cmd-suite failures (doctor, routing/e2e, update, skills, housekeeping, and environment-specific fixture tests) outside the land-coordination scope. The new Niflheim land-coordination and retry-escalation tests pass, but the full package command cannot be closed green without broad remediation beyond this bead.

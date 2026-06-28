@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260607T110957-daa6a197",
+  "bead_id": "ddx-78b73b2e",
+  "base_rev": "78fc64bc909b977011a1a6ab268b7bb72c2344de",
+  "created_at": "2026-06-07T11:10:19.13790375Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-78b73b2e",
+    "title": "build: exclude frontend node_modules from Go package discovery",
+    "description": "PROBLEM\n`go list ./...` from cli/ includes a Go package inside frontend `node_modules`: `github.com/DocumentDrivenDX/ddx/internal/server/frontend/node_modules/flatted/golang/pkg/flatted`. That means Go package discovery can traverse vendored frontend dependencies and include unrelated third-party code in build/test tooling.\n\nROOT CAUSE\n- cli/internal/server/frontend/node_modules/flatted/golang/pkg/flatted/flatted.go exists under the Go module tree.\n- There is no current exclusion or layout guard preventing `go list ./...` from discovering that package.\n\nPROPOSED FIX\nKeep frontend dependencies out of Go package discovery. Prefer moving generated dependency installs outside the Go module or adding a durable module/workspace exclusion that makes `go list ./...` ignore `node_modules`. Add a regression test or build-script guard so future frontend dependency trees cannot become Go packages.\n\nNON-SCOPE\nDo not vendor or modify the `flatted` package itself. Do not rewrite frontend dependency management beyond the minimum needed to keep Go discovery clean.",
+    "acceptance": "1. `cd cli \u0026\u0026 go list ./... | rg node_modules` exits non-zero.\n2. `cd cli \u0026\u0026 go test ./...` does not attempt to compile any package below cli/internal/server/frontend/node_modules.\n3. A regression guard exists in an appropriate test or script so a future Go file under frontend node_modules fails fast or is excluded.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-4ac4da95",
+    "labels": [
+      "phase:iterate",
+      "area:build",
+      "area:frontend",
+      "kind:bug"
+    ],
+    "metadata": {
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 2983171)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T15:09:44Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T110957-daa6a197",
+    "prompt": ".ddx/executions/20260607T110957-daa6a197/prompt.md",
+    "manifest": ".ddx/executions/20260607T110957-daa6a197/manifest.json",
+    "result": ".ddx/executions/20260607T110957-daa6a197/result.json",
+    "checks": ".ddx/executions/20260607T110957-daa6a197/checks.json",
+    "usage": ".ddx/executions/20260607T110957-daa6a197/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-78b73b2e-20260607T110957-daa6a197"
+  },
+  "prompt_sha": "8034a7fc03976d73b3e3986bac3c406b4215c2110fc1c9b1f7c1b3cc96bb4647"
+}

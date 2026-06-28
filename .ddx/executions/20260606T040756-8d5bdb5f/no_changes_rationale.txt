@@ -1,0 +1,2 @@
+status: blocked
+reason: external blocker - the host is saturated by long-running `lefthook run pre-commit` / `go test -short -race ./internal/agent` jobs, and new shell processes cannot be spawned to complete verification, commit, or cleanup.

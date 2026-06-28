@@ -1,0 +1,2 @@
+status: open
+reason: retryable repo-wide gate failure. `cd cli && go test ./...` fails in `github.com/DocumentDrivenDX/ddx/internal/server` on `TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel` after 30.22s (`workers_resolve_route_test.go:174: worker ... did not finish in time`). The bead-scoped regressions for the back-edge path and bead doctor snapshot both pass, but the repo-wide acceptance gate is blocked by this unrelated server package failure.

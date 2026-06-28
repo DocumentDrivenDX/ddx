@@ -1,0 +1,18 @@
+## Review: ddx-c3736074 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | go build ./tools/lint/evidencelint/... passes | APPROVE | cli/tools/lint/evidencelint/analyzer.go + cmd/evidencelint/main.go — singlechecker entry point present |
+| 2 | go test passes, fixtures cover all 4 patterns | APPROVE | testdata/src/violations (P1, P1-embedded, P3), testdata/src/server/violations.go (P2, P4) |
+| 3 | Adversarial: unannotated violation → non-zero w/ file:line | APPROVE | analyzer_test.go:TestViolations uses `// want` regex pinning line per pattern |
+| 4 | Positive: same violation w/ allow comment passes | APPROVE | testdata/src/allowed/allowed.go + TestAllowAnnotation; both above-line and inline forms |
+| 5 | lefthook pre-commit fails on synthetic violation | APPROVE | lefthook.yml:120-154 evidence-lint hook with staged-file filter and fail_text |
+| 6 | Analyzer against current tree exits non-zero | APPROVE | lefthook.yml:387-393 evidence-lint-all runs `./...`; existing sites (runner.go, compare_adapter.go, mcp text content) match P1/P2/P3 patterns |
+
+### Summary
+
+Clean Stage A2 implementation. Analyzer covers all four structural sink patterns with proper type-checker resolution (RunOptions detected via package suffix + transitive embedding; mcpContent via type identity), constant-string exemption, and both above-line and inline allow-annotation forms with non-empty reason validation. Wired into lefthook pre-commit (staged-file scoped) and CI (full-tree). No scope creep into existing call sites, as instructed.

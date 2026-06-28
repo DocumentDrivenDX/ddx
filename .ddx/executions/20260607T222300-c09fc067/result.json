@@ -1,0 +1,44 @@
+{
+  "bead_id": "ddx-746782bc",
+  "attempt_id": "20260607T222300-c09fc067",
+  "base_rev": "c75627554afbc71b540ec362f85bf2d49ae77828",
+  "result_rev": "b2716c4cf7613c534fee305b5858bbd5f1e111ba",
+  "implementation_rev": "b2716c4cf7613c534fee305b5858bbd5f1e111ba",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "large-deletion gate: cli/internal/agent/execute_bead.go deleted 737 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "land_conflict",
+  "reason": "large-deletion gate: cli/internal/agent/execute_bead.go deleted 737 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-746782bc/20260607T222300-c09fc067-75e9962614a9",
+  "candidate_ref": "refs/ddx/iterations/20260607T222300-c09fc067/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260607T222300-c09fc067",
+      "result_rev": "b2716c4cf7613c534fee305b5858bbd5f1e111ba",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.5"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.5",
+  "session_id": "eb-d604c108",
+  "duration_ms": 1202128,
+  "tokens": 1728893,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260607T222300-c09fc067",
+  "prompt_file": ".ddx/executions/20260607T222300-c09fc067/prompt.md",
+  "manifest_file": ".ddx/executions/20260607T222300-c09fc067/manifest.json",
+  "result_file": ".ddx/executions/20260607T222300-c09fc067/result.json",
+  "usage_file": ".ddx/executions/20260607T222300-c09fc067/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-07T22:23:21.286453038Z",
+  "finished_at": "2026-06-07T22:43:23.415389534Z"
+}

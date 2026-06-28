@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./...` fails in unrelated baseline tests outside this bead's scope, including `TestIdleTimer_ProgressEventsResetTimer`, `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget`, `TestServerStateBeadSnapshotLatencyBudget`, and `TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel`.

@@ -1,0 +1,18 @@
+---
+## Review: ddx-57af378b iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | go build ./internal/config/... passes | APPROVE | resolved.go uses only existing imports (time, evidence, ExecutionsMirrorConfig); commit message + clean diff indicate build-clean |
+| 2 | go test -run TestResolvedConfig passes | APPROVE | resolved_test.go:74 TestResolvedConfigZeroValuePanicsOnFirstAccessor + per-accessor subtests at :81 |
+| 3 | Zero-value test asserts panic naming LoadAndResolve | APPROVE | resolved_test.go:60 `strings.Contains(msg,"LoadAndResolve")`; resolved.go:52 panic message includes "LoadAndResolve" |
+| 4 | Every accessor has a unit test | APPROVE | resolved_test.go:81–105 enumerates all 22 accessors in the panic test map |
+| 5 | go doc shows ≥22 methods | APPROVE | resolved.go defines exactly 22 exported accessors (Assignee, ReviewMaxRetries, NoProgressCooldown, MaxNoChangesBeforeClose, HeartbeatInterval, Harness, Model, Provider, ModelRef, Profile, MinTier, MaxTier, Effort, Permissions, Timeout, WallClock, ContextBudget, EvidenceCaps, SessionLogDir, MirrorConfig, ResolvedLadder, ReasoningLevels) |
+
+### Summary
+
+Stage 1 cleanly delivers the sealed `ResolvedConfig` foundation per SD-024 / TD-024. Sentinel-based seal with panic message naming `LoadAndResolve`, exactly 22 accessors each guarded by `requireSealed`, defensive map cloning for the two map accessors, and a comprehensive per-accessor zero-value panic test. Scope is correctly limited to the type + tests with no production caller wiring.

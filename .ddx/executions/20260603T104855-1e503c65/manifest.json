@@ -1,0 +1,79 @@
+{
+  "attempt_id": "20260603T104855-1e503c65",
+  "bead_id": "ddx-c3c4869f",
+  "base_rev": "f133f6960065e858f88629c80eb72e846d95dd3e",
+  "created_at": "2026-06-03T10:49:02.349216585Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c3c4869f",
+    "title": "install/init: project-tier `ddx install` (in-tree + convention) and `ddx init` does not install plugins",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\nThe install-in-project surface must write the plugin under the project's DDx root and link it into the project's agent-tier skill paths, working in BOTH in-tree mode (`\u003cproject\u003e/.ddx/`) and convention mode (`${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/`). Separately, `ddx init` (no flag) must NOT install plugins — plugins are lazy-resolved on first use, preferring the project install over global.\n\nROOT CAUSE\n- cli/cmd/install.go:184 `resolveInstallDirs(global=false)` returns `ddxroot.Path(ctx, f.WorkingDir)` as the install root (install.go:195) plus `\u003cproject\u003e/.agents/skills` and `\u003cproject\u003e/.claude/skills` (install.go:196-197). `ddxroot.Path` (cli/internal/ddxroot/ddxroot.go:75) transparently yields the in-tree `.ddx/` or the XDG convention root, so a single code path must serve both modes.\n- cli/cmd/install.go:235 `remapSkillTargets` rewrites relative `.agents/skills` / `.claude/skills` install mappings to the resolved dirs so project-tier links point into the active plugins/ root.\n- cli/cmd/init.go:132 `initProject` performs project initialization (manifest, gitignore) and must NOT bundle a plugin install for the no-flag path.\n\nPROPOSED FIX\n- Ensure `ddx install \u003cname\u003e` (no --global) in in-tree mode writes to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and links `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e` into it.\n- Ensure the same command in convention mode (no `\u003cproject\u003e/.ddx/`) writes to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and links the project agent-tier paths into THAT plugins/ dir.\n- Ensure `ddx init` (no flag) creates `\u003cproject\u003e/.ddx/` without writing anything under `plugins/`; plugins lazy-resolve (project preferred over global) on first use.\n- Tests sandbox `XDG_DATA_HOME`/`HOME` and construct a git repo so host/owner/repo derivation is deterministic; use the testutils fixture helper where a clean ddx repo is needed.\n\nNON-SCOPE\n- `--global` install and `ddx init --global` — sibling bead.\n- Update behavior — sibling bead.\n- Removing the per-project install (both modes coexist).\n- Migrating legacy ~/.config/ddx paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution) for `ddxroot.Path()` in-tree-vs-convention behavior.\n- Sibling resolver bead (ResolvePlugin precedence) — project installs must resolve as the \"project\" layer ahead of global.",
+    "acceptance": "1. TestInstall_InTreeWritesProjectTreeAndLinks (cli/cmd/install_test.go): with an in-tree `\u003cproject\u003e/.ddx/`, `ddx install \u003cname\u003e` (no --global) writes to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and creates project-tier links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e` resolving into that plugins/ dir.\n2. TestInstall_ConventionModeWritesXDGProjectTree (cli/cmd/install_test.go): with no `\u003cproject\u003e/.ddx/`, `ddx install \u003cname\u003e` (no --global) writes to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and the project agent-tier links point into that XDG plugins/ path.\n3. TestInitProject_DoesNotInstallPlugins (cli/cmd/init_test.go): `ddx init` (no flag) creates the project DDx root but writes nothing under `plugins/`; plugins lazy-resolve from global.\n4. cd cli \u0026\u0026 go test ./cmd/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:plugin",
+      "area:config",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-03T08:19:03.975677833Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260603T075651-f9715039\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":4,\"output_tokens\":478,\"total_tokens\":482,\"cost_usd\":3.098988500000001,\"duration_ms\":1324640,\"exit_code\":0}",
+          "created_at": "2026-06-03T08:19:04.038514852Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=482 cost_usd=3.0990 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-c3c4869f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-03T08:19:20.791971577Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"The agent attempt itself exited 0 (478 output tokens); the failure occurred afterward in the tracker-commit step with 'committing tracker: fatal: unable to write new index file: exit status 128'. A git index write failure is an infrastructure/index-lock-contention condition, not a bead defect or a deterministic repository regression, so per the triage contract it is a recoverable infrastructure failure that can plausibly succeed on a later retry of the same bead.\",\"recommended_action\":\"release_claim_wait_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-03T08:20:21.460975Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_wait_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-06-03T08:20:21.541097918Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T104855-1e503c65",
+    "prompt": ".ddx/executions/20260603T104855-1e503c65/prompt.md",
+    "manifest": ".ddx/executions/20260603T104855-1e503c65/manifest.json",
+    "result": ".ddx/executions/20260603T104855-1e503c65/result.json",
+    "checks": ".ddx/executions/20260603T104855-1e503c65/checks.json",
+    "usage": ".ddx/executions/20260603T104855-1e503c65/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c3c4869f-20260603T104855-1e503c65"
+  },
+  "prompt_sha": "8eb682a853bffad166f79110695c73b51645b66e133f07778d91512eada27cfc"
+}

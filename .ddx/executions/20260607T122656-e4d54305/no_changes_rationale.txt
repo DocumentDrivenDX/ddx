@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test -short ./internal/server/graphql ./internal/agent/...` still fails in `./internal/agent` with many unrelated execution/orchestration tests red after the config-fixture updates; the GraphQL slice is green, but the broader agent suite needs additional non-bead fixes before a commit is safe.

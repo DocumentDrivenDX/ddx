@@ -1,0 +1,82 @@
+{
+  "attempt_id": "20260531T183616-5aa0209b",
+  "bead_id": "ddx-24ebc57a",
+  "base_rev": "cabd58896f1020259d32b4fc8895633d71d429c8",
+  "created_at": "2026-05-31T18:36:23.850370885Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-24ebc57a",
+    "title": "routing P0: repo isolation + dirty-repo guard with cleanup/revert contract",
+    "description": "Failed/local attempts in isolated worktrees; worker never drains a dirty/WIP root (helix churned); failure reverts worktree before retry. Must precede escalation + local mixin. See fizeau docs/helix/01-frame/features/FEAT-004-model-routing.md Addendum for the normative failure-classification table + tier policy.",
+    "acceptance": "1. failed attempt leaves canonical repo clean; escalation retry from clean worktree. 2. dirty/WIP root -\u003e operator-attention, no churn loop. 3. test reproduces helix-style churn and asserts it stops. 4. cd ddx/cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green. 5. lefthook passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:reliability",
+      "priority:reliability",
+      "spec:FEAT-004",
+      "phase:0"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Three hard blockers prevent autonomous execution. First, the normative spec cited as load-bearing ('fizeau docs/helix/01-frame/features/FEAT-004-model-routing.md Addendum') does not exist in this repository; only FEAT-004-beads.md and a helix plugin-packaging FEAT-004 are present. The Addendum defines the failure-classification table and tier policy that determine what failure modes this bead must handle — without it, implementation scope is undefined. Second, AC #3 requires a test that 'reproduces helix-style churn' but 'helix-style churn' is never defined: no file, no trigger condition, no observable symptom is named that an agent could use to write a test assertion. Third, significant worktree-isolation and dirty-detection infrastructure already exists (attempt_backend.go:101-123, execute_bead_validation.go:40-71, execute_bead.go:595-660 pre-dispatch checkpoint) but the description provides no file:line pointing to the specific gap that remains, so an agent cannot determine what to add without re-reading substantial existing code and guessing.\",\"fingerprint\":\"5ac5bf1f0164657a0ae772019272dff517d3fcdd50503b2c11476cdb697e5b35\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5ac5bf1f0164657a0ae772019272dff517d3fcdd50503b2c11476cdb697e5b35\"}",
+          "created_at": "2026-05-31T17:55:07.067545604Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260531T175507-18b4b80a\",\"bead_id\":\"ddx-24ebc57a\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-05-31T18:26:07Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-05-31T18:26:07.161962393Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-31T18:33:54.238680753Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: The normative spec driving scope — the failure-classification table and tier policy in fizeau's FEAT-004-model-routing.md Addendum — lives in an external repo that a sub-agent cannot read. Without it, both 'failed attempt' and 'escalation retry from clean worktree' in AC-1 are undefined. Compounding this: substantial dirty-repo guard infrastructure already exists (checkpoint_dirty, preDispatchDirtyPreserver, loop.pre_dispatch_dirty_preserved events, stay-alive tests covering dirty-root scenarios in execute_bead_loop_stay_alive_test.go:493–911), but the bead gives no file:line gap analysis distinguishing what remains from what is already shipped. AC-3's 'helix-style churn' is undefined — no fixture description, no observable trigger sequence. The phrase 'local mixin' in the ordering constraint is undefined. The revert contract named in the title has no definition of when it fires, what command runs it, or what invariant it asserts.\",\"fingerprint\":\"6c6b46b606a929cd91b86feffc5a468c5f4374d2adcb86c21ca4ec588e40ce9e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"6c6b46b606a929cd91b86feffc5a468c5f4374d2adcb86c21ca4ec588e40ce9e\"}",
+          "created_at": "2026-05-31T18:36:02.321382603Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "FEAT-004",
+      "work-consecutive-wedges": {
+        "at": "2026-05-31T18:26:07Z",
+        "count": 1,
+        "last_reason": "progress_watchdog"
+      }
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-004",
+      "path": "docs/helix/01-frame/features/FEAT-004-beads.md",
+      "title": "Feature: Beads (Work Item Tracker)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260531T183616-5aa0209b",
+    "prompt": ".ddx/executions/20260531T183616-5aa0209b/prompt.md",
+    "manifest": ".ddx/executions/20260531T183616-5aa0209b/manifest.json",
+    "result": ".ddx/executions/20260531T183616-5aa0209b/result.json",
+    "checks": ".ddx/executions/20260531T183616-5aa0209b/checks.json",
+    "usage": ".ddx/executions/20260531T183616-5aa0209b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-24ebc57a-20260531T183616-5aa0209b"
+  },
+  "prompt_sha": "c5ecff0ed71683b537d70d36325d04c4fc9da5c0443f5c4795dbe53738e3626d"
+}

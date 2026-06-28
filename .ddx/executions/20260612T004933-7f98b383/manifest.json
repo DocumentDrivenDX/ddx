@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260612T004933-7f98b383",
+  "bead_id": "ddx-2a537aa2",
+  "base_rev": "460549a17c876cb2e3a957c7a66ab3e08b0a664f",
+  "created_at": "2026-06-12T00:49:45.492370198Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2a537aa2",
+    "title": "test: add federation owner-write queue and spec editing Playwright coverage",
+    "description": "PROBLEM\nThe new basic server-operator scope includes hub-to-spoke worker control, bead queue mutation, and spec editing, but the frontend E2E suite does not yet have focused specs for those workflows.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-026-federation.md:290 defines US-097b for controlling spoke work from the hub.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:531 defines US-102 for controlling workers on spoke nodes.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:552 defines US-103 for mutating any project bead queue.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:573 defines US-104 for editing specs for any project.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327, docs/helix/03-test/test-plans/TP-002-server-web-ui.md:340, and docs/helix/03-test/test-plans/TP-002-server-web-ui.md:353 define TC-017 through TC-019.\n\nPROPOSED FIX\n- Add `federation-worker-control.spec.ts` or `federation-owner-writes.spec.ts` coverage for hub start/stop worker forwarding, offline refusal, and idempotency.\n- Add `beads-queue-mutations.spec.ts` coverage for create, edit, lifecycle actions, federated bead write, and invalid-state refusal.\n- Add `spec-editing.spec.ts` coverage for save FEAT doc, path confinement, stale-write refusal, federated document write, and graph/staleness refresh.\n- Keep fixtures hermetic: temp projects, isolated XDG_DATA_HOME, mock or local hub/spoke servers as appropriate.\n\nNON-SCOPE\nDo not implement production server or UI behavior except minimal test fixtures/helpers. Do not cover Axon or FEAT-029 managed nodes.",
+    "acceptance": "1. `federation-worker-control.spec.ts` includes tests named `starts a spoke worker from the hub`, `stops a spoke worker from the hub`, `refuses commands for an offline spoke`, and `deduplicates retried forwarded worker commands`.\n2. `beads-queue-mutations.spec.ts` includes tests named `creates a bead in the selected project only`, `edits bead fields and refreshes the row`, `runs lifecycle actions with required notes`, `forwards spoke bead writes from the hub`, and `shows invalid state refusal`.\n3. `spec-editing.spec.ts` includes tests named `saves a helix spec in the selected project`, `rejects traversal and absolute document writes`, `refuses stale document saves`, `forwards spoke document writes from the hub`, and `refreshes graph or staleness state after save`.\n4. `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/federation-worker-control.spec.ts e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` passes once implementation beads land.\n5. `cd cli \u0026\u0026 go test -short ./internal/server/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:web",
+      "area:test",
+      "area:federation",
+      "kind:test",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "spec-id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH",
+      "path": "docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md",
+      "title": "Server Operator Workbench Plan"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260612T004933-7f98b383",
+    "prompt": ".ddx/executions/20260612T004933-7f98b383/prompt.md",
+    "manifest": ".ddx/executions/20260612T004933-7f98b383/manifest.json",
+    "result": ".ddx/executions/20260612T004933-7f98b383/result.json",
+    "checks": ".ddx/executions/20260612T004933-7f98b383/checks.json",
+    "usage": ".ddx/executions/20260612T004933-7f98b383/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-2a537aa2-20260612T004933-7f98b383"
+  },
+  "prompt_sha": "666eb61823e93254640241504b4476cc62a905565da986df55ca0b804ffca00e"
+}

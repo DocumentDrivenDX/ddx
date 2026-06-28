@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ClassifyExecuteBeadStatus maps merged+push-failed reason to new push_failed status; loop parks bead with stderr in last_detail; bead.Claim refuses parked beads. All AC items addressed with test coverage.",
+  "findings": [
+    { "severity": "info", "summary": "Park duration of 365 days is effectively a manual-clear gate; reasonable but worth noting it relies on operator clearing execute-loop-last-status.", "location": "cli/internal/agent/execute_bead_loop.go:644" }
+  ]
+}
+```

@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./internal/agent... -run "TestReadinessVerdict_AcceptsBoolStringOrNull|TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent" && lefthook run pre-commit

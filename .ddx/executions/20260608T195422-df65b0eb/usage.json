@@ -1,0 +1,9 @@
+{
+  "attempt_id": "20260608T195422-df65b0eb",
+  "harness": "fiz",
+  "provider": "sindri",
+  "model": "dflash",
+  "tokens": 96515,
+  "input_tokens": 94845,
+  "output_tokens": 1670
+}

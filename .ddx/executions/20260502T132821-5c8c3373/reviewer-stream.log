@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only a result.json execution evidence file; no changes to execute_bead_loop.go, no triage.Decide() integration, no tests. None of the 4 acceptance criteria are demonstrated by the diff.",
+  "findings": [
+    { "severity": "block", "summary": "No changes to cli/internal/agent/execute_bead_loop.go — AC#1 (loop calls triage.Decide() after VerdictBlock/VerdictRequestChanges) not evidenced", "location": "cli/internal/agent/execute_bead_loop.go" },
+    { "severity": "block", "summary": "No implementation of BLOCK ladder (re-attempt → escalate → needs_human) — AC#2 not evidenced", "location": "cli/internal/agent/execute_bead_loop.go" },
+    { "severity": "block", "summary": "No wiring of review-pairing-degraded events into decision context — AC#3 not evidenced", "location": "cli/internal/agent/execute_bead_loop.go" },
+    { "severity": "block", "summary": "No new or updated tests for BLOCK ladder progression or degraded-pairing bias — AC#4 not evidenced", "location": "cli/internal/agent" }
+  ]
+}
+```

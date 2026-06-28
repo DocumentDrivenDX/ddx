@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The submitted diff only adds an execution metadata file and provides no code, tests, deadcode output, or decisions log needed to satisfy or verify any acceptance criterion.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No production code or deletions are present, so there is no evidence that any of the 16 `internal/persona` symbols were wired into the call graph or removed.",
+      "location": ".ddx/executions/20260506T184453-976ea6c9/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log at `.ddx/executions/<run-id>/decisions.md` is not included in the diff, so the per-symbol WIRE|DELETE|PENDING record cannot be verified.",
+      "location": ".ddx/executions/20260506T184453-976ea6c9/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no deadcode RTA output or test evidence in the diff, so zero remaining dead symbols in `internal/persona` and `cd cli && go test ./...` green cannot be confirmed.",
+      "location": ".ddx/executions/20260506T184453-976ea6c9/result.json:1"
+    }
+  ]
+}
+```

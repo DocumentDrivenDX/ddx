@@ -1,0 +1,634 @@
+{
+  "attempt_id": "20260528T163502-d3e736aa",
+  "bead_id": "ddx-f71ef348",
+  "base_rev": "6372ad168a260ec506a1ad348df4cf287ba5a80d",
+  "created_at": "2026-05-28T16:35:10.822003035Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-f71ef348",
+    "title": "checks: delete duplicate ratelimit_retry helpers superseded by try/attempt.go",
+    "description": "PROBLEM\nThe deadcode RTA artifact lists every helper in cli/internal/agent/ratelimit_retry.go as unreachable from the production graph. These are stale duplicates of the rate-limit logic now owned by the try package (cli/internal/agent/try/attempt.go), keeping ddx-83440482 from closing on current-tree evidence.\n\nROOT CAUSE WITH FILE:LINE\n.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json reports the following symbols dead in cli/internal/agent/ratelimit_retry.go:73 — EvaluateRateLimitWait, IsRateLimitResult, hasIsolated429, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig.resolved, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt. The live worker rate-limit path now runs through cli/internal/agent/try/attempt.go (proven by TestAttempt_RateLimit_WiresEvaluateRateLimitWait in cli/internal/agent/try/attempt_test.go), so the agent-package copies are dead duplicates.\n\nPROPOSED FIX\nDELETE the dead duplicate helpers from cli/internal/agent/ratelimit_retry.go and remove their now-orphaned unit file cli/internal/agent/ratelimit_retry_test.go (TestEvaluateRateLimitWait_*, TestParseRetryAfter, TestExtractRetryAfterFromStderr, TestIsRateLimitResult, TestRunWithRateLimitRetry_*, TestBuildRateLimitRouteAttempt_*). Confirm the surviving try-package rate-limit behavior remains green. If any single symbol turns out to still have a live caller and cannot be deleted in ~15 minutes, annotate it `// wiring:pending \u003cfollow-up-bead-id\u003e` and file the narrower follow-up before closing.\n\nNON-SCOPE\n- Do not touch the try-package rate-limit implementation in cli/internal/agent/try/attempt.go.\n- Do not touch candidate-cycle, compare, or execute-bead residuals.\n- Do not modify the preclaim/profile/recovery/service_run/triage/repair clusters (sibling beads).\n- Do not change the production-reachability protocol or checker implementation.",
+    "acceptance": "1. Every ratelimit_retry.go symbol listed for this cluster in .ddx/executions/20260515T210515-1a20052a/production-reachability-final.json is deleted (or, if a live caller exists, annotated `// wiring:pending` per AC 3).\n2. `cd cli \u0026\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/agent/ratelimit_retry\\.go'` returns no hits.\n3. The surviving try-package rate-limit tests pass: `cd cli \u0026\u0026 go test ./internal/agent/try/ -run 'TestAttempt_RateLimit_Retry_HonorsRetryAfter|TestAttempt_RateLimit_Retry_UsesExponentialBackoff|TestAttempt_RateLimit_WiresEvaluateRateLimitWait'` is green.\n4. Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\n5. Decisions log written to .ddx/executions/\u003crun-id\u003e/decisions.md records WIRE|DELETE|PENDING for each listed ratelimit_retry.go symbol.\n6. `cd cli \u0026\u0026 go test ./...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-97375097",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:cleanup",
+      "prevention",
+      "epic-closure"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2546e30a4a17cfee21c293673837d6c127477919b08082c4805f29c602d97f78\"}",
+          "created_at": "2026-05-28T12:19:37.143601193Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260528T121937-18b3b9fd\",\"bead_id\":\"ddx-f71ef348\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-05-28T12:49:37Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-05-28T12:50:07.23912893Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T12:50:07.468667877Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T121959-fede9311\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":562,\"output_tokens\":25193,\"total_tokens\":25755,\"cost_usd\":0.90112125,\"duration_ms\":1798115,\"exit_code\":-1}",
+          "created_at": "2026-05-28T12:50:07.526873142Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=25755 cost_usd=0.9011 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T12:52:21.097809758Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T125141-1347fb60\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-28T12:52:22.984590271Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T12:52:23.152357034Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=aca771a95643fd20ad8f9190f7c6c05bd340a5ec\nbase_rev=aca771a95643fd20ad8f9190f7c6c05bd340a5ec\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T12:52:23.210274492Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T13:32:36.150902943Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T133153-e1472831\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-28T13:32:38.968554462Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"keep_open_for_autonomous_retry\",\"actual_power\":5,\"count\":2,\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"model\":\"qwen3.5-27b\",\"provider\":\"bragi\",\"reason\":\"provider_connectivity\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T13:32:39.105247364Z",
+          "kind": "provider_connectivity.auto_retry",
+          "source": "ddx work",
+          "summary": "repeated provider connectivity failure kept open for autonomous retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T13:32:39.219793532Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=56babc3eb0cea0ed08148fbdf37bacd4c2713f57\nbase_rev=56babc3eb0cea0ed08148fbdf37bacd4c2713f57\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T13:32:39.283830027Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1743 tokens with tools=false at policy default\",\"fingerprint\":\"a388423426ba78394099b416ce1a93ccff0b46e70afc70cbdc0f40ecd67dd3b4\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"a388423426ba78394099b416ce1a93ccff0b46e70afc70cbdc0f40ecd67dd3b4\"}",
+          "created_at": "2026-05-28T14:10:33.101676009Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T14:10:47.426407648Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T14:10:47.484081681Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T14:10:47.579122805Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1801 tokens with tools=false at policy default\",\"fingerprint\":\"e15a8fd8480b3865eb198a52b9957b84d33e6ba0515dd83cfe78ffdb1a1bf96e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e15a8fd8480b3865eb198a52b9957b84d33e6ba0515dd83cfe78ffdb1a1bf96e\"}",
+          "created_at": "2026-05-28T14:11:13.923048913Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T14:11:30.249316159Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T14:11:30.305994026Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T14:11:30.364115766Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead is atomic, executable, and well-scoped. Title is imperative and names subsystem (checks/ratelimit_retry). Description provides specific file:line evidence (cli/internal/agent/ratelimit_retry.go:73) and enumerates all symbols to delete (EvaluateRateLimitWait, IsRateLimitResult, hasIsolated429, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig.resolved, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt). Acceptance criteria are numbered with verifiable gates: specific test names (TestAttempt_RateLimit_Retry_HonorsRetryAfter, TestAttempt_RateLimit_Retry_UsesExponentialBackoff, TestAttempt_RateLimit_WiresEvaluateRateLimitWait), deadcode checker invocation, full test suite, and lefthook. Parent (ddx-97375097) and scope boundaries (no touch to try-package, deadcode checker, sibling clusters) are explicit. Time-specific artifact path (.ddx/executions/20260515T210515-1a20052a/...) is mitigated by enumerated symbols in description.\",\"fingerprint\":\"5c79c5e79586e5d31f2abd46149a50091f0de05fbd3f268f18d3ee858a28f456\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5c79c5e79586e5d31f2abd46149a50091f0de05fbd3f268f18d3ee858a28f456\"}",
+          "created_at": "2026-05-28T14:21:21.458627805Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T14:22:23.148587075Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T142138-30831421\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-28T14:22:25.282741903Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"keep_open_for_autonomous_retry\",\"actual_power\":5,\"count\":3,\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"model\":\"qwen3.5-27b\",\"provider\":\"bragi\",\"reason\":\"provider_connectivity\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T14:22:25.412504823Z",
+          "kind": "provider_connectivity.auto_retry",
+          "source": "ddx work",
+          "summary": "repeated provider connectivity failure kept open for autonomous retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T14:22:25.548855736Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=a76344b74be681a59bdb230700ccbcc9470bf041\nbase_rev=a76344b74be681a59bdb230700ccbcc9470bf041\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T14:22:25.633658323Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/attachments/ddx-2f9e6c0b/events.jsonl, .ddx/attachments/ddx-f500c75b/events.jsonl, .ddx/executions/20260509T161344-5a35f540/embedded/agent-claude-1778343234213706671.jsonl, .ddx/executions/20260509T161344-5a35f540/embedded/svc-1778343232196220615.jsonl, .ddx/executions/20260509T213742-66fa140e/embedded/agent-claude-1778362668912383045.jsonl, .ddx/executions/20260509T213742-66fa140e/embedded/svc-1778362666893948718.jsonl, .ddx/executions/20260509T214554-8701025b/embedded/agent-claude-1778363160421349620.jsonl, .ddx/executions/20260509T214554-8701025b/embedded/svc-1778363158402562638.jsonl, .ddx/executions/20260509T215414-e03c6efe/embedded/agent-claude-1778363665997610612.jsonl, .ddx/executions/20260509T215414-e03c6efe/embedded/svc-1778363663977883937.jsonl, .ddx/executions/20260509T220325-4c05113c/embedded/agent-claude-1778364217871060089.jsonl, .ddx/executions/20260509T220325-4c05113c/embedded/svc-1778364215852796324.jsonl, .ddx/executions/20260509T221701-670ccae2/embedded/agent-claude-1778365029633591228.jsonl, .ddx/executions/20260509T221701-670ccae2/embedded/svc-1778365027613686599.jsonl, .ddx/executions/20260509T230207-8ebcc046/embedded/agent-claude-1778367739026333833.jsonl, .ddx/executions/20260509T230207-8ebcc046/embedded/svc-1778367737008970418.jsonl, .ddx/executions/20260509T231207-8e73f79c/embedded/agent-claude-1778368338630688088.jsonl, .ddx/executions/20260509T231207-8e73f79c/embedded/svc-1778368336605841256.jsonl, .ddx/executions/20260510T003036-55f17274/embedded/agent-claude-1778373044685218910.jsonl, .ddx/executions/20260510T003036-55f17274/embedded/svc-1778373042443546290.jsonl, .ddx/executions/20260510T013243-b86bf611/embedded/agent-claude-1778376771383421542.jsonl, .ddx/executions/20260510T013243-b86bf611/embedded/svc-1778376769351035306.jsonl, .ddx/executions/20260510T024346-ee2c290f/embedded/agent-claude-1778381034802247623.jsonl, .ddx/executions/20260510T024346-ee2c290f/embedded/svc-1778381032779807131.jsonl, .ddx/executions/20260510T032335-bf9c0b13/embedded/agent-claude-1778383423949279493.jsonl, .ddx/executions/20260510T032335-bf9c0b13/embedded/svc-1778383421930952795.jsonl, .ddx/executions/20260510T041124-a1a4c03c/embedded/agent-claude-1778386295806185995.jsonl, .ddx/executions/20260510T041124-a1a4c03c/embedded/svc-1778386293783663398.jsonl, .ddx/executions/20260510T042749-15d35f06/embedded/agent-claude-1778387275132437107.jsonl, .ddx/executions/20260510T042749-15d35f06/embedded/svc-1778387273110625628.jsonl, .ddx/executions/20260510T043515-d02682df/embedded/agent-claude-1778387728820287866.jsonl, .ddx/executions/20260510T043515-d02682df/embedded/svc-1778387726570834041.jsonl, .ddx/executions/20260510T044154-4ce64774/embedded/agent-claude-1778388122822765530.jsonl, .ddx/executions/20260510T044154-4ce64774/embedded/svc-1778388120802696718.jsonl, .ddx/executions/20260510T044916-e91f0f8c/embedded/agent-claude-1778388569972099192.jsonl, .ddx/executions/20260510T044916-e91f0f8c/embedded/svc-1778388567909156600.jsonl, .ddx/executions/20260510T051936-1d52e9b1/embedded/agent-claude-1778390387784306034.jsonl, .ddx/executions/20260510T051936-1d52e9b1/embedded/svc-1778390385760244141.jsonl, .ddx/executions/20260510T052916-e3dae952/embedded/agent-claude-1778390966799542485.jsonl, .ddx/executions/20260510T052916-e3dae952/embedded/svc-1778390964781060081.jsonl, .ddx/executions/20260510T054110-ddeda7d3/embedded/agent-claude-1778391676314255053.jsonl, .ddx/executions/20260510T054110-ddeda7d3/embedded/svc-1778391674265868146.jsonl, .ddx/executions/20260510T060101-4bad7bcb/embedded/agent-claude-1778392873906727028.jsonl, .ddx/executions/20260510T060101-4bad7bcb/embedded/svc-1778392871890678394.jsonl, .ddx/executions/20260510T060101-af015525/embedded/agent-claude-1778392869680396535.jsonl, .ddx/executions/20260510T060101-af015525/embedded/svc-1778392867662892568.jsonl, .ddx/executions/20260510T062935-e4ef6b7f/embedded/agent-claude-1778394586633635374.jsonl, .ddx/executions/20260510T062935-e4ef6b7f/embedded/svc-1778394584605270382.jsonl, .ddx/executions/20260510T075644-6854a3cf/embedded/agent-claude-1778399813560119778.jsonl, .ddx/executions/20260510T075644-6854a3cf/embedded/svc-1778399811534325124.jsonl, .ddx/executions/20260510T075814-5b1760f7/embedded/agent-claude-1778399903874848774.jsonl, .ddx/executions/20260510T075814-5b1760f7/embedded/svc-1778399901854129573.jsonl, .ddx/executions/20260510T120403-5c226dd9/embedded/agent-claude-1778414651478691576.jsonl, .ddx/executions/20260510T120403-5c226dd9/embedded/svc-1778414649450804222.jsonl, .ddx/executions/20260510T121710-030e359c/embedded/agent-claude-1778415436758253994.jsonl, .ddx/executions/20260510T121710-030e359c/embedded/svc-1778415434711371431.jsonl, .ddx/executions/20260510T155032-b060de12/embedded/agent-claude-1778428238703954160.jsonl, .ddx/executions/20260510T155032-b060de12/embedded/svc-1778428236687239238.jsonl, .ddx/executions/20260510T155033-2ad149a3/embedded/agent-claude-1778428245075692163.jsonl, .ddx/executions/20260510T155033-2ad149a3/embedded/svc-1778428243054842161.jsonl, .ddx/executions/20260510T155340-a98a445b/embedded/agent-claude-1778428426904410325.jsonl, .ddx/executions/20260510T155340-a98a445b/embedded/svc-1778428424885060113.jsonl, .ddx/executions/20260510T155430-b122c92e/embedded/agent-claude-1778428479147774662.jsonl, .ddx/executions/20260510T155430-b122c92e/embedded/svc-1778428477125895744.jsonl, .ddx/executions/20260510T160036-e97889f4/embedded/agent-claude-1778428842581475419.jsonl, .ddx/executions/20260510T160036-e97889f4/embedded/svc-1778428840562690499.jsonl, .ddx/executions/20260510T161751-3daedf26/embedded/agent-claude-1778429879188753336.jsonl, .ddx/executions/20260510T161751-3daedf26/embedded/svc-1778429877165626564.jsonl, .ddx/executions/20260510T164535-9af19d37/embedded/agent-claude-1778431543412791138.jsonl, .ddx/executions/20260510T164535-9af19d37/embedded/svc-1778431541385971314.jsonl, .ddx/executions/20260510T204710-824bdd56/embedded/agent-claude-1778446037644168666.jsonl, .ddx/executions/20260510T204710-824bdd56/embedded/svc-1778446035621014290.jsonl, .ddx/executions/20260510T205112-857f1de2/embedded/agent-claude-1778446283753507969.jsonl, .ddx/executions/20260510T205112-857f1de2/embedded/svc-1778446281727606575.jsonl, .ddx/executions/20260510T213136-e346d298/embedded/agent-claude-1778448703758773996.jsonl, .ddx/executions/20260510T213136-e346d298/embedded/svc-1778448701737178090.jsonl, .ddx/executions/20260510T213234-fb5ce415/embedded/agent-claude-1778448761999330749.jsonl, .ddx/executions/20260510T213234-fb5ce415/embedded/svc-1778448759971923251.jsonl, .ddx/executions/20260510T213451-6e05df7c/embedded/agent-claude-1778448896263209707.jsonl, .ddx/executions/20260510T213451-6e05df7c/embedded/svc-1778448894243109803.jsonl, .ddx/executions/20260510T213639-4b048b66/embedded/agent-claude-1778449005083024497.jsonl, .ddx/executions/20260510T213639-4b048b66/embedded/svc-1778449003061220887.jsonl, .ddx/executions/20260510T214111-a50a6b75/embedded/agent-claude-1778449276288604205.jsonl, .ddx/executions/20260510T214111-a50a6b75/embedded/svc-1778449274274381350.jsonl, .ddx/executions/20260510T214323-595fc029/embedded/agent-claude-1778449407573543127.jsonl, .ddx/executions/20260510T214323-595fc029/embedded/svc-1778449405550630694.jsonl, .ddx/executions/20260510T214516-d550ba49/embedded/agent-claude-1778449520572264174.jsonl, .ddx/executions/20260510T214516-d550ba49/embedded/svc-1778449518551221573.jsonl, .ddx/executions/20260510T214541-9fb9e791/embedded/agent-claude-1778449547186402225.jsonl, .ddx/executions/20260510T214541-9fb9e791/embedded/svc-1778449545074342517.jsonl, .ddx/executions/20260510T214900-56975502/embedded/agent-claude-1778449744922487552.jsonl, .ddx/executions/20260510T214900-56975502/embedded/svc-1778449742907935703.jsonl, .ddx/executions/20260510T215824-b4a5ba1d/embedded/agent-claude-1778450309949416293.jsonl, .ddx/executions/20260510T215824-b4a5ba1d/embedded/svc-1778450307910536247.jsonl, .ddx/executions/20260510T220308-29cf2502/embedded/agent-claude-1778450595002378177.jsonl, .ddx/executions/20260510T220308-29cf2502/embedded/svc-1778450592970611951.jsonl, .ddx/executions/20260510T220848-ecdb044d/embedded/agent-claude-1778450935655983751.jsonl, .ddx/executions/20260510T220848-ecdb044d/embedded/svc-1778450933626354714.jsonl, .ddx/executions/20260510T221643-2c7f23df/embedded/agent-claude-1778451408321625226.jsonl, .ddx/executions/20260510T221643-2c7f23df/embedded/svc-1778451406303997138.jsonl, .ddx/executions/20260510T221820-8cfab51f/embedded/agent-claude-1778451506324520924.jsonl, .ddx/executions/20260510T221820-8cfab51f/embedded/svc-1778451504302172092.jsonl, .ddx/executions/20260510T223610-6b646bdc/embedded/agent-claude-1778452576638701553.jsonl, .ddx/executions/20260510T223610-6b646bdc/embedded/svc-1778452574610736686.jsonl, .ddx/executions/20260510T223712-3110a1ba/embedded/agent-claude-1778452638741705806.jsonl, .ddx/executions/20260510T223712-3110a1ba/embedded/svc-1778452636716984899.jsonl, .ddx/executions/20260510T225301-28e05c46/embedded/agent-claude-1778453587774276499.jsonl, .ddx/executions/20260510T225301-28e05c46/embedded/svc-1778453585734026985.jsonl, .ddx/executions/20260510T230357-ea29fa4d/embedded/agent-claude-1778454244284811262.jsonl, .ddx/executions/20260510T230357-ea29fa4d/embedded/svc-1778454242255593532.jsonl, .ddx/executions/20260510T232237-53038858/embedded/agent-claude-1778455361463780924.jsonl, .ddx/executions/20260510T232237-53038858/embedded/svc-1778455359449731923.jsonl, .ddx/executions/20260510T232527-37b60853/embedded/agent-claude-1778455531969271119.jsonl, .ddx/executions/20260510T232527-37b60853/embedded/svc-1778455529946836781.jsonl, .ddx/executions/20260510T233326-b4925cc5/embedded/agent-claude-1778456010837781973.jsonl, .ddx/executions/20260510T233326-b4925cc5/embedded/svc-1778456008814848720.jsonl, .ddx/executions/20260510T233540-1514ca02/embedded/agent-claude-1778456146227882843.jsonl, .ddx/executions/20260510T233540-1514ca02/embedded/svc-1778456144198809465.jsonl, .ddx/executions/20260510T234449-715856e4/embedded/agent-claude-1778456695695159290.jsonl, .ddx/executions/20260510T234449-715856e4/embedded/svc-1778456693674099954.jsonl, .ddx/executions/20260510T234508-bf0b3053/embedded/agent-claude-1778456714503735699.jsonl, .ddx/executions/20260510T234508-bf0b3053/embedded/svc-1778456712468513322.jsonl, .ddx/executions/20260510T235051-d9994667/embedded/agent-claude-1778457055880172122.jsonl, .ddx/executions/20260510T235051-d9994667/embedded/svc-1778457053866673494.jsonl, .ddx/executions/20260510T235558-2a921c5c/embedded/agent-claude-1778457363111830130.jsonl, .ddx/executions/20260510T235558-2a921c5c/embedded/svc-1778457361089025114.jsonl, .ddx/executions/20260511T000808-cd3fc1ce/embedded/agent-claude-1778458093936104998.jsonl, .ddx/executions/20260511T000808-cd3fc1ce/embedded/svc-1778458091897373821.jsonl, .ddx/executions/20260511T001706-987ecf0e/embedded/agent-claude-1778458631496928041.jsonl, .ddx/executions/20260511T001706-987ecf0e/embedded/svc-1778458629468674562.jsonl, .ddx/executions/20260511T001956-23ed1d5c/embedded/agent-claude-1778458802876194310.jsonl, .ddx/executions/20260511T001956-23ed1d5c/embedded/svc-1778458800846655915.jsonl, .ddx/executions/20260511T002949-13728cd5/embedded/agent-claude-1778459394353984014.jsonl, .ddx/executions/20260511T002949-13728cd5/embedded/svc-1778459392338577488.jsonl, .ddx/executions/20260511T005127-0e69fcbd/embedded/agent-claude-1778460693861469534.jsonl, .ddx/executions/20260511T005127-0e69fcbd/embedded/svc-1778460691827111804.jsonl, .ddx/executions/20260511T005938-91c70043/embedded/agent-claude-1778461182458147536.jsonl, .ddx/executions/20260511T005938-91c70043/embedded/svc-1778461180400467786.jsonl, .ddx/executions/20260511T010243-65caacef/embedded/agent-claude-1778461369082545875.jsonl, .ddx/executions/20260511T010243-65caacef/embedded/svc-1778461367061444675.jsonl, .ddx/executions/20260511T010641-dcc3194a/embedded/agent-claude-1778461605193415542.jsonl, .ddx/executions/20260511T010641-dcc3194a/embedded/svc-1778461603164273284.jsonl, .ddx/executions/20260511T011319-e8cc7cdf/embedded/agent-claude-1778462003282408414.jsonl, .ddx/executions/20260511T011319-e8cc7cdf/embedded/svc-1778462001263850168.jsonl, .ddx/executions/20260511T012426-c8d9f9d4/embedded/agent-claude-1778462672432559900.jsonl, .ddx/executions/20260511T012426-c8d9f9d4/embedded/svc-1778462670400297339.jsonl, .ddx/executions/20260511T013213-f2628528/embedded/agent-claude-1778463137870016049.jsonl, .ddx/executions/20260511T013213-f2628528/embedded/svc-1778463135853355678.jsonl, .ddx/executions/20260511T013249-1c092fb4/embedded/agent-claude-1778463173763471367.jsonl, .ddx/executions/20260511T013249-1c092fb4/embedded/svc-1778463171747725371.jsonl, .ddx/executions/20260511T013402-7aa571bc/embedded/agent-claude-1778463246371108103.jsonl, .ddx/executions/20260511T013402-7aa571bc/embedded/svc-1778463244345656537.jsonl, .ddx/executions/20260511T014529-858e9a1c/embedded/agent-claude-1778463933656548046.jsonl, .ddx/executions/20260511T014529-858e9a1c/embedded/svc-1778463931591416719.jsonl, .ddx/executions/20260511T015214-2a7e0f5c/embedded/agent-claude-1778464340325245812.jsonl, .ddx/executions/20260511T015214-2a7e0f5c/embedded/svc-1778464338296449420.jsonl, .ddx/executions/20260511T015431-66336069/embedded/agent-claude-1778464475783541164.jsonl, .ddx/executions/20260511T015431-66336069/embedded/svc-1778464473727300089.jsonl, .ddx/executions/20260511T020255-ffe26257/embedded/agent-claude-1778464980368069880.jsonl, .ddx/executions/20260511T020255-ffe26257/embedded/svc-1778464978340308550.jsonl, .ddx/executions/20260511T021034-1f7a3fb4/embedded/agent-claude-1778465439457156779.jsonl, .ddx/executions/20260511T021034-1f7a3fb4/embedded/svc-1778465437440731328.jsonl, .ddx/executions/20260511T021223-a368dc99/embedded/agent-claude-1778465550162244520.jsonl, .ddx/executions/20260511T021223-a368dc99/embedded/svc-1778465548130417414.jsonl, .ddx/executions/20260511T022209-18780562/embedded/agent-claude-1778466134435078382.jsonl, .ddx/executions/20260511T022209-18780562/embedded/svc-1778466132414318412.jsonl, .ddx/executions/20260511T022702-0e2cba43/embedded/agent-claude-1778466426561286148.jsonl, .ddx/executions/20260511T022702-0e2cba43/embedded/svc-1778466424506434863.jsonl, .ddx/executions/20260511T023828-20373225/embedded/agent-claude-1778467115463437535.jsonl, .ddx/executions/20260511T023828-20373225/embedded/svc-1778467113434821859.jsonl, .ddx/executions/20260511T024422-77db0456/embedded/agent-claude-1778467467609652322.jsonl, .ddx/executions/20260511T024422-77db0456/embedded/svc-1778467465589081868.jsonl, .ddx/executions/20260511T024952-0f573169/embedded/agent-claude-1778467798434356194.jsonl, .ddx/executions/20260511T024952-0f573169/embedded/svc-1778467796403913939.jsonl, .ddx/executions/20260511T025545-a3984070/embedded/agent-claude-1778468148886341835.jsonl, .ddx/executions/20260511T025545-a3984070/embedded/svc-1778468146830196895.jsonl, .ddx/executions/20260511T030206-bca671a4/embedded/agent-claude-1778468530829823016.jsonl, .ddx/executions/20260511T030206-bca671a4/embedded/svc-1778468528777475425.jsonl, .ddx/executions/20260511T030309-64d604ac/embedded/agent-claude-1778468593318414744.jsonl, .ddx/executions/20260511T030309-64d604ac/embedded/svc-1778468591298776445.jsonl, .ddx/executions/20260511T030315-256bd8b1/embedded/agent-claude-1778468599370660485.jsonl, .ddx/executions/20260511T030315-256bd8b1/embedded/svc-1778468597356313429.jsonl, .ddx/executions/20260511T031603-62f91682/embedded/agent-claude-1778469367760512277.jsonl, .ddx/executions/20260511T031603-62f91682/embedded/svc-1778469365741108257.jsonl, .ddx/executions/20260511T031624-23f59c9f/embedded/agent-claude-1778469388901668712.jsonl, .ddx/executions/20260511T031624-23f59c9f/embedded/svc-1778469386886318895.jsonl, .ddx/executions/20260511T032640-3be37e1a/embedded/agent-claude-1778470006802171507.jsonl, .ddx/executions/20260511T032640-3be37e1a/embedded/svc-1778470004778624074.jsonl, .ddx/executions/20260512T004543-fb6a24ee/embedded/agent-codex-1778546749541585217.jsonl, .ddx/executions/20260512T004543-fb6a24ee/embedded/svc-1778546747522330551.jsonl, .ddx/executions/20260512T010619-36d5ff19/embedded/agent-codex-1778547988351372269.jsonl, .ddx/executions/20260512T010619-36d5ff19/embedded/svc-1778547986315971597.jsonl, .ddx/executions/20260512T021606-d29e07e4/embedded/agent-codex-1778552172975243172.jsonl, .ddx/executions/20260512T021606-d29e07e4/embedded/svc-1778552170953173874.jsonl, .ddx/executions/20260512T023608-03dd1cd6/embedded/agent-codex-1778553376717125404.jsonl, .ddx/executions/20260512T023608-03dd1cd6/embedded/svc-1778553374694197386.jsonl, .ddx/executions/20260512T024606-44dcd578/embedded/agent-codex-1778553974007938091.jsonl, .ddx/executions/20260512T024606-44dcd578/embedded/svc-1778553970165541457.jsonl, .ddx/executions/20260512T024900-e56100f8/embedded/agent-codex-1778554154515194003.jsonl, .ddx/executions/20260512T024900-e56100f8/embedded/svc-1778554152454790751.jsonl, .ddx/executions/20260512T025110-14aacf04/embedded/agent-codex-1778554281019794727.jsonl, .ddx/executions/20260512T025110-14aacf04/embedded/svc-1778554278977104702.jsonl, .ddx/executions/20260512T035137-c0bdf98c/embedded/agent-codex-1778557905166830389.jsonl, .ddx/executions/20260512T035137-c0bdf98c/embedded/svc-1778557903130879133.jsonl, .ddx/executions/20260512T040638-02f9677a/embedded/agent-codex-1778558809227887998.jsonl, .ddx/executions/20260512T040638-02f9677a/embedded/svc-1778558807164759608.jsonl, .ddx/executions/20260512T041407-84b2cff5/embedded/agent-codex-1778559261776990267.jsonl, .ddx/executions/20260512T041407-84b2cff5/embedded/svc-1778559259719736683.jsonl, .ddx/executions/20260512T041648-df65cfef/embedded/agent-codex-1778559419974620440.jsonl, .ddx/executions/20260512T041648-df65cfef/embedded/svc-1778559417951353291.jsonl, .ddx/executions/20260512T043242-1d670c6c/embedded/agent-codex-1778560377575052727.jsonl, .ddx/executions/20260512T043242-1d670c6c/embedded/svc-1778560375543337589.jsonl, .ddx/executions/20260512T043546-82590e3d/embedded/agent-codex-1778560558538903700.jsonl, .ddx/executions/20260512T043546-82590e3d/embedded/svc-1778560556512936008.jsonl, .ddx/executions/20260512T050728-bb18a61f/embedded/agent-codex-1778562459174664764.jsonl, .ddx/executions/20260512T050728-bb18a61f/embedded/svc-1778562457147357955.jsonl, .ddx/executions/20260512T052754-d9c90d3c/embedded/agent-codex-1778563687888707805.jsonl, .ddx/executions/20260512T052754-d9c90d3c/embedded/svc-1778563685861712249.jsonl, .ddx/executions/20260512T081418-037f14f3/embedded/agent-codex-1778573671735026000.jsonl, .ddx/executions/20260512T081418-037f14f3/embedded/svc-1778573669702632765.jsonl, .ddx/executions/20260512T081926-f0ee19b6/embedded/agent-codex-1778573975438939966.jsonl, .ddx/executions/20260512T081926-f0ee19b6/embedded/svc-1778573973333182077.jsonl, .ddx/executions/20260512T083041-fc6e29e0/embedded/agent-codex-1778574649070030561.jsonl, .ddx/executions/20260512T083041-fc6e29e0/embedded/svc-1778574647014241607.jsonl, .ddx/executions/20260512T084548-c8deb96f/embedded/agent-codex-1778575560669975045.jsonl, .ddx/executions/20260512T084548-c8deb96f/embedded/svc-1778575558644554205.jsonl, .ddx/executions/20260512T151439-5496cba1/embedded/agent-codex-1778598883652258582.jsonl, .ddx/executions/20260512T151439-5496cba1/embedded/svc-1778598881641500326.jsonl, .ddx/executions/20260512T152546-30a71afd/embedded/agent-codex-1778599551306140956.jsonl, .ddx/executions/20260512T152546-30a71afd/embedded/svc-1778599549295647088.jsonl, .ddx/executions/20260512T153442-8ef79367/embedded/agent-codex-1778600087064354901.jsonl, .ddx/executions/20260512T153442-8ef79367/embedded/svc-1778600085052577963.jsonl, .ddx/executions/20260512T161838-82c2837b/embedded/agent-codex-1778602724024791754.jsonl, .ddx/executions/20260512T161838-82c2837b/embedded/svc-1778602722013886702.jsonl, .ddx/executions/20260512T162124-1e8dc136/embedded/agent-codex-1778602889949049053.jsonl, .ddx/executions/20260512T162124-1e8dc136/embedded/svc-1778602887938709639.jsonl, .ddx/executions/20260512T163146-2c15e6f6/embedded/agent-codex-1778603511453836061.jsonl, .ddx/executions/20260512T163146-2c15e6f6/embedded/svc-1778603509442812828.jsonl, .ddx/executions/20260512T164211-ef880dc5/embedded/agent-codex-1778604136774952938.jsonl, .ddx/executions/20260512T164211-ef880dc5/embedded/svc-1778604134763185873.jsonl, .ddx/executions/20260512T165922-eb4604e1/embedded/agent-codex-1778605167230972732.jsonl, .ddx/executions/20260512T165922-eb4604e1/embedded/svc-1778605165220568671.jsonl, .ddx/executions/20260512T171420-cf8d7729/embedded/agent-codex-1778606065442424481.jsonl, .ddx/executions/20260512T171420-cf8d7729/embedded/svc-1778606063430548507.jsonl, .ddx/executions/20260512T171718-eda49ba3/embedded/agent-codex-1778606243597706821.jsonl, .ddx/executions/20260512T171718-eda49ba3/embedded/svc-1778606241586496460.jsonl, .ddx/executions/20260512T173058-60ec4fe2/embedded/agent-codex-1778607063322870841.jsonl, .ddx/executions/20260512T173058-60ec4fe2/embedded/svc-1778607061312031068.jsonl, .ddx/executions/20260512T174759-1369eb5a/embedded/agent-codex-1778608085329258722.jsonl, .ddx/executions/20260512T174759-1369eb5a/embedded/svc-1778608083318266330.jsonl, .ddx/executions/20260512T180410-dfb1da01/embedded/agent-codex-1778609055151806329.jsonl, .ddx/executions/20260512T180410-dfb1da01/embedded/svc-1778609053139827152.jsonl, .ddx/executions/20260512T181845-0bd7d7ba/embedded/agent-codex-1778609930606862050.jsonl, .ddx/executions/20260512T181845-0bd7d7ba/embedded/svc-1778609928595978932.jsonl, .ddx/executions/20260512T183448-6ef538f8/embedded/agent-codex-1778610892854795725.jsonl, .ddx/executions/20260512T183448-6ef538f8/embedded/svc-1778610890843326758.jsonl, .ddx/executions/20260512T184223-c66946ba/embedded/agent-codex-1778611348462787580.jsonl, .ddx/executions/20260512T184223-c66946ba/embedded/svc-1778611346451799922.jsonl, .ddx/executions/20260512T184618-4e341e67/embedded/agent-codex-1778611584751911091.jsonl, .ddx/executions/20260512T184618-4e341e67/embedded/svc-1778611582736056826.jsonl, .ddx/executions/20260512T185606-0a2b1ee1/embedded/agent-codex-1778612172051619019.jsonl, .ddx/executions/20260512T185606-0a2b1ee1/embedded/svc-1778612170039555636.jsonl, .ddx/executions/20260512T185857-9c9a0d87/embedded/svc-1778612341073153198.jsonl, .ddx/executions/20260512T190058-526ec1e4/embedded/svc-1778612461421192283.jsonl, .ddx/executions/20260512T190102-0f356a1d/embedded/svc-1778612465035919672.jsonl, .ddx/executions/20260512T190456-12c40262/embedded/agent-codex-1778612701760310185.jsonl, .ddx/executions/20260512T190456-12c40262/embedded/svc-1778612699748495684.jsonl, .ddx/executions/20260512T190647-b6d62059/embedded/agent-codex-1778612813154471566.jsonl, .ddx/executions/20260512T190647-b6d62059/embedded/svc-1778612811142092985.jsonl, .ddx/executions/20260512T190856-167ae456/embedded/svc-1778612941548892924.jsonl, .ddx/executions/20260512T193105-289dc928/embedded/agent-codex-1778614270482003164.jsonl, .ddx/executions/20260512T193105-289dc928/embedded/svc-1778614268468822395.jsonl, .ddx/executions/20260512T193207-07e79a84/embedded/svc-1778614331001594413.jsonl, .ddx/executions/20260512T194134-fbbfb796/embedded/agent-codex-1778614898924344869.jsonl, .ddx/executions/20260512T194134-fbbfb796/embedded/svc-1778614896911108045.jsonl, .ddx/executions/20260512T194750-a0fb7c6f/embedded/agent-codex-1778615275946394196.jsonl, .ddx/executions/20260512T194750-a0fb7c6f/embedded/svc-1778615273933481792.jsonl, .ddx/executions/20260512T195112-5361d17d/embedded/agent-codex-1778615478308512831.jsonl, .ddx/executions/20260512T195112-5361d17d/embedded/svc-1778615476295219655.jsonl, .ddx/executions/20260512T200057-f37fc2b2/embedded/agent-codex-1778616062821604236.jsonl, .ddx/executions/20260512T200057-f37fc2b2/embedded/svc-1778616060808813587.jsonl, .ddx/executions/20260512T200409-ac4cfe30/embedded/agent-codex-1778616254385200457.jsonl, .ddx/executions/20260512T200409-ac4cfe30/embedded/svc-1778616252373724929.jsonl, .ddx/executions/20260512T200444-4522f1bc/embedded/svc-1778616287302423224.jsonl, .ddx/executions/20260512T200447-e99cd2ef/embedded/svc-1778616290814542153.jsonl, .ddx/executions/20260512T200730-b07f18ba/embedded/agent-codex-1778616455427771717.jsonl, .ddx/executions/20260512T200730-b07f18ba/embedded/svc-1778616453416853417.jsonl, .ddx/executions/20260512T201016-ef7e2387/embedded/svc-1778616619519190910.jsonl, .ddx/executions/20260512T201020-94ffd32e/embedded/svc-1778616623925627557.jsonl, .ddx/executions/20260512T201320-965c8275/embedded/agent-codex-1778616805820142788.jsonl, .ddx/executions/20260512T201320-965c8275/embedded/svc-1778616803805770674.jsonl, .ddx/executions/20260512T202606-17af9511/embedded/agent-codex-1778617571458951414.jsonl, .ddx/executions/20260512T202606-17af9511/embedded/svc-1778617569448475505.jsonl, .ddx/executions/20260512T204334-1d5f3760/embedded/agent-codex-1778618620254049405.jsonl, .ddx/executions/20260512T204334-1d5f3760/embedded/svc-1778618618241018255.jsonl, .ddx/executions/20260512T215846-36b2389d/embedded/agent-codex-1778623132744247662.jsonl, .ddx/executions/20260512T215846-36b2389d/embedded/svc-1778623130731815026.jsonl, .ddx/executions/20260512T220732-c8459543/embedded/agent-codex-1778623658400603364.jsonl, .ddx/executions/20260512T220732-c8459543/embedded/svc-1778623656387390633.jsonl, .ddx/executions/20260512T221833-e7b1512b/embedded/agent-codex-1778624320103752187.jsonl, .ddx/executions/20260512T221833-e7b1512b/embedded/svc-1778624318091319039.jsonl, .ddx/executions/20260512T222635-0fc2a639/embedded/agent-codex-1778624800879644440.jsonl, .ddx/executions/20260512T222635-0fc2a639/embedded/svc-1778624798868574163.jsonl, .ddx/executions/20260512T223345-bd0f215b/embedded/agent-codex-1778625231025190138.jsonl, .ddx/executions/20260512T223345-bd0f215b/embedded/svc-1778625229013315765.jsonl, .ddx/executions/20260512T224117-6150aead/embedded/agent-codex-1778625683363004299.jsonl, .ddx/executions/20260512T224117-6150aead/embedded/svc-1778625681350865447.jsonl, .ddx/executions/20260512T225953-65a9d7b5/embedded/agent-codex-1778626799751745080.jsonl, .ddx/executions/20260512T225953-65a9d7b5/embedded/svc-1778626797737858146.jsonl, .ddx/executions/20260512T230927-c39ab0e9/embedded/agent-codex-1778627372943194397.jsonl, .ddx/executions/20260512T230927-c39ab0e9/embedded/svc-1778627370929704621.jsonl, .ddx/executions/20260512T231341-9f886c23/embedded/agent-codex-1778627628722565463.jsonl, .ddx/executions/20260512T231341-9f886c23/embedded/svc-1778627626709142511.jsonl, .ddx/executions/20260512T232144-11d55fdc/embedded/agent-codex-1778628110502159402.jsonl, .ddx/executions/20260512T232144-11d55fdc/embedded/svc-1778628108491348605.jsonl, .ddx/executions/20260512T233640-c9a51260/embedded/agent-codex-1778629006063862473.jsonl, .ddx/executions/20260512T233640-c9a51260/embedded/svc-1778629004052614783.jsonl, .ddx/executions/20260512T235448-faa3c861/embedded/agent-codex-1778630094905800445.jsonl, .ddx/executions/20260512T235448-faa3c861/embedded/svc-1778630092894335921.jsonl, .ddx/executions/20260513T000136-e8b1b3fd/embedded/svc-1778630499829486775.jsonl, .ddx/executions/20260513T000754-d0311f3f/embedded/agent-codex-1778630877935650777.jsonl, .ddx/executions/20260513T000754-d0311f3f/embedded/svc-1778630877930239854.jsonl, .ddx/executions/20260513T000856-c9a83172/embedded/agent-codex-1778630941004824859.jsonl, .ddx/executions/20260513T000856-c9a83172/embedded/svc-1778630940999316252.jsonl, .ddx/executions/20260513T010130-5e7010ba/embedded/agent-codex-1778634095902938272.jsonl, .ddx/executions/20260513T010130-5e7010ba/embedded/svc-1778634095897045641.jsonl, .ddx/executions/20260513T011254-7fe1366c/embedded/agent-codex-1778634779303005309.jsonl, .ddx/executions/20260513T011254-7fe1366c/embedded/svc-1778634779296045593.jsonl, .ddx/executions/20260513T012638-681e6f3c/embedded/agent-codex-1778635602093045396.jsonl, .ddx/executions/20260513T012638-681e6f3c/embedded/svc-1778635602087800001.jsonl, .ddx/executions/20260513T013121-8299d5b6/embedded/agent-claude-1778635885904437195.jsonl, .ddx/executions/20260513T013121-8299d5b6/embedded/svc-1778635883895834366.jsonl, .ddx/executions/20260513T044743-07ba7a4a/embedded/agent-codex-1778647666570856532.jsonl, .ddx/executions/20260513T044743-07ba7a4a/embedded/svc-1778647666567867915.jsonl, .ddx/executions/20260513T154248-c9bb0f65/embedded/agent-claude-1778686971316196058.jsonl, .ddx/executions/20260513T154248-c9bb0f65/embedded/svc-1778686971313100840.jsonl, .ddx/executions/20260513T163115-c0835258/embedded/agent-claude-1778689878441522718.jsonl, .ddx/executions/20260513T163115-c0835258/embedded/svc-1778689878438728637.jsonl, .ddx/executions/20260513T170753-8af5ae5a/embedded/agent-claude-1778692076551218343.jsonl, .ddx/executions/20260513T170753-8af5ae5a/embedded/svc-1778692076548298142.jsonl, .ddx/executions/20260513T171723-c36853bc/embedded/agent-claude-1778692646132045409.jsonl, .ddx/executions/20260513T171723-c36853bc/embedded/svc-1778692646129143836.jsonl, .ddx/executions/20260513T172704-447ea3a4/embedded/agent-claude-1778693227279152199.jsonl, .ddx/executions/20260513T172704-447ea3a4/embedded/svc-1778693227275129357.jsonl, .ddx/executions/20260513T174646-0882a04e/embedded/agent-codex-1778694409091670084.jsonl, .ddx/executions/20260513T174646-0882a04e/embedded/svc-1778694409087486087.jsonl, .ddx/executions/20260513T180409-2bc98b2b/embedded/agent-codex-1778695452601527004.jsonl, .ddx/executions/20260513T180409-2bc98b2b/embedded/svc-1778695452598346501.jsonl, .ddx/executions/20260513T182542-83fcd146/embedded/agent-codex-1778696745391028688.jsonl, .ddx/executions/20260513T182542-83fcd146/embedded/svc-1778696745385111076.jsonl, .ddx/executions/20260513T183521-176c69d0/embedded/agent-codex-1778697325540715748.jsonl, .ddx/executions/20260513T183521-176c69d0/embedded/svc-1778697325104298011.jsonl, .ddx/executions/20260513T184225-b293b8a9/embedded/agent-codex-1778697748839600154.jsonl, .ddx/executions/20260513T184225-b293b8a9/embedded/svc-1778697748835602257.jsonl, .ddx/executions/20260513T185530-1bc8b7f9/embedded/agent-codex-1778698535731408361.jsonl, .ddx/executions/20260513T185530-1bc8b7f9/embedded/svc-1778698535726821066.jsonl, .ddx/executions/20260513T194145-9c09b1df/embedded/agent-codex-1778701312643661284.jsonl, .ddx/executions/20260513T194145-9c09b1df/embedded/svc-1778701312636435987.jsonl, .ddx/executions/20260513T195201-8f22a9de/embedded/agent-codex-1778701927085980456.jsonl, .ddx/executions/20260513T195201-8f22a9de/embedded/svc-1778701927072953822.jsonl, .ddx/executions/20260513T203547-0362f021/embedded/agent-codex-1778704552690253929.jsonl, .ddx/executions/20260513T203547-0362f021/embedded/svc-1778704552682365053.jsonl, .ddx/executions/20260513T231309-0e6f776b/embedded/agent-claude-1778713997238621903.jsonl, .ddx/executions/20260513T231309-0e6f776b/embedded/svc-1778713997233804132.jsonl, .ddx/executions/20260514T000745-2d4e385a/embedded/agent-claude-1778717268738389028.jsonl, .ddx/executions/20260514T000745-2d4e385a/embedded/svc-1778717268733907523.jsonl, .ddx/executions/20260514T023757-4493b333/embedded/agent-claude-1778726280279186018.jsonl, .ddx/executions/20260514T023757-4493b333/embedded/svc-1778726280276238000.jsonl, .ddx/executions/20260514T032933-ca0f5fef/embedded/agent-claude-1778729400936404047.jsonl, .ddx/executions/20260514T032933-ca0f5fef/embedded/svc-1778729400933076672.jsonl, .ddx/executions/20260514T040943-f550207c/embedded/svc-1778731790212175849.jsonl, .ddx/executions/20260514T044647-d8968c35/embedded/svc-1778734012100779315.jsonl, .ddx/executions/20260514T053430-3ffc6700/embedded/svc-1778736875440302984.jsonl, .ddx/executions/20260514T053510-7a7b82b7/embedded/svc-1778736925856133614.jsonl, .ddx/executions/20260514T054021-087c4984/embedded/svc-1778737239780390935.jsonl, .ddx/executions/20260514T054021-8f6048ea/embedded/svc-1778737227066844251.jsonl, .ddx/executions/20260514T055855-af528310/embedded/svc-1778738341696223204.jsonl, .ddx/executions/20260514T055936-828932c0/embedded/svc-1778738393204921409.jsonl, .ddx/executions/20260514T065515-68c2868e/embedded/agent-claude-1778741722633731363.jsonl, .ddx/executions/20260514T065515-68c2868e/embedded/svc-1778741721818818101.jsonl, .ddx/executions/20260514T073136-7ab8fd11/embedded/agent-claude-1778743902685532239.jsonl, .ddx/executions/20260514T073136-7ab8fd11/embedded/svc-1778743901796116412.jsonl, .ddx/executions/20260514T073217-72223f6e/embedded/agent-claude-1778743943077922068.jsonl, .ddx/executions/20260514T073217-72223f6e/embedded/svc-1778743942270268830.jsonl, .ddx/executions/20260514T074410-18020d6f/embedded/agent-claude-1778744657101381522.jsonl, .ddx/executions/20260514T074410-18020d6f/embedded/svc-1778744656274452722.jsonl, .ddx/executions/20260514T074451-4d3c40f6/embedded/agent-claude-1778744707365739417.jsonl, .ddx/executions/20260514T074451-4d3c40f6/embedded/svc-1778744706309182919.jsonl, .ddx/executions/20260514T074528-1bae2606/embedded/agent-claude-1778744735163669693.jsonl, .ddx/executions/20260514T074528-1bae2606/embedded/svc-1778744734301462593.jsonl, .ddx/executions/20260514T080008-cc8f2b06/embedded/agent-claude-1778745622316053655.jsonl, .ddx/executions/20260514T080008-cc8f2b06/embedded/svc-1778745621454071531.jsonl, .ddx/executions/20260514T080830-81b1dec2/embedded/agent-claude-1778746124757215259.jsonl, .ddx/executions/20260514T080830-81b1dec2/embedded/svc-1778746123823600410.jsonl, .ddx/executions/20260514T082409-d8679f7f/embedded/svc-1778747055216588884.jsonl, .ddx/executions/20260514T082731-4388d0d7/embedded/svc-1778747264652341217.jsonl, .ddx/executions/20260514T083056-7531dc48/embedded/svc-1778747468828610178.jsonl, .ddx/executions/20260514T083253-354d5b00/embedded/svc-1778747579949553136.jsonl, .ddx/executions/20260514T083334-4f435455/embedded/svc-1778747629005413263.jsonl, .ddx/executions/20260514T084012-305e9719/embedded/svc-1778748017832278062.jsonl, .ddx/executions/20260514T084032-4494a1b5/embedded/svc-1778748047422101389.jsonl, .ddx/executions/20260514T084402-708690e7/embedded/svc-1778748254815612291.jsonl, .ddx/executions/20260514T084410-d3748278/embedded/svc-1778748267219351358.jsonl, .ddx/executions/20260514T085019-64dfbf48/embedded/svc-1778748624363760057.jsonl, .ddx/executions/20260514T085039-c7ef3c59/embedded/svc-1778748654034743462.jsonl, .ddx/executions/20260514T085350-9cab9271/embedded/svc-1778748842960630503.jsonl, .ddx/executions/20260514T085419-ef810a09/embedded/svc-1778748874865731390.jsonl, .ddx/executions/20260514T085845-d18e60b9/embedded/svc-1778749145639248935.jsonl, .ddx/executions/20260514T085925-9c8bdb3b/embedded/svc-1778749196732204409.jsonl, .ddx/executions/20260514T090402-4de28251/embedded/svc-1778749463524888699.jsonl, .ddx/executions/20260514T090422-917671eb/embedded/svc-1778749494651917118.jsonl, .ddx/executions/20260514T090619-a95c8983/embedded/agent-claude-1778749602051821462.jsonl, .ddx/executions/20260514T090619-a95c8983/embedded/svc-1778749601169605825.jsonl, .ddx/executions/20260514T090626-d4274524/embedded/agent-claude-1778749618489539265.jsonl, .ddx/executions/20260514T090626-d4274524/embedded/svc-1778749617582287731.jsonl, .ddx/executions/20260514T092041-0bfe506b/embedded/agent-claude-1778750475768861904.jsonl, .ddx/executions/20260514T092041-0bfe506b/embedded/svc-1778750474935988626.jsonl, .ddx/executions/20260514T092132-866934f0/embedded/agent-claude-1778750514368212405.jsonl, .ddx/executions/20260514T092132-866934f0/embedded/svc-1778750513534989837.jsonl, .ddx/executions/20260514T093814-745b16e6/embedded/agent-claude-1778751532288435721.jsonl, .ddx/executions/20260514T093814-745b16e6/embedded/svc-1778751531353007495.jsonl, .ddx/executions/20260514T094953-1d56fc2d/embedded/agent-claude-1778752220602553458.jsonl, .ddx/executions/20260514T094953-1d56fc2d/embedded/svc-1778752219728684546.jsonl, .ddx/executions/20260514T095606-0acf3d07/embedded/agent-claude-1778752590535969059.jsonl, .ddx/executions/20260514T095606-0acf3d07/embedded/svc-1778752589417218024.jsonl, .ddx/executions/20260514T100704-ca70df67/embedded/agent-claude-1778753261210156379.jsonl, .ddx/executions/20260514T100704-ca70df67/embedded/svc-1778753260177234562.jsonl, .ddx/executions/20260514T101009-428197b4/embedded/agent-claude-1778753432492943140.jsonl, .ddx/executions/20260514T101009-428197b4/embedded/svc-1778753431501637152.jsonl, .ddx/executions/20260514T101417-34e72acb/embedded/agent-claude-1778753681392061795.jsonl, .ddx/executions/20260514T101417-34e72acb/embedded/svc-1778753680365154307.jsonl, .ddx/executions/20260514T102840-d1f1476f/embedded/agent-claude-1778754553925750871.jsonl, .ddx/executions/20260514T102840-d1f1476f/embedded/svc-1778754552186235471.jsonl, .ddx/executions/20260514T103049-881e92de/embedded/agent-claude-1778754672468358159.jsonl, .ddx/executions/20260514T103049-881e92de/embedded/svc-1778754671540851454.jsonl, .ddx/executions/20260514T103301-bf90bdb4/embedded/agent-claude-1778754813107733116.jsonl, .ddx/executions/20260514T103301-bf90bdb4/embedded/svc-1778754812040101683.jsonl, .ddx/executions/20260514T103805-9bade6c2/embedded/agent-claude-1778755118466396470.jsonl, .ddx/executions/20260514T103805-9bade6c2/embedded/svc-1778755117361331113.jsonl, .ddx/executions/20260514T154528-f0d9564a/embedded/svc-1778773546882949354.jsonl, .ddx/executions/20260514T154927-930e9b04/embedded/agent-claude-1778773795020187617.jsonl, .ddx/executions/20260514T154927-930e9b04/embedded/svc-1778773794197353574.jsonl, .ddx/executions/20260514T155540-0f695a5e/embedded/agent-claude-1778774169472141033.jsonl, .ddx/executions/20260514T155540-0f695a5e/embedded/svc-1778774168526001688.jsonl, .ddx/executions/20260514T164158-f771c4b2/embedded/svc-1778776938913634270.jsonl, .ddx/executions/20260514T164555-a9bb4ec8/embedded/svc-1778777175691002749.jsonl, .ddx/executions/20260514T164952-8fb7870e/embedded/agent-claude-1778777415227606085.jsonl, .ddx/executions/20260514T164952-8fb7870e/embedded/svc-1778777414112414400.jsonl, .ddx/executions/20260514T170325-de94c651/embedded/svc-1778778235052180918.jsonl, .ddx/executions/20260514T170737-70f5df6a/embedded/svc-1778778485981041865.jsonl, .ddx/executions/20260514T171151-8852268f/embedded/svc-1778778739047389827.jsonl, .ddx/executions/20260514T171606-f74535ce/embedded/svc-1778778994389876980.jsonl, .ddx/executions/20260514T172016-8b76385f/embedded/svc-1778779242805840429.jsonl, .ddx/executions/20260514T172428-386f6367/embedded/svc-1778779496550252741.jsonl, .ddx/executions/20260514T172847-db27381f/embedded/svc-1778779757391688180.jsonl, .ddx/executions/20260514T173306-8012caca/embedded/svc-1778780014211542074.jsonl, .ddx/executions/20260514T173731-f88ad2a6/embedded/svc-1778780278132127845.jsonl, .ddx/executions/20260514T185436-8a6d9fe4/embedded/agent-claude-1778784898899556382.jsonl, .ddx/executions/20260514T185436-8a6d9fe4/embedded/svc-1778784898045382512.jsonl, .ddx/executions/20260514T200804-4c03265c/embedded/agent-claude-1778789306599525272.jsonl, .ddx/executions/20260514T200804-4c03265c/embedded/svc-1778789305732405204.jsonl, .ddx/executions/20260514T202716-40a9ca00/embedded/svc-1778790458547365212.jsonl, .ddx/executions/20260514T202757-74326a80/embedded/svc-1778790498328418090.jsonl, .ddx/executions/20260514T202948-c4ed2f9f/embedded/svc-1778790618563502920.jsonl, .ddx/executions/20260514T203006-74dae9cc/embedded/svc-1778790636971146877.jsonl, .ddx/executions/20260514T211736-28d17379/embedded/agent-claude-1778793479572172315.jsonl, .ddx/executions/20260514T211736-28d17379/embedded/svc-1778793478568845762.jsonl, .ddx/executions/20260514T212920-6772697e/embedded/agent-claude-1778794183860578512.jsonl, .ddx/executions/20260514T212920-6772697e/embedded/svc-1778794182760703808.jsonl, .ddx/executions/20260514T213213-fca8d6f5/embedded/agent-claude-1778794357800741805.jsonl, .ddx/executions/20260514T213213-fca8d6f5/embedded/svc-1778794356792348859.jsonl, .ddx/executions/20260514T213220-4601a4d1/embedded/agent-claude-1778794373110516348.jsonl, .ddx/executions/20260514T213220-4601a4d1/embedded/svc-1778794372077863955.jsonl, .ddx/executions/20260514T213233-0f31c238/embedded/agent-claude-1778794386494453714.jsonl, .ddx/executions/20260514T213233-0f31c238/embedded/svc-1778794385454882086.jsonl, .ddx/executions/20260514T213246-62c83fdc/embedded/agent-claude-1778794397701570789.jsonl, .ddx/executions/20260514T213246-62c83fdc/embedded/svc-1778794396761655983.jsonl, .ddx/executions/20260514T214241-681e0505/embedded/svc-1778794996280970935.jsonl, .ddx/executions/20260514T220417-1c7f1f78/embedded/svc-1778796288587353151.jsonl, .ddx/executions/20260514T220629-5bdca400/embedded/svc-1778796421840675462.jsonl, .ddx/executions/20260514T220831-59690843/embedded/svc-1778796543339029114.jsonl, .ddx/executions/20260514T221033-cc65404e/embedded/svc-1778796666010080515.jsonl, .ddx/executions/20260514T221233-859e3f04/embedded/svc-1778796784977630132.jsonl, .ddx/executions/20260514T221433-908a911b/embedded/svc-1778796905449103802.jsonl, .ddx/executions/20260514T221622-d471c903/embedded/svc-1778797015522140073.jsonl, .ddx/executions/20260514T233410-0523167d/embedded/svc-1778801682018938711.jsonl, .ddx/executions/20260514T233610-c454206b/embedded/svc-1778801800233057768.jsonl, .ddx/executions/20260514T233808-5a77b4e9/embedded/svc-1778801919183454407.jsonl, .ddx/executions/20260514T234006-6666edf5/embedded/svc-1778802035697554335.jsonl, .ddx/executions/20260514T234203-6ac69e51/embedded/svc-1778802153445974636.jsonl, .ddx/executions/20260514T234401-c1e189c2/embedded/svc-1778802270422753939.jsonl, .ddx/executions/20260514T234603-777da793/embedded/svc-1778802393356815661.jsonl, .ddx/executions/20260515T003734-545135b5/embedded/svc-1778805472232082492.jsonl, .ddx/executions/20260515T003905-2d44d34b/embedded/svc-1778805562864273626.jsonl, .ddx/executions/20260515T004138-b7178a02/embedded/svc-1778805718455213769.jsonl, .ddx/executions/20260515T004337-dd7d17a3/embedded/svc-1778805835925267688.jsonl, .ddx/executions/20260515T004501-34f3c8aa/embedded/svc-1778805909573377611.jsonl, .ddx/executions/20260515T004637-9bcd07f1/embedded/svc-1778806006179750863.jsonl, .ddx/executions/20260515T004821-9916bfdd/embedded/svc-1778806121199113269.jsonl, .ddx/executions/20260515T005210-66717610/embedded/svc-1778806349095352810.jsonl, .ddx/executions/20260515T011040-d00c7a60/embedded/agent-claude-1778807450385332960.jsonl, .ddx/executions/20260515T011040-d00c7a60/embedded/svc-1778807449349992914.jsonl, .ddx/executions/20260515T013427-2e0fe082/embedded/svc-1778808880729224484.jsonl, .ddx/executions/20260515T013441-289e8cc7/embedded/svc-1778808904353114789.jsonl, .ddx/executions/20260515T052757-68eb44f2/embedded/agent-codex-1778822892812083671.jsonl, .ddx/executions/20260515T052757-68eb44f2/embedded/svc-1778822891904144343.jsonl, .ddx/executions/20260515T053424-4c9c3bbc/embedded/agent-codex-1778823279065708767.jsonl, .ddx/executions/20260515T053424-4c9c3bbc/embedded/svc-1778823278172410593.jsonl, .ddx/executions/20260515T054253-ce299f5d/embedded/agent-codex-1778823787792321181.jsonl, .ddx/executions/20260515T054253-ce299f5d/embedded/svc-1778823786857125872.jsonl, .ddx/executions/20260515T055246-83542142/embedded/agent-codex-1778824382260409379.jsonl, .ddx/executions/20260515T055246-83542142/embedded/svc-1778824380820365594.jsonl, .ddx/executions/20260515T060356-ee7cd2c8/embedded/agent-codex-1778825051277044143.jsonl, .ddx/executions/20260515T060356-ee7cd2c8/embedded/svc-1778825050369544486.jsonl, .ddx/executions/20260515T061456-87d14876/embedded/ag\n…[truncated, 73284 bytes]\nit, .ddx/executions/20260516T015123-1a15150a/embedded/git-global.cfg, .ddx/executions/20260516T015123-1a15150a/embedded/git-local-private.cfg, .ddx/executions/20260516T015123-1a15150a/embedded/svc-1778896293605286665.jsonl, .ddx/executions/20260516T030734-b5dd0918/embedded/git-bin/git, .ddx/executions/20260516T030734-b5dd0918/embedded/git-global.cfg, .ddx/executions/20260516T030734-b5dd0918/embedded/git-local-private.cfg, .ddx/executions/20260516T030734-b5dd0918/embedded/svc-1778900867061283313.jsonl, .ddx/executions/20260516T030826-498fbae6/embedded/git-bin/git, .ddx/executions/20260516T030826-498fbae6/embedded/git-global.cfg, .ddx/executions/20260516T030826-498fbae6/embedded/git-local-private.cfg, .ddx/executions/20260516T030826-498fbae6/embedded/svc-1778900918341051932.jsonl, .ddx/executions/20260516T030926-34fd9164/embedded/git-bin/git, .ddx/executions/20260516T030926-34fd9164/embedded/git-global.cfg, .ddx/executions/20260516T030926-34fd9164/embedded/git-local-private.cfg, .ddx/executions/20260516T030926-34fd9164/embedded/svc-1778900977989853300.jsonl, .ddx/executions/20260516T031048-e128a8c6/embedded/git-bin/git, .ddx/executions/20260516T031048-e128a8c6/embedded/git-global.cfg, .ddx/executions/20260516T031048-e128a8c6/embedded/git-local-private.cfg, .ddx/executions/20260516T031048-e128a8c6/embedded/svc-1778901060828149479.jsonl, .ddx/executions/20260516T033649-e5f87e54/embedded/agent-claude-1778902621258068697.jsonl, .ddx/executions/20260516T033649-e5f87e54/embedded/git-bin/git, .ddx/executions/20260516T033649-e5f87e54/embedded/git-global.cfg, .ddx/executions/20260516T033649-e5f87e54/embedded/git-local-private.cfg, .ddx/executions/20260516T033649-e5f87e54/embedded/svc-1778902620360179835.jsonl, .ddx/executions/20260516T035359-c280ea33/embedded/git-bin/git, .ddx/executions/20260516T035359-c280ea33/embedded/git-global.cfg, .ddx/executions/20260516T035359-c280ea33/embedded/git-local-private.cfg, .ddx/executions/20260516T035359-c280ea33/embedded/svc-1778903655484643486.jsonl, .ddx/executions/20260516T035502-2da30989/embedded/agent-claude-1778903715183039893.jsonl, .ddx/executions/20260516T035502-2da30989/embedded/git-bin/git, .ddx/executions/20260516T035502-2da30989/embedded/git-global.cfg, .ddx/executions/20260516T035502-2da30989/embedded/git-local-private.cfg, .ddx/executions/20260516T035502-2da30989/embedded/svc-1778903714290158093.jsonl, .ddx/executions/20260516T041350-c6aa5a87/embedded/git-bin/git, .ddx/executions/20260516T041350-c6aa5a87/embedded/git-global.cfg, .ddx/executions/20260516T041350-c6aa5a87/embedded/git-local-private.cfg, .ddx/executions/20260516T041350-c6aa5a87/embedded/svc-1778904844471674190.jsonl, .ddx/executions/20260516T043007-7ac09885/embedded/agent-claude-1778905820205166069.jsonl, .ddx/executions/20260516T043007-7ac09885/embedded/git-bin/git, .ddx/executions/20260516T043007-7ac09885/embedded/git-global.cfg, .ddx/executions/20260516T043007-7ac09885/embedded/git-local-private.cfg, .ddx/executions/20260516T043007-7ac09885/embedded/svc-1778905819220498794.jsonl, .ddx/executions/20260516T045133-65539241/embedded/agent-claude-1778907105741894852.jsonl, .ddx/executions/20260516T045133-65539241/embedded/git-bin/git, .ddx/executions/20260516T045133-65539241/embedded/git-global.cfg, .ddx/executions/20260516T045133-65539241/embedded/git-local-private.cfg, .ddx/executions/20260516T045133-65539241/embedded/svc-1778907104667457778.jsonl, .ddx/executions/20260516T050342-3c60a0da/embedded/git-bin/git, .ddx/executions/20260516T050342-3c60a0da/embedded/git-global.cfg, .ddx/executions/20260516T050342-3c60a0da/embedded/git-local-private.cfg, .ddx/executions/20260516T050342-3c60a0da/embedded/svc-1778907835799474412.jsonl, .ddx/executions/20260516T052142-c5e33aad/embedded/git-bin/git, .ddx/executions/20260516T052142-c5e33aad/embedded/git-global.cfg, .ddx/executions/20260516T052142-c5e33aad/embedded/git-local-private.cfg, .ddx/executions/20260516T052142-c5e33aad/embedded/svc-1778908912862360947.jsonl, .ddx/executions/20260516T052224-6c94effb/embedded/git-bin/git, .ddx/executions/20260516T052224-6c94effb/embedded/git-global.cfg, .ddx/executions/20260516T052224-6c94effb/embedded/git-local-private.cfg, .ddx/executions/20260516T052224-6c94effb/embedded/svc-1778908954759042356.jsonl, .ddx/executions/20260516T053138-afab769e/embedded/agent-claude-1778909509944901749.jsonl, .ddx/executions/20260516T053138-afab769e/embedded/git-bin/git, .ddx/executions/20260516T053138-afab769e/embedded/git-global.cfg, .ddx/executions/20260516T053138-afab769e/embedded/git-local-private.cfg, .ddx/executions/20260516T053138-afab769e/embedded/svc-1778909509080144033.jsonl, .ddx/executions/20260516T054543-6bfe665a/embedded/git-bin/git, .ddx/executions/20260516T054543-6bfe665a/embedded/git-global.cfg, .ddx/executions/20260516T054543-6bfe665a/embedded/git-local-private.cfg, .ddx/executions/20260516T054543-6bfe665a/embedded/svc-1778910354812365776.jsonl, .ddx/executions/20260516T054638-aa6ba0b6/embedded/git-bin/git, .ddx/executions/20260516T054638-aa6ba0b6/embedded/git-global.cfg, .ddx/executions/20260516T054638-aa6ba0b6/embedded/git-local-private.cfg, .ddx/executions/20260516T054638-aa6ba0b6/embedded/svc-1778910412635698762.jsonl, .ddx/executions/20260516T060933-666df52d/embedded/agent-claude-1778911787930454947.jsonl, .ddx/executions/20260516T060933-666df52d/embedded/git-bin/git, .ddx/executions/20260516T060933-666df52d/embedded/git-global.cfg, .ddx/executions/20260516T060933-666df52d/embedded/git-local-private.cfg, .ddx/executions/20260516T060933-666df52d/embedded/svc-1778911787023813266.jsonl, .ddx/executions/20260516T061514-a8979854/embedded/git-bin/git, .ddx/executions/20260516T061514-a8979854/embedded/git-global.cfg, .ddx/executions/20260516T061514-a8979854/embedded/git-local-private.cfg, .ddx/executions/20260516T061514-a8979854/embedded/svc-1778912128023046714.jsonl, .ddx/executions/20260516T061616-68b96400/embedded/agent-claude-1778912190265725466.jsonl, .ddx/executions/20260516T061616-68b96400/embedded/git-bin/git, .ddx/executions/20260516T061616-68b96400/embedded/git-global.cfg, .ddx/executions/20260516T061616-68b96400/embedded/git-local-private.cfg, .ddx/executions/20260516T061616-68b96400/embedded/svc-1778912189244987580.jsonl, .ddx/executions/20260516T063346-8841789b/embedded/git-bin/git, .ddx/executions/20260516T063346-8841789b/embedded/git-global.cfg, .ddx/executions/20260516T063346-8841789b/embedded/git-local-private.cfg, .ddx/executions/20260516T063346-8841789b/embedded/svc-1778913240407639450.jsonl, .ddx/executions/20260516T064457-edcefc59/embedded/agent-claude-1778913910639615769.jsonl, .ddx/executions/20260516T064457-edcefc59/embedded/git-bin/git, .ddx/executions/20260516T064457-edcefc59/embedded/git-global.cfg, .ddx/executions/20260516T064457-edcefc59/embedded/git-local-private.cfg, .ddx/executions/20260516T064457-edcefc59/embedded/svc-1778913909767370127.jsonl, .ddx/executions/20260516T071341-3f116b9e/embedded/git-bin/git, .ddx/executions/20260516T071341-3f116b9e/embedded/git-global.cfg, .ddx/executions/20260516T071341-3f116b9e/embedded/git-local-private.cfg, .ddx/executions/20260516T071341-3f116b9e/embedded/svc-1778915634852717843.jsonl, .ddx/executions/20260516T071433-c6da0260/embedded/agent-claude-1778915687114386080.jsonl, .ddx/executions/20260516T071433-c6da0260/embedded/git-bin/git, .ddx/executions/20260516T071433-c6da0260/embedded/git-global.cfg, .ddx/executions/20260516T071433-c6da0260/embedded/git-local-private.cfg, .ddx/executions/20260516T071433-c6da0260/embedded/svc-1778915686188345560.jsonl, .ddx/executions/20260516T072014-b36e21ea/embedded/git-bin/git, .ddx/executions/20260516T072014-b36e21ea/embedded/git-global.cfg, .ddx/executions/20260516T072014-b36e21ea/embedded/git-local-private.cfg, .ddx/executions/20260516T072014-b36e21ea/embedded/svc-1778916027269342085.jsonl, .ddx/executions/20260516T173349-cc564573/embedded/git-bin/git, .ddx/executions/20260516T173349-cc564573/embedded/git-global.cfg, .ddx/executions/20260516T173349-cc564573/embedded/git-local-private.cfg, .ddx/executions/20260516T173349-cc564573/embedded/svc-1778952843453283920.jsonl, .ddx/executions/20260516T180016-6b66ca90/embedded/agent-claude-1778954430082295539.jsonl, .ddx/executions/20260516T180016-6b66ca90/embedded/git-bin/git, .ddx/executions/20260516T180016-6b66ca90/embedded/git-global.cfg, .ddx/executions/20260516T180016-6b66ca90/embedded/git-local-private.cfg, .ddx/executions/20260516T180016-6b66ca90/embedded/svc-1778954429114343002.jsonl, .ddx/executions/20260516T180246-db98a449/embedded/git-bin/git, .ddx/executions/20260516T180246-db98a449/embedded/git-global.cfg, .ddx/executions/20260516T180246-db98a449/embedded/git-local-private.cfg, .ddx/executions/20260516T180246-db98a449/embedded/svc-1778954580816230960.jsonl, .ddx/executions/20260516T180352-74ae6533/embedded/agent-claude-1778954645627677725.jsonl, .ddx/executions/20260516T180352-74ae6533/embedded/git-bin/git, .ddx/executions/20260516T180352-74ae6533/embedded/git-global.cfg, .ddx/executions/20260516T180352-74ae6533/embedded/git-local-private.cfg, .ddx/executions/20260516T180352-74ae6533/embedded/svc-1778954644759223392.jsonl, .ddx/executions/20260516T180416-97b9a38d/embedded/git-bin/git, .ddx/executions/20260516T180416-97b9a38d/embedded/git-global.cfg, .ddx/executions/20260516T180416-97b9a38d/embedded/git-local-private.cfg, .ddx/executions/20260516T180416-97b9a38d/embedded/svc-1778954678032207443.jsonl, .ddx/executions/20260516T180519-637b1bd8/embedded/agent-claude-1778954731495746031.jsonl, .ddx/executions/20260516T180519-637b1bd8/embedded/git-bin/git, .ddx/executions/20260516T180519-637b1bd8/embedded/git-global.cfg, .ddx/executions/20260516T180519-637b1bd8/embedded/git-local-private.cfg, .ddx/executions/20260516T180519-637b1bd8/embedded/svc-1778954730622208206.jsonl, .ddx/executions/20260516T180538-3e037969/embedded/git-bin/git, .ddx/executions/20260516T180538-3e037969/embedded/git-global.cfg, .ddx/executions/20260516T180538-3e037969/embedded/git-local-private.cfg, .ddx/executions/20260516T180538-3e037969/embedded/svc-1778954759252277157.jsonl, .ddx/executions/20260516T180644-800a31d7/embedded/agent-claude-1778954817533060716.jsonl, .ddx/executions/20260516T180644-800a31d7/embedded/git-bin/git, .ddx/executions/20260516T180644-800a31d7/embedded/git-global.cfg, .ddx/executions/20260516T180644-800a31d7/embedded/git-local-private.cfg, .ddx/executions/20260516T180644-800a31d7/embedded/svc-1778954816252577667.jsonl, .ddx/executions/20260516T180712-4978cf72/embedded/git-bin/git, .ddx/executions/20260516T180712-4978cf72/embedded/git-global.cfg, .ddx/executions/20260516T180712-4978cf72/embedded/git-local-private.cfg, .ddx/executions/20260516T180712-4978cf72/embedded/svc-1778954855777745266.jsonl, .ddx/executions/20260517T213547-544b149c/embedded/agent-claude-1779053819016205206.jsonl, .ddx/executions/20260517T213547-544b149c/embedded/git-bin/git, .ddx/executions/20260517T213547-544b149c/embedded/git-global.cfg, .ddx/executions/20260517T213547-544b149c/embedded/git-local-private.cfg, .ddx/executions/20260517T213547-544b149c/embedded/svc-1779053816657135315.jsonl, .ddx/executions/20260518T014331-11d65724/embedded/agent-claude-1779068637450896795.jsonl, .ddx/executions/20260518T014331-11d65724/embedded/git-bin/git, .ddx/executions/20260518T014331-11d65724/embedded/git-global.cfg, .ddx/executions/20260518T014331-11d65724/embedded/git-local-private.cfg, .ddx/executions/20260518T014331-11d65724/embedded/svc-1779068635438461944.jsonl, .ddx/executions/20260518T074657-b00492d0/embedded/agent-claude-1779090442046732266.jsonl, .ddx/executions/20260518T074657-b00492d0/embedded/git-bin/git, .ddx/executions/20260518T074657-b00492d0/embedded/git-global.cfg, .ddx/executions/20260518T074657-b00492d0/embedded/git-local-private.cfg, .ddx/executions/20260518T074657-b00492d0/embedded/svc-1779090440234651574.jsonl, .ddx/executions/20260518T074718-9af123a0/embedded/agent-claude-1779090464498735639.jsonl, .ddx/executions/20260518T074718-9af123a0/embedded/git-bin/git, .ddx/executions/20260518T074718-9af123a0/embedded/git-global.cfg, .ddx/executions/20260518T074718-9af123a0/embedded/git-local-private.cfg, .ddx/executions/20260518T074718-9af123a0/embedded/svc-1779090462593937584.jsonl, .ddx/executions/20260518T074951-030ff546/embedded/agent-claude-1779090618023721061.jsonl, .ddx/executions/20260518T074951-030ff546/embedded/git-bin/git, .ddx/executions/20260518T074951-030ff546/embedded/git-global.cfg, .ddx/executions/20260518T074951-030ff546/embedded/git-local-private.cfg, .ddx/executions/20260518T074951-030ff546/embedded/svc-1779090615630617931.jsonl, .ddx/executions/20260518T075454-3eb3c57f/embedded/agent-claude-1779090923962109376.jsonl, .ddx/executions/20260518T075454-3eb3c57f/embedded/git-bin/git, .ddx/executions/20260518T075454-3eb3c57f/embedded/git-global.cfg, .ddx/executions/20260518T075454-3eb3c57f/embedded/git-local-private.cfg, .ddx/executions/20260518T075454-3eb3c57f/embedded/svc-1779090920944926419.jsonl, .ddx/executions/20260518T075646-bad85484/embedded/agent-claude-1779091031410634952.jsonl, .ddx/executions/20260518T075646-bad85484/embedded/git-bin/git, .ddx/executions/20260518T075646-bad85484/embedded/git-global.cfg, .ddx/executions/20260518T075646-bad85484/embedded/git-local-private.cfg, .ddx/executions/20260518T075646-bad85484/embedded/svc-1779091029472084100.jsonl, .ddx/executions/20260518T075754-b7eb18e9/embedded/agent-claude-1779091101073890785.jsonl, .ddx/executions/20260518T075754-b7eb18e9/embedded/git-bin/git, .ddx/executions/20260518T075754-b7eb18e9/embedded/git-global.cfg, .ddx/executions/20260518T075754-b7eb18e9/embedded/git-local-private.cfg, .ddx/executions/20260518T075754-b7eb18e9/embedded/svc-1779091099240322806.jsonl, .ddx/executions/20260518T082003-2b1bee31/embedded/agent-claude-1779092429916798755.jsonl, .ddx/executions/20260518T082003-2b1bee31/embedded/git-bin/git, .ddx/executions/20260518T082003-2b1bee31/embedded/git-global.cfg, .ddx/executions/20260518T082003-2b1bee31/embedded/git-local-private.cfg, .ddx/executions/20260518T082003-2b1bee31/embedded/svc-1779092428017485489.jsonl, .ddx/executions/20260518T083953-3e20c03f/embedded/agent-claude-1779093625703842563.jsonl, .ddx/executions/20260518T083953-3e20c03f/embedded/git-bin/git, .ddx/executions/20260518T083953-3e20c03f/embedded/git-global.cfg, .ddx/executions/20260518T083953-3e20c03f/embedded/git-local-private.cfg, .ddx/executions/20260518T083953-3e20c03f/embedded/svc-1779093623206955875.jsonl, .ddx/executions/20260518T092344-1f673ce0/embedded/agent-claude-1779096247700734531.jsonl, .ddx/executions/20260518T092344-1f673ce0/embedded/git-bin/git, .ddx/executions/20260518T092344-1f673ce0/embedded/git-global.cfg, .ddx/executions/20260518T092344-1f673ce0/embedded/git-local-private.cfg, .ddx/executions/20260518T092344-1f673ce0/embedded/svc-1779096245994931810.jsonl, .ddx/executions/20260518T094306-666772f9/embedded/agent-claude-1779097430372747288.jsonl, .ddx/executions/20260518T094306-666772f9/embedded/git-bin/git, .ddx/executions/20260518T094306-666772f9/embedded/git-global.cfg, .ddx/executions/20260518T094306-666772f9/embedded/git-local-private.cfg, .ddx/executions/20260518T094306-666772f9/embedded/svc-1779097428354650430.jsonl, .ddx/executions/20260518T100548-3e9bbbf6/embedded/agent-claude-1779098775156779617.jsonl, .ddx/executions/20260518T100548-3e9bbbf6/embedded/git-bin/git, .ddx/executions/20260518T100548-3e9bbbf6/embedded/git-global.cfg, .ddx/executions/20260518T100548-3e9bbbf6/embedded/git-local-private.cfg, .ddx/executions/20260518T100548-3e9bbbf6/embedded/svc-1779098773465405585.jsonl, .ddx/executions/20260518T100918-4c4a6b06/embedded/agent-claude-1779098982203836663.jsonl, .ddx/executions/20260518T100918-4c4a6b06/embedded/git-bin/git, .ddx/executions/20260518T100918-4c4a6b06/embedded/git-global.cfg, .ddx/executions/20260518T100918-4c4a6b06/embedded/git-local-private.cfg, .ddx/executions/20260518T100918-4c4a6b06/embedded/svc-1779098980467840581.jsonl, .ddx/executions/20260518T102110-4a0bacb1/embedded/agent-claude-1779099702511747845.jsonl, .ddx/executions/20260518T102110-4a0bacb1/embedded/git-bin/git, .ddx/executions/20260518T102110-4a0bacb1/embedded/git-global.cfg, .ddx/executions/20260518T102110-4a0bacb1/embedded/git-local-private.cfg, .ddx/executions/20260518T102110-4a0bacb1/embedded/svc-1779099700315480097.jsonl, .ddx/executions/20260518T103403-4620ca94/embedded/agent-claude-1779100471304317327.jsonl, .ddx/executions/20260518T103403-4620ca94/embedded/git-bin/git, .ddx/executions/20260518T103403-4620ca94/embedded/git-global.cfg, .ddx/executions/20260518T103403-4620ca94/embedded/git-local-private.cfg, .ddx/executions/20260518T103403-4620ca94/embedded/svc-1779100469171639993.jsonl, .ddx/executions/20260518T104606-1db3596e/embedded/agent-claude-1779101196804720783.jsonl, .ddx/executions/20260518T104606-1db3596e/embedded/git-bin/git, .ddx/executions/20260518T104606-1db3596e/embedded/git-global.cfg, .ddx/executions/20260518T104606-1db3596e/embedded/git-local-private.cfg, .ddx/executions/20260518T104606-1db3596e/embedded/svc-1779101192628883675.jsonl, .ddx/executions/20260518T110040-ddee14e0/embedded/agent-claude-1779102099910111030.jsonl, .ddx/executions/20260518T110040-ddee14e0/embedded/git-bin/git, .ddx/executions/20260518T110040-ddee14e0/embedded/git-global.cfg, .ddx/executions/20260518T110040-ddee14e0/embedded/git-local-private.cfg, .ddx/executions/20260518T110040-ddee14e0/embedded/svc-1779102097756768504.jsonl, .ddx/executions/20260518T161150-b5be3c38/embedded/git-bin/git, .ddx/executions/20260518T161150-b5be3c38/embedded/git-global.cfg, .ddx/executions/20260518T161150-b5be3c38/embedded/git-local-private.cfg, .ddx/executions/20260518T163053-4f2fe69a/embedded/git-bin/git, .ddx/executions/20260518T163053-4f2fe69a/embedded/git-global.cfg, .ddx/executions/20260518T163053-4f2fe69a/embedded/git-local-private.cfg, .ddx/executions/20260518T173137-9a0eab2c/embedded/git-bin/git, .ddx/executions/20260518T173137-9a0eab2c/embedded/git-global.cfg, .ddx/executions/20260518T173137-9a0eab2c/embedded/git-local-private.cfg, .ddx/executions/20260518T173227-6f3385d2/embedded/git-bin/git, .ddx/executions/20260518T173227-6f3385d2/embedded/git-global.cfg, .ddx/executions/20260518T173227-6f3385d2/embedded/git-local-private.cfg, .ddx/executions/20260518T173250-e02eff03/embedded/git-bin/git, .ddx/executions/20260518T173250-e02eff03/embedded/git-global.cfg, .ddx/executions/20260518T173250-e02eff03/embedded/git-local-private.cfg, .ddx/executions/20260518T173509-81c13733/embedded/git-bin/git, .ddx/executions/20260518T173509-81c13733/embedded/git-global.cfg, .ddx/executions/20260518T173509-81c13733/embedded/git-local-private.cfg, .ddx/executions/20260518T183122-365304fe/embedded/git-bin/git, .ddx/executions/20260518T183122-365304fe/embedded/git-global.cfg, .ddx/executions/20260518T183122-365304fe/embedded/git-local-private.cfg, .ddx/executions/20260518T190614-103811d3/embedded/git-bin/git, .ddx/executions/20260518T190614-103811d3/embedded/git-global.cfg, .ddx/executions/20260518T190614-103811d3/embedded/git-local-private.cfg, .ddx/executions/20260518T191656-3ae2c4e9/embedded/git-bin/git, .ddx/executions/20260518T191656-3ae2c4e9/embedded/git-global.cfg, .ddx/executions/20260518T191656-3ae2c4e9/embedded/git-local-private.cfg, .ddx/executions/20260519T140549-47e95fea/embedded/git-bin/git, .ddx/executions/20260519T140549-47e95fea/embedded/git-global.cfg, .ddx/executions/20260519T140549-47e95fea/embedded/git-local-private.cfg, .ddx/executions/20260519T143040-3f8e6621/embedded/git-bin/git, .ddx/executions/20260519T143040-3f8e6621/embedded/git-global.cfg, .ddx/executions/20260519T143040-3f8e6621/embedded/git-local-private.cfg, .ddx/executions/20260519T145919-085b95f6/embedded/git-bin/git, .ddx/executions/20260519T145919-085b95f6/embedded/git-global.cfg, .ddx/executions/20260519T145919-085b95f6/embedded/git-local-private.cfg, .ddx/executions/20260520T230028-701034db/embedded/git-bin/git, .ddx/executions/20260520T230028-701034db/embedded/git-global.cfg, .ddx/executions/20260520T230028-701034db/embedded/git-local-private.cfg, .ddx/executions/20260520T230038-f7338517/embedded/git-bin/git, .ddx/executions/20260520T230038-f7338517/embedded/git-global.cfg, .ddx/executions/20260520T230038-f7338517/embedded/git-local-private.cfg, .ddx/executions/20260520T230433-7221e2a8/embedded/git-bin/git, .ddx/executions/20260520T230433-7221e2a8/embedded/git-global.cfg, .ddx/executions/20260520T230433-7221e2a8/embedded/git-local-private.cfg, .ddx/executions/20260520T230442-ac730f72/embedded/git-bin/git, .ddx/executions/20260520T230442-ac730f72/embedded/git-global.cfg, .ddx/executions/20260520T230442-ac730f72/embedded/git-local-private.cfg, .ddx/executions/20260520T231411-ca37f9ba/embedded/git-bin/git, .ddx/executions/20260520T231411-ca37f9ba/embedded/git-global.cfg, .ddx/executions/20260520T231411-ca37f9ba/embedded/git-local-private.cfg, .ddx/executions/20260520T232549-3e5314c4/embedded/git-bin/git, .ddx/executions/20260520T232549-3e5314c4/embedded/git-global.cfg, .ddx/executions/20260520T232549-3e5314c4/embedded/git-local-private.cfg, .ddx/executions/20260521T031310-805b4a1c/embedded/git-bin/git, .ddx/executions/20260521T031310-805b4a1c/embedded/git-global.cfg, .ddx/executions/20260521T031310-805b4a1c/embedded/git-local-private.cfg, .ddx/executions/20260521T031320-75e14104/embedded/git-bin/git, .ddx/executions/20260521T031320-75e14104/embedded/git-global.cfg, .ddx/executions/20260521T031320-75e14104/embedded/git-local-private.cfg)\",\"fingerprint\":\"6b35732da06ea816faeccc96235f5a9efea1a5d725ffc2e6682a1444243d076a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"6b35732da06ea816faeccc96235f5a9efea1a5d725ffc2e6682a1444243d076a\"}",
+          "created_at": "2026-05-28T15:02:22.286069651Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-28T15:04:23.733888881Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T150341-3927fdd2\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-28T15:04:26.06627055Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"keep_open_for_autonomous_retry\",\"actual_power\":5,\"count\":4,\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"model\":\"qwen3.5-27b\",\"provider\":\"bragi\",\"reason\":\"provider_connectivity\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T15:04:26.220011508Z",
+          "kind": "provider_connectivity.auto_retry",
+          "source": "ddx work",
+          "summary": "repeated provider connectivity failure kept open for autonomous retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T15:04:26.359207195Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=10dd3fc1dbf4ed723b9f268dcfb0571aeb2c0bba\nbase_rev=10dd3fc1dbf4ed723b9f268dcfb0571aeb2c0bba\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T15:04:26.429399016Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:05:08.736123873Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:05:09.217545512Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:05:09.707051556Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:08:07.9575531Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:08:08.439734571Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:08:08.91259243Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:08:10.714121778Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:08:11.17820794Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:08:11.645913972Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:08:13.14347219Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:08:13.63898556Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:08:14.140428505Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (new dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"2b4c9e6f674327eacffe1b6a1c86a7be33af51de45f1d0ce1e3957eae158dcd8\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2b4c9e6f674327eacffe1b6a1c86a7be33af51de45f1d0ce1e3957eae158dcd8\"}",
+          "created_at": "2026-05-28T15:08:10.042240939Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:10:56.866469834Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:10:57.34760839Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:10:57.835664186Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-28T15:11:01.759150403Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-28T15:11:02.210636832Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1896 tokens with tools=false at policy default\",\"fingerprint\":\"4aa3ff0198a4885ade8eefd97ae6307b7ce989e727bfc9af8772db800a71dc0b\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4aa3ff0198a4885ade8eefd97ae6307b7ce989e727bfc9af8772db800a71dc0b\"}",
+          "created_at": "2026-05-28T15:11:05.422000891Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:13:40.751056587Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:13:41.237200482Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:13:41.705616515Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:13:43.21036698Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:13:43.814174815Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:13:44.385990164Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-28T15:13:46.834171961Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T15:13:47.370107289Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: all routes at power 0 excluded by recent failures; escalating current retry floor to 1\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-28T15:13:47.926552796Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-28T15:38:27.193699522Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T16:07:53.739651001Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T153843-bb225119\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":9,\"output_tokens\":126,\"total_tokens\":135,\"cost_usd\":1.1450243499999997,\"duration_ms\":1741840,\"exit_code\":0}",
+          "created_at": "2026-05-28T16:07:53.80485154Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=135 cost_usd=1.1450 model=haiku"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260528T153843-bb225119/0\",\"cycle_index\":0,\"attempt_id\":\"20260528T153843-bb225119\",\"base_rev\":\"4a183932e4b966e9f14a2c52c92199685b46c4d6\",\"result_rev\":\"4f6fc83ab2c18ce1456be5f0314ad1167df337d4\"}",
+          "created_at": "2026-05-28T16:07:53.873447196Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"requested_min_power\":5,\"actual_power\":5}",
+          "created_at": "2026-05-28T16:08:51.618393977Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260528T160810-6c611b59\",\"bead_id\":\"ddx-f71ef348\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T16:08:53.528538909Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"keep_open_for_autonomous_retry\",\"actual_power\":5,\"count\":5,\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"model\":\"qwen3.5-27b\",\"provider\":\"bragi\",\"reason\":\"provider_connectivity\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T16:08:53.653122712Z",
+          "kind": "provider_connectivity.auto_retry",
+          "source": "ddx work",
+          "summary": "repeated provider connectivity failure kept open for autonomous retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"endpoint\":\"http://bragi:1234/v1/chat/completions\",\"error\":\"agent: provider error: openai: POST \\\"http://bragi:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\",\"timeout_class\":\"bad gateway\"}",
+          "created_at": "2026-05-28T16:08:53.776329268Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b endpoint=http://bragi:1234/v1/chat/completions (bad gateway) connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=standard\nresult_rev=2d5ee7bb84e9d1d18d7c12ed95bf2122cb3717c8\nbase_rev=2d5ee7bb84e9d1d18d7c12ed95bf2122cb3717c8\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-28T16:08:53.839243855Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T16:34:44.493713718Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T161115-71721849\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":9,\"output_tokens\":121,\"total_tokens\":130,\"cost_usd\":0.78693795,\"duration_ms\":1400038,\"exit_code\":0}",
+          "created_at": "2026-05-28T16:34:44.553618576Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=130 cost_usd=0.7869 model=haiku"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260528T161115-71721849/0\",\"cycle_index\":0,\"attempt_id\":\"20260528T161115-71721849\",\"base_rev\":\"8330c620d621d312a4d8f22424fa2984fd67a33f\",\"result_rev\":\"ea191b5ffae34d6fd64fbe43185cbef8fb48776b\"}",
+          "created_at": "2026-05-28T16:34:44.620826261Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-28T16:08:53Z",
+          "count": 5,
+          "endpoint": "http://bragi:1234/v1/chat/completions",
+          "model": "qwen3.5-27b",
+          "provider": "bragi",
+          "reason": "provider_connectivity",
+          "timeout_class": "bad gateway"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T163502-d3e736aa",
+    "prompt": ".ddx/executions/20260528T163502-d3e736aa/prompt.md",
+    "manifest": ".ddx/executions/20260528T163502-d3e736aa/manifest.json",
+    "result": ".ddx/executions/20260528T163502-d3e736aa/result.json",
+    "checks": ".ddx/executions/20260528T163502-d3e736aa/checks.json",
+    "usage": ".ddx/executions/20260528T163502-d3e736aa/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f71ef348-20260528T163502-d3e736aa"
+  },
+  "prompt_sha": "47c47f98d5bc2fa53dd263f72a71652cdfe1e45639c41c205f6a742c6058e2e0"
+}

@@ -1,0 +1,12 @@
+All four AC items are covered: per-call latency tracked via `lastRequestSentAt` reset on user events, sum-bounded by elapsed, CHANGELOG documents legacy traces, and a unit test asserts the divergence.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Fix tracks lastRequestSentAt (reset on user/tool_result events) and emits per-call latency_ms distinct from cumulative elapsed_ms. CHANGELOG documents legacy traces. Regression test asserts divergence, bounded second-turn latency, and sum<=elapsed.",
+  "findings": [
+    { "severity": "info", "summary": "Fix limited to claude harness; if other harnesses share the bug they are out of scope here.", "location": "cli/internal/agent/claude_stream.go:125" }
+  ]
+}
+```

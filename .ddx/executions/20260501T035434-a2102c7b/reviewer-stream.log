@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no beads.spec.ts test file added or modified. Acceptance criteria require a Playwright test rendering the bead dependency DAG view, which is absent from the changed files.",
+  "findings": [
+    { "severity": "block", "summary": "No beads.spec.ts test added or modified in this diff; AC requires a DAG view test", "location": ".ddx/executions/20260501T035434-a2102c7b/result.json" },
+    { "severity": "block", "summary": "Cannot verify parent/child bead relationship rendering — no test code present to evaluate", "location": "(missing test file)" }
+  ]
+}
+```

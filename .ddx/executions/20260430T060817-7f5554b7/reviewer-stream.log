@@ -1,0 +1,23 @@
+---
+## Review: ddx-43118352 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Replace --ddx-color-* with lever/load/fulcrum tokens | BLOCK | website/assets/css/custom.css not in diff |
+| 2 | Re-derive --primary-hue/sat/lightness from accent-lever | BLOCK | not found in diff |
+| 3 | Add @import for Newsreader and Space Grotesk | BLOCK | not found in diff |
+| 4 | Expose bg-canvas/surface, fg-ink/muted, border-line vars | BLOCK | not found in diff |
+
+### Summary
+
+The diff under review contains only execution evidence files (manifest.json, result.json) under `.ddx/executions/`. The actual implementation commit `686a589a` (which the result.json references) is not included in the provided diff, so none of the acceptance criteria can be verified from what was supplied.
+
+### Findings
+
+- The reviewable diff is the evidence-only commit `e13a850d`. The implementation commit `686a589a` ("feat(website): replace --ddx-color-* vars with lever/load/fulcrum token system") is referenced as `result_rev` but its contents are not in the diff.
+- No changes to `website/assets/css/custom.css` are visible — cannot verify token replacement, HSL re-derivation, Google Fonts @import, or new CSS variable exposure.
+- Re-run the review against the merged result_rev `686a589a` (or the diff `9af6b048..686a589a`) to evaluate ACs against actual CSS changes.

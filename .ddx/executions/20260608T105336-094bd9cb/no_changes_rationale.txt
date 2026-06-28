@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` is not green in this workspace; the `internal/agent` subset passes, but `./cmd/...` fails broadly with pre-existing fixture/state errors (for example `TestAcRun_PassExitsZero` cannot load bead `ddx-ac-pass`, and many work/bead commands report missing queue state). The review-gate change is implemented, but the acceptance-gated full suite is blocked on the cmd environment.

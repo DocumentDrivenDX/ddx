@@ -1,0 +1,12 @@
+All AC items satisfied: palette classes removed, semantic badge-layer-* utilities defined in app.css, and text-xl/text-sm replaced with text-headline-lg/text-body-sm.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Both runs pages now use semantic badge-layer-work/try/run utilities defined in app.css with light/dark CSS variables; raw text-xl/text-sm replaced with text-headline-lg/text-body-sm. All AC items satisfied.",
+  "findings": [
+    { "severity": "info", "summary": "Layer badge pill-shape vs status badge sharp-corner inconsistency mentioned in description was not addressed, but it was not part of the acceptance criteria.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte" }
+  ]
+}
+```

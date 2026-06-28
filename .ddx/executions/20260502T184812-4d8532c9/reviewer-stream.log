@@ -1,0 +1,12 @@
+Implementation covers all AC items: 2-node spawn, /federation page, scope toggle, offline/restart cycle, ts-net guard with both rejection and acceptance + WARN.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Playwright spec spawns hub+spoke, asserts /federation listing, scope=federation merge, scope toggle, stop-spoke→offline poll, restart→active, plus ts-net guard rejection without flag and acceptance+WARN with flag (skipped cleanly when no external IPv4). Hub GraphQL provider wired.",
+  "findings": [
+    { "severity": "info", "summary": "ts-net guard tests skip when no non-loopback IPv4 available; acceptable fallback documented in spec header.", "location": "cli/internal/server/frontend/e2e/federation-2node.spec.ts" }
+  ]
+}
+```

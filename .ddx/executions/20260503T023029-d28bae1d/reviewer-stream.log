@@ -1,0 +1,19 @@
+---
+## Review: ddx-92e10599 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Prompt input on project home, trusted-gated | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/+page.svelte:328` mounts `OperatorPromptPanel`; the route + `/api/csrf-token` are served via `trusted(...)` in `server.go:732`, and submit/approve/cancel mutations require the per-session `X-CSRF-Token` already enforced server-side |
+| 2 | Submit shows preview before approve | APPROVE | `OperatorPromptPanel.svelte:97-109` (handleSubmit sets `pendingBead`) and template branch `{:else}` block renders `operator-prompt-preview` with title/body/status before any approve action |
+| 3 | Approve transitions bead to ready | APPROVE | `OperatorPromptPanel.svelte:120-128` calls `OPERATOR_PROMPT_APPROVE_MUTATION` (proposed → open per server semantics); e2e asserts preview clears and bead surfaces as `open` in recent pane |
+| 4 | Recent prompts pane updates live via subscription | APPROVE | `OperatorPromptPanel.svelte:178-194` subscribes via `subscribeBeadLifecycle`, applies `status_changed` to `liveStatus`, reloads on `created`; rendered list at `data-testid="operator-prompt-recent"` |
+| 5 | Click-through opens bead detail | APPROVE | `beadHref()` resolves `/nodes/[nodeId]/projects/[projectId]/beads/[beadId]`; e2e clicks `operator-prompt-recent-link` and asserts URL matches `/beads/${beadId}` |
+| 6 | Playwright e2e: submit→approve→advance + XSS escaping | APPROVE | `e2e/operator-prompts.spec.ts:30-65` covers happy path; `:67-108` injects `<img onerror>` and `<script>` payloads, asserts `img`/`script` element counts are 0 in both preview body and title, and dialogs array stays empty |
+
+### Summary
+
+Clean, scoped implementation: a single new Svelte panel + GraphQL module + one server route + Playwright spec, mounted on the existing project home. All six AC threads (gating, preview, approve, live recent pane, click-through, e2e + XSS) are covered with matching `data-testid` hooks and real-server e2e. Body/title rely on Svelte's default text interpolation (no `{@html}`), and the XSS test guards regression.

@@ -1,0 +1,19 @@
+---
+## Review: ddx-778fcfd1 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | US-086a.a-c green in e2e/workers.spec.ts | BLOCK | — not found in diff |
+
+### Summary
+
+The reviewed diff only adds execution evidence files under `.ddx/executions`; it does not include frontend implementation changes or e2e test output proving US-086a.a-c. The acceptance criteria cannot be validated from this diff.
+
+### Findings
+
+- `.ddx/executions/20260422T083933-f1906040/result.json` only records a claimed successful run; it does not implement or prove `workerProgress` live streaming, tool cards, reconnect catch-up, terminal state handling, or `e2e/workers.spec.ts` results.
+- `e2e/workers.spec.ts` is absent from the reviewed diff, so the required US-086a.a-c green status is not verifiable.

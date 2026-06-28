@@ -1,0 +1,2 @@
+status: blocked
+reason: full cli suite still fails in this environment on broad pre-existing cmd tests unrelated to the review-gating change, so I cannot truthfully claim the bead is fully verified

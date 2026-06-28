@@ -1,0 +1,23 @@
+---
+## Review: ddx-05b4cc9d iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Root-cause fix | APPROVE | `cli/internal/server/state_graphql.go:267-273` — resolves id→path via `GetProjectByID` before filtering; justification in commit message ("Option 1: one-line change, no schema or migration") |
+| 2 | Regression test — project-scoped query | APPROVE | `cli/internal/server/graphql_backfill_test.go:221-350` — `TestGraphQLWorkersByProjectScopedByID`: two projects, two workers, asserts per-project isolation, unknown id returns empty, global returns both |
+| 3 | Regression test — backward compat | APPROVE | N/A — Option 1 chosen, no `ProjectID` field added to `WorkerRecord`, so no migration needed. AC explicitly says "Only required if Option 2 is chosen." |
+| 4 | End-to-end validation (Playwright) | BLOCK | — No Playwright tests in diff |
+| 5 | No regression to unrelated surfaces | APPROVE | Existing `TestGraphQLWorkers` updated to use project id (not path); global query tested in new test; fix is scoped to one filter change |
+| 6 | Cross-reference to ddx-69789664 | APPROVE | Commit message: "Unblocks the Workers-lifecycle-controls bead (ddx-69789664) whose acceptance assumed the Workers pane worked correctly." |
+
+### Summary
+
+The root-cause fix is clean and correct — Option 1 with id→path resolution at the filter site, exactly matching the bead's proposed direction. Unit tests are thorough and well-structured. The only gap is the Playwright e2e test required by AC4.
+
+### Findings
+
+- **AC4 — Playwright e2e test missing.** The acceptance criteria require a Playwright test that navigates to project home, clicks Drain, confirms the worker appears in the Workers tab, and verifies cross-project isolation. No Playwright test was added. File to add: `cli/internal/server/frontend/tests/` (or wherever existing Playwright tests live). The test should cover: (1) Drain → Workers tab shows new row with `state: running`, (2) second project's Workers tab does not show project-1's worker.

@@ -1,0 +1,17 @@
+---
+## Review: ddx-ffe9ba63 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | 6 prompts at docs/helix/00-discover/visuals/principle-N-*.prompt.md | APPROVE | principle-{1-lever,2-cyclic-motion,3-interchangeable-handles,4-load,5-trail,6-fulcrum}.prompt.md all created |
+| 2 | Map principles to lever-machine components (1=lever arm, 2=cyclic, 3=handles, 4=load, 5=trail, 6=fulcrum) | APPROVE | filenames + frontmatter `component:` fields match (e.g., principle-1 `component: "lever arm"`, principle-4 `component: "the load — probabilistic mass"`) |
+| 3 | Reference DESIGN.md tokens for palette/typography | APPROVE | `depends_on: DESIGN.md` in frontmatter; explicit hex tokens (#4878C6, #35A35F, #8E35A3) and Inter typography per file |
+| 4 | Sober/utilitarian register; no AI-gloss | APPROVE | Each prompt includes "Sober, utilitarian, mechanical" tone language and a negative prompt blocking glow/gradient/cinematic/AI-art treatments |
+
+### Summary
+
+All six principle-graphic prompts are authored at the prescribed path, each mapped to its assigned lever-machine component with consistent frontmatter, DESIGN.md token references, and sober technical-diagram register. The diff shown in the bead-review wrapper was only the execution evidence; the actual content landed in commit 611b45ca and satisfies every requirement in the description.

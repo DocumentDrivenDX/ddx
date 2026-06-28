@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The change adds a new skipped-epic classification and output text, but it does not implement a real completed-epic closure-evaluation path in `ddx work`, so AC2 is not met.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Completed epics are only reclassified for diagnostics. `ddx work` still filters all epic containers out of execution and merely copies the new list into `NoReadyWorkDetail`; there is no code here that evaluates or closes a completed epic.",
+      "location": "cli/internal/agent/execute_bead_loop.go:589"
+    },
+    {
+      "severity": "warn",
+      "summary": "The new worker test only proves the completed epic appears in `SkippedEpicClosureCandidates` during a no-ready-work result. It does not verify any closure-evaluation behavior or status mutation, so it misses the acceptance target.",
+      "location": "cli/internal/agent/execute_bead_loop_test.go:560"
+    },
+    {
+      "severity": "warn",
+      "summary": "Operator-facing text says completed epics are 'surfaced for closure evaluation', but this change only prints the label; the underlying worker behavior does not perform such an evaluation.",
+      "location": "cli/cmd/work_plan.go:146"
+    }
+  ]
+}
+```

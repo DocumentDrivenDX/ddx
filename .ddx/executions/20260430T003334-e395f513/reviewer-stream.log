@@ -1,0 +1,19 @@
+---
+## Review: ddx-751c661a iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Promote run/try/work to top-level | APPROVE | FEAT-001-cli.md:54-58 — items 20, 20d, 20e define top-level `ddx run`/`ddx try`/`ddx work` |
+| 2 | ddx agent mounts upstream Cobra root structurally | APPROVE | FEAT-001-cli.md:65-66 — explicit "mounts the upstream `ddx-agent` Cobra root structurally per CONTRACT-003" |
+| 3 | Hard-deprecation handlers for agent run/execute-bead/execute-loop | APPROVE | FEAT-001-cli.md:70 — "Hard-deprecation handlers for `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop`...No aliases, no grace period, no shims" |
+| 4 | New ddx runs / ddx tries / ddx work workers namespaces | APPROVE | FEAT-001-cli.md:60-63 — items 21a/21b/21c define all three namespaces |
+| 5 | Remove FEAT-001:92 backcompat clause | APPROVE | Diff removes old "Queue Work" section (lines 92-93 of prior version) defining `ddx work` as backcompat alias |
+| 6 | Remove --quorum flag | APPROVE | FEAT-001-cli.md:59 — strikethrough with "removed. Multi-agent consensus moves to the `compare-prompts` skill" |
+
+### Summary
+
+Frame-only doc refactor cleanly executes all six items in the bead description against `docs/helix/01-frame/features/FEAT-001-cli.md`. The structural-mount language correctly defers enumeration to upstream rather than re-listing subcommands, matching the plan's intent.

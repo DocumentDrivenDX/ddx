@@ -1,0 +1,15 @@
+---
+## Review: ddx-10717b12 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | go build ./internal/agent/... passes | APPROVE | cli/internal/agent/execute_bead.go:127-170 — new types use existing `config.ResolvedConfig` accessors and `ExecuteBeadOptions` fields; no new external deps |
+| 2 | TestExecuteBeadRuntimeDelegation passes | APPROVE | cli/internal/agent/execute_bead_runtime_test.go:27 — test threads rcfg+runtime through ExecuteBeadWithConfig and asserts every durable knob lands on RunOptions |
+
+### Summary
+
+Clean Stage 3 foundation: `ExecuteBeadRuntime` carries only plumbing/per-invocation intent, `ExecuteBeadWithConfig` sources durable knobs (Harness, Model, Provider, ModelRef, Effort, ContextBudget, MirrorCfg) from `ResolvedConfig` and delegates to existing `ExecuteBead`, and `NewTestConfigForBead`/`TestBeadOverrides` mirror the loop/run test constructors. Bonus zero-value-panic test enforces the SD-024 sealed-construction invariant on the new path. No callers migrated, consistent with the "add alongside" discipline.

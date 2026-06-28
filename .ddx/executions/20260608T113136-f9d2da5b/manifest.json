@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260608T113136-f9d2da5b",
+  "bead_id": "ddx-3a6f1ad6",
+  "base_rev": "0e9591fc4efdbfe094c4a836e497239817202d8e",
+  "created_at": "2026-06-08T11:31:48.955819801Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 7
+  },
+  "bead": {
+    "id": "ddx-3a6f1ad6",
+    "title": "agent: classify land coordination failures as reconciliation",
+    "description": "PROBLEM\nLanding failures that are really ref-lock, already-landed, or staged-evidence coordination issues still look like ordinary implementation failures to the worker. That causes fresh implementation reruns and the wrong retry lane instead of reconciliation or operator attention.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead_orchestrator.go:292-312` wraps every `LandingAdvancer` error as a generic `land advancer` failure, which loses whether the candidate was already landed, whether `refs/heads/main` could not be locked, or whether the landing worktree was dirty. `cli/internal/agent/execute_bead_report_test.go:57-62` only proves the current detail string records land failure; it does not distinguish the coordination class from implementation failure.\n\nPROPOSED FIX\n- Split land/ref/index/evidence-staging failures into explicit retry actions: reconcile, retry-land, or operator-attention.\n- If the candidate commit or merge is already landed or is an ancestor of the target, reconcile and continue without rerunning implementation.\n- If the landing worktree has staged generated evidence or DDx metadata, preserve or retry the land/evidence step according to local policy rather than escalating the model.\n\nNON-SCOPE\n- Do not change review gating, decomposition detection, or power escalation policy in this child.\n- Do not reimplement low-level tracker/index contention fixes owned by sibling work.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_LandCoordinationFailureDoesNotRerunImplementation` simulates both observed details (`cannot lock ref refs/heads/main` after a candidate/merge is already landed, and `landing worktree has staged changes after waiting 2s`) and asserts the action is reconcile/retry-land/operator-attention, not a fresh implementation run and not model escalation.\n2. The regression shows the worker preserves or reconciles land state instead of rerunning implementation when the land result is already effectively landed or blocked by dirty staged evidence.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'LandCoordination' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T11:20:29.620183985Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=default; score=96.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T111525-fada8140\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=default; score=96.0\",\"input_tokens\":93440,\"output_tokens\":391,\"total_tokens\":93831,\"cost_usd\":0,\"duration_ms\":293850,\"exit_code\":1}",
+          "created_at": "2026-06-08T11:20:29.704313649Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=93831 model=dflash"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T11:31:33.749356488Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T112033-271336dd\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":145262,\"output_tokens\":1714,\"total_tokens\":146976,\"cost_usd\":0,\"duration_ms\":614995,\"exit_code\":1}",
+          "created_at": "2026-06-08T11:31:33.823525907Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=146976 model=dflash"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T113136-f9d2da5b",
+    "prompt": ".ddx/executions/20260608T113136-f9d2da5b/prompt.md",
+    "manifest": ".ddx/executions/20260608T113136-f9d2da5b/manifest.json",
+    "result": ".ddx/executions/20260608T113136-f9d2da5b/result.json",
+    "checks": ".ddx/executions/20260608T113136-f9d2da5b/checks.json",
+    "usage": ".ddx/executions/20260608T113136-f9d2da5b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3a6f1ad6-20260608T113136-f9d2da5b"
+  },
+  "prompt_sha": "7f5a8adce20817c6c7ac19b04f18d8cac77b66514282a8a8541bbe003ed53720"
+}

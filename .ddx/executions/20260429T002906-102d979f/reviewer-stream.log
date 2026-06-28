@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json). No CHANGELOG entry was added and cli/go.mod is not shown in the diff, so AC #2, #3, and #4 cannot be verified as satisfied.",
+  "findings": [
+    { "severity": "block", "summary": "AC #2 not met: no CHANGELOG.md entry present in the diff listing the six upstream beads/capabilities consumed.", "location": "CHANGELOG.md" },
+    { "severity": "block", "summary": "AC #3 not met: no links to upstream beads in ~/Projects/agent/.ddx/ added.", "location": "CHANGELOG.md" },
+    { "severity": "block", "summary": "AC #4 not met: no callout that AC #1 of parent ddx-fdd3ea36 is satisfied by go.mod + this CHANGELOG entry.", "location": "CHANGELOG.md" },
+    { "severity": "warn", "summary": "AC #5 violated: the only changed files are execution evidence artifacts, not a focused content commit.", "location": ".ddx/executions/20260429T002906-102d979f/" }
+  ]
+}
+```

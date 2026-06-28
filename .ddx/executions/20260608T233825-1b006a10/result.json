@@ -1,0 +1,61 @@
+{
+  "bead_id": "ddx-df319cf9",
+  "attempt_id": "20260608T233825-1b006a10",
+  "base_rev": "517bd213faccaf44be21018651b1b9f81297e0b2",
+  "result_rev": "34d88c934aa1524ff7fab1772409d4ae447851bb",
+  "implementation_rev": "34d88c934aa1524ff7fab1772409d4ae447851bb",
+  "outcome": "land_coordination_retry",
+  "status": "land_retry",
+  "detail": "land coordination retry: land advancer: fast-forwarding refs/heads/main to merge commit 90853a7115b139387d399df72ab5d631f0bfd569: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 70520979c1bb5ad41f5a0e71bbcaf4fe34ac8861 but expected c5b8b108f7b8ad2e212300e5c7462410d2561420: exit status 128: land advancer: fast-forwarding refs/heads/main to merge commit 90853a7115b139387d399df72ab5d631f0bfd569: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 70520979c1bb5ad41f5a0e71bbcaf4fe34ac8861 but expected c5b8b108f7b8ad2e212300e5c7462410d2561420: exit status 128",
+  "orchestrator_status": "land_retry",
+  "reason": "land coordination retry: land advancer: fast-forwarding refs/heads/main to merge commit 90853a7115b139387d399df72ab5d631f0bfd569: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 70520979c1bb5ad41f5a0e71bbcaf4fe34ac8861 but expected c5b8b108f7b8ad2e212300e5c7462410d2561420: exit status 128",
+  "preserve_ref": "refs/ddx/iterations/ddx-df319cf9/20260608T233825-1b006a10-517bd213facc",
+  "candidate_ref": "refs/ddx/iterations/20260608T233825-1b006a10/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260608T233825-1b006a10",
+      "result_rev": "34d88c934aa1524ff7fab1772409d4ae447851bb",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-877d3552",
+  "duration_ms": 1455057,
+  "tokens": 13677841,
+  "exit_code": 0,
+  "error": "land advancer: fast-forwarding refs/heads/main to merge commit 90853a7115b139387d399df72ab5d631f0bfd569: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 70520979c1bb5ad41f5a0e71bbcaf4fe34ac8861 but expected c5b8b108f7b8ad2e212300e5c7462410d2561420: exit status 128",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "land_retry",
+  "execution_dir": ".ddx/executions/20260608T233825-1b006a10",
+  "prompt_file": ".ddx/executions/20260608T233825-1b006a10/prompt.md",
+  "manifest_file": ".ddx/executions/20260608T233825-1b006a10/manifest.json",
+  "result_file": ".ddx/executions/20260608T233825-1b006a10/result.json",
+  "usage_file": ".ddx/executions/20260608T233825-1b006a10/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-08T23:38:34.916716163Z",
+  "finished_at": "2026-06-09T00:02:49.974476412Z"
+}

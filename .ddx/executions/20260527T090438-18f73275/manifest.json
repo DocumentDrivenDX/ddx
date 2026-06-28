@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260527T090438-18f73275",
+  "bead_id": "ddx-c68f3f22",
+  "base_rev": "466b9d35e2eda86da291e45e4d3d37e267152d08",
+  "created_at": "2026-05-27T09:04:45.652836329Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c68f3f22",
+    "title": "execute-bead: reap orphaned harness children on `ddx work` startup (backstop for dead prior workers)",
+    "description": "PROBLEM\nIf a `ddx work` orchestrator already died abnormally before any kernel parent-death signal could apply (e.g. host reboot, pre-Pdeathsig binary, or a child whose Pdeathsig misfired), its spawned harness child (e.g. `claude --print ... \u003cexecute-bead\u003e` or `codex exec --json ...`) is left running as a PID-1 orphan, burning a harness session and anchoring leaked subprocess trees. Observed 2026-05-27: a `claude --print` execute-bead child orphaned with PPID 1 for ~9h53m after its parent worker had gone. Nothing in the startup path adopts or kills harness children whose owning worker PID is gone.\n\nROOT CAUSE (file:line)\n- cli/internal/agent/executor.go:190-194 / :231-255 — harness-child cleanup (cmdKillProcessGroup) is invoked ONLY from the live executor's graceful paths. A dead parent runs none of them, so its orphan persists with no later sweep.\n- cli/cmd/root.go:49-50 — worker context catches only os.Interrupt + SIGTERM; SIGKILL/crash leave no cleanup hook, and there is no startup reaper to compensate.\n- There is no code path on `ddx work` startup that scans for execute-bead harness processes whose parent PID is gone (reparented to PID 1) or whose recorded owner PID no longer exists.\n\nPROPOSED FIX\nOn `ddx work` startup (at register/claim time), reap orphaned execute-bead harness children left by prior dead workers: scan for harness processes (matching the execute-bead invocation signature / recorded owner PID) whose parent is PID 1 or whose recorded owner PID no longer exists, and SIGKILL their process groups. Scope the sweep strictly to the current project/workspace (e.g. via the project root / workspace marker already recorded for attempts) so it never kills harness children of OTHER live workers or unrelated processes. Tie into the existing lease-release / operator-attention machinery (cross-ref ddx-8f2e0ebf) for release of any stale lease the orphan was holding.\n\nNON-SCOPE\n- The kernel-enforced Pdeathsig change in cmdSetProcessGroup is a separate child (the primary fix); this reaper is the cross-platform backstop and must not depend on Pdeathsig being present.\n- Graceful SIGINT/SIGTERM shutdown of live workers (executor.go:231-255) is out of scope and must not be touched.\n- docker-clone backend cleanup is a separate child.\n- The harness-runner-INTERNAL leak is covered by fizeau-50b6f055.\n\nCROSS-REF: ddx-8f2e0ebf (lease release / operator-attention), fizeau-50b6f055.",
+    "acceptance": "1. `ddx work` startup reaps orphaned execute-bead harness children left by prior dead workers, scoped to the current project/workspace. TestWork_ReapsOrphanedHarnessChildren plants a fake orphaned harness process (recorded owner PID gone / reparented to PID 1) within the project scope and asserts it (and its process group) is SIGKILLed on startup.\n2. The reaper does NOT kill harness children owned by other LIVE workers or unrelated processes. TestWork_DoesNotReapLiveOwnedChildren plants both an orphan and a live-owned harness process and asserts only the orphan is reaped.\n3. The reaper releases any stale lease the reaped orphan held, via the existing lease-release / operator-attention machinery (ddx-8f2e0ebf), or documents why no lease interaction is required.\n4. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green (whichever package houses the reaper and its test).\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-93d2ac52",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "observability",
+      "ref:ddx-8f2e0ebf"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T090438-18f73275",
+    "prompt": ".ddx/executions/20260527T090438-18f73275/prompt.md",
+    "manifest": ".ddx/executions/20260527T090438-18f73275/manifest.json",
+    "result": ".ddx/executions/20260527T090438-18f73275/result.json",
+    "checks": ".ddx/executions/20260527T090438-18f73275/checks.json",
+    "usage": ".ddx/executions/20260527T090438-18f73275/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c68f3f22-20260527T090438-18f73275"
+  },
+  "prompt_sha": "a23de4fe5826422cc4dca3bddd091219a63e8deeca8b374542aa243563149e1d"
+}

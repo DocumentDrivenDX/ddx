@@ -1,0 +1,24 @@
+---
+## Review: ddx-915240dd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Config no longer names provider profiles | BLOCK | — no config schema or `.ddx/config.yaml` changes in diff |
+| 2 | Cheap-only drains land at live endpoints | BLOCK | — no routing or endpoint resolution changes in diff |
+| 3 | 32 fake-migration children begin progressing | BLOCK | — no bead execution results or go.mod bump in diff |
+
+### Summary
+
+The diff contains only a single execution evidence file (`result.json`) recording that the bead ran for ~44 minutes at $5.42 and reported `task_succeeded`. There are zero functional changes — no `go.mod` bump, no config migration, no routing code, no endpoint schema updates. The result metadata alone cannot satisfy any acceptance criterion.
+
+### Findings
+
+- **No `cli/go.mod` change**: AC requires bumping to the new agent release with endpoint-first routing. The diff has no dependency update.
+- **No `.ddx/config.yaml` migration**: AC requires removing named provider profiles and replacing them with endpoint blocks. No config file appears in the diff.
+- **No routing/resolution code**: AC expects `qwen3.6` to resolve to a live endpoint. No code changes to the agent, routing, or endpoint-discovery packages are present.
+- **No drain evidence for the 32 children**: AC requires the fake-migration beads (ddx-68c372a6 through ddx-27e2b5ce) to begin making progress. The diff shows no bead status updates or execution logs for child beads.
+- **`result.json` claims `task_succeeded` but the diff contradicts this**: the only artifact is bookkeeping metadata with no substantive implementation behind it. The execution likely ran but produced no mergeable code changes.

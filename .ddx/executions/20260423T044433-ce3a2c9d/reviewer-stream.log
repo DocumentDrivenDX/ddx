@@ -1,0 +1,26 @@
+---
+## Review: ddx-23978824 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Unified view — harnessStatuses resolver, kind field, async probes, 500ms load | BLOCK | — no resolver, schema, or UI code in diff |
+| 2 | Usage + quota fields — sessions index aggregation, header parsing, sparkline | BLOCK | — no usage/quota code in diff |
+| 3 | Trend detail — time series route, server-side buckets, projection callout | BLOCK | — no detail route or aggregation code in diff |
+| 4 | Perf posture — fixtures ≥1k rows, p95 targets, DB-substrate escalation | BLOCK | — no fixtures or perf tests in diff |
+| 5 | Design note — one-pager in docs/helix/02-design/ | BLOCK | — no design document in diff |
+| 6 | No regressions — CLI commands unchanged | BLOCK | — cannot verify; no code changes to evaluate |
+| 7 | Cross-references — sessions index dependency handling | BLOCK | — no stub or feature code in diff |
+
+### Summary
+
+The diff contains only a single execution evidence file (`result.json`) recording that an agent session ran for ~32 minutes at $19.28 cost. No implementation artifacts — no Go resolvers, no GraphQL schema changes, no frontend components, no tests, no design document — are present in the diff. The execution metadata claims `task_succeeded` but the merge commit (`3102f0da`) that it references is not included in the reviewed diff.
+
+### Findings
+
+- **Missing entire implementation.** The diff at `7da22459` adds only `.ddx/executions/20260423T044433-ce3a2c9d/result.json` — execution bookkeeping, not deliverable code. The actual work commit `3102f0da` (referenced in `result_rev`) is not part of this diff. The review should be re-run against the range `9c8b2a54..3102f0da` to capture the implementation.
+- **All 7 AC items unaddressable.** Without the implementation diff, every acceptance criterion — unified resolver, usage/quota fields, trend detail, perf fixtures, design note, regression safety, and dependency handling — cannot be evaluated.
+- **Next step:** Re-extract the diff using `git diff 9c8b2a54..3102f0da` (base_rev to result_rev from the result.json) and re-submit for review.

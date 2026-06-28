@@ -1,0 +1,17 @@
+---
+## Review: ddx-c1b1754f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | File exists with all 6 principles | APPROVE | docs/dev/engineering-principles.md:7-53 — 6 numbered `### ` sections present |
+| 2 | Each has rule/decision/alternative/tradeoff/feature | APPROVE | e.g. lines 9-13 — all five bold-labeled bullets per principle |
+| 3 | File begins with cross-link line | APPROVE | docs/dev/engineering-principles.md:1 — exact required string |
+| 4 | `grep -c "^### "` returns 6 | APPROVE | verified: returns 6 |
+
+### Summary
+
+All four acceptance criteria are satisfied. Each principle has the required five-element structure (Rule, Decision generated, Alternative rejected, Tradeoff, DDx feature it shapes), the cross-link is the literal first line, and the heading count matches exactly.

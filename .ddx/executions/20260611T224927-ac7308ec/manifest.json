@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260611T224927-ac7308ec",
+  "bead_id": "ddx-18e55cd2",
+  "base_rev": "54b8a54513da31db97186824bc959505fa8009a4",
+  "created_at": "2026-06-11T22:49:39.642629786Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-18e55cd2",
+    "title": "registry: global plugins dir resolution + project→global→baked-in plugin lookup precedence",
+    "description": "PROBLEM (foundation child of ddx-937de9fc)\nPlugins resolve only to project-local paths today. internal/registry has no concept of a machine-global plugin tree (${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e) nor a precedence order for runtime lookup. This child lands the path resolver and precedence that the --global install/update/init/doctor children all build on.\n\nROOT CAUSE\n- No resolver maps (projectRoot, name) -\u003e a concrete plugin dir with precedence.\n- cli/internal/registry/registry.go exposes BuiltinRegistry/Find only; there is no GlobalPluginsDir / ResolvePluginDir.\n- The XDG data-home helper xdgDataHome() in cli/internal/ddxroot/ddxroot.go:89 is unexported; project root comes from ddxroot.Path() (ddxroot.go:75).\n- cli/internal/registry/installer.go rejects any home-rooted (~) install target at installer.go:43, :79, :135 (FEAT-015). That guard must stay for project-scope installs; this child does NOT write any global tree, only resolves paths.\n\nPROPOSED FIX\n1. Add registry.GlobalPluginsDir() string returning filepath.Join(\u003cxdg-data-home\u003e, 'ddx', 'global', 'plugins'), honoring XDG_DATA_HOME and the ~/.local/share fallback (mirror ddxroot.xdgDataHome semantics; export a shared helper rather than duplicating).\n2. Add registry.ResolvePluginDir(ctx context.Context, projectRoot, name string) (dir, scope string, ok bool) with precedence:\n   a. ddxroot.Path(ctx, projectRoot)/plugins/\u003cname\u003e if it exists -\u003e scope 'project'.\n   b. GlobalPluginsDir()/\u003cname\u003e if it exists -\u003e scope 'global'.\n   c. baked-in default plugin (only name=='ddx', via internal/registry/defaultplugin) -\u003e scope 'baked-in'.\n   d. otherwise ok=false.\n3. Leave FEAT-015 ~-target rejection in installer.go untouched.\n\nNON-SCOPE: wiring --global into install/update/init/doctor (sibling children); writing/symlinking the global tree.\n\nDEPS: none new (parent dep ddx-06cbaa90 closed; ddxroot.Path already lands).",
+    "acceptance": "1. registry.GlobalPluginsDir() returns ${XDG_DATA_HOME}/ddx/global/plugins, honoring an XDG_DATA_HOME override and falling back to ~/.local/share/ddx/global/plugins.\n2. TestPluginLookup_PrefersProjectOverGlobal (cli/internal/registry): with \u003cname\u003e present in BOTH ddxroot.Path()/plugins/\u003cname\u003e and GlobalPluginsDir()/\u003cname\u003e, ResolvePluginDir returns the project dir and scope 'project'.\n3. TestPluginLookup_FallsBackToGlobal (cli/internal/registry): with the project copy absent and the global copy present, ResolvePluginDir returns the global dir and scope 'global'.\n4. Existing FEAT-015 home-target rejection tests in cli/internal/registry remain green (no weakening of the ~ guard).\n5. cd cli \u0026\u0026 go test ./internal/registry/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      " area:plugin",
+      " area:cli",
+      " kind:feature",
+      " phase:3",
+      " initiative:zero-footprint",
+      " principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed ddx-937de9fc (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.439157017Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"cli/internal/registry/resolve.go already contains globalplugindir(name) and resolveplugin(ctx, projectroot, name) implementing the three-tier project→global→baked-in precedence described in the bead: cli/internal/registry/resolve.go already exists and implements the described three-tier precedence: GlobalPluginDir(name string) and ResolvePlugin(ctx, projectRoot, name). The bead's root cause ('No resolver maps (projectRoot, name) → a concrete plugin dir with precedence') is factually stale. The bead's proposed API (GlobalPluginsDir() no-arg returning root, ResolvePluginDir returning (dir, scope, ok)) differs from what is already present. An agent cannot determine whether to: (a) close the bead as satisfied, (b) add additional functions with the AC-specified signatures alongside the existing ones, or (c) treat the existing functions as sufficient and update AC to match. This requires operator judgment.\",\"fingerprint\":\"0323aa2a819989bbd435bb944888311d7b850c692e138b39a7dfc27193a16185\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"0323aa2a819989bbd435bb944888311d7b850c692e138b39a7dfc27193a16185\"}",
+          "created_at": "2026-06-11T22:49:18.129514184Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260611T224927-ac7308ec",
+    "prompt": ".ddx/executions/20260611T224927-ac7308ec/prompt.md",
+    "manifest": ".ddx/executions/20260611T224927-ac7308ec/manifest.json",
+    "result": ".ddx/executions/20260611T224927-ac7308ec/result.json",
+    "checks": ".ddx/executions/20260611T224927-ac7308ec/checks.json",
+    "usage": ".ddx/executions/20260611T224927-ac7308ec/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-18e55cd2-20260611T224927-ac7308ec"
+  },
+  "prompt_sha": "1f579d25d351e3ac1029211d36f8bd075a57fe022fd75e4a31d3cecb57544ea1"
+}

@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json metadata file. No source changes implementing approve/cancel mutations, allowlist, or auto-approve flag are present to evaluate against any AC item.",
+  "findings": [
+    { "severity": "block", "summary": "No implementation diff for operatorPromptApprove/Cancel mutations", "location": "(missing)" },
+    { "severity": "block", "summary": "No per-project allowlist enforcement code present", "location": "(missing)" },
+    { "severity": "block", "summary": "No auto-approve flag restricted to configured-localhost identity", "location": "(missing)" },
+    { "severity": "block", "summary": "No tests covering happy or denied paths", "location": "(missing)" }
+  ]
+}
+```

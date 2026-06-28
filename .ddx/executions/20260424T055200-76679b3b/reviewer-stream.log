@@ -1,0 +1,17 @@
+---
+## Review: ddx-455807e6 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner in test | APPROVE | cli/cmd/agent_execute_bead_test.go:2570-2638 — test now uses inline `runGit` + `agent.NewRunner` + script directives; no references to either fake type |
+| 2 | Dispatches through real-git harness | APPROVE | cli/cmd/agent_execute_bead_test.go:2582-2599 — real `git init`/`commit` builds isolated repo, `f.AgentRunnerOverride = agent.NewRunner(agent.Config{})` + `--harness script` drives the script harness; gate docs committed so worker worktree at `baseSHA` materializes them. Qualifies as "equivalent real-git harness" per AC. |
+| 3 | go test … green | APPROVE | result.json `"outcome":"task_succeeded","exit_code":0`; commit message confirms target test verified green |
+| 4 | No other test in file modified | APPROVE | `git show` stat: only 1 file, 65 lines changed, all within `TestExecuteBeadGateBlocksLanding` body |
+
+### Summary
+
+Clean migration. The test now exercises real git plumbing (init/commit/rev-parse with scrubbed `GIT_*` env), drives the real script harness via a per-attempt directive file producing a real commit, and runs through the actual ExecuteBead → LandBeadResult → Land pipeline. Scope is strictly limited to the target test. The choice to use inline real-git setup rather than `newScriptHarnessRepo` is allowed by the AC ("or equivalent real-git harness") and is justified by the test's need for a custom commit graph (separate seed + gate-docs commits to capture `baseSHA`).
