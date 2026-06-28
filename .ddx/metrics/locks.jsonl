@@ -225,3 +225,14 @@
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":1313321,"acquired_at":"2026-06-28T02:32:08.822752958Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":1313321,"acquired_at":"2026-06-28T02:32:08.822752958Z","released_at":"2026-06-28T02:32:08.971315791Z","duration_ms":148}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1313321,"acquired_at":"2026-06-28T02:32:08.651220266Z","released_at":"2026-06-28T02:32:09.512915119Z","duration_ms":861}
+{"event":"acquire","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":1313321,"acquired_at":"2026-06-28T03:21:55.528547388Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":1313321,"acquired_at":"2026-06-28T03:21:55.528547388Z","released_at":"2026-06-28T03:22:17.27243783Z","duration_ms":21743}
+{"event":"acquire","lock_name":"tracker.lock","operation":"land_post_land_finalize","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:34.071741734Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"land_post_land_finalize","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:34.071741734Z","released_at":"2026-06-28T03:22:35.061807487Z","duration_ms":990}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:52.302576261Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:52.522399808Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:52.522399808Z","released_at":"2026-06-28T03:22:52.594867736Z","duration_ms":72}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:52.638103897Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:52.638103897Z","released_at":"2026-06-28T03:23:04.923257543Z","duration_ms":9665}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":1313321,"acquired_at":"2026-06-28T03:22:52.302576261Z","released_at":"2026-06-28T03:23:04.923328911Z","duration_ms":10001}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1313321,"acquired_at":"2026-06-28T03:28:45.693147547Z"}
