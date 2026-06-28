@@ -309,6 +309,126 @@ func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 	assert.NotEmpty(t, body["fingerprint"])
 }
 
+func TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	beadIDs := []string{
+		"ddx-niflheim-system-unready-1",
+		"ddx-niflheim-system-unready-2",
+	}
+	for i, beadID := range beadIDs {
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
+			ID:       beadID,
+			Title:    "niflheim pre-claim warning " + beadID,
+			Priority: i,
+		}))
+	}
+
+	var floorCalls atomic.Int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				ResultRev: "rev-" + beadID,
+			}, nil
+		}),
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			floorCalls.Add(1)
+			return actualPower + 1, nil
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	detail := "readiness check timed out after 45s (.ddx/harness-sessions/session-timeout.json)"
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:                        executeloop.ModeDrain,
+		EventSink:                   &eventSink,
+		NoReview:                    true,
+		PreClaimWarnRepeatThreshold: 2,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome:      PreClaimIntakeError,
+				Reason:       "system_unready",
+				SystemReason: "readiness_timeout",
+				Detail:       detail,
+			}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "preclaim_warn_repeated", result.OperatorAttention.Reason)
+	assert.Equal(t, beadIDs[1], result.OperatorAttention.BeadID)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Zero(t, floorCalls.Load(), "pre-claim system warnings must not request stronger power")
+
+	gotFirst, err := store.Get(context.Background(), beadIDs[0])
+	require.NoError(t, err)
+	gotSecond, err := store.Get(context.Background(), beadIDs[1])
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Nil(t, gotFirst.Extra["work-retry-after"])
+	assert.Nil(t, gotSecond.Extra["work-retry-after"])
+
+	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
+	var escalations []map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["type"] != "loop.operator_attention" {
+			continue
+		}
+		data, ok := entry["data"].(map[string]any)
+		require.True(t, ok)
+		if data["reason"] == "preclaim_warn_repeated" {
+			escalations = append(escalations, data)
+		}
+	}
+	require.Len(t, escalations, 1, "exactly one repeated-warn escalation is expected")
+	esc := escalations[0]
+	assert.NotEmpty(t, esc["fingerprint"])
+	assert.Equal(t, float64(2), esc["count"])
+	assert.Equal(t, beadIDs[0], esc["example_bead_id"])
+	assert.Equal(t, detail, esc["example_detail"])
+	distinctIDs, ok := esc["distinct_bead_ids"].([]any)
+	require.True(t, ok, "distinct_bead_ids must be a JSON array")
+	assert.Len(t, distinctIDs, 2)
+	assert.Equal(t, "preclaim_warn_repeated", esc["reason"])
+	assert.NotEmpty(t, esc["example_payload"])
+	assert.Contains(t, eventSink.String(), "\"system_reason\":\"readiness_timeout\"")
+	assert.Contains(t, eventSink.String(), detail)
+
+	lastEvents, err := store.Events(beadIDs[1])
+	require.NoError(t, err)
+	var operatorAttentionEvent *bead.BeadEvent
+	for i := range lastEvents {
+		if lastEvents[i].Kind == "operator_attention" && lastEvents[i].Summary == "preclaim_warn_repeated" {
+			operatorAttentionEvent = &lastEvents[i]
+			break
+		}
+	}
+	require.NotNil(t, operatorAttentionEvent, "a durable operator_attention event must be recorded")
+	assert.Contains(t, operatorAttentionEvent.Body, "preclaim_warn_repeated")
+	assert.Contains(t, operatorAttentionEvent.Body, detail)
+}
+
 // TestWorkWatch_PreClaimIdleEscalatesAfterRepeatedSameDetail covers
 // ddx-df77e668 AC #3: when the worker idles on the same pre-claim blocker for
 // preClaimIdleEscalationThreshold consecutive cycles, it emits a non-terminal
