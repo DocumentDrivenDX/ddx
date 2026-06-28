@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260628T150726-725cc977",
+  "bead_id": "ddx-1ba2650d",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977",
+  "trigger": "",
+  "started_at": "2026-06-28T16:39:05.025633558Z",
+  "finished_at": "2026-06-28T16:39:05.282758327Z",
+  "scanned": 1043,
+  "candidates": [
+    {
+      "pid": 1921246,
+      "ppid": 1920929,
+      "pgid": 1920929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/usr/bin/exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?response_type=code\u0026client_id=app_EMoamEEZ73f0CkXaXp7hrann\u0026redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\u0026scope=openid%20profile%20email%20offline_access%20api.connectors.read%20api.connectors.invoke\u0026code_challenge=ODWcwbTpmONXVxIfuuraP9e14v5e1dsjYjmDhhCwZdg\u0026code_challenge_method=S256\u0026id_token_add_organizations=true\u0026codex_cli_simplified_flow=true\u0026state=-Srjaq4YL0oIQHE4bG5HTxVk854yOwQatcATMhLOgP8\u0026originator=codex-tui"
+    },
+    {
+      "pid": 1918576,
+      "ppid": 1918289,
+      "pgid": 1918289,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/usr/bin/exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?response_type=code\u0026client_id=app_EMoamEEZ73f0CkXaXp7hrann\u0026redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\u0026scope=openid%20profile%20email%20offline_access%20api.connectors.read%20api.connectors.invoke\u0026code_challenge=qYIwDOJeItGIt4gs2Drs_Ohs67WaXU7fzYFbEQOAvZI\u0026code_challenge_method=S256\u0026id_token_add_organizations=true\u0026codex_cli_simplified_flow=true\u0026state=9-pYBJEYfd84qgjUIn4feBSaZslvew4eEJIu4sRkZDQ\u0026originator=codex-tui"
+    },
+    {
+      "pid": 1920929,
+      "ppid": 1,
+      "pgid": 1920929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    },
+    {
+      "pid": 1918289,
+      "ppid": 1,
+      "pgid": 1918289,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1921246,
+      "ppid": 1920929,
+      "pgid": 1920929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/usr/bin/exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?response_type=code\u0026client_id=app_EMoamEEZ73f0CkXaXp7hrann\u0026redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\u0026scope=openid%20profile%20email%20offline_access%20api.connectors.read%20api.connectors.invoke\u0026code_challenge=ODWcwbTpmONXVxIfuuraP9e14v5e1dsjYjmDhhCwZdg\u0026code_challenge_method=S256\u0026id_token_add_organizations=true\u0026codex_cli_simplified_flow=true\u0026state=-Srjaq4YL0oIQHE4bG5HTxVk854yOwQatcATMhLOgP8\u0026originator=codex-tui"
+    },
+    {
+      "pid": 1918576,
+      "ppid": 1918289,
+      "pgid": 1918289,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/usr/bin/exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?response_type=code\u0026client_id=app_EMoamEEZ73f0CkXaXp7hrann\u0026redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\u0026scope=openid%20profile%20email%20offline_access%20api.connectors.read%20api.connectors.invoke\u0026code_challenge=qYIwDOJeItGIt4gs2Drs_Ohs67WaXU7fzYFbEQOAvZI\u0026code_challenge_method=S256\u0026id_token_add_organizations=true\u0026codex_cli_simplified_flow=true\u0026state=9-pYBJEYfd84qgjUIn4feBSaZslvew4eEJIu4sRkZDQ\u0026originator=codex-tui"
+    },
+    {
+      "pid": 1920929,
+      "ppid": 1,
+      "pgid": 1920929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    },
+    {
+      "pid": 1918289,
+      "ppid": 1,
+      "pgid": 1918289,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1ba2650d-20260628T150726-725cc977/cli/cmd",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ]
+}
