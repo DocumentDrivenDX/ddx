@@ -72,12 +72,14 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 			"inodes_reclaimed":            summary.InodesReclaimed,
 			"scratch_bytes_reclaimed":     summary.ScratchBytesReclaimed,
 			"scratch_inodes_reclaimed":    summary.ScratchInodesReclaimed,
+			"process_findings":            len(summary.ProcessFindings),
 			"warnings":                    len(summary.Warnings),
 			"issues":                      len(summary.Issues),
 		})
 	}
 	if meaningful && log != nil {
-		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d evidence dir(s), %d agent log(s), %d worker dir(s), %d byte(s), %d inode(s)\n",
+		processFindings := len(summary.ProcessFindings)
+		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d evidence dir(s), %d agent log(s), %d worker dir(s), %d process group(s), %d byte(s), %d inode(s)\n",
 			reason,
 			summary.RemovedUnregisteredTempDirs,
 			summary.RemovedRegisteredWorktrees,
@@ -86,6 +88,7 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 			summary.RemovedEvidenceDirs,
 			summary.RemovedAgentLogs,
 			summary.RemovedWorkerDirs,
+			processFindings,
 			summary.BytesReclaimed+summary.ScratchBytesReclaimed,
 			summary.InodesReclaimed+summary.ScratchInodesReclaimed,
 		)
@@ -95,6 +98,7 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 
 func executionCleanupSummaryMeaningful(summary ExecutionCleanupSummary) bool {
 	return len(summary.Issues) > 0 ||
+		len(summary.ProcessFindings) > 0 ||
 		summary.BytesReclaimed > 0 ||
 		summary.InodesReclaimed > 0 ||
 		summary.ScratchBytesReclaimed > 0 ||
