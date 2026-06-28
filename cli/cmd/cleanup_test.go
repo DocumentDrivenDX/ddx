@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ type cleanupCommandJSON struct {
 	Warnings                    []map[string]any `json:"warnings"`
 	BlockedErrors               []map[string]any `json:"blocked_errors"`
 	Observations                []map[string]any `json:"observations"`
+	ProcessFindings             []map[string]any `json:"process_findings"`
 }
 
 func setupCleanupCommandProject(t *testing.T) (string, string) {
@@ -320,4 +322,136 @@ func TestCleanupCommand_ReportsScratchReclamation(t *testing.T) {
 	assert.GreaterOrEqual(t, report.RemovedScratchDirs, int64(1))
 	assert.Greater(t, report.ScratchBytesReclaimed, int64(0))
 	assert.Greater(t, report.ScratchInodesReclaimed, int64(0))
+}
+
+func TestCleanupCommand_JSONPreservesExistingCleanupFields(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-fields-20260628T120000-deadbeef", projectRoot, "20260628T120000-deadbeef")
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-cleanup",
+		AttemptID:    "20260628T120000-live-other",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	// Existing fields must be preserved with correct values.
+	assert.True(t, report.DryRun)
+	assert.NotEmpty(t, report.ProjectRoot)
+	assert.NotEmpty(t, report.TempRoot)
+	assert.Equal(t, int64(1), report.RemovedUnregisteredTempDirs)
+	assert.Equal(t, int64(1), report.RemovedRunStateFiles)
+	assert.NotNil(t, report.Warnings)
+	assert.NotNil(t, report.BlockedErrors)
+	assert.NotNil(t, report.Observations)
+
+	// New process_findings field must be present (may be empty on platforms without process scanning).
+	assert.NotNil(t, report.ProcessFindings, "process_findings must be present in JSON output")
+}
+
+func TestCleanupCommand_JSONIncludesProcessFindings(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+
+	stalePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-stale-20260628T120000-deadbeef")
+	require.NoError(t, os.MkdirAll(stalePath, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(stalePath, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-stale",
+		AttemptID:    "20260628T120000-deadbeef",
+		WorktreePath: stalePath,
+	}))
+
+	// Start a real process with cwd = stalePath so the Linux /proc scanner picks it up.
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = stalePath
+	require.NoError(t, sleepCmd.Start())
+	t.Cleanup(func() { _ = sleepCmd.Process.Kill() })
+
+	// Run state points elsewhere so the stale worktree's process is classified as stale.
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-other",
+		AttemptID:    "20260628T120000-live-other",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	require.NotEmpty(t, report.ProcessFindings, "process_findings must include the stale sleep process")
+
+	// Find the finding for our stale worktree.
+	var found map[string]any
+	for _, f := range report.ProcessFindings {
+		if wt, _ := f["worktree"].(string); wt == stalePath {
+			found = f
+			break
+		}
+	}
+	require.NotNil(t, found, "stale worktree must appear in process_findings")
+
+	pid, _ := found["pid"].(float64)
+	assert.Greater(t, pid, float64(0), "pid must be present and non-zero")
+	pgid, _ := found["pgid"].(float64)
+	assert.Greater(t, pgid, float64(0), "pgid must be present and non-zero")
+	assert.NotEmpty(t, found["command"], "command must be present")
+	assert.NotEmpty(t, found["worktree"], "worktree must be present")
+	assert.NotEmpty(t, found["stale_reason"], "stale_reason must be present")
+	wouldKill, _ := found["would_kill"].(bool)
+	assert.True(t, wouldKill, "would_kill must be true for a stale process in dry-run")
+}
+
+func TestCleanupCommand_DryRunTextIncludesProcessFindingsAndCounts(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+
+	stalePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-stale-20260628T130000-deadbeef")
+	require.NoError(t, os.MkdirAll(stalePath, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(stalePath, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-stale",
+		AttemptID:    "20260628T130000-deadbeef",
+		WorktreePath: stalePath,
+	}))
+
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = stalePath
+	require.NoError(t, sleepCmd.Start())
+	t.Cleanup(func() { _ = sleepCmd.Process.Kill() })
+
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-other",
+		AttemptID:    "20260628T130000-live-other",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup")
+	require.NoError(t, err)
+
+	// Text output must include process group count.
+	assert.Contains(t, out, "stale process group", "must report stale process group count")
+	// Dry-run must use "would kill" language, not "killed".
+	assert.Contains(t, out, "would kill", "dry-run must say 'would kill'")
+	assert.NotContains(t, out, "killed:", "dry-run must not imply killing happened")
+	// Per-process detail line must appear.
+	assert.Contains(t, out, "stale process:", "must include per-process detail line")
+	// Dry-run footer must still appear.
+	assert.Contains(t, out, "run again with --apply")
 }
