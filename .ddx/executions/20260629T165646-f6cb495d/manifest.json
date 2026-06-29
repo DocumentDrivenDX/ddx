@@ -1,0 +1,70 @@
+{
+  "attempt_id": "20260629T165646-f6cb495d",
+  "bead_id": "ddx-29491a0e",
+  "base_rev": "72eb2bc8425f9d880e12406eb2d3d5d5da6b2e59",
+  "created_at": "2026-06-29T16:57:05.917109958Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-29491a0e",
+    "title": "execute-bead: cluster of 'transport: exit status 1' under high system load wastes attempts without progress",
+    "description": "PROBLEM\nObserved on 2026-06-29 in this repo while draining the queue. Worker pid 4014720 hit 4 consecutive 'transport: exit status 1' outcomes within ~2h on different beads (ddx-9aa2151d, ddx-95d80f7e, ddx-1c865bdb, ddx-aef568e7) without any successful merge. Load average was 38-52 throughout (8-core host). After each transport failure the worker advances to the next ready bead and the cycle repeats; closed counter unchanged across the period.\n\nSpecific log signature:\n  do response complete in \u003cN\u003em\n  tracker_lock section=durable_audit wait=1ms hold=\u003cseconds\u003e\n  ✗ ddx-\u003cid\u003e → transport: exit status 1\n\nSome attempts had very short responses (1m37s) suggesting codex died early; others completed long (32m+) then died at durable_audit. Common factor: the provider subprocess exits status 1, which DDx classifies as 'transport' (not tests_red, not no_changes, not timeout).\n\nROOT CAUSE WITH FILE:LINE\n- The outcome classifier maps any non-zero provider exit (codex/claude/etc.) to 'transport: exit status 1' regardless of cause (OOM, kill, network error mid-stream). Inspect cli/internal/agent/execute_bead_loop.go around the outcome-mapping path for the codex/provider exit code (search 'transport: exit status'). The classifier does not distinguish 'load-killed' from 'genuine bug' from 'provider API error'.\n- Under high system load (load avg \u003e ~3-5x CPU count), the provider subprocess gets starved during the durable_audit / land phase (which is git+disk heavy), bumps into kernel OOM-killer or hits its own internal heartbeat/timeout, and exits non-zero. DDx then walks the queue trying the next bead which also dies, burning context+tokens with zero forward progress.\n- There is no backoff/cooldown when transport failures cluster (e.g., 3+ in N minutes).\n\nPROPOSED FIX\n1. Add load-pressure detection: before each claim, sample /proc/loadavg and compare to runtime.NumCPU(); if 5-min loadavg \u003e k * cores (k=2-3 reasonable), emit a structured backoff observation and sleep proportional to overload before claiming.\n2. Add transport-failure cooldown: when N (≥3) 'transport: exit status 1' outcomes occur within the last M minutes, the worker should pause for a longer interval (e.g., 5-15 min) before next claim instead of immediately consuming another bead.\n3. Capture and surface the provider subprocess's exit reason where possible: check WaitStatus for signal-killed (SIGKILL → OOM-likely, SIGTERM → graceful), and distinguish in the outcome string (e.g., 'transport: provider killed by SIGKILL (likely OOM)').\n\nIN-SCOPE FILES\n- cli/internal/agent/execute_bead_loop.go (outcome classifier + claim-loop pacing)\n- cli/cmd/work.go (worker pacing/backoff)\n- cli/internal/workerstatus/ (if load sampling needs a place)\n\nOUT-OF-SCOPE\n- Do not change the queue ordering.\n- Do not change the durable_audit commit flow itself.\n- Do not implement a general-purpose host load manager.\n\nAC\n1. New helper LoadPressureSnapshot() in cli/internal/workerstatus or cli/internal/agent returning normalized loadavg/cores; unit test covers \u003ethreshold and \u003cthreshold paths.\n2. Worker pre-claim path checks the snapshot; when pressure exceeds k (default 2.5), logs a structured 'load_pressure_backoff' observation and sleeps before claim. Unit test asserts the path is invoked with k configurable.\n3. Worker tracks last N (≥3) 'transport: exit status 1' outcomes by wall-clock timestamp; when 3 occur within 10m, the next claim is delayed by an extended cooldown (\u003e=5m). Unit test simulates 3 failures within window and asserts the delay.\n4. Outcome classifier distinguishes signal-killed (SIGKILL/SIGTERM) provider exits in the outcome string. Unit test asserts the distinct outcomes.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/workerstatus/... -count=1 green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:iterate",
+      "area:execute-bead",
+      "area:agent",
+      "kind:bug",
+      "kind:reliability",
+      "resource-exhaustion",
+      "load-pressure"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T12:01:21.452071062Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T111036-3759f345\",\"bead_id\":\"ddx-29491a0e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T12:01:23.447847957Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"6375c78abf32d01b479579a7b322559f68d4ff30\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt ended with harness/provider subprocess failure `exit status 1`, `result_rev` equals `base_rev`, and there is no evidence of code changes, test failures, merge conflict, quota, or bead-owned blocker. The bead context also describes clustered identical transport failures under load, so waiting before retry is safer than immediate re-claim.\",\"recommended_action\":\"release_claim_wait_retry\",\"result_rev\":\"6375c78abf32d01b479579a7b322559f68d4ff30\",\"session_id\":\"eb-a785834b\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T12:02:46.839779612Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_wait_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=6375c78abf32d01b479579a7b322559f68d4ff30\nbase_rev=6375c78abf32d01b479579a7b322559f68d4ff30\noutcome_reason=transport",
+          "created_at": "2026-06-29T12:02:47.039470483Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "queue-rank": 0
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T165646-f6cb495d",
+    "prompt": ".ddx/executions/20260629T165646-f6cb495d/prompt.md",
+    "manifest": ".ddx/executions/20260629T165646-f6cb495d/manifest.json",
+    "result": ".ddx/executions/20260629T165646-f6cb495d/result.json",
+    "checks": ".ddx/executions/20260629T165646-f6cb495d/checks.json",
+    "usage": ".ddx/executions/20260629T165646-f6cb495d/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d"
+  },
+  "prompt_sha": "7ddd361135d0c4a9241c6c20f9a7b1d2745c0ef1605a34dbe34b7f34bacaab66"
+}
