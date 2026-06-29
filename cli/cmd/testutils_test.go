@@ -17,6 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	cmdTestOriginalHome            string
+	cmdTestOriginalXDGCacheHome    string
+	cmdTestOriginalXDGDataHome     string
+	cmdTestOriginalPath            string
+	cmdTestOriginalFizeauCacheDir  string
+	cmdTestOriginalClaudeTransport string
+)
+
 // TestMain clears all GIT_* environment variables before running tests so
 // that tests invoking git commands operate on their own temp-dir repositories
 // rather than any repository inherited from a hook invocation (e.g. GIT_DIR
@@ -24,6 +33,13 @@ import (
 // sets GIT_AUTHOR_NAME, GIT_COMMITTER_EMAIL, GIT_CONFIG_PARAMETERS etc. that
 // also leak into test subprocesses and corrupt the shared repo config.
 func TestMain(m *testing.M) {
+	cmdTestOriginalHome = os.Getenv("HOME")
+	cmdTestOriginalXDGCacheHome = os.Getenv("XDG_CACHE_HOME")
+	cmdTestOriginalXDGDataHome = os.Getenv("XDG_DATA_HOME")
+	cmdTestOriginalPath = os.Getenv("PATH")
+	cmdTestOriginalFizeauCacheDir = os.Getenv("FIZEAU_CACHE_DIR")
+	cmdTestOriginalClaudeTransport = os.Getenv("FIZEAU_CLAUDE_TRANSPORT")
+
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "GIT_") {
 			if idx := strings.IndexByte(kv, '='); idx >= 0 {
@@ -52,14 +68,27 @@ func isolateCmdTestTempRoot() func() {
 	}
 	oldTmpDir, hadTmpDir := os.LookupEnv("TMPDIR")
 	oldTmp, hadTmp := os.LookupEnv("TMP")
+	oldXDGCacheHome, hadXDGCacheHome := os.LookupEnv("XDG_CACHE_HOME")
 	oldXDG, hadXDG := os.LookupEnv("XDG_DATA_HOME")
 	oldHome, hadHome := os.LookupEnv("HOME")
+	oldFizeauCacheDir, hadFizeauCacheDir := os.LookupEnv("FIZEAU_CACHE_DIR")
+	oldClaudeTransport, hadClaudeTransport := os.LookupEnv("FIZEAU_CLAUDE_TRANSPORT")
+	binDir, cacheDir, err := prepareCmdHermeticRoot(tempRoot)
+	if err != nil {
+		return func() {
+			_ = os.RemoveAll(tempRoot)
+		}
+	}
 	homeDir := filepath.Join(tempRoot, "home")
 	_ = os.MkdirAll(homeDir, 0o755)
 	_ = os.Setenv("TMPDIR", tempRoot)
 	_ = os.Setenv("TMP", tempRoot)
-	_ = os.Setenv("XDG_DATA_HOME", filepath.Join(tempRoot, "xdg"))
+	_ = os.Setenv("XDG_CACHE_HOME", cacheDir)
+	_ = os.Setenv("XDG_DATA_HOME", filepath.Join(tempRoot, ".local", "share"))
 	_ = os.Setenv("HOME", homeDir)
+	_ = os.Setenv("FIZEAU_CACHE_DIR", filepath.Join(cacheDir, "fizeau"))
+	_ = os.Setenv("FIZEAU_CLAUDE_TRANSPORT", "subprocess")
+	_ = os.Setenv("PATH", binDir+string(os.PathListSeparator)+cmdTestOriginalPath)
 	return func() {
 		if hadTmpDir {
 			_ = os.Setenv("TMPDIR", oldTmpDir)
@@ -71,6 +100,11 @@ func isolateCmdTestTempRoot() func() {
 		} else {
 			_ = os.Unsetenv("TMP")
 		}
+		if hadXDGCacheHome {
+			_ = os.Setenv("XDG_CACHE_HOME", oldXDGCacheHome)
+		} else {
+			_ = os.Unsetenv("XDG_CACHE_HOME")
+		}
 		if hadXDG {
 			_ = os.Setenv("XDG_DATA_HOME", oldXDG)
 		} else {
@@ -81,8 +115,246 @@ func isolateCmdTestTempRoot() func() {
 		} else {
 			_ = os.Unsetenv("HOME")
 		}
+		if hadFizeauCacheDir {
+			_ = os.Setenv("FIZEAU_CACHE_DIR", oldFizeauCacheDir)
+		} else {
+			_ = os.Unsetenv("FIZEAU_CACHE_DIR")
+		}
+		if hadClaudeTransport {
+			_ = os.Setenv("FIZEAU_CLAUDE_TRANSPORT", oldClaudeTransport)
+		} else {
+			_ = os.Unsetenv("FIZEAU_CLAUDE_TRANSPORT")
+		}
+		if cmdTestOriginalPath != "" {
+			_ = os.Setenv("PATH", cmdTestOriginalPath)
+		} else {
+			_ = os.Unsetenv("PATH")
+		}
 		_ = os.RemoveAll(tempRoot)
 	}
+}
+
+func prepareCmdHermeticRoot(root string) (binDir, cacheDir string, err error) {
+	binDir = filepath.Join(root, "bin")
+	cacheDir = filepath.Join(root, ".cache")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		return "", "", err
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", "", err
+	}
+	for _, name := range []string{"claude", "claude-code", "codex", "gemini"} {
+		if err := writeFakeProviderBinary(filepath.Join(binDir, name), name); err != nil {
+			return "", "", err
+		}
+	}
+	return binDir, cacheDir, nil
+}
+
+func writeFakeProviderBinary(path, name string) error {
+	script := fakeProviderScript(name)
+	if runtime.GOOS == "windows" {
+		path += ".cmd"
+		script = fakeProviderCmdScript(name)
+	}
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		return err
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fakeProviderScript(name string) string {
+	switch name {
+	case "claude", "claude-code":
+		return `#!/bin/sh
+emit_claude_stream() {
+cat <<'EOF'
+{"type":"system","subtype":"init","model":"claude-sonnet-4-6","session_id":"fake-session"}
+{"type":"assistant","message":{"model":"claude-sonnet-4-6","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}}
+{"type":"result","result":"ok","usage":{"input_tokens":1,"output_tokens":1},"session_id":"fake-session"}
+EOF
+}
+
+emit_claude_discovery() {
+cat <<'EOF'
+claude-sonnet-4-6
+sonnet-4.6
+opus-4.7
+--effort <level> (low, medium, high, xhigh, max)
+EOF
+}
+
+case " $* " in
+  *" --version "*|*" -V "*|*" version "*)
+    printf '%s\n' 'claude-code 0.0.0'
+    exit 0
+    ;;
+  *" --help "*|*" -h "*|*" help "*)
+    printf '%s\n' 'Usage: claude [options]' '  --effort <level> (low, medium, high, xhigh, max)'
+    exit 0
+    ;;
+  *" --output-format stream-json "*|*" --print "*)
+    emit_claude_stream
+    exit 0
+    ;;
+esac
+
+printf '%s\n' '> '
+emit_claude_discovery
+exit 0
+`
+	case "codex":
+		return `#!/bin/sh
+emit_codex_stream() {
+cat <<'EOF'
+{"type":"output","item":{"type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}
+EOF
+}
+
+emit_codex_discovery() {
+cat <<'EOF'
+gpt-5.4
+gpt-5.4-mini
+EOF
+}
+
+case " $* " in
+  *" --version "*|*" -V "*|*" version "*)
+    printf '%s\n' 'codex 0.0.0'
+    exit 0
+    ;;
+  *" --help "*|*" -h "*|*" help "*)
+    printf '%s\n' 'Usage: codex [options]' '  gpt-5.4' '  gpt-5.4-mini'
+    exit 0
+    ;;
+  *" exec --json "*|*" exec --json")
+    emit_codex_stream
+    exit 0
+    ;;
+esac
+
+printf '%s\n' '› '
+emit_codex_discovery
+exit 0
+`
+	case "gemini":
+		return `#!/bin/sh
+emit_gemini_stream() {
+cat <<'EOF'
+{"type":"message","role":"assistant","content":"ok"}
+{"type":"result","status":"success","stats":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}
+EOF
+}
+
+emit_gemini_quota() {
+cat <<'EOF'
+Pro
+10% used
+Resets tomorrow
+Flash Lite
+0% used
+Resets tomorrow
+Flash
+5% used
+Resets tomorrow
+EOF
+}
+
+case " $* " in
+  *" --version "*|*" -V "*|*" version "*)
+    printf '%s\n' 'gemini 0.0.0'
+    exit 0
+    ;;
+  *" --help "*|*" -h "*|*" help "*)
+    printf '%s\n' 'Usage: gemini [options]' '  gemini-2.5-pro' '  gemini-2.5-flash'
+    exit 0
+    ;;
+  *" --output-format stream-json "*)
+    emit_gemini_stream
+    exit 0
+    ;;
+esac
+
+printf '%s\n' '> '
+emit_gemini_quota
+exit 0
+`
+	default:
+		return "#!/bin/sh\nexit 0\n"
+	}
+}
+
+func fakeProviderCmdScript(name string) string {
+	switch name {
+	case "claude", "claude-code":
+		return "@echo off\r\necho claude-sonnet-4-6\r\necho sonnet-4.6\r\necho opus-4.7\r\necho --effort ^<level^> (low, medium, high, xhigh, max)\r\nexit /b 0\r\n"
+	case "codex":
+		return "@echo off\r\necho gpt-5.4\r\necho gpt-5.4-mini\r\nexit /b 0\r\n"
+	case "gemini":
+		return "@echo off\r\necho Pro\r\necho 10%% used\r\necho Resets tomorrow\r\necho Flash Lite\r\necho 0%% used\r\necho Resets tomorrow\r\necho Flash\r\necho 5%% used\r\necho Resets tomorrow\r\nexit /b 0\r\n"
+	default:
+		return "@echo off\r\nexit /b 0\r\n"
+	}
+}
+
+func installCmdHermeticEnv(t *testing.T, root string) string {
+	t.Helper()
+
+	return installCmdHermeticEnvAt(t, root, root, root)
+}
+
+func installCmdHermeticEnvAt(t *testing.T, binRoot, homeRoot, stateRoot string) string {
+	t.Helper()
+
+	binDir, _, err := prepareCmdHermeticRoot(binRoot)
+	require.NoError(t, err)
+
+	t.Setenv("HOME", homeRoot)
+	t.Setenv("TMPDIR", stateRoot)
+	t.Setenv("TMP", stateRoot)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(stateRoot, ".cache"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(stateRoot, ".local", "share"))
+	t.Setenv("FIZEAU_CACHE_DIR", filepath.Join(stateRoot, ".cache", "fizeau"))
+	t.Setenv("FIZEAU_CLAUDE_TRANSPORT", "subprocess")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return homeRoot
+}
+
+func installCmdHermeticEnvIfUnset(t *testing.T, binRoot, homeRoot, stateRoot string) string {
+	t.Helper()
+
+	binDir, _, err := prepareCmdHermeticRoot(binRoot)
+	require.NoError(t, err)
+
+	if _, ok := os.LookupEnv("HOME"); !ok {
+		t.Setenv("HOME", homeRoot)
+	}
+	if _, ok := os.LookupEnv("TMPDIR"); !ok {
+		t.Setenv("TMPDIR", stateRoot)
+	}
+	if _, ok := os.LookupEnv("TMP"); !ok {
+		t.Setenv("TMP", stateRoot)
+	}
+	if _, ok := os.LookupEnv("XDG_CACHE_HOME"); !ok {
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(stateRoot, ".cache"))
+	}
+	if _, ok := os.LookupEnv("XDG_DATA_HOME"); !ok {
+		t.Setenv("XDG_DATA_HOME", filepath.Join(stateRoot, ".local", "share"))
+	}
+	if _, ok := os.LookupEnv("FIZEAU_CACHE_DIR"); !ok {
+		t.Setenv("FIZEAU_CACHE_DIR", filepath.Join(stateRoot, ".cache", "fizeau"))
+	}
+	if _, ok := os.LookupEnv("FIZEAU_CLAUDE_TRANSPORT"); !ok {
+		t.Setenv("FIZEAU_CLAUDE_TRANSPORT", "subprocess")
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return homeRoot
 }
 
 // buildTestLibraryFixture creates a per-test bare git repository that mimics
@@ -234,6 +506,8 @@ func NewTestEnvironment(t *testing.T, opts ...TestEnvOption) *TestEnvironment {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	tempDir := t.TempDir()
+	hermeticRoot := t.TempDir()
+	installCmdHermeticEnvIfUnset(t, hermeticRoot, hermeticRoot, hermeticRoot)
 	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	configPath := filepath.Join(ddxDir, "config.yaml")
 
@@ -415,6 +689,33 @@ func TestNoSharedTmpFixtureLeaks(t *testing.T) {
 		if !os.IsNotExist(err) {
 			t.Fatalf("expected %s to be absent, got: %v", path, err)
 		}
+	}
+}
+
+func TestProviderDiscoveryGuard_RedirectsCacheToTempRoot(t *testing.T) {
+	root := t.TempDir()
+	installCmdHermeticEnv(t, root)
+
+	cacheDir := os.Getenv("FIZEAU_CACHE_DIR")
+	require.NotEmpty(t, cacheDir)
+	require.Equal(t, filepath.Join(root, ".cache", "fizeau"), cacheDir)
+	require.True(t, strings.HasPrefix(cacheDir, root), "FIZEAU_CACHE_DIR=%q must live under %q", cacheDir, root)
+	require.True(t, strings.HasPrefix(os.Getenv("HOME"), root), "HOME must live under temp root")
+	require.True(t, strings.HasPrefix(os.Getenv("XDG_CACHE_HOME"), root), "XDG_CACHE_HOME must live under temp root")
+	require.Equal(t, "subprocess", os.Getenv("FIZEAU_CLAUDE_TRANSPORT"))
+	require.NotEqual(t, filepath.Join(cmdTestOriginalHome, ".cache", "fizeau"), cacheDir, "must not fall back to the operator's real cache")
+}
+
+func TestProviderDiscoveryGuard_FakeProviderCLIsOnPath(t *testing.T) {
+	root := t.TempDir()
+	installCmdHermeticEnv(t, root)
+
+	wantBinDir := filepath.Join(root, "bin")
+	for _, name := range []string{"claude", "claude-code", "codex", "gemini"} {
+		path, err := exec.LookPath(name)
+		require.NoErrorf(t, err, "%s must resolve on the hermetic PATH", name)
+		require.Truef(t, strings.HasPrefix(path, wantBinDir+string(os.PathSeparator)),
+			"%s must resolve from fake bin dir %q; got %q", name, wantBinDir, path)
 	}
 }
 

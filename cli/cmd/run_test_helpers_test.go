@@ -232,7 +232,8 @@ func capturedModelFilters(stub *executeCapturingStub) []agentlib.ModelFilter {
 func minimalProjectDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	hermeticRoot := t.TempDir()
+	installCmdHermeticEnvIfUnset(t, hermeticRoot, dir, hermeticRoot)
 	ddxDir := ddxroot.JoinProject(dir)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	cfg := `version: "1.0"
