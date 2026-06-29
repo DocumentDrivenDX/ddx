@@ -531,3 +531,13 @@
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":4014720,"acquired_at":"2026-06-29T12:02:47.719607788Z","released_at":"2026-06-29T12:02:47.986906359Z","duration_ms":267}
 {"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":4014720,"acquired_at":"2026-06-29T12:02:47.424639319Z","released_at":"2026-06-29T12:02:47.986980655Z","duration_ms":562}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":4014720,"acquired_at":"2026-06-29T12:08:48.955876078Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":4014720,"acquired_at":"2026-06-29T12:08:48.955876078Z","released_at":"2026-06-29T12:08:50.244470555Z","duration_ms":1288}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:47.663034591Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:47.997447301Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:47.997447301Z","released_at":"2026-06-29T12:21:48.132234415Z","duration_ms":134}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:48.191152225Z"}
+{"event":"violation","lock_name":"index.lock","operation":"index.commit","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:48.191152225Z","duration_ms":10000,"severity":"error","cap_ms":10000}
+{"event":"violation","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:47.663034591Z","duration_ms":30001,"severity":"error","cap_ms":30000}
+{"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:48.191152225Z","released_at":"2026-06-29T12:22:23.499563071Z","duration_ms":34162}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":4014720,"acquired_at":"2026-06-29T12:21:47.663034591Z","released_at":"2026-06-29T12:22:23.49971972Z","duration_ms":34690}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":4014720,"acquired_at":"2026-06-29T12:28:21.926309034Z"}

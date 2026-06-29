@@ -1,0 +1,111 @@
+{
+  "attempt_id": "20260629T120848-f9651e23",
+  "bead_id": "ddx-95d80f7e",
+  "base_rev": "4501df9a831fc0142013ba3c157277d42db09be3",
+  "created_at": "2026-06-29T12:09:08.546833719Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-95d80f7e",
+    "title": "tests: make zero-config and underspecified-routing work tests use fake harness routes",
+    "description": "PROBLEM\nDuring ddx-0be85773 dogfood on 2026-06-13, TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified and TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting drove real routing/discovery code paths, launching real codex/claude/gemini CLIs and reading the operator's real Fizeau discovery cache. These tests must exercise routing logic without touching live providers.\n\nROOT CAUSE WITH FILE:LINE\nThese tests in cli/cmd (zero-config work and underspecified-routing work paths) route through real provider discovery instead of a fake harness/service route. cli/cmd/testutils_test.go and cli/cmd/run_test_helpers_test.go do not force these tests onto fake harness binaries, so an empty/underspecified config falls through to real provider CLI discovery.\n\nPROPOSED FIX\n- Point TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified and TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting at a fake harness/service route, using the hermetic discovery guard from the sibling bead 'tests: add hermetic provider-discovery guard for the cmd suite' (depends on it).\n- Ensure both tests assert their existing behavior (no under-specified emission; no provider spawn) while running entirely against fake harness binaries and the temp-root discovery cache.\n\nNON-SCOPE\nDo not weaken production provider discovery. Do not skip the affected tests. Do not kill unrelated interactive provider sessions as part of test cleanup. The shared hermetic guard and the process-leak assertion are handled in sibling beads.",
+    "acceptance": "1. TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified passes with PATH containing fake harness binaries and without reading the user's real Fizeau discovery cache.\n2. TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting passes without launching a real provider CLI.\n3. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified|TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting'` passes.\n4. `cd cli \u0026\u0026 go test ./cmd/...` green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-69607adb",
+    "labels": [
+      "phase:build",
+      "area:tests",
+      "area:agent",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T03:03:07.432005628Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T021710-142bba3c\",\"bead_id\":\"ddx-95d80f7e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T03:03:09.533844744Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"48cc074bc328c97995f85c79aabf67584f8559e6\",\"classification\":\"tests_red\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt produced implementation changes, and the targeted test filter passed, but required package verification did not complete cleanly: `go test -timeout 20m ./cmd/...` exited status 1 and the later full `go test ./cmd/...` was still running when the harness exited, so AC4/AC5 remain unverified.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"ab05bf2835e7e9fb34fdd3006a71bf4fa6646f8a\",\"session_id\":\"eb-ca89e13a\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T03:06:23.122654836Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "tests_red: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"tests_red\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=ab05bf2835e7e9fb34fdd3006a71bf4fa6646f8a\nbase_rev=48cc074bc328c97995f85c79aabf67584f8559e6\noutcome_reason=tests_red",
+          "created_at": "2026-06-29T03:06:23.250419666Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-95d80f7e)\",\"fingerprint\":\"3238cd5369d6def0f1bf53f38ea5f301b74cdb826f0b77aa35ebdb5ace607071\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3238cd5369d6def0f1bf53f38ea5f301b74cdb826f0b77aa35ebdb5ace607071\"}",
+          "created_at": "2026-06-29T08:54:04.359083525Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T08:59:35.074641999Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T085539-229418a8\",\"bead_id\":\"ddx-95d80f7e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T08:59:38.191688183Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"b15d78415629e1c76ff799ce1c6cef539373370c\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"The current attempt failed with generic `exit status 1` before producing changes or verification evidence: base_rev equals result_rev, outcome_reason is unknown, and the only current failure detail is the harness/subprocess exit. No evidence shows a bead-owned test regression or external blocker; the prior tests_red event belongs to an earlier attempt.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"b15d78415629e1c76ff799ce1c6cef539373370c\",\"session_id\":\"eb-0f52659f\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T09:01:08.00316142Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=b15d78415629e1c76ff799ce1c6cef539373370c\nbase_rev=b15d78415629e1c76ff799ce1c6cef539373370c\noutcome_reason=transport",
+          "created_at": "2026-06-29T09:01:08.358842027Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T120848-f9651e23",
+    "prompt": ".ddx/executions/20260629T120848-f9651e23/prompt.md",
+    "manifest": ".ddx/executions/20260629T120848-f9651e23/manifest.json",
+    "result": ".ddx/executions/20260629T120848-f9651e23/result.json",
+    "checks": ".ddx/executions/20260629T120848-f9651e23/checks.json",
+    "usage": ".ddx/executions/20260629T120848-f9651e23/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-95d80f7e-20260629T120848-f9651e23"
+  },
+  "prompt_sha": "7da34aeb61f784275ca530e32b7fd268b61f5c2f6792f1b91b748d436b5a8f6f"
+}
