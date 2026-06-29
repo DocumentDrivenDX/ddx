@@ -1,0 +1,198 @@
+{
+  "attempt_id": "20260629T182020-c5cbb01d",
+  "bead_id": "ddx-9aa2151d",
+  "base_rev": "d3289db99b5c9c7359c13056fe2951927d41a2a2",
+  "created_at": "2026-06-29T18:20:43.164995101Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9aa2151d",
+    "title": "fix: keep ddx work watch from leaving stale active run-state",
+    "description": "Incident observed in sibling repo `/home/erik/Projects/axon` on 2026-06-13 while running `ddx work --watch --idle-interval 15s --request-timeout 45m` from Codex.\n\nSymptoms:\n1. Two background launches of `ddx work --watch` exited immediately with empty logs: PID 819208 `/tmp/axon-ddx-worker-20260612-232505.log`, then PID 819691 `/tmp/axon-ddx-worker-20260612-232537.log`. `ddx work plan --json` showed a valid next bead, so the queue was not empty.\n2. Foreground `ddx work --once --request-timeout 45m` succeeded on Axon bead `axon-5c6af8f0`, proving the route/queue could execute.\n3. Foreground `ddx work --watch --idle-interval 15s --request-timeout 45m` repeatedly emitted pre-claim readiness warnings: `readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead \u003cid\u003e (continuing)`. Seen for Axon beads `axon-5c6af8f0`, `axon-7e75384c`, and `axon-a8e564c1`. The warning was recorded as `intake.warn` with `rule_id=pre_claim_intake.system_unready`.\n4. For Axon bead `axon-7e75384c`, watch/attempt output included `Cancel received, shutting down gracefully`; DDx recorded `status: success` and closed the bead even though the landed implementation commit trail contained only execution evidence / harness metadata, no product code diff. The acceptance tests happened to pass independently, but `.ddx/beads.jsonl` closure was left dirty and had to be committed manually (`7351979f`).\n5. For Axon bead `axon-a8e564c1`, the watch session exited with code -1 during implementation after reading CI/package files. After exit, `ddx work status --json` reported no live workers but still reported active work from `.ddx/run-state/20260613T034907-3d00f60f.json`; the bead remained open/claimed and queue status was `ready=0`, `worker_ready=0`, `active_work.count=1`. That jams the queue until an operator manually unclaims/cleans/restarts.\n\nExpected behavior: if the worker process exits or its harness subprocess is cancelled, DDx should either complete/close with committed tracker evidence, or release the bead and clear stale active run-state. `ddx work --watch` should not leave the project with zero workers, a claimed open bead, stale active run-state, and no ready work. The readiness route should not attempt a project-root mutation during pre-claim analysis, or the warning should include a precise non-blocking explanation and not recur on every bead.\n\nReproduction context from Axon:\n- project: `/home/erik/Projects/axon`\n- ready beads: `axon-5c6af8f0`, then `axon-7e75384c`, then `axon-a8e564c1`\n- stale files after crash: `.ddx/run-state/20260613T034907-3d00f60f.json`, `.ddx/workers/agent-loop-1781322253776691221/status.json`\n- command: `ddx work --watch --idle-interval 15s --request-timeout 45m`\n\nIn-scope files: DDx worker/watch loop, run-state/liveness cleanup, pre-claim readiness/lifecycle dispatch, and tests around process exit/cancel handling.\nOut-of-scope: Axon product code, model routing policy, and general host process cleanup not tied to DDx run-state.",
+    "acceptance": "1. Add a regression test where a `ddx work --watch` attempt subprocess exits/cancels mid-implementation; the bead is unclaimed or closed with committed tracker evidence, and `ddx work status --json` reports no stale active work when no worker is alive.\n2. Add a regression test where an implementation produces no product commit but DDx records success; DDx must classify it as `already_satisfied` with explicit rationale/evidence or leave the bead open/unclaimed, not silently close as generic success with only metadata.\n3. Add a regression test for stale `.ddx/run-state/*.json` plus no live worker: startup cleanup or status reconciliation removes/ignores stale active work so the queue exposes ready beads again.\n4. Add a test or guard proving pre-claim readiness/lifecycle dispatch does not mutate the project root; if mutation is intentionally blocked, the warning includes a stable code and does not repeat as operator noise for every bead.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/workerstatus/... -run \"Work|RunState|Readiness|Lifecycle|Status\" -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:workers",
+      "area:run-state",
+      "area:lifecycle",
+      "kind:bug",
+      "kind:reliability",
+      "source:axon-incident"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T00:26:30.704200453Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260628T205754-2cd96862\",\"bead_id\":\"ddx-9aa2151d\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T00:26:33.351096874Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"03cce141e302f98970ea43feb365978cb3df8cd9\",\"classification\":\"transport\",\"detail\":\"agent: provider process exited without emitting a final event\",\"rationale\":\"Attempt failed because the agent provider subprocess exited without emitting a final event; routing facts were unavailable, and there is no evidence of bead-owned implementation failure or red tests.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"00890a89d09ef543a2db0e4c21b3f3c5dd6dd6f3\",\"session_id\":\"eb-d5aba7fd\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T00:27:34.780350627Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider process exited without emitting a final event\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=00890a89d09ef543a2db0e4c21b3f3c5dd6dd6f3\nbase_rev=03cce141e302f98970ea43feb365978cb3df8cd9\noutcome_reason=transport",
+          "created_at": "2026-06-29T00:27:34.874546688Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9aa2151d)\",\"fingerprint\":\"e9d7c5ce64255470bc6604d2a939309ce1877812721e176bcc3bb00c20537043\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e9d7c5ce64255470bc6604d2a939309ce1877812721e176bcc3bb00c20537043\"}",
+          "created_at": "2026-06-29T03:42:51.799448469Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T05:43:01.65150352Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T034349-dc725eaa\",\"bead_id\":\"ddx-9aa2151d\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T05:43:03.645055226Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"6e2a6fe759385f4d95a84ea1896a62c06abb6bf5\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt failed with harness/subprocess exit status 1, produced no result revision change, and includes no evidence of bead-owned code failure, red verification, quota exhaustion, or a hard external blocker. The prior attempt on this bead was also classified as provider/transport failure, so the narrow supported classification is transport and the bead should be released for retry policy rather than amended.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"6e2a6fe759385f4d95a84ea1896a62c06abb6bf5\",\"session_id\":\"eb-a532e3d4\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T05:44:21.790753592Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=6e2a6fe759385f4d95a84ea1896a62c06abb6bf5\nbase_rev=6e2a6fe759385f4d95a84ea1896a62c06abb6bf5\noutcome_reason=transport",
+          "created_at": "2026-06-29T05:44:21.908581439Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T08:47:14.066124519Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T074756-4d0d27bb\",\"bead_id\":\"ddx-9aa2151d\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T08:47:18.06126118Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"0d6705ff84d10e76971b67e8b362202c62fbee7a\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt failed as execution_failed with exit status 1, left base_rev and result_rev identical, and provides no evidence of bead-owned code failure, red verification, quota exhaustion, timeout, merge conflict, review block, or hard external blocker. Recent events for this bead also show provider/subprocess failure without a final event, so the narrow supported class is transport and retry policy should release the claim.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"0d6705ff84d10e76971b67e8b362202c62fbee7a\",\"session_id\":\"eb-d9c40400\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T08:48:48.234533953Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=0d6705ff84d10e76971b67e8b362202c62fbee7a\nbase_rev=0d6705ff84d10e76971b67e8b362202c62fbee7a\noutcome_reason=transport",
+          "created_at": "2026-06-29T08:48:48.343481796Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9aa2151d)\",\"fingerprint\":\"e9d7c5ce64255470bc6604d2a939309ce1877812721e176bcc3bb00c20537043\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e9d7c5ce64255470bc6604d2a939309ce1877812721e176bcc3bb00c20537043\"}",
+          "created_at": "2026-06-29T10:49:38.773591193Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T11:01:27.02773676Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T105142-4c4dd716\",\"bead_id\":\"ddx-9aa2151d\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T11:01:31.259101179Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"a258406e6c5fa9840c632ab99ea1ce7682f91387\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt ended execution_failed with exit status 1, left base_rev and result_rev identical, and includes no evidence of implementation changes, red tests, merge conflict, quota exhaustion, review block, or a bead-owned defect. Recent same-bead events already classified the same exit-status/no-result pattern as transport, while the pre-claim timeout was warn-only noise rather than a durable bead blocker.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"a258406e6c5fa9840c632ab99ea1ce7682f91387\",\"session_id\":\"eb-a8312c11\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T11:02:47.183189849Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=a258406e6c5fa9840c632ab99ea1ce7682f91387\nbase_rev=a258406e6c5fa9840c632ab99ea1ce7682f91387\noutcome_reason=transport",
+          "created_at": "2026-06-29T11:02:47.343093212Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9aa2151d)\",\"fingerprint\":\"e9d7c5ce64255470bc6604d2a939309ce1877812721e176bcc3bb00c20537043\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e9d7c5ce64255470bc6604d2a939309ce1877812721e176bcc3bb00c20537043\"}",
+          "created_at": "2026-06-29T18:19:30.243235381Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "queue-rank": 2200,
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260629T182020-c5cbb01d",
+    "prompt": ".ddx/executions/20260629T182020-c5cbb01d/prompt.md",
+    "manifest": ".ddx/executions/20260629T182020-c5cbb01d/manifest.json",
+    "result": ".ddx/executions/20260629T182020-c5cbb01d/result.json",
+    "checks": ".ddx/executions/20260629T182020-c5cbb01d/checks.json",
+    "usage": ".ddx/executions/20260629T182020-c5cbb01d/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T182020-c5cbb01d"
+  },
+  "prompt_sha": "61be9dd1baf6f1ad0e28c9f7f5bf03d4fa90fb12767820acbe583e6a0fe7cd5c"
+}
