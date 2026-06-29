@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260629T011534-2a6b0f89",
+  "bead_id": "ddx-bd70c416",
+  "base_rev": "ed7265143d0e1ee04c44d376ab97ac043d473027",
+  "created_at": "2026-06-29T01:15:49.547242251Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bd70c416",
+    "title": "tests: assert cmd suite leaves no real provider CLI descendants",
+    "description": "PROBLEM\nDuring ddx-0be85773 dogfood on 2026-06-13, cmd tests left real provider CLI children (codex --no-alt-screen, claude, gemini) alive. There is no leak assertion that fails when a cmd test leaves a descendant provider process running, so leaks go undetected.\n\nROOT CAUSE WITH FILE:LINE\ncli/cmd has no descendant-process leak guard around its tests. Tests such as TestWorkResourceExhaustionEndToEnd_StopsBeforeNextClaim and TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting can spawn provider children, and nothing in cli/cmd/testutils_test.go enumerates and asserts on surviving descendants after a test completes.\n\nPROPOSED FIX\n- Add TestCmdTestsDoNotSpawnRealProviderCLIs that runs a set of representative cmd tests and, after each, enumerates descendant processes of the test process and fails if any process named real codex, claude, or gemini remains alive.\n- Scope the assertion to descendants of the test process only, so unrelated/interactive provider sessions on the machine are ignored.\n- Build on the hermetic discovery guard from the sibling bead 'tests: add hermetic provider-discovery guard for the cmd suite' (depends on it).\n\nNON-SCOPE\nDo not weaken production provider discovery. Do not skip the affected tests. Do not kill unrelated interactive provider sessions as part of test cleanup. The hermetic PATH/discovery guard itself and the zero-config/underspecified-routing test rewrites are handled in sibling beads.",
+    "acceptance": "1. TestCmdTestsDoNotSpawnRealProviderCLIs wraps representative cmd tests and asserts no descendant process named real codex, claude, or gemini remains after the test completes.\n2. The assertion only inspects descendants of the test process and does not kill or fail on unrelated interactive provider sessions.\n3. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestCmdTestsDoNotSpawnRealProviderCLIs'` passes.\n4. `cd cli \u0026\u0026 go test ./cmd/...` green and leaves no real codex/claude/gemini descendants.\n5. lefthook run pre-commit passes without leaving provider descendants.",
+    "parent": "ddx-69607adb",
+    "labels": [
+      "phase:build",
+      "area:tests",
+      "area:agent",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T011534-2a6b0f89",
+    "prompt": ".ddx/executions/20260629T011534-2a6b0f89/prompt.md",
+    "manifest": ".ddx/executions/20260629T011534-2a6b0f89/manifest.json",
+    "result": ".ddx/executions/20260629T011534-2a6b0f89/result.json",
+    "checks": ".ddx/executions/20260629T011534-2a6b0f89/checks.json",
+    "usage": ".ddx/executions/20260629T011534-2a6b0f89/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-bd70c416-20260629T011534-2a6b0f89"
+  },
+  "prompt_sha": "6bcc2d884391cc86ddf9f2fc424768aa0119f2bcb889a3c6408e85d160d3d253"
+}
