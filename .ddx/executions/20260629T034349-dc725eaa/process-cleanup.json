@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260629T034349-dc725eaa",
+  "bead_id": "ddx-9aa2151d",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa",
+  "trigger": "",
+  "started_at": "2026-06-29T05:09:11.623029785Z",
+  "finished_at": "2026-06-29T05:09:12.07283051Z",
+  "scanned": 1160,
+  "candidates": [
+    {
+      "pid": 2517258,
+      "ppid": 2512039,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build4036514615/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build4036514615/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 2512039,
+      "ppid": 2373608,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli",
+      "command": "go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 2373608,
+      "ppid": 2373596,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work_status_test.go ./internal/activework/activework.go ./internal/activework/activework_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_orchestrator.go ./internal/agent/execute_bead_orchestrator_test.go ./internal/agent/execute_bead_ratchet_test.go ./internal/agent/preclaim_intake_hook_test.go ./internal/bead/claim_liveness.go ./internal/bead/claim_liveness_test.go"
+    },
+    {
+      "pid": 2373596,
+      "ppid": 1,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work_status_test.go ./internal/activework/activework.go ./internal/activework/activework_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_orchestrator.go ./internal/agent/execute_bead_orchestrator_test.go ./internal/agent/execute_bead_ratchet_test.go ./internal/agent/preclaim_intake_hook_test.go ./internal/bead/claim_liveness.go ./internal/bead/claim_liveness_test.go"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 2517258,
+      "ppid": 2512039,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build4036514615/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build4036514615/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 2512039,
+      "ppid": 2373608,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli",
+      "command": "go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 2373608,
+      "ppid": 2373596,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work_status_test.go ./internal/activework/activework.go ./internal/activework/activework_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_orchestrator.go ./internal/agent/execute_bead_orchestrator_test.go ./internal/agent/execute_bead_ratchet_test.go ./internal/agent/preclaim_intake_hook_test.go ./internal/bead/claim_liveness.go ./internal/bead/claim_liveness_test.go"
+    },
+    {
+      "pid": 2373596,
+      "ppid": 1,
+      "pgid": 2373596,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260629T034349-dc725eaa/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work_status_test.go ./internal/activework/activework.go ./internal/activework/activework_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_orchestrator.go ./internal/agent/execute_bead_orchestrator_test.go ./internal/agent/execute_bead_ratchet_test.go ./internal/agent/preclaim_intake_hook_test.go ./internal/bead/claim_liveness.go ./internal/bead/claim_liveness_test.go"
+    }
+  ]
+}
