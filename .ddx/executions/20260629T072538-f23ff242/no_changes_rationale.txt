@@ -1,0 +1,2 @@
+status: blocked
+reason: external blocker: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` fails in `TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers` because its fixture repo contains an untracked `.ddx/lifecycle-schema.json`; the `internal/agent` package then times out at 10m in `TestExecuteBeadWorker_ClaimLeaseStaysFreshDuringPreClaimIntake`.
