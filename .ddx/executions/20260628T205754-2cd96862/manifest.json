@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260628T205754-2cd96862",
+  "bead_id": "ddx-9aa2151d",
+  "base_rev": "03cce141e302f98970ea43feb365978cb3df8cd9",
+  "created_at": "2026-06-28T20:58:09.622183592Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9aa2151d",
+    "title": "fix: keep ddx work watch from leaving stale active run-state",
+    "description": "Incident observed in sibling repo `/home/erik/Projects/axon` on 2026-06-13 while running `ddx work --watch --idle-interval 15s --request-timeout 45m` from Codex.\n\nSymptoms:\n1. Two background launches of `ddx work --watch` exited immediately with empty logs: PID 819208 `/tmp/axon-ddx-worker-20260612-232505.log`, then PID 819691 `/tmp/axon-ddx-worker-20260612-232537.log`. `ddx work plan --json` showed a valid next bead, so the queue was not empty.\n2. Foreground `ddx work --once --request-timeout 45m` succeeded on Axon bead `axon-5c6af8f0`, proving the route/queue could execute.\n3. Foreground `ddx work --watch --idle-interval 15s --request-timeout 45m` repeatedly emitted pre-claim readiness warnings: `readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead \u003cid\u003e (continuing)`. Seen for Axon beads `axon-5c6af8f0`, `axon-7e75384c`, and `axon-a8e564c1`. The warning was recorded as `intake.warn` with `rule_id=pre_claim_intake.system_unready`.\n4. For Axon bead `axon-7e75384c`, watch/attempt output included `Cancel received, shutting down gracefully`; DDx recorded `status: success` and closed the bead even though the landed implementation commit trail contained only execution evidence / harness metadata, no product code diff. The acceptance tests happened to pass independently, but `.ddx/beads.jsonl` closure was left dirty and had to be committed manually (`7351979f`).\n5. For Axon bead `axon-a8e564c1`, the watch session exited with code -1 during implementation after reading CI/package files. After exit, `ddx work status --json` reported no live workers but still reported active work from `.ddx/run-state/20260613T034907-3d00f60f.json`; the bead remained open/claimed and queue status was `ready=0`, `worker_ready=0`, `active_work.count=1`. That jams the queue until an operator manually unclaims/cleans/restarts.\n\nExpected behavior: if the worker process exits or its harness subprocess is cancelled, DDx should either complete/close with committed tracker evidence, or release the bead and clear stale active run-state. `ddx work --watch` should not leave the project with zero workers, a claimed open bead, stale active run-state, and no ready work. The readiness route should not attempt a project-root mutation during pre-claim analysis, or the warning should include a precise non-blocking explanation and not recur on every bead.\n\nReproduction context from Axon:\n- project: `/home/erik/Projects/axon`\n- ready beads: `axon-5c6af8f0`, then `axon-7e75384c`, then `axon-a8e564c1`\n- stale files after crash: `.ddx/run-state/20260613T034907-3d00f60f.json`, `.ddx/workers/agent-loop-1781322253776691221/status.json`\n- command: `ddx work --watch --idle-interval 15s --request-timeout 45m`\n\nIn-scope files: DDx worker/watch loop, run-state/liveness cleanup, pre-claim readiness/lifecycle dispatch, and tests around process exit/cancel handling.\nOut-of-scope: Axon product code, model routing policy, and general host process cleanup not tied to DDx run-state.",
+    "acceptance": "1. Add a regression test where a `ddx work --watch` attempt subprocess exits/cancels mid-implementation; the bead is unclaimed or closed with committed tracker evidence, and `ddx work status --json` reports no stale active work when no worker is alive.\n2. Add a regression test where an implementation produces no product commit but DDx records success; DDx must classify it as `already_satisfied` with explicit rationale/evidence or leave the bead open/unclaimed, not silently close as generic success with only metadata.\n3. Add a regression test for stale `.ddx/run-state/*.json` plus no live worker: startup cleanup or status reconciliation removes/ignores stale active work so the queue exposes ready beads again.\n4. Add a test or guard proving pre-claim readiness/lifecycle dispatch does not mutate the project root; if mutation is intentionally blocked, the warning includes a stable code and does not repeat as operator noise for every bead.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/workerstatus/... -run \"Work|RunState|Readiness|Lifecycle|Status\" -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:workers",
+      "area:run-state",
+      "area:lifecycle",
+      "kind:bug",
+      "kind:reliability",
+      "source:axon-incident"
+    ],
+    "metadata": {
+      "queue-rank": 2200,
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260628T205754-2cd96862",
+    "prompt": ".ddx/executions/20260628T205754-2cd96862/prompt.md",
+    "manifest": ".ddx/executions/20260628T205754-2cd96862/manifest.json",
+    "result": ".ddx/executions/20260628T205754-2cd96862/result.json",
+    "checks": ".ddx/executions/20260628T205754-2cd96862/checks.json",
+    "usage": ".ddx/executions/20260628T205754-2cd96862/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862"
+  },
+  "prompt_sha": "00307776186fa114b6bcf5e065ef166a5b6592c169e28f12745edc36a82f3edc"
+}
