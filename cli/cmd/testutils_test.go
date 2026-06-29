@@ -38,6 +38,10 @@ func TestMain(m *testing.M) {
 	cleanupTemp := isolateCmdTestTempRoot()
 	code := m.Run()
 	cleanupTemp()
+	if err := ensureNoRealProviderCLIDescendants(os.Getpid()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
+	}
 	os.Exit(code)
 }
 
