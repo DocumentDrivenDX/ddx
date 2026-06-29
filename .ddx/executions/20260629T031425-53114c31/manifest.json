@@ -1,0 +1,208 @@
+{
+  "attempt_id": "20260629T031425-53114c31",
+  "bead_id": "ddx-d3abb526",
+  "base_rev": "c8b98695d5eeff04875d37bb19690c9055948e9b",
+  "created_at": "2026-06-29T03:15:46.549326246Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d3abb526",
+    "title": "Classify land coordination failures without implementation reruns: part 3",
+    "description": "PROBLEM\nParent bead ddx-bced4e39 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nNiflheim land/ref/index/evidence-staging failures were recorded as overall `execution_failed` even when the candidate had succeeded or landed. The worker retried implementation work instead of reconciling land/evidence state or sending the bead to operator attention, wasting route attempts and confusing system failure with model-quality failure.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_orchestrator.go:305-309` wraps `LandingAdvancer` errors as generic `land advancer` errors.\n- `cli/internal/agent/failclass/failclass.go:103-142` contains the normative table that only `OutcomeGenuineFailure` can escalate, but execute-bead/work land outcomes are not consistently reduced to this typed table before retry/escalation decisions.\n\nPROPOSED FIX\nAdd self-contained Niflheim-style land coordination fixtures or table-driven cases under `cli/internal/agent/...` for `cannot lock ref refs/heads/main` after a candidate or merge is already landed, and for `landing worktree has staged changes after waiting 2s` caused by generated DDx evidence. Classify these as land/ref/index/evidence coordination outcomes, not implementation/model failures. If the candidate commit or merge is already an ancestor of the target, reconcile and close/continue without rerunning implementation. If the landing worktree is dirty with generated evidence or DDx metadata, retry/preserve the land/evidence step or move to operator attention according to existing reliability policy.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`; reuse or align with it.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`; this is typed classification and reconciliation behavior, not another timeout implementation.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related: `ddx-e1a576a7`, `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineer\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|LandCoordination|RetryEscalation|LandCoordinationDecisionAudit' -count=1` passes.\n- `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n- `lefthook run pre-commit` passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|LandCoordination|RetryEscalation|LandCoordinationDecisionAudit' -count=1` passes.\n2. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-bced4e39",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-d3abb526\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-28T02:21:03.956332259Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"bead: not found: ddx-d3abb526\",\"rationale\":\"attempt failed before implementation because the executor reported `bead: not found: ddx-d3abb526`; this is a tracker/worktree state mismatch or lookup failure, not evidence of bead-owned code failure\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-28T02:21:48.175788808Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "bead: not found: ddx-d3abb526\ndecision_audit={\"failure_class\":\"recoverable\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=recoverable",
+          "created_at": "2026-06-28T02:21:48.236502414Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-d3abb526)\",\"fingerprint\":\"795ec2e430369c0a97c7a84a9321a6c100d63f3b30388997158f245881c68faf\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"795ec2e430369c0a97c7a84a9321a6c100d63f3b30388997158f245881c68faf\"}",
+          "created_at": "2026-06-28T16:45:52.371334671Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-28T17:04:32.631433379Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260628T164653-df72426d\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":5199504,\"output_tokens\":19404,\"total_tokens\":5218908,\"cost_usd\":0,\"duration_ms\":1003244,\"exit_code\":0}",
+          "created_at": "2026-06-28T17:04:32.72281726Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=5218908 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260628T164653-df72426d\",\"bead_id\":\"ddx-d3abb526\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-28T17:04:35.389255823Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=`cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` is blocked by unrelated baseline failures outside this bead's land-coordination slice: `TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers` fails because its fixture repo contains an untracked `.ddx/lifecycle-schema.json`, and `TestConcurrentPrepareNoLock` times out after `effort \"turbo\" is not a known reasoning level for harness \"codex\"`.\nsuggested_action=decompose into executable follow-up work or retry with a stronger agent",
+          "created_at": "2026-06-28T17:04:35.633386973Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: blocked\nreason: `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` is blocked by unrelated baseline failures outside this bead's land-coordination slice: `TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers` fails because its fixture repo contains an untracked `.ddx/lifecycle-schema.json`, and `TestConcurrentPrepareNoLock` times out after `effort \"turbo\" is not a known reasoning level for harness \"codex\"`.\ndecision_audit={\"failure_class\":\"no_changes\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=0df3d5af01c7f55d80f526bb0e466c728391993f\nbase_rev=0df3d5af01c7f55d80f526bb0e466c728391993f\nretry_after=2026-06-28T17:09:35Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-28T17:04:35.96460997Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-28T20:27:12.137182674Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260628T201213-8919a6f6\",\"bead_id\":\"ddx-d3abb526\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-28T20:27:14.739775709Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"ccb76510884f72ef32259cc07da39e8276782310\",\"classification\":\"transport\",\"detail\":\"signal: terminated\",\"rationale\":\"Current attempt ended as execution_failed with detail/error `signal: terminated`, result_rev equal to base_rev, and no evidence of bead-owned code changes, red tests, review block, merge conflict, quota, or an explicit timeout. This is best treated as a harness/subprocess transport failure and retried through normal policy.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"ccb76510884f72ef32259cc07da39e8276782310\",\"session_id\":\"eb-274410f1\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-28T20:28:21.657245162Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "signal: terminated\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=ccb76510884f72ef32259cc07da39e8276782310\nbase_rev=ccb76510884f72ef32259cc07da39e8276782310\noutcome_reason=transport",
+          "created_at": "2026-06-28T20:28:21.780283939Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-28T20:51:41.894716374Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260628T203535-11d4fae7\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":4530032,\"output_tokens\":21756,\"total_tokens\":4551788,\"cost_usd\":0,\"duration_ms\":950107,\"exit_code\":0}",
+          "created_at": "2026-06-28T20:51:42.012972801Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4551788 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260628T203535-11d4fae7\",\"bead_id\":\"ddx-d3abb526\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-28T20:51:44.691821373Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1 times out at the default 10m package timeout in cli/internal/agent, with the run still active in TestPreClaimOriginEqualNoOp when the timeout fires; the land-coordination target slice passes in isolation, so this looks like a separate package-runtime issue to retry on a faster or less contended run.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-06-28T20:51:44.916367862Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1 times out at the default 10m package timeout in cli/internal/agent, with the run still active in TestPreClaimOriginEqualNoOp when the timeout fires; the land-coordination target slice passes in isolation, so this looks like a separate package-runtime issue to retry on a faster or less contended run.\ndecision_audit={\"failure_class\":\"no_changes\",\"retry_action\":\"retry\",\"escalation_count\":2,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=c6a5eb037a87547c0b5cc0ea7abaf2ee09113a74\nbase_rev=c6a5eb037a87547c0b5cc0ea7abaf2ee09113a74\nretry_after=2026-06-28T20:56:45Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-28T20:51:45.305260405Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-d3abb526)\",\"fingerprint\":\"795ec2e430369c0a97c7a84a9321a6c100d63f3b30388997158f245881c68faf\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"795ec2e430369c0a97c7a84a9321a6c100d63f3b30388997158f245881c68faf\"}",
+          "created_at": "2026-06-29T03:11:35.654871041Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "queue-rank": 2170,
+      "work-last-detail": "cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1 times out at the default 10m package timeout in cli/internal/agent, with the run still active in TestPreClaimOriginEqualNoOp when the timeout fires; the land-coordination target slice passes in isolation, so this looks like a separate package-runtime issue to retry on a faster or less contended run.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 2,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-06-28T20:56:45Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1 times out at the default 10m package timeout in cli/internal/agent, with the run still active in TestPreClaimOriginEqualNoOp when the timeout fires; the land-coordination target slice passes in isolation, so this looks like a separate package-runtime issue to retry on a faster or less contended run.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T031425-53114c31",
+    "prompt": ".ddx/executions/20260629T031425-53114c31/prompt.md",
+    "manifest": ".ddx/executions/20260629T031425-53114c31/manifest.json",
+    "result": ".ddx/executions/20260629T031425-53114c31/result.json",
+    "checks": ".ddx/executions/20260629T031425-53114c31/checks.json",
+    "usage": ".ddx/executions/20260629T031425-53114c31/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-d3abb526-20260629T031425-53114c31"
+  },
+  "prompt_sha": "10b6375d600d98a6f99d0c9e394d77e16053c113848c2e3d28781429d2be0f8a"
+}
