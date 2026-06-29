@@ -1,0 +1,80 @@
+{
+  "attempt_id": "20260629T143536-33ea831b",
+  "bead_id": "ddx-1c865bdb",
+  "base_rev": "e4dd0a4a5cb8f10a8f5e09ea9dc28706183040f4",
+  "created_at": "2026-06-29T14:35:56.374672754Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1c865bdb",
+    "title": "server: spawn managed work workers in process groups",
+    "description": "PROBLEM\nServer-managed drain workers are still started as in-process goroutines, so their WorkerRecord usually has PID zero and no PGID. The server cannot reliably target the ddx work process tree that later launches claude, codex, shell, or sleep descendants.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:123-127 records only PID and has no persisted PGID. cli/internal/server/workers.go:192 defines WorkerManager as managing in-process work workers as goroutines. cli/internal/server/workers.go:438 creates a cancelable context, and cli/internal/server/workers.go:461-462 starts drainProgress and runWorker goroutines instead of a server-owned OS process. cli/internal/server/workers.go:414-436 writes the initial WorkerRecord before any managed worker process boundary exists.\n\nPROPOSED FIX\nAdd a server-managed subprocess launch path for StartExecuteLoop in cli/internal/server/workers.go:361-464. Persist the ExecuteLoopWorkerSpec as today, then start the current ddx binary as ddx work --server-managed \u003cworker-id\u003e or an equivalent hidden internal entry point in its own process group. Record nonzero PID and PGID on WorkerRecord and status.json. Keep the existing in-process path only where tests explicitly inject it, and do not make externally reported workers look server-owned.\n\nNON-SCOPE\nDo not kill external reported workers or interactive Claude/Codex sessions. Do not change bead claim semantics except releasing claims for the stopped/reaped managed worker. Do not implement UI controls.\n\nGOVERNING ARTIFACT AND RELATIONSHIP\nParent bead: ddx-9d1af129. Governing artifact reference: plan:server-managed-workers. No explicit dependency IDs were provided by the parent bead.",
+    "acceptance": "1. TestManagedWorkerRecordsProcessGroup proves StartExecuteLoop creates a server-managed drain worker with nonzero PID and PGID in WorkerRecord and persisted status.json.\n2. TestManagedWorkerServerManagedFlagRunsWorkLoop proves the hidden ddx work --server-managed \u003cworker-id\u003e entry point reads the persisted spec and runs the same execute-loop path used by current server-managed workers.\n3. TestManagedWorkerProcessBoundarySkipsExternalReportedWorkers proves process-boundary recording is applied only to server-owned work workers, not external reported workers or interactive Claude/Codex sessions.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestManagedWorkerRecordsProcessGroup|TestManagedWorkerServerManagedFlagRunsWorkLoop|TestManagedWorkerProcessBoundarySkipsExternalReportedWorkers' passes.\n5. make install is run after the code change lands.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-1c865bdb)\",\"fingerprint\":\"c9e999969c06ee1fbe63e384bf23a059b4be1459b39bb7196c4c52833b02310a\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"c9e999969c06ee1fbe63e384bf23a059b4be1459b39bb7196c4c52833b02310a\"}",
+          "created_at": "2026-06-29T09:30:51.709049312Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T09:42:54.793539569Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T093128-3ac391c3\",\"bead_id\":\"ddx-1c865bdb\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T09:42:57.476833744Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"3901bcff4ecdc16a53ad47a62d3f781727082e07\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt failed with harness/subprocess error \\\"exit status 1\\\", produced no result revision change, and provides no test failure or bead-owned regression evidence; the preceding readiness timeout was warn-only and not the terminal failure.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"3901bcff4ecdc16a53ad47a62d3f781727082e07\",\"session_id\":\"eb-cdfab850\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T09:44:13.381747361Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=3901bcff4ecdc16a53ad47a62d3f781727082e07\nbase_rev=3901bcff4ecdc16a53ad47a62d3f781727082e07\noutcome_reason=transport",
+          "created_at": "2026-06-29T09:44:13.620662448Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T143536-33ea831b",
+    "prompt": ".ddx/executions/20260629T143536-33ea831b/prompt.md",
+    "manifest": ".ddx/executions/20260629T143536-33ea831b/manifest.json",
+    "result": ".ddx/executions/20260629T143536-33ea831b/result.json",
+    "checks": ".ddx/executions/20260629T143536-33ea831b/checks.json",
+    "usage": ".ddx/executions/20260629T143536-33ea831b/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-1c865bdb-20260629T143536-33ea831b"
+  },
+  "prompt_sha": "9a6ec3c174e4ea1ef2bd80421ce7d647f1b1b4adc10945d4115d0e35da97d70c"
+}

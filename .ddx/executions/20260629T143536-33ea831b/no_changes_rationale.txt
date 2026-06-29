@@ -1,0 +1,2 @@
+status: blocked
+reason: pre-commit cannot be made green within this bead scope because `go test -race ./internal/server` still fails standalone on `TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel` (worker never reaches Execute within 2s), while the other timing-sensitive GraphQL budget failure was reduced by serializing tests. Fixing the remaining failure would require changing unrelated test timing/budget behavior outside the managed-worker scope.
