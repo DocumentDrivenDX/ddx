@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260629T090840-d64351ac",
+  "bead_id": "ddx-071e9bd6",
+  "base_rev": "95fa24e97dd5c257e56262c5fc0b72644fa277ca",
+  "created_at": "2026-06-29T09:09:01.291639099Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-071e9bd6",
+    "title": "server: launch managed worker subprocesses with persisted PID/PGID",
+    "description": "PROBLEM\nServer-managed workers still start through the in-process goroutine path, so the server owns only a cancelable context and cannot prove it owns a killable worker process group. A managed worker also needs its process-group identity persisted in status.json, not just memory, so restart/shutdown can reason about the same worker after a process exit.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:361-462 starts a worker by building a record, creating a context, and launching runWorker in goroutines; there is no OS process boundary in that path.\ncli/internal/server/workers.go:88-135 defines WorkerRecord with PID and PIDAlive, but no persisted PGID/process-group field.\ncli/internal/server/workers.go:1711-1720 writes status.json from the record as-is, so any managed process ownership must be recorded on WorkerRecord to survive a restart.\n\nPROPOSED FIX\n- Add a server-managed launch path that starts ddx work --server-managed \u003cworker-id\u003e in its own process group instead of only launching runWorker in-process.\n- Extend WorkerRecord and the persisted status.json shape to include the managed process-group identity needed for cleanup.\n- Wire the server-owned work start flow through that managed launch path and keep the existing in-process path only as a test seam if needed.\n- Add TestManagedWorkerRecordsProcessGroup to prove the managed worker record and status.json both show nonzero process-group ownership.\n\nNON-SCOPE\n- Do not implement stop, watchdog reap, or shutdown cleanup in this bead.\n- Do not change external reported workers or the UI.\n- Do not alter bead claim semantics beyond what the managed start path needs for its own record.\n\nACCEPTANCE\n1. TestManagedWorkerRecordsProcessGroup proves a server-managed drain worker has nonzero PID/PGID in WorkerRecord and status.json.\n2. cd cli \u0026\u0026 go test ./internal/server/... -run \"TestManagedWorkerRecordsProcessGroup\" passes.\n3. make install is run after the code change lands.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260629T090840-d64351ac",
+    "prompt": ".ddx/executions/20260629T090840-d64351ac/prompt.md",
+    "manifest": ".ddx/executions/20260629T090840-d64351ac/manifest.json",
+    "result": ".ddx/executions/20260629T090840-d64351ac/result.json",
+    "checks": ".ddx/executions/20260629T090840-d64351ac/checks.json",
+    "usage": ".ddx/executions/20260629T090840-d64351ac/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260629T090840-d64351ac"
+  },
+  "prompt_sha": "49fc16a55fddcbf58b27c58e9b77f9f5b1cbd6a8a3bc18ccb663f560dfcdaef1"
+}
