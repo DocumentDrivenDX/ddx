@@ -297,6 +297,11 @@ func (r ExecuteBeadLoopRuntime) effectiveServerHealthProbeInterval() time.Durati
 // operator-attention guard.
 const DefaultPreClaimWarnRepeatThreshold = 5
 
+const (
+	preClaimIntakeProjectRootMutationRejectedCode   = "project_root_mutation_rejected"
+	preClaimIntakeProjectRootMutationRejectedDetail = "project root mutation rejected"
+)
+
 // effectivePreClaimWarnRepeatThreshold returns the configured pre-claim warn
 // repeat threshold, falling back to DefaultPreClaimWarnRepeatThreshold when
 // unset.
@@ -2759,16 +2764,14 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 			classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
-			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+			warningCode, warningDetail := normalizePreClaimSystemUnreadyWarning(warning)
+			message := fmt.Sprintf("check unavailable: %s (continuing)", warningDetail)
 			eventType := "pre_claim_intake.warn"
 			policyMode := "warn-only"
 			decision := "warn"
 			suggestedAction := "check the readiness route or harness configuration and retry"
 			if rootMutationError {
-				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
-				eventType = "pre_claim_intake.error"
-				policyMode = "error"
-				decision = "error"
+				message = fmt.Sprintf("check unavailable: %s (code=%s; continuing)", warningDetail, warningCode)
 				suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
 			}
 			if runtime.Log != nil {
@@ -2792,14 +2795,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"bead_id":       candidate.ID,
 					"outcome":       string(PreClaimIntakeError),
 					"system_reason": classified.SystemReason,
-					"detail":        warning,
+					"detail":        warningDetail,
+					"error_detail":  warning,
 				},
 			)
-			if rootMutationError {
-				eventBody["severity"] = "error"
+			if warningCode != "" {
+				eventBody["code"] = warningCode
 			}
 			emit(eventType, eventBody)
-			if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+			if appendPreClaimWarn(candidate.ID, "system_unready", warningDetail, now().UTC()) {
 				return executeBeadIterationOutcome{Stop: true}, nil
 			}
 		case intakeOutcome == PreClaimIntakeActionableAtomic:
@@ -2840,16 +2844,14 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				systemReason = classified.SystemReason
 			}
 			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
-			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+			warningCode, warningDetail := normalizePreClaimSystemUnreadyWarning(warning)
+			message := fmt.Sprintf("check unavailable: %s (continuing)", warningDetail)
 			eventType := "pre_claim_intake.warn"
 			policyMode := "warn-only"
 			decision := "warn"
 			suggestedAction := "check the readiness route or harness configuration and retry"
 			if rootMutationError {
-				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
-				eventType = "pre_claim_intake.error"
-				policyMode = "error"
-				decision = "error"
+				message = fmt.Sprintf("check unavailable: %s (code=%s; continuing)", warningDetail, warningCode)
 				suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
 			}
 			if runtime.Log != nil {
@@ -2873,14 +2875,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"bead_id":       candidate.ID,
 					"outcome":       string(PreClaimIntakeError),
 					"system_reason": systemReason,
-					"detail":        warning,
+					"detail":        warningDetail,
+					"error_detail":  warning,
 				},
 			)
-			if rootMutationError {
-				eventBody["severity"] = "error"
+			if warningCode != "" {
+				eventBody["code"] = warningCode
 			}
 			emit(eventType, eventBody)
-			if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+			if appendPreClaimWarn(candidate.ID, "system_unready", warningDetail, now().UTC()) {
 				return executeBeadIterationOutcome{Stop: true}, nil
 			}
 		case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
@@ -4955,6 +4958,13 @@ func preClaimIntakeWarningFingerprint(reason, detail string) string {
 
 func isProjectRootMutationRejectedDetail(detail string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(detail)), "project root mutation rejected")
+}
+
+func normalizePreClaimSystemUnreadyWarning(detail string) (code, normalizedDetail string) {
+	if isProjectRootMutationRejectedDetail(detail) {
+		return preClaimIntakeProjectRootMutationRejectedCode, preClaimIntakeProjectRootMutationRejectedDetail
+	}
+	return "", detail
 }
 
 func emitStaleCandidateSkip(emit func(string, map[string]any), beadID string, skip *candidateSkipDecision, fresh *bead.Bead, stage string) {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -253,8 +254,8 @@ func TestLifecycleDispatchRejectsProjectRootMutation(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(status))
 }
 
-func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
-	root, baseStore, later := newCleanPreClaimIntakeHookGitRoot(t)
+func TestWorkReadinessRootMutationWarningsEscalateWithStableCode(t *testing.T) {
+	root, baseStore, later1 := newCleanPreClaimIntakeHookGitRoot(t)
 	parent := &bead.Bead{
 		ID:          "ddx-root-mutation-parent",
 		Title:       "Parent bead that triggers a back-edge",
@@ -266,6 +267,17 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 		Labels:      []string{"phase:2", "area:agent", "kind:feature"},
 	}
 	require.NoError(t, baseStore.Create(context.Background(), parent))
+	later2 := &bead.Bead{
+		ID:          "ddx-root-mutation-later-2",
+		Title:       "Second bead after root mutation rejection",
+		IssueType:   bead.DefaultType,
+		Status:      bead.StatusOpen,
+		Priority:    2,
+		Description: "Second later bead used to prove root-mutation warnings dedupe and escalate.",
+		Acceptance:  "1. execute after the parent back-edge is established",
+		Labels:      []string{"phase:2", "area:agent", "kind:feature"},
+	}
+	require.NoError(t, baseStore.Create(context.Background(), later2))
 
 	store := &backEdgeDecompositionStore{
 		Store:    baseStore,
@@ -306,13 +318,19 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 					WorkerID:           "worker-root-mutation-back-edge",
 					NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: split the parent",
 				}, nil
-			default:
+			case later1.ID:
 				return ExecuteBeadReport{
 					BeadID:    beadID,
 					Status:    ExecuteBeadStatusSuccess,
 					SessionID: "sess-root-mutation-back-edge",
 					ResultRev: "root-mutation-result",
 				}, nil
+			case later2.ID:
+				t.Fatalf("second later bead must not execute once repeated root-mutation warnings trip")
+				return ExecuteBeadReport{}, nil
+			default:
+				t.Fatalf("unexpected bead execution: %s", beadID)
+				return ExecuteBeadReport{}, nil
 			}
 		}),
 	}
@@ -320,10 +338,14 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", MaxDecompositionDepth: 3}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Log:                &log,
-		EventSink:          &eventSink,
-		PreClaimIntakeHook: hook,
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Log:                         &log,
+		EventSink:                   &eventSink,
+		PreClaimIntakeHook:          hook,
+		PreClaimWarnRepeatThreshold: 2,
 		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
 			require.Equal(t, parent.ID, beadID)
 			return &PreClaimDecomposition{
@@ -349,34 +371,57 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 2, result.Attempts, "the worker must process the back-edge bead and the root-mutation bead")
+	assert.Equal(t, 2, result.Attempts, "the worker must process the back-edge bead and the first root-mutation bead")
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "preclaim_warn_repeated", result.OperatorAttention.Reason)
+	assert.Equal(t, later2.ID, result.OperatorAttention.BeadID)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
 
 	events := parseLoopEvents(t, eventSink.String())
 	sawBackEdge := strings.Contains(eventSink.String(), "\"event\":\"post_attempt_decomposition.parent_back_edge\"")
-	var rootMutationError *loopEvent
-	var sawWarnForLater bool
+	var later1Warn *loopEvent
+	var later2Warn *loopEvent
 	for i := range events {
 		switch events[i].Type {
 		case "pre_claim_intake.warn":
-			if data, ok := events[i].Data["bead_id"].(string); ok && data == later.ID {
-				sawWarnForLater = true
+			if data, ok := events[i].Data["bead_id"].(string); ok {
+				switch data {
+				case later1.ID:
+					later1Warn = &events[i]
+				case later2.ID:
+					later2Warn = &events[i]
+				}
 			}
 		case "pre_claim_intake.error":
-			if data, ok := events[i].Data["bead_id"].(string); ok && data == later.ID {
-				rootMutationError = &events[i]
+			if data, ok := events[i].Data["bead_id"].(string); ok && (data == later1.ID || data == later2.ID) {
+				t.Fatalf("root-mutation rejection must emit a warning, not an error, for bead %s", data)
 			}
 		}
 	}
 	require.Truef(t, sawBackEdge, "the run must first record the parent-back-edge state; events=%s", eventSink.String())
-	require.NotNil(t, rootMutationError, "the root-mutation rejection must be surfaced as an error event")
-	assert.Equal(t, "error", rootMutationError.Data["severity"])
-	assert.Equal(t, "error", rootMutationError.Data["decision"])
-	assert.Equal(t, "error", rootMutationError.Data["policy_mode"])
-	assert.Contains(t, fmt.Sprint(rootMutationError.Data["detail"]), "project root mutation rejected for bead "+later.ID)
-	assert.Contains(t, fmt.Sprint(rootMutationError.Data["detail"]), later.ID)
-	assert.Contains(t, log.String(), "check unavailable for bead "+later.ID)
-	assert.Contains(t, log.String(), "(error)")
-	assert.False(t, sawWarnForLater, "the root-mutation rejection must not be downgraded to a warning event")
+	require.NotNil(t, later1Warn, "the first later bead must emit a root-mutation warning")
+	require.NotNil(t, later2Warn, "the second later bead must emit a root-mutation warning")
+	for beadID, ev := range map[string]*loopEvent{
+		later1.ID: later1Warn,
+		later2.ID: later2Warn,
+	} {
+		assert.Equal(t, "warn", ev.Data["decision"])
+		assert.Equal(t, "warn-only", ev.Data["policy_mode"])
+		assert.Equal(t, preClaimIntakeProjectRootMutationRejectedCode, ev.Data["code"])
+		assert.Equal(t, preClaimIntakeProjectRootMutationRejectedDetail, ev.Data["detail"])
+		assert.Contains(t, fmt.Sprint(ev.Data["error_detail"]), "project root mutation rejected for bead "+beadID)
+		assert.Contains(t, fmt.Sprint(ev.Data["error_detail"]), beadID)
+	}
+	assert.Contains(t, log.String(), "code="+preClaimIntakeProjectRootMutationRejectedCode)
+	assert.NotContains(t, log.String(), "(error)")
+
+	gotLater1, err := baseStore.Get(context.Background(), later1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotLater1.Status)
+	gotLater2, err := baseStore.Get(context.Background(), later2.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotLater2.Status)
 }
 
 func TestPreClaimIntakeHookWithLogDoesNotEmitPromptByDefault(t *testing.T) {
