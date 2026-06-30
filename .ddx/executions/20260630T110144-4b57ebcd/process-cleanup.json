@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260630T110144-4b57ebcd",
+  "bead_id": "ddx-6c17de78",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260630T110144-4b57ebcd",
+  "trigger": "",
+  "started_at": "2026-06-30T11:31:52.239840824Z",
+  "finished_at": "2026-06-30T11:31:52.468675861Z",
+  "scanned": 1314,
+  "candidates": [
+    {
+      "pid": 3722175,
+      "ppid": 1,
+      "pgid": 3722175,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260630T110144-4b57ebcd/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2339443567/b885/agent.test __provider-launch /home/erik/.local/bin/claude"
+    },
+    {
+      "pid": 3721560,
+      "ppid": 1,
+      "pgid": 3721560,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260630T110144-4b57ebcd/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2339443567/b885/agent.test __provider-launch /home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3722175,
+      "ppid": 1,
+      "pgid": 3722175,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260630T110144-4b57ebcd/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2339443567/b885/agent.test __provider-launch /home/erik/.local/bin/claude"
+    },
+    {
+      "pid": 3721560,
+      "ppid": 1,
+      "pgid": 3721560,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260630T110144-4b57ebcd/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2339443567/b885/agent.test __provider-launch /home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ]
+}

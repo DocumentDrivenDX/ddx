@@ -1,0 +1,2 @@
+status: open
+reason: retryable verification blocked by unrelated internal/agent failures in the full required sweep; `go test ./cmd/... ./internal/agent/... -count=1` first hit the 10m default timeout, and the 20m rerun later failed in `TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers` and `TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup`. Targeted startup-cleanup coverage passed (`go test ./cmd/... ./internal/agent/... -run 'WorkStartupCleanup|AttemptDescendant|Cleanup.*Process' -count=1`).
