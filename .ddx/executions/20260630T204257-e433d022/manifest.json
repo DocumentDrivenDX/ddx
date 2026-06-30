@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260630T204257-e433d022",
+  "bead_id": "ddx-7873bee5",
+  "base_rev": "a9b82467a1d987b6319676e90ca1eae0d15014b0",
+  "created_at": "2026-06-30T20:43:09.419452733Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7873bee5",
+    "title": "spec: add durable-audit commit collision-safety + idempotency contract to TP-021 and FEAT-010",
+    "description": "PROBLEM: TP-021:44-47 frames the .ddx/.git-tracker.lock 30s only as a PERFORMANCE contract and TP-021:38 names the durable-audit window without a collision-safety contract; FEAT-010's operator-attention discussion (around FEAT-010:294, :322, :797) never carves out transient git contention. The B1 (ddx-83361480) / B2 (ddx-e8bf0695) behavior must be pinned in the specs so it does not regress.\n\nROOT CAUSE: missing contract text — TP-021:38, TP-021:44-47, FEAT-010:322.\n\nPROPOSED FIX: (1) Extend TP-021's durable-audit window bullet (TP-021:38) and append a \"Durable-audit commit collision-safety contract\" paragraph after TP-021:47 stating: lock-acquire timeout AND a git-subprocess SIGKILL/context-deadline (\"signal: killed\") on any status/add/commit step MUST be classified transient and retried (never operator_attention); the commit MUST be idempotent/resumable (re-run completes with no manual git reset); concurrent workers serialize on the durable-audit critical section with a bounded wait that BACKS OFF and returns a transient error rather than killing the git child; genuine non-transient failure (permissions, ENOSPC, corruption) still surfaces operator attention. (2) Add the regression test name shipped by B2 to TP-021 Fast Chaos list (after TP-021:78). (3) Add the one-sentence transient-contention carve-out to FEAT-010 near :322.\n\nNON-SCOPE: code changes (B1/B2); editing the gitlock package contract (unchanged — gitlock.IsIndexLockError is correct; the gap is the agent-layer classifier + deadline policy).\nIN-SCOPE FILES: docs/helix/03-test/test-plans/TP-021*.md, docs/helix/01-frame/features/FEAT-010-task-execution.md.",
+    "acceptance": "1. TP-021 contains a \"Durable-audit commit collision-safety contract\" paragraph stating lock-timeout and signal:killed/command-deadline are transient (not operator-attention), the commit is idempotent/resumable, and concurrent workers back off rather than kill.\n2. TP-021 Fast Chaos list names the regression test shipped by B2.\n3. FEAT-010 states transient durable-audit-commit contention is not an operator-attention condition while non-transient git failure still is.\n4. The named test in AC#2 exists in the codebase (cross-check against B2) — no dangling spec reference.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:docs",
+      "kind:spec",
+      "phase:iterate",
+      "spec:TP-021",
+      "spec:FEAT-010",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-e8bf0695 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.448611208Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TP-021 contains a \\\"Durable-audit commit collision-safety contract\\\" paragraph stating lock-timeout and signal:killed/command-deadline are transient (not operator-attention), the commit is idempotent/resumable, and concurrent workers back off rather than kill.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"TP-021 Fast Chaos list names the regression test shipped by B2.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"FEAT-010 states transient durable-audit-commit contention is not an operator-attention condition while non-transient git failure still is.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"The named test in AC#2 exists in the codebase (cross-check against B2) — no dangling spec reference.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-06-30T20:37:32.943844251Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-7873bee5)\",\"fingerprint\":\"59d32d220162ffdeb88db13bea8db2a5766857491936e407fff384eaa67ad6b7\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"59d32d220162ffdeb88db13bea8db2a5766857491936e407fff384eaa67ad6b7\"}",
+          "created_at": "2026-06-30T20:42:37.992705555Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 1993005)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T15:25:57Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T204257-e433d022",
+    "prompt": ".ddx/executions/20260630T204257-e433d022/prompt.md",
+    "manifest": ".ddx/executions/20260630T204257-e433d022/manifest.json",
+    "result": ".ddx/executions/20260630T204257-e433d022/result.json",
+    "checks": ".ddx/executions/20260630T204257-e433d022/checks.json",
+    "usage": ".ddx/executions/20260630T204257-e433d022/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7873bee5-20260630T204257-e433d022"
+  },
+  "prompt_sha": "1021e8096ddfd0d71fce7af7ba66aa8423278653874752d0caad2259dac13a00"
+}
