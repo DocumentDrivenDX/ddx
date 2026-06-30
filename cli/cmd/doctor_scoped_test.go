@@ -73,9 +73,11 @@ func TestDoctorHookPathsDoesNotInvokeFullScope(t *testing.T) {
 
 	// Simulate the hook passing staged paths including both .ddx.yml and a template.
 	factory := NewCommandFactory(workDir)
-	_, err := executeWithStdoutCapture(t, factory.NewRootCommand(),
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(),
 		"doctor", "--paths", ".ddx.yml templates/example.md")
 	require.NoError(t, err, "hook-style --paths with multiple staged files must not invoke full-scope doctor")
+	require.NotContains(t, output, "Global Install (", "scoped doctor must not report install topology")
+	require.NotContains(t, output, "Project Install (", "scoped doctor must not report install topology")
 }
 
 // TestDoctorScopedSkillValidationIgnoresInstallLayer asserts that
@@ -109,12 +111,14 @@ func TestDoctorScopedSkillValidationIgnoresInstallLayer(t *testing.T) {
 			} {
 				t.Run(stagingPath, func(t *testing.T) {
 					factory := NewCommandFactory(workDir)
-					_, err := executeWithStdoutCapture(t, factory.NewRootCommand(),
+					output, err := executeWithStdoutCapture(t, factory.NewRootCommand(),
 						"doctor", "--paths", stagingPath)
 					require.NoError(t, err,
 						"doctor --paths %s must exit 0 regardless of install layer; legacy symlinks must not be checked for skill-file-only staged sets",
 						stagingPath,
 					)
+					require.NotContains(t, output, "Global Install (", "skill-file-only scoped doctor must not report install topology")
+					require.NotContains(t, output, "Project Install (", "skill-file-only scoped doctor must not report install topology")
 				})
 			}
 		})

@@ -33,13 +33,13 @@ live.
 DDx resolves the default `ddx` package in this order:
 
 1. project-local `<project>/.ddx/plugins/ddx/`
-2. global `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`
+2. global install `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`
 3. baked-in package embedded in the binary
 
-The project-local package is the authoritative install for a repository. The
-global layer is a fallback and may be used when the project copy is absent.
-The baked-in layer exists only for the default `ddx` package so the binary
-remains usable offline.
+This is project > global > baked-in precedence. The project-local package is
+the authoritative install for a repository. The global install is a fallback
+and may be used when the project copy is absent. The baked-in layer exists only
+for the default `ddx` package so the binary remains usable offline.
 
 DDx supports two install modes with distinct agent-tier outputs:
 
@@ -76,4 +76,3 @@ Unmanaged legacy home-directory skill installs (those not created by DDx's
 - The default package remains available offline through the embedded layer.
 - `ddx install --global` satisfies the common case where an operator wants a
   skill on every project without repeating the install per repository.
-

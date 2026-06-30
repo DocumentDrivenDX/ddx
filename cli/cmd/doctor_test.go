@@ -206,6 +206,49 @@ func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
 	}
 }
 
+func TestSkillInstallTopologyDocsMentionGlobalProjectAndPrecedence(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "ADR-027",
+			path: filepath.Join("..", "..", "docs", "helix", "02-design", "adr", "ADR-027-skill-install-topology.md"),
+		},
+		{
+			name: "library skill",
+			path: filepath.Join("..", "..", "library", "skills", "ddx", "SKILL.md"),
+		},
+		{
+			name: "library agents reference",
+			path: filepath.Join("..", "..", "library", "skills", "ddx", "reference", "agents.md"),
+		},
+		{
+			name: "CLAUDE persona system",
+			path: filepath.Join("..", "..", "CLAUDE.md"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tc.path, err)
+			}
+			text := string(data)
+			for _, want := range []string{
+				"project-local",
+				"global install",
+				"project > global > baked-in precedence",
+			} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("%s missing required phrase %q", tc.path, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 	cases := []struct {
 		name              string
