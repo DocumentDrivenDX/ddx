@@ -364,6 +364,48 @@ func TestExecutionCleanupManager_DetectsNonHarnessDescendantByOwnershipEvidence(
 	}
 }
 
+// TestStaleAttemptProcessScanner_DetectsReparentedDescendantsByCwd proves the
+// scanner classifies a reparented process (ppid=1) whose cwd sits under the
+// configured execution worktree root (e.g. ~/.cache/ddx/exec-wt/) as DDx-owned
+// even when the cwd does not contain the `.execute-bead-wt-*` segment.
+func TestStaleAttemptProcessScanner_DetectsReparentedDescendantsByCwd(t *testing.T) {
+	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	// A reparented descendant whose cwd lives under tempRoot but does NOT
+	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
+	descendantCwd := filepath.Join(tempRoot, "scratch-2026-orphan")
+	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
+
+	startedAt := time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC)
+	proc := executionCleanupAttemptProcessFromWorkerStatus(
+		"some-provider --child", descendantCwd, 4242, 1, 4242, startedAt, tempRoot,
+	)
+
+	assert.Equal(t, 4242, proc.PID, "PID must be preserved")
+	assert.Equal(t, 1, proc.PPID, "ppid=1 reparented process must be preserved")
+	assert.NotEmpty(t, proc.Worktree,
+		"reparented descendant whose cwd is under tempRoot must be classified as DDx-owned")
+	assert.Truef(t, isPathWithin(proc.Worktree, tempRoot),
+		"classified worktree %q must be within tempRoot %q", proc.Worktree, tempRoot)
+
+	// A process whose cwd is outside tempRoot and has no `.execute-bead-wt-*`
+	// signal must NOT be classified.
+	foreign := executionCleanupAttemptProcessFromWorkerStatus(
+		"unrelated-command", "/home/user/project", 5555, 1, 5555, startedAt, tempRoot,
+	)
+	assert.Empty(t, foreign.Worktree,
+		"processes outside tempRoot without a `.execute-bead-wt-*` signal must remain unclassified")
+
+	// The existing `.execute-bead-wt-*` classification must still be honored even
+	// when tempRoot is empty (default-helper call sites that pre-date the fix).
+	bareWt := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-bare-20260628T120000-cafe1234")
+	bare := executionCleanupAttemptProcessFromWorkerStatus(
+		"sh -c sleep", bareWt, 6666, 1, 6666, startedAt, "",
+	)
+	assert.NotEmpty(t, bare.Worktree,
+		"`.execute-bead-wt-*` classification must remain even without tempRoot")
+}
+
 func TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
