@@ -49,6 +49,7 @@ func TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified(t *testing.T) {
 	// localhost port no test will ever bind — actual dispatch will fail
 	// but the routing-under-specified gate must not.
 	homeDir := t.TempDir()
+	hermeticRoot := t.TempDir()
 	agentCfgDir := filepath.Join(homeDir, ".config", "agent")
 	require.NoError(t, os.MkdirAll(agentCfgDir, 0o755))
 	agentCfg := `providers:
@@ -61,7 +62,12 @@ default_provider: testprov
 `
 	require.NoError(t, os.WriteFile(filepath.Join(agentCfgDir, "config.yaml"), []byte(agentCfg), 0o644))
 
-	t.Setenv("HOME", homeDir)
+	installCmdHermeticEnvAt(t, hermeticRoot, homeDir, hermeticRoot)
+	assert.True(t, strings.HasPrefix(os.Getenv("PATH"), filepath.Join(hermeticRoot, "bin")+string(os.PathListSeparator)),
+		"zero-config work must resolve provider CLIs from fake harness binaries")
+	assert.True(t, strings.HasPrefix(os.Getenv("FIZEAU_CACHE_DIR"), filepath.Join(hermeticRoot, ".cache")),
+		"zero-config work must keep discovery cache under a temp root")
+
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
 
 	factory := NewCommandFactory(projectDir)

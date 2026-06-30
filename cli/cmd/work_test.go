@@ -825,6 +825,12 @@ func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
 	}
 
 	dir := minimalProjectDir(t)
+	hermeticRoot := t.TempDir()
+	installCmdHermeticEnvAt(t, hermeticRoot, hermeticRoot, hermeticRoot)
+	assert.True(t, strings.HasPrefix(os.Getenv("PATH"), filepath.Join(hermeticRoot, "bin")+string(os.PathListSeparator)),
+		"underspecified-routing work must resolve provider CLIs from fake harness binaries")
+	assert.True(t, strings.HasPrefix(os.Getenv("FIZEAU_CACHE_DIR"), filepath.Join(hermeticRoot, ".cache")),
+		"underspecified-routing work must keep discovery cache under a temp root")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
 	require.NoError(t, exec.Command("git", "init", dir).Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
