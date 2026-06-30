@@ -188,7 +188,8 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 		return svc.executeCalled
 	}, 2*time.Second, 10*time.Millisecond, "worker must reach Execute promptly")
 
-	final := waitForWorkerExit(t, m, record.ID, 6*time.Second)
+	// Race builds on shared hosts can need more time to drain the worker.
+	final := waitForWorkerExit(t, m, record.ID, 15*time.Second)
 	assert.NotEqual(t, "failed", final.State, "worker should complete without a ResolveRoute failure")
 
 	svc.mu.Lock()

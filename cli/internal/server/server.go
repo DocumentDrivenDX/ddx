@@ -94,7 +94,7 @@ func mcpText(text string) mcpContent {
 // beadHubCloser is the minimal interface the Server requires from its bead
 // lifecycle hub. *bead.WatcherHub satisfies this interface.
 type beadHubCloser interface {
-	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
+	bead.LifecycleSubscriber
 	Close()
 }
 
@@ -174,7 +174,9 @@ func New(addr, workingDir string) *Server {
 
 	workers := NewWorkerManager(workingDir)
 	workers.ReconcileStaleWorkers()
-	beadHub := bead.NewWatcherHub(250 * time.Millisecond)
+	beadHub := bead.NewWatcherHub(func(projectID string) (bead.BeadReader, error) {
+		return bead.NewStore(ddxroot.JoinProject(projectID)), nil
+	}, 250*time.Millisecond)
 	csrfStore, err := ddxgraphql.NewStaticCSRFTokenStore()
 	if err != nil {
 		// CSRF token generation should never fail outside of a broken

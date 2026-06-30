@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 )
@@ -21,21 +20,28 @@ type LifecycleEvent struct {
 	Timestamp time.Time
 }
 
-// WatcherHub manages per-project bead file watchers by polling beads.jsonl
-// for changes. It satisfies the BeadLifecycleSubscriber interface used by
-// the GraphQL subscription resolver.
+// StoreFactory creates the bead reader used to watch one project.
+type StoreFactory func(projectID string) (BeadReader, error)
+
+// WatcherHub manages per-project bead readers by polling for changes. It
+// satisfies the BeadLifecycleSubscriber interface used by the GraphQL
+// subscription resolver.
 type WatcherHub struct {
 	mu       sync.Mutex
+	factory  StoreFactory
 	watchers map[string]*projectWatcher
 	interval time.Duration
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
+var _ LifecycleSubscriber = (*WatcherHub)(nil)
+
 // NewWatcherHub creates a hub that polls each watched project at interval.
-func NewWatcherHub(interval time.Duration) *WatcherHub {
+func NewWatcherHub(factory StoreFactory, interval time.Duration) *WatcherHub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &WatcherHub{
+		factory:  factory,
 		watchers: make(map[string]*projectWatcher),
 		interval: interval,
 		ctx:      ctx,
@@ -45,23 +51,52 @@ func NewWatcherHub(interval time.Duration) *WatcherHub {
 
 // Close stops all background watchers.
 func (h *WatcherHub) Close() {
+	if h == nil || h.cancel == nil {
+		return
+	}
 	h.cancel()
 }
 
 // SubscribeLifecycle registers for lifecycle events from the project at
 // projectID (the project root directory). A new per-project watcher is
 // started on first Subscribe call. The returned func unsubscribes.
-func (h *WatcherHub) SubscribeLifecycle(projectID string) (<-chan LifecycleEvent, func()) {
+func (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if h == nil {
+		return nil, nil, fmt.Errorf("bead watcher hub is nil")
+	}
 	h.mu.Lock()
 	pw, ok := h.watchers[projectID]
+	created := false
 	if !ok {
-		store := NewStore(projectID + "/.ddx")
-		pw = newProjectWatcher(store, h.interval)
+		if h.factory == nil {
+			h.mu.Unlock()
+			return nil, nil, fmt.Errorf("bead watcher factory not configured")
+		}
+		reader, err := h.factory(projectID)
+		if err != nil {
+			h.mu.Unlock()
+			return nil, nil, err
+		}
+		if reader == nil {
+			h.mu.Unlock()
+			return nil, nil, fmt.Errorf("bead watcher factory returned nil reader for project %q", projectID)
+		}
+		pw = newProjectWatcher(reader, h.interval)
 		h.watchers[projectID] = pw
-		go pw.run(h.ctx)
+		created = true
 	}
 	h.mu.Unlock()
-	return pw.subscribe()
+	ch, unsub := pw.subscribe()
+	if created {
+		go pw.run(h.ctx)
+	}
+	return ch, unsub, nil
 }
 
 // beadState captures the fields we compare across polls to detect changes.
@@ -71,20 +106,19 @@ type beadState struct {
 	title  string
 }
 
-// projectWatcher polls a single bead store and broadcasts lifecycle events.
+// projectWatcher polls a single bead reader and broadcasts lifecycle events.
 type projectWatcher struct {
-	store    *Store
+	reader   BeadReader
 	interval time.Duration
 
 	mu       sync.Mutex
 	subs     []chan LifecycleEvent
 	snapshot map[string]beadState
-	lastMod  time.Time
 }
 
-func newProjectWatcher(store *Store, interval time.Duration) *projectWatcher {
+func newProjectWatcher(reader BeadReader, interval time.Duration) *projectWatcher {
 	return &projectWatcher{
-		store:    store,
+		reader:   reader,
 		interval: interval,
 		snapshot: make(map[string]beadState),
 	}
@@ -134,16 +168,10 @@ func (pw *projectWatcher) run(ctx context.Context) {
 }
 
 func (pw *projectWatcher) poll(ctx context.Context) {
-	info, err := os.Stat(pw.store.File)
-	if err != nil {
+	if pw.reader == nil {
 		return
 	}
-	if !info.ModTime().After(pw.lastMod) {
-		return
-	}
-	pw.lastMod = info.ModTime()
-
-	beads, err := pw.store.ReadAll(ctx)
+	beads, err := pw.reader.ReadAll(ctx)
 	if err != nil {
 		return
 	}

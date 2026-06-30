@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,9 @@ func TestServerShutdownCallsWorkerManagerShutdown(t *testing.T) {
 	srv.EnableManagedWorkers()
 
 	// Inject a spy so we can observe the Close() call.
-	spy := &spyBeadHub{WatcherHub: bead.NewWatcherHub(250 * time.Millisecond)}
+	spy := &spyBeadHub{WatcherHub: bead.NewWatcherHub(func(projectID string) (bead.BeadReader, error) {
+		return bead.NewStore(ddxroot.JoinProject(projectID)), nil
+	}, 250*time.Millisecond)}
 	srv.beadHub = spy
 
 	// Prime one coordinator so StopAll has an entry to clear.
