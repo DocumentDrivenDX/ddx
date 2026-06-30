@@ -37,7 +37,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	require.NoError(t, err, "ddx work must exist")
 	require.NotNil(t, workCmd)
 
-	for _, name := range []string{"harness", "provider", "model", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
+	for _, name := range []string{"harness", "provider", "model", "label-filter", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
@@ -134,6 +134,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("model", "sonnet")
 	setFlag("profile", "smart")
 	setFlag("provider", "anthropic")
+	setFlag("label-filter", "phase:reliability")
 	setFlag("effort", "high")
 	setFlag("ignore-cooldown", "true")
 	setFlag("reason", "operator unblock")
@@ -163,6 +164,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, "sonnet", spec.Model)
 	assert.Equal(t, "smart", spec.Profile)
 	assert.Equal(t, "anthropic", spec.Provider)
+	assert.Equal(t, "phase:reliability", spec.LabelFilter)
 	assert.Equal(t, "high", spec.Effort)
 	assert.True(t, spec.IgnoreCooldown)
 	assert.Equal(t, "operator unblock", spec.CooldownOverrideReason)

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -125,6 +126,10 @@ type WorkerRecord struct {
 	// autonomous watchdog can send SIGTERM/SIGKILL to the process group when
 	// cancelling the context is not enough.
 	PID int `json:"pid,omitempty"`
+	// PGID is the OS process-group id of an external worker subprocess, if any.
+	// For server-managed workers on Unix this matches PID because the child
+	// starts in its own process group. Zero for purely in-process workers.
+	PGID int `json:"pgid,omitempty"`
 	// ReapReason is populated when the watchdog forcibly terminates a worker;
 	// set to "watchdog" today.
 	ReapReason string `json:"reap_reason,omitempty"`
@@ -181,6 +186,10 @@ type workerHandle struct {
 	// no-op and runWorker can preserve the "stopped" state across its final
 	// record write.
 	stopped bool
+	// managed marks a subprocess-backed worker launched via the server-managed
+	// path. The parent manager does not watchdog these workers because the
+	// worker loop lives in a separate OS process.
+	managed bool
 	// cleanupPGIDs stores additional child process groups registered for this
 	// worker when the worker itself does not own the full process tree. The
 	// slice is protected by m.mu and consumed by the stop/reap cleanup helper.
@@ -224,6 +233,11 @@ type WorkerManager struct {
 
 	watchdogOnce sync.Once
 	watchdogStop chan struct{}
+
+	// managedLaunch switches StartExecuteLoop onto the subprocess-backed
+	// server-managed launch path. Tests keep the default in-process behavior;
+	// the CLI server enables this when it wants real process-group ownership.
+	managedLaunch bool
 }
 
 const (
@@ -274,6 +288,13 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 	}
 	m.applyServerWatchdogConfig(projectRoot)
 	return m
+}
+
+func (m *WorkerManager) enableManagedLaunch() {
+	if m == nil {
+		return
+	}
+	m.managedLaunch = true
 }
 
 func appendUniqueInt(dst []int, value int) []int {
@@ -346,6 +367,101 @@ func prepareExecuteLoopWorkerSpec(projectRoot string, spec executeloop.ExecuteLo
 		return ExecuteLoopWorkerSpec{}, err
 	}
 	return ExecuteLoopWorkerSpec(spec), nil
+}
+
+func resolveManagedWorkerBinaryPath() (string, error) {
+	if env := strings.TrimSpace(os.Getenv("DDX_BIN")); env != "" {
+		if _, err := os.Stat(env); err == nil {
+			return env, nil
+		}
+		return "", fmt.Errorf("managed worker launch: DDX_BIN %q does not exist", env)
+	}
+
+	if exe, err := os.Executable(); err == nil && looksLikeDDXBinary(exe) {
+		return exe, nil
+	}
+	if len(os.Args) > 0 && looksLikeDDXBinary(os.Args[0]) {
+		return os.Args[0], nil
+	}
+	if path, err := exec.LookPath("ddx"); err == nil {
+		return path, nil
+	}
+	return "", fmt.Errorf("managed worker launch requires a ddx binary; run make install or set DDX_BIN")
+}
+
+func looksLikeDDXBinary(path string) bool {
+	if path == "" {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(path))
+	return base == "ddx" || base == "ddx.exe"
+}
+
+func managedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
+	args := []string{"work", "--server-managed", workerID}
+	if spec.ProjectRoot != "" {
+		args = append(args, "--project", spec.ProjectRoot)
+	}
+	if spec.FromRev != "" {
+		args = append(args, "--from", spec.FromRev)
+	}
+	if spec.Harness != "" {
+		args = append(args, "--harness", spec.Harness)
+	}
+	if spec.Model != "" {
+		args = append(args, "--model", spec.Model)
+	}
+	if spec.Profile != "" {
+		args = append(args, "--profile", spec.Profile)
+	}
+	if spec.Provider != "" {
+		args = append(args, "--provider", spec.Provider)
+	}
+	if spec.LabelFilter != "" {
+		args = append(args, "--label-filter", spec.LabelFilter)
+	}
+	if spec.Effort != "" {
+		args = append(args, "--effort", spec.Effort)
+	}
+	if spec.AttemptBackend != "" {
+		args = append(args, "--attempt-backend", spec.AttemptBackend)
+	}
+	if spec.IgnoreCooldown {
+		args = append(args, "--ignore-cooldown")
+		if spec.CooldownOverrideReason != "" {
+			args = append(args, "--reason", spec.CooldownOverrideReason)
+		}
+	}
+	switch spec.Mode {
+	case executeloop.ModeOnce:
+		args = append(args, "--once")
+	case executeloop.ModeWatch:
+		args = append(args, "--watch")
+		if spec.IdleInterval.Duration > 0 {
+			args = append(args, "--idle-interval", spec.IdleInterval.String())
+		}
+	}
+	if spec.NoReview {
+		args = append(args, "--no-review", "--no-review-i-know-what-im-doing")
+	}
+	if spec.ReviewHarness != "" {
+		args = append(args, "--review-harness", spec.ReviewHarness)
+	}
+	if spec.ReviewModel != "" {
+		args = append(args, "--review-model", spec.ReviewModel)
+	}
+	args = append(args,
+		"--max-cost", fmt.Sprintf("%g", spec.MaxCostUSD),
+		"--max-bead-cost", fmt.Sprintf("%g", spec.MaxBeadCostUSD),
+		"--max-recovery-cost", fmt.Sprintf("%g", spec.MaxRecoveryCostUSD),
+		"--preclaim-timeout", spec.PreClaimTimeout.String(),
+		"--route-resolution-timeout", spec.RouteResolutionTimeout.String(),
+		"--request-timeout", spec.RequestTimeout.String(),
+		"--rate-limit-max-wait", spec.RateLimitMaxWait.String(),
+		"--min-power", fmt.Sprintf("%d", spec.MinPower),
+		"--max-power", fmt.Sprintf("%d", spec.MaxPower),
+	)
+	return args
 }
 
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
@@ -470,6 +586,9 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	progressCh := make(chan agent.ProgressEvent, 64)
 	wakeCh := make(chan struct{}, 1)
+	if m.managedLaunch {
+		wakeCh = nil
+	}
 	handle := &workerHandle{
 		record:       record,
 		cancel:       cancel,
@@ -479,6 +598,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		progressDone: make(chan struct{}),
 		lastPhaseTS:  time.Now().UTC(),
 		wakeCh:       wakeCh,
+		managed:      m.managedLaunch,
 	}
 
 	m.mu.Lock()
@@ -487,10 +607,98 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	m.ensureWatchdog()
 
+	if m.managedLaunch {
+		managedRecord, err := m.launchManagedExecuteLoop(id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
+		if err != nil {
+			m.mu.Lock()
+			delete(m.workers, id)
+			m.mu.Unlock()
+			_ = logFile.Close()
+			if eventsFile != nil {
+				_ = eventsFile.Close()
+			}
+			_ = os.RemoveAll(dir)
+			return WorkerRecord{}, err
+		}
+		return managedRecord, nil
+	}
+
 	go m.drainProgress(id, handle, progressCh)
 	go m.runWorker(ctx, id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
 
 	return record, nil
+}
+
+func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) (WorkerRecord, error) {
+	binary, err := resolveManagedWorkerBinaryPath()
+	if err != nil {
+		return WorkerRecord{}, err
+	}
+
+	cmd := exec.Command(binary, managedWorkerCommandArgs(spec, id)...)
+	cmd.Dir = projectRoot
+	cmd.Stdout = log
+	cmd.Stderr = log
+	cmd.SysProcAttr = newManagedWorkerSysProcAttr()
+
+	if err := cmd.Start(); err != nil {
+		return WorkerRecord{}, err
+	}
+
+	m.mu.Lock()
+	record := handle.record
+	record.PID = cmd.Process.Pid
+	record.PGID = cmd.Process.Pid
+	handle.managed = true
+	handle.record = record
+	m.mu.Unlock()
+	if err := m.writeRecord(dir, record); err != nil {
+		_ = cleanupManagedWorkerProcessTree(cmd.Process.Pid, nil, 0)
+		_ = cmd.Wait()
+		return WorkerRecord{}, err
+	}
+
+	go m.drainProgress(id, handle, progressCh)
+	go m.waitManagedWorkerExit(cmd, id, dir, handle, eventSink, progressCh)
+
+	return record, nil
+}
+
+func (m *WorkerManager) waitManagedWorkerExit(cmd *exec.Cmd, id, dir string, handle *workerHandle, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
+	waitErr := cmd.Wait()
+	close(progressCh)
+	<-handle.progressDone
+
+	now := time.Now().UTC()
+	m.mu.Lock()
+	record := handle.record
+	preservedState := ""
+	if record.State == "stopped" || record.State == "reaped" {
+		preservedState = record.State
+	}
+	record.FinishedAt = now
+	record.Substate = ""
+	if eventSink != nil {
+		_ = eventSink.Close()
+	}
+	_ = handle.logFile.Close()
+	if waitErr != nil {
+		record.State = "failed"
+		record.Status = "failed"
+		record.Error = waitErr.Error()
+		record.LastError = waitErr.Error()
+	} else {
+		record.State = "exited"
+		record.Status = "success"
+	}
+	if preservedState != "" {
+		record.State = preservedState
+		record.Status = preservedState
+	}
+	handle.record = record
+	m.mu.Unlock()
+
+	_ = m.writeRecord(dir, record)
 }
 
 func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run PluginActionExecutor) (WorkerRecord, error) {
@@ -1399,6 +1607,12 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 	var picks []candidate
 	for id, h := range m.workers {
 		if h == nil || h.reaped {
+			continue
+		}
+		if h.managed {
+			// Managed workers are subprocess-backed and do not stream progress
+			// through the parent manager. They are monitored and cleaned up by
+			// explicit stop/reap flows, not the in-process watchdog.
 			continue
 		}
 		rec := h.record

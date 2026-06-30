@@ -111,6 +111,7 @@ MCP (POST /mcp):
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
 			srv := server.New(listenAddr, projectRoot)
+			srv.EnableManagedWorkers()
 			if hubMode {
 				srv.EnableHubMode(federationAllowPlainHTTP)
 				fmt.Fprintf(cmd.OutOrStdout(), "DDx hub-mode enabled (federation routes mounted)\n")

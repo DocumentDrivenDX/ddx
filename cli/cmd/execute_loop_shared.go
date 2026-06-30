@@ -45,6 +45,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	model, _ := cmd.Flags().GetString("model")
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
+	labelFilter, _ := cmd.Flags().GetString("label-filter")
 	effort, _ := cmd.Flags().GetString("effort")
 	attemptBackend, _ := cmd.Flags().GetString("attempt-backend")
 	ignoreCooldown, _ := cmd.Flags().GetBool("ignore-cooldown")
@@ -101,6 +102,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		Model:                  model,
 		Profile:                profile,
 		Provider:               provider,
+		LabelFilter:            labelFilter,
 		Effort:                 effort,
 		AttemptBackend:         attemptBackend,
 		Mode:                   mode,
