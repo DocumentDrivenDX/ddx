@@ -1,0 +1,2 @@
+status: open
+reason: repo-wide verification is blocked by unrelated performance/time budget failures under this environment. The exact `go test ./...` run fails in `internal/agent` unless the timeout is raised, and even with `GOFLAGS='-p=1 -timeout=20m'` the full sweep later trips `cli/internal/bead`'s `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` under load. The archive/interchange changes and targeted bead tests pass, but the acceptance command is not green here.
