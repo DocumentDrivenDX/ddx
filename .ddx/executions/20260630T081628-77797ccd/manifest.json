@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260630T081628-77797ccd",
+  "bead_id": "ddx-3e734740",
+  "base_rev": "fac69bb56df2c36f66d8d5e75a3338b6e11d2319",
+  "created_at": "2026-06-30T08:16:41.36379346Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3e734740",
+    "title": "server: reap stalled managed worker process trees from watchdog",
+    "description": "PROBLEM\nThe watchdog reap path must clean the same server-owned worker process tree as operator Stop and must release any claimed bead when a worker stalls. Today a stalled managed worker with PID zero can leave harness descendants behind.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:1400-1408 records only rec.PID when selecting watchdog reap candidates. cli/internal/server/workers.go:1434-1450 emits bead.reaped and releases the bead claim before cleanup, which is correct and must be preserved. cli/internal/server/workers.go:1453-1457 then calls terminateProcessGroup only when pid \u003e 0, and cli/internal/server/workers.go:1459-1462 falls back to context cancellation, which is insufficient for orphaned child harnesses.\n\nPROPOSED FIX\nWire reapWorker through the same managed process-tree cleanup helper used by Stop. Preserve the ordering that appends bead.reaped and Unclaim before process termination, then send SIGTERM, wait WatchdogKillGrace, SIGKILL survivors, persist terminal reaped status, and keep reaping idempotent for a worker already marked reaped.\n\nNON-SCOPE\nDo not kill external reported workers or interactive Claude/Codex sessions. Do not change bead claim semantics except releasing claims for the stopped/reaped managed worker. Do not implement UI controls.\n\nGOVERNING ARTIFACT AND RELATIONSHIP\nParent bead: ddx-9d1af129. Governing artifact reference: plan:server-managed-workers. No explicit dependency IDs were provided by the parent bead.",
+    "acceptance": "1. TestManagedWorkerWatchdogReapKillsProcessTree proves watchdog reap follows the SIGTERM-to-SIGKILL cleanup path and leaves no managed worker descendants running.\n2. TestManagedWorkerWatchdogReapReleasesClaim proves the claimed bead is unclaimed and receives one bead.reaped event when the watchdog reaps the worker.\n3. TestManagedWorkerWatchdogReapSkipsExternalReportedWorkers proves watchdog cleanup does not terminate external reported workers, interactive Claude/Codex sessions, or unrelated process groups.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestManagedWorkerWatchdogReapKillsProcessTree|TestManagedWorkerWatchdogReapReleasesClaim|TestManagedWorkerWatchdogReapSkipsExternalReportedWorkers' passes.\n5. make install is run after the code change lands.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T081628-77797ccd",
+    "prompt": ".ddx/executions/20260630T081628-77797ccd/prompt.md",
+    "manifest": ".ddx/executions/20260630T081628-77797ccd/manifest.json",
+    "result": ".ddx/executions/20260630T081628-77797ccd/result.json",
+    "checks": ".ddx/executions/20260630T081628-77797ccd/checks.json",
+    "usage": ".ddx/executions/20260630T081628-77797ccd/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-3e734740-20260630T081628-77797ccd"
+  },
+  "prompt_sha": "e3a029bcdfe3a256bcc9047ca0da9b11ed5a5ce4d6003514a37cb0072426acf9"
+}
