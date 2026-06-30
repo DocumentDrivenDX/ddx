@@ -1,0 +1,83 @@
+{
+  "attempt_id": "20260630T014313-4b7ebb0f",
+  "bead_id": "ddx-071e9bd6",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f",
+  "trigger": "context canceled",
+  "started_at": "2026-06-30T04:00:53.827923499Z",
+  "finished_at": "2026-06-30T04:00:54.056030079Z",
+  "scanned": 1302,
+  "candidates": [
+    {
+      "pid": 427568,
+      "ppid": 373162,
+      "pgid": 373149,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 373162,
+      "ppid": 373149,
+      "pgid": 373149,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_launch_unix.go ./internal/server/workers_launch_windows.go ./internal/server/workers_managed_test.go ./internal/server/workers_stop_test.go ./internal/server/workers_supervisor.go ./internal/server/workers_test.go"
+    },
+    {
+      "pid": 373149,
+      "ppid": 372991,
+      "pgid": 373149,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_launch_unix.go ./internal/server/workers_launch_windows.go ./internal/server/workers_managed_test.go ./internal/server/workers_stop_test.go ./internal/server/workers_supervisor.go ./internal/server/workers_test.go"
+    },
+    {
+      "pid": 372991,
+      "ppid": 372984,
+      "pgid": 372929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 372984,
+      "ppid": 1,
+      "pgid": 372929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f",
+      "command": "/bin/sh /home/erik/Projects/ddx/.git/hooks/pre-commit"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 427568,
+      "ppid": 373162,
+      "pgid": 373149,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 373162,
+      "ppid": 373149,
+      "pgid": 373149,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_launch_unix.go ./internal/server/workers_launch_windows.go ./internal/server/workers_managed_test.go ./internal/server/workers_stop_test.go ./internal/server/workers_supervisor.go ./internal/server/workers_test.go"
+    },
+    {
+      "pid": 373149,
+      "ppid": 372991,
+      "pgid": 373149,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_launch_unix.go ./internal/server/workers_launch_windows.go ./internal/server/workers_managed_test.go ./internal/server/workers_stop_test.go ./internal/server/workers_supervisor.go ./internal/server/workers_test.go"
+    },
+    {
+      "pid": 372991,
+      "ppid": 372984,
+      "pgid": 372929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 372984,
+      "ppid": 1,
+      "pgid": 372929,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T014313-4b7ebb0f",
+      "command": "/bin/sh /home/erik/Projects/ddx/.git/hooks/pre-commit"
+    }
+  ]
+}
