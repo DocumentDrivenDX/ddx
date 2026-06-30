@@ -1609,12 +1609,6 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 		if h == nil || h.reaped {
 			continue
 		}
-		if h.managed {
-			// Managed workers are subprocess-backed and do not stream progress
-			// through the parent manager. They are monitored and cleaned up by
-			// explicit stop/reap flows, not the in-process watchdog.
-			continue
-		}
 		rec := h.record
 		if !rec.FinishedAt.IsZero() {
 			continue
@@ -1648,6 +1642,11 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 			beadID = rec.CurrentBead
 		}
 
+		pid := rec.PID
+		if pid <= 0 && h.managed {
+			pid = rec.PGID
+		}
+
 		h.reaped = true
 		picks = append(picks, candidate{
 			id:      id,
@@ -1655,7 +1654,7 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 			runtime: runtime,
 			stalled: stalled,
 			beadID:  beadID,
-			pid:     rec.PID,
+			pid:     pid,
 		})
 	}
 	m.mu.Unlock()
@@ -1681,6 +1680,11 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
+	processRoot := pid
+	if processRoot <= 0 && handle.managed {
+		processRoot = rec.PGID
+	}
+	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
 	m.mu.Unlock()
 
 	// 1. Emit the reap event and release the bead claim before killing, so
@@ -1689,7 +1693,7 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		body := fmt.Sprintf(
 			"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
-			id, runtime.Round(time.Second), stalled.Round(time.Second), pid, reason,
+			id, runtime.Round(time.Second), stalled.Round(time.Second), processRoot, reason,
 		)
 		_ = store.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      "bead.reaped",
@@ -1705,8 +1709,7 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	// 2. Escalate to the worker process tree if we know any server-owned
 	//    process groups.
 	_, _, _, grace := m.watchdogDeadlines()
-	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
-	cleanupReport := cleanupManagedWorkerProcessTree(pid, cleanupPGIDs, grace)
+	cleanupReport := cleanupManagedWorkerProcessTree(processRoot, cleanupPGIDs, grace)
 
 	// 3. Cancel the goroutine so any in-process code sees context.Canceled.
 	if handle.cancel != nil {
