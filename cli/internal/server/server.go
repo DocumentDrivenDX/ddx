@@ -276,9 +276,10 @@ func (s *Server) RegisterProject(path string) ProjectEntry {
 	return entry
 }
 
-// Shutdown stops the server's background services: closes the bead lifecycle
-// hub and stops all land coordinators. Returns the first error encountered.
-// Both operations are idempotent and safe to call on an idle server.
+// Shutdown stops the server's background services: server-owned workers,
+// bead lifecycle subscriptions, and land coordinators. Returns the first error
+// encountered. The cleanup steps are idempotent and safe to call on an idle
+// server.
 func (s *Server) Shutdown() error {
 	// Best-effort spoke deregister so the hub registry does not show this
 	// node as stale after a graceful shutdown. Errors are swallowed inside
@@ -288,9 +289,19 @@ func (s *Server) Shutdown() error {
 		_ = s.ShutdownSpoke(ctx)
 		cancel()
 	}
-	s.beadHub.Close()
-	s.workers.LandCoordinators.StopAll()
-	return nil
+	var firstErr error
+	if s.workers != nil {
+		if err := s.workers.Shutdown(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if s.beadHub != nil {
+		s.beadHub.Close()
+	}
+	if s.workers != nil && s.workers.LandCoordinators != nil {
+		s.workers.LandCoordinators.StopAll()
+	}
+	return firstErr
 }
 
 // ListenAndServe starts the server. If TsnetConfig.Enabled is true, a parallel

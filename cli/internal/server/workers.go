@@ -1557,6 +1557,167 @@ func (m *WorkerManager) Stop(id string) error {
 	return nil
 }
 
+// Shutdown stops every live server-owned worker, reaps any running worker
+// records left on disk after a restart, and waits for managed workers that
+// still have a live goroutine to persist their terminal stopped state.
+// It is idempotent and best-effort: shutdown continues past individual worker
+// errors and returns the first one encountered.
+func (m *WorkerManager) Shutdown() error {
+	if m == nil {
+		return nil
+	}
+
+	m.StopWatchdog()
+
+	type liveWorker struct {
+		id         string
+		waitForEnd bool
+	}
+
+	m.mu.Lock()
+	live := make([]liveWorker, 0, len(m.workers))
+	liveIDs := make(map[string]struct{}, len(m.workers))
+	for id, handle := range m.workers {
+		if handle == nil {
+			continue
+		}
+		rec := handle.record
+		if rec.State != "running" && rec.State != "stopping" {
+			continue
+		}
+		if !rec.FinishedAt.IsZero() {
+			continue
+		}
+		liveIDs[id] = struct{}{}
+		live = append(live, liveWorker{
+			id:         id,
+			waitForEnd: handle.logFile != nil,
+		})
+	}
+	m.mu.Unlock()
+
+	var firstErr error
+	for _, worker := range live {
+		if err := m.Stop(worker.id); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	if entries, err := os.ReadDir(m.rootDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			id := entry.Name()
+			if _, ok := liveIDs[id]; ok {
+				continue
+			}
+
+			rec, err := m.readRecord(filepath.Join(m.rootDir, id))
+			if err != nil {
+				continue
+			}
+			if rec.State != "running" && rec.State != "stopping" {
+				continue
+			}
+			if rec.PID > 0 || rec.PGID > 0 {
+				if err := m.shutdownManagedDiskEntry(rec); err != nil && firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if err := m.stopStaleDiskEntry(id); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) && firstErr == nil {
+		firstErr = err
+	}
+
+	const shutdownWaitTimeout = 5 * time.Second
+	for _, worker := range live {
+		if !worker.waitForEnd {
+			continue
+		}
+		if err := m.waitForStoppedRecord(worker.id, shutdownWaitTimeout); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return firstErr
+}
+
+func (m *WorkerManager) waitForStoppedRecord(id string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		rec, err := m.Show(id)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				time.Sleep(25 * time.Millisecond)
+				continue
+			}
+			return err
+		}
+		if rec.State == "stopped" && rec.Status == "stopped" && !rec.FinishedAt.IsZero() {
+			return nil
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	return fmt.Errorf("worker %s did not persist stopped state before shutdown timeout", id)
+}
+
+func (m *WorkerManager) shutdownManagedDiskEntry(rec WorkerRecord) error {
+	now := time.Now().UTC()
+	projectRoot := rec.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = m.projectRoot
+	}
+	beadID := ""
+	if rec.CurrentAttempt != nil {
+		beadID = rec.CurrentAttempt.BeadID
+	}
+	if beadID == "" {
+		beadID = rec.CurrentBead
+	}
+	rootPID := rec.PID
+	if rootPID <= 0 {
+		rootPID = rec.PGID
+	}
+
+	if beadID != "" {
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+		body := fmt.Sprintf("worker=%s pid=%d reason=shutdown", rec.ID, rootPID)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "shutdown",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
+	}
+
+	_, _, _, grace := m.watchdogDeadlines()
+	cleanupReport := cleanupManagedWorkerProcessTree(rootPID, nil, grace)
+	cleanupSummary := cleanupReport.String()
+
+	rec.State = "stopped"
+	rec.Status = "stopped"
+	if rec.FinishedAt.IsZero() {
+		rec.FinishedAt = now
+	}
+	rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+		Action:    "stop",
+		Actor:     "local-operator",
+		Timestamp: now,
+		Detail:    fmt.Sprintf("reason=shutdown pid=%d cleanup=%s", rootPID, cleanupSummary),
+		BeadID:    beadID,
+	})
+	dir := filepath.Join(m.rootDir, rec.ID)
+	return m.writeRecord(dir, rec)
+}
+
 // ensureWatchdog starts the supervisor goroutine exactly once per manager.
 // The goroutine runs until StopWatchdog() is called (or the process exits).
 func (m *WorkerManager) ensureWatchdog() {
