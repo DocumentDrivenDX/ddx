@@ -337,6 +337,8 @@ evidence, record the interruption/disruption, release the claim, and leave the
 bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
 Shutdown is not itself a reason to park a bead on `work-retry-after`.
 
+Transient durable-audit commit contention, including lock-acquire timeouts and git children that exit with `signal: killed` or a context deadline while staging audit outputs, is retried and does not become `operator_attention`; only non-transient git failures such as permissions, ENOSPC, or corruption still escalate to operator attention.
+
 #### Idle-Path Diagnosis and Auto-Remediation
 
 When the picker returns no executable bead, Layer 3 does not exit. It diagnoses
