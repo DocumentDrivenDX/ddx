@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260630T101236-ae03c473",
+  "bead_id": "ddx-392ed1e4",
+  "base_rev": "e38d5cf5348e924e1b66b5cdd1acc14174c2f945",
+  "created_at": "2026-06-30T10:12:46.643476177Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-392ed1e4",
+    "title": "cmd: surface cleanup process findings in JSON and text",
+    "description": "PROBLEM\n`ddx cleanup` can already report stale temp dirs, run-state files, scratch dirs, and evidence retention, but it has no way to show stale attempt-descendant process findings to the operator. A dry-run can therefore look clean while the host still has DDx-owned CPU/port pressure.\n\nROOT CAUSE\n`cli/cmd/cleanup.go:11-30` defines `cleanupCommandReport` with only file/resource counters, warnings, blocked errors, and observations; there is no process field in the JSON/text contract.\n`cli/cmd/cleanup.go:69-72` constructs `agent.NewExecutionCleanupManager` and runs it, but `runCleanup` only copies the current file/resource summary fields into the report and prints those fields in text output.\n`cli/internal/agent/execution_cleanup.go:110-138` currently exposes file/resource counts only, so the CLI has nothing process-related to forward.\n\nPROPOSED FIX\n- Extend `cleanupCommandReport` with process counts and structured process findings from the cleanup summary, keeping the existing resource counters intact.\n- Update `runCleanup` so both `--json` and the text report include process findings/counts without dropping stale temp dir, run-state, scratch, or evidence fields.\n- Keep dry-run semantics unchanged: the report should show what `--apply` would terminate, but dry-run must not kill anything.\n- Add focused command tests that assert the widened JSON/text shape while preserving the current resource-reporting assertions.\n\nNON-SCOPE\n- Process detection/reaping logic itself lives in the sibling `agent` bead.\n- Startup/pre-claim cleanup wiring lives in the sibling `work startup` bead.\n- Documentation updates in `docs/` are handled separately.\n- No change to the command name, flag set, or non-cleanup subcommands.",
+    "acceptance": "1. `TestCleanupCommand_JSONIncludesProcessFindings` proves `ddx cleanup --json` includes process findings/counts and still exposes the stale temp dir, run-state, and scratch fields that already existed.\n2. `TestCleanupCommand_DryRunReportsProcessFindingsInText` (or equivalent) proves dry-run text includes process findings/counts and still prints the existing stale temp dir/run-state/scratch summary lines.\n3. The existing cleanup command regression tests, especially `TestCleanupCommand_DryRunReportsWithoutDeleting` and `TestCleanupCommand_JSONShape`, continue to pass with the widened output contract.\n4. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'CleanupCommand|Cleanup.*Process|AttemptDescendant' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -count=1` passes and `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260630T101236-ae03c473",
+    "prompt": ".ddx/executions/20260630T101236-ae03c473/prompt.md",
+    "manifest": ".ddx/executions/20260630T101236-ae03c473/manifest.json",
+    "result": ".ddx/executions/20260630T101236-ae03c473/result.json",
+    "checks": ".ddx/executions/20260630T101236-ae03c473/checks.json",
+    "usage": ".ddx/executions/20260630T101236-ae03c473/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-392ed1e4-20260630T101236-ae03c473"
+  },
+  "prompt_sha": "35c5d53883b3345e67324c42b7e5a3a860091aab7cd3eb348f39ff68be9755a4"
+}
