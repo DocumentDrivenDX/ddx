@@ -92,6 +92,19 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		wd, _ = os.Getwd()
 	}
 
+	// Install the provider-launch PATH shim before constructing the
+	// Fizeau service so that when fizeau LookPaths codex/claude/etc it
+	// finds our wrapper, which sets PR_SET_PDEATHSIG=SIGKILL before
+	// execve'ing the real binary. This is the local seam that prevents
+	// orphan provider subprocesses when the worker dies abnormally
+	// (bead ddx-01b89378). Best-effort: if the shim fails to install
+	// we still proceed; the orphan reaper remains as a backstop.
+	if ddxBinary, err := os.Executable(); err == nil {
+		if _, _, shimErr := EnsureProviderShimOnPATH(ddxBinary); shimErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
+		}
+	}
+
 	// Construct the service. Reuses NewServiceFromWorkDir so provider/model
 	// routing data lands on the agent the same way every other DDx command
 	// constructs it (see serviceconfig.go).
