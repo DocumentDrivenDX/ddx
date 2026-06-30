@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260630T155255-cf36a4a3",
+  "bead_id": "ddx-98d2280f",
+  "base_rev": "81946aefc674b478b294a9b542433dfcd0543b75",
+  "created_at": "2026-06-30T15:53:09.489649629Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-98d2280f",
+    "title": "doctor and docs: report install layers and document topology",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nOperators need `ddx doctor` and the shipped docs to explain which install layer is active. The ddx-validate pre-commit hook must keep its scoped behavior so skill-related validation runs only when skill files are staged, regardless of whether skills are installed globally or project-locally. This documentation and diagnostic work should be separate from the install/update/init implementation beads.\n\nROOT CAUSE\n- `cli/cmd/doctor.go:35` owns full doctor execution and must report installation topology without breaking existing health checks.\n- `cli/cmd/doctor.go:292` invokes skill install topology reporting, and `cli/cmd/doctor.go:429` renders the global and project layer statuses.\n- `cli/cmd/doctor.go:487` is the scoped doctor path used by the ddx-validate hook; it must stay scoped to staged paths rather than running global install checks.\n- `docs/helix/02-design/adr/ADR-027-skill-install-topology.md:31`, `library/skills/ddx/SKILL.md:37`, `library/skills/ddx/reference/agents.md:144`, and `CLAUDE.md:220` are the durable documentation surfaces that must describe install locations and precedence.\n\nPROPOSED FIX\nHave `ddx doctor` render two explicit lines for the default `ddx` plugin layer: `Global Install (${XDG_DATA_HOME}/ddx/global/plugins/ddx) — ok | missing` and `Project Install (ddxroot.Path()/plugins/ddx) — ok | missing | lazy-resolves-to-global`. Preserve `ddx doctor --paths` behavior for ddx-validate so only relevant scoped checks run for staged files. Update or file the topology ADR, `library/skills/ddx/SKILL.md` How this skill works/install topology section, `library/skills/ddx/reference/agents.md` if present, and the `CLAUDE.md` Persona System section so they all describe project-local, global, and baked-in precedence.\n\nGOVERNING ARTIFACTS\n- Principle 2 of epic ddx-602ae31a.\n- Depends on ddx-06cbaa90 and its home-resolution spec updates.\n- Spec impact: `docs/helix/02-design/adr/ADR-025-or-equivalent` skill install topology, `library/skills/ddx/SKILL.md`, `library/skills/ddx/reference/agents.md` if it exists, and `CLAUDE.md` Persona System.\n\nPARENT\n- ddx-602ae31a\n\nDEPS\n- ddx-06cbaa90\n\nNON-SCOPE\n- Removing the existing per-project install entirely; global and per-project modes coexist.\n- Migrating `~/.config/ddx/` legacy paths if any exist.\n- Agent-harness path discovery beyond Claude Code and Codex-facing `.agents/skills`; add others only when those harnesses define their skill paths.",
+    "acceptance": "1. `TestDoctor_ReportsBothInstallLayers` asserts `ddx doctor` renders `Global Install (...) — ok|missing` and `Project Install (...) — ok|missing|lazy-resolves-to-global`.\n2. `TestDoctor_ReportsInstallTopology` asserts the project line reports `lazy-resolves-to-global` when the global install exists and the project plugin is absent.\n3. `TestDoctorHookPathsDoesNotInvokeFullScope` and `TestDoctorScopedSkillValidationIgnoresInstallLayer` assert the ddx-validate `--paths` flow does not run global or project install topology checks unless staged paths require skill validation.\n4. `TestSkillInstallTopologyDocsMentionGlobalProjectAndPrecedence` asserts `docs/helix/02-design/adr/ADR-027-skill-install-topology.md`, `library/skills/ddx/SKILL.md`, `library/skills/ddx/reference/agents.md`, and `CLAUDE.md` mention project-local installs, global installs, and project \u003e global \u003e baked-in precedence.\n5. `ddx skills check library/skills/ddx cli/internal/skills/ddx` passes after skill doc updates.\n6. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... -run 'TestDoctor_ReportsBothInstallLayers|TestDoctor_ReportsInstallTopology|TestDoctorHookPathsDoesNotInvokeFullScope|TestDoctorScopedSkillValidationIgnoresInstallLayer|TestSkillInstallTopologyDocsMentionGlobalProjectAndPrecedence' -count=1` passes.\n7. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/...` passes.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "area:cli",
+      "area:docs",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "parent:ddx-602ae31a",
+      "depends:ddx-06cbaa90"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T155255-cf36a4a3",
+    "prompt": ".ddx/executions/20260630T155255-cf36a4a3/prompt.md",
+    "manifest": ".ddx/executions/20260630T155255-cf36a4a3/manifest.json",
+    "result": ".ddx/executions/20260630T155255-cf36a4a3/result.json",
+    "checks": ".ddx/executions/20260630T155255-cf36a4a3/checks.json",
+    "usage": ".ddx/executions/20260630T155255-cf36a4a3/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-98d2280f-20260630T155255-cf36a4a3"
+  },
+  "prompt_sha": "cee6a8ee3e079159f0d0357535b0191566a26d53fcfb557ecffd010f4c3c09ff"
+}
