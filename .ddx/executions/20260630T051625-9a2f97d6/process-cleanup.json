@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260630T051625-9a2f97d6",
+  "bead_id": "ddx-071e9bd6",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6",
+  "trigger": "",
+  "started_at": "2026-06-30T06:07:16.346729662Z",
+  "finished_at": "2026-06-30T06:07:16.560217375Z",
+  "scanned": 1310,
+  "candidates": [
+    {
+      "pid": 1832351,
+      "ppid": 1703542,
+      "pgid": 1703515,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 1703542,
+      "ppid": 1703515,
+      "pgid": 1703515,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 1703515,
+      "ppid": 1,
+      "pgid": 1703515,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1832351,
+      "ppid": 1703542,
+      "pgid": 1703515,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 1703542,
+      "ppid": 1703515,
+      "pgid": 1703515,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 1703515,
+      "ppid": 1,
+      "pgid": 1703515,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T051625-9a2f97d6/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    }
+  ]
+}
