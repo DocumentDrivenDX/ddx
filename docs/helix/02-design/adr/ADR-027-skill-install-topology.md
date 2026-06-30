@@ -44,8 +44,10 @@ for the default `ddx` package so the binary remains usable offline.
 DDx supports two install modes with distinct agent-tier outputs:
 
 **Project-local (default, `ddx install <name>`):**
-- Plugin content: `<project>/.ddx/plugins/<name>/` (in-tree) or
-  `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` (convention mode)
+- Plugin content: `ddxroot.Path()/plugins/<name>/` (that is
+  `<project>/.ddx/plugins/<name>/` in-tree or
+  `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` in convention
+  mode)
 - Agent-tier skill outputs: `<project>/.agents/skills/<name>/` and
   `<project>/.claude/skills/<name>/`
 
@@ -54,8 +56,9 @@ DDx supports two install modes with distinct agent-tier outputs:
 - Agent-tier skill outputs: `~/.agents/skills/<name>/` and
   `~/.claude/skills/<name>/`
 
-The `--global` surface enables machine-wide installs so operators can share a
-single skill across every project on the machine without per-project setup.
+The `--global` surface is reinstated under the zero-footprint epic and enables
+machine-wide installs so operators can share a single skill across every
+project on the machine without per-project setup.
 State for global installs is recorded in a separate global state file
 (`${XDG_DATA_HOME}/ddx/global/installed.json`) and does not pollute per-project
 state. The `ddx plugin list --global` and `ddx plugin show <name> --global`

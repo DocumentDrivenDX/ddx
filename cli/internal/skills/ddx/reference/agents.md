@@ -143,16 +143,22 @@ See the personas README for the authoring quality bar.
 
 ## Install topology
 
-DDx resolves package installs in this order: project-local
-`.ddx/plugins/<name>/`, then the global install at
-`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`, then the baked-in
-default package for `ddx` itself. This is project > global > baked-in precedence.
-`ddx doctor` exposes the project and global `ddx` layers separately so
-operators can distinguish a real project install from a global fallback.
+DDx resolves package installs in this order: project tier
+`ddxroot.Path()/plugins/<name>/` (which is `<project>/.ddx/plugins/<name>/` in-tree
+or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` in convention
+mode), then the global install at `${XDG_DATA_HOME}/ddx/global/plugins/<name>/`,
+then the baked-in default package for `ddx` itself. This is project > global >
+baked-in precedence. `ddx doctor` exposes the project and global `ddx` layers
+separately so operators can distinguish a real project install from a global
+fallback.
 
-The agent-facing skill outputs are the project-local `.agents/skills/`
-and `.claude/skills/` directories. Those are the install targets for the
-resolved package; home-directory skill installs are retired.
+The agent-facing skill outputs for project installs are the project-local
+`.agents/skills/<name>/` and `.claude/skills/<name>/` directories. Global
+installs created with `ddx install <name> --global` write the plugin to
+`${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and create links under
+`~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. Managed global
+installs are the supported machine-wide path; unmanaged home-directory skill
+installs are retired.
 
 ## Anti-patterns
 

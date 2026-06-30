@@ -23,11 +23,12 @@ the DDx surface correctly.
 The skill body you're reading is an **overview** plus an **intent
 router**. The real domain guidance lives in `reference/*.md` files.
 
-Install locations: this skill is resolved from the project-local plugin layer
-(`.ddx/plugins/ddx/`), the global machine layer
-(`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`), or the binary's baked-in
-default — see **Install topology** below. `ddx doctor` reports which layer is
-active.
+Install locations: this skill is resolved from the project tier
+(`ddxroot.Path()/plugins/ddx/`, which is `<project>/.ddx/plugins/ddx/` in-tree
+or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/ddx/` in convention
+mode), the global machine layer (`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`),
+or the binary's baked-in default — see **Install topology** below. `ddx doctor`
+reports which layer is active.
 
 **Directive: before responding to any DDx-related request, read the
 matching reference file from the router table below. The router is
@@ -36,21 +37,21 @@ guidance, not this overview alone.**
 
 ## Install topology
 
-DDx resolves the default `ddx` package in three layers: project-local
-`.ddx/plugins/ddx/`, then the global install at
-`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in package
-embedded in the binary. This is project > global > baked-in precedence.
-`ddx doctor` reports the project and global layers separately so operators can
-tell whether the project copy is real, missing, or lazily resolving to the
-global layer.
+DDx resolves the default `ddx` package in three layers: project tier
+`ddxroot.Path()/plugins/ddx/` (in-tree or convention mode), then the global
+install at `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in
+package embedded in the binary. This is project > global > baked-in
+precedence. `ddx doctor` reports the project and global layers separately so
+operators can tell whether the project copy is real, missing, or lazily
+resolving to the global layer.
 
-For project-local installs, the agent-facing skill outputs live in
+For project installs, the agent-facing skill outputs live in
 `<project>/.agents/skills/<name>/` and `<project>/.claude/skills/<name>/`.
-For machine-wide installs (`ddx install <name> --global`), the plugin lands
-in `${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and skill links are created
-under `~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. Manual
-home-directory skill placements outside these managed paths are retired; use
-`ddx install --global` instead.
+For machine-wide installs (`ddx install <name> --global`), the plugin lands in
+`${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and skill links are created under
+`~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. `ddx install
+--global` is reinstated under the zero-footprint epic; unmanaged home-directory
+skill placements outside these managed paths are retired.
 
 ## Vocabulary
 
