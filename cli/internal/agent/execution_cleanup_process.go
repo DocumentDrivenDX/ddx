@@ -412,9 +412,19 @@ func executionCleanupAttemptFactFromRaw(proc executionCleanupAttemptProcess) Exe
 	return ExecutionCleanupProcessFact(proc)
 }
 
-func executionCleanupAttemptProcessFromWorkerStatus(cmdline, cwd string, pid, ppid, pgid int, startedAt time.Time) executionCleanupAttemptProcess {
+func executionCleanupAttemptProcessFromWorkerStatus(cmdline, cwd string, pid, ppid, pgid int, startedAt time.Time, tempRoot string) executionCleanupAttemptProcess {
 	_, worktree := workerstatus.InferBead(cmdline, cwd)
 	worktree = executionCleanupAttemptWorktreeRoot(worktree)
+	// Fallback: classify reparented DDx descendants whose cwd lives under the
+	// configured execution worktree root, even when the cwd no longer carries
+	// the `.execute-bead-wt-*` segment (e.g. provider subprocess that inherited
+	// the parent cwd, then its parent died and it was reparented to init).
+	if worktree == "" && tempRoot != "" && cwd != "" {
+		trimmedCwd := strings.TrimSuffix(strings.TrimSpace(cwd), " (deleted)")
+		if trimmedCwd != "" && isPathWithin(trimmedCwd, tempRoot) {
+			worktree = filepath.Clean(trimmedCwd)
+		}
+	}
 	return executionCleanupAttemptProcess{
 		PID:       pid,
 		PPID:      ppid,
