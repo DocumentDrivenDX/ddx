@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260630T074643-d4f75f6d",
+  "bead_id": "ddx-a0a13392",
+  "base_rev": "0bd46c5406d6e395e411dc1b350961b3424b86f0",
+  "created_at": "2026-06-30T07:46:53.984652237Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a0a13392",
+    "title": "server: stop managed worker trees with shared cleanup helper",
+    "description": "PROBLEM\nStop currently performs ad hoc cleanup inside WorkerManager.Stop, releasing the claimed bead and then killing only the recorded pid when pid \u003e 0. That path does not prove that a managed worker tree with fake claude/codex descendants is fully terminated, and the cleanup logic is not centralized for reuse by other lifecycle paths.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:1214-1312 contains Stop, including the current pid-gated terminateProcessGroup call.\ncli/internal/server/workers.go:1234-1286 computes pid and only escalates when pid \u003e 0, so cleanup is limited to the recorded leader process.\ncli/internal/server/workers.go:1298-1312 finalizes the worker after the ad hoc kill path, which makes idempotence depend on repeated copies of the same logic rather than a shared helper.\n\nPROPOSED FIX\n- Introduce a shared managed-worker tree cleanup helper that sends SIGTERM to the managed process group, waits WatchdogKillGrace, then SIGKILLs any remaining descendants.\n- Make Stop call that helper for server-managed workers before terminalizing the record.\n- Preserve the bead.stopped event, claim release, and terminal status writes so repeated Stop calls remain idempotent.\n- Add fake claude and codex binaries on PATH that spawn sleeping children so the test can prove the full descendant tree is gone after Stop.\n- Add a second Stop call assertion so the test proves no duplicate bead transition and no unrelated process kill.\n\nNON-SCOPE\n- Do not change watchdog reaping in this bead.\n- Do not implement server shutdown cleanup in this bead.\n- Do not change external reported workers or interactive sessions.\n\nACCEPTANCE\n1. TestManagedWorkerStopKillsClaudeCodexDescendants uses fake claude and codex binaries on PATH that spawn sleeping children, then proves Stop leaves none of those descendants running.\n2. TestManagedWorkerStopIsIdempotent calls Stop twice and proves no duplicate bead transition and no unrelated process kill.\n3. cd cli \u0026\u0026 go test ./internal/server/... -run \"TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerStopIsIdempotent\" passes.\n4. make install is run after the code change lands.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260630T074643-d4f75f6d",
+    "prompt": ".ddx/executions/20260630T074643-d4f75f6d/prompt.md",
+    "manifest": ".ddx/executions/20260630T074643-d4f75f6d/manifest.json",
+    "result": ".ddx/executions/20260630T074643-d4f75f6d/result.json",
+    "checks": ".ddx/executions/20260630T074643-d4f75f6d/checks.json",
+    "usage": ".ddx/executions/20260630T074643-d4f75f6d/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a0a13392-20260630T074643-d4f75f6d"
+  },
+  "prompt_sha": "7eb870b44336a2fa13d15e81b41a7e6132d70bab248e7975c6899d14556af40e"
+}
