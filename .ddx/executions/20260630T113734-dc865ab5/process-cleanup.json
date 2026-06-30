@@ -1,0 +1,27 @@
+{
+  "attempt_id": "20260630T113734-dc865ab5",
+  "bead_id": "ddx-900a8d38",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-900a8d38-20260630T113734-dc865ab5",
+  "trigger": "",
+  "started_at": "2026-06-30T12:51:54.308052703Z",
+  "finished_at": "2026-06-30T12:51:54.54623373Z",
+  "scanned": 1312,
+  "candidates": [
+    {
+      "pid": 3834965,
+      "ppid": 1,
+      "pgid": 3834965,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-900a8d38-20260630T113734-dc865ab5/cli/internal/server/graphql",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3834965,
+      "ppid": 1,
+      "pgid": 3834965,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-900a8d38-20260630T113734-dc865ab5/cli/internal/server/graphql",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ]
+}
