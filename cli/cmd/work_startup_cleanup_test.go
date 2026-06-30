@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -174,6 +175,60 @@ func TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim(t *t
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.GreaterOrEqual(t, atomic.LoadInt32(&cleanupCalls), int32(1))
+}
+
+// TestWorkStartupCleanup_ReapsReparentedAttemptDescendantsBeforeClaim proves
+// that the startup pre-claim cleanup pass invokes the broadened cwd-based
+// classifier from ddx-54d9c455: a reparented descendant whose cwd lives under
+// the configured execution worktree root but whose leaf directory does NOT
+// carry the `.execute-bead-wt-*` suffix is reaped before the worker attempts
+// its first ready-execution claim.
+func TestWorkStartupCleanup_ReapsReparentedAttemptDescendantsBeforeClaim(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+
+	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
+
+	// A reparented descendant whose cwd lives under tempRoot but does NOT
+	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
+	descendantCwd := filepath.Join(tempRoot, "reparented-orphan-20260628T170000-feedface")
+	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(descendantCwd, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-startup-reparented",
+		AttemptID:    "20260628T170000-feedface",
+		WorktreePath: descendantCwd,
+	}))
+
+	// Spawn a real process in its own process group with cwd = the reparented
+	// descendant. The startup pre-claim pass must reap it via the broadened
+	// classifier even though the cwd lacks the `.execute-bead-wt-*` segment.
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = descendantCwd
+	sleepCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, sleepCmd.Start())
+	pid := sleepCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_, _ = sleepCmd.Process.Wait()
+	})
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "work", "--json", "--once", "--project", projectRoot)
+	require.NoError(t, err)
+
+	var res struct {
+		NoReadyWork bool `json:"no_ready_work"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	assert.True(t, res.NoReadyWork)
+
+	// Reap the leader zombie so the polling check sees the PID disappear.
+	go func() { _, _ = sleepCmd.Process.Wait() }()
+	require.Eventually(t, func() bool {
+		return sleepCmd.Process.Signal(syscall.Signal(0)) != nil
+	}, 3*time.Second, 20*time.Millisecond, "startup pre-claim pass must reap the reparented descendant process group")
 }
 
 func TestWorkStartupCleanup_UsesCleanupLockForProcessReaping(t *testing.T) {

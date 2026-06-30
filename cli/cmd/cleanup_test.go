@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -454,4 +455,67 @@ func TestCleanupCommand_DryRunTextIncludesProcessFindingsAndCounts(t *testing.T)
 	assert.Contains(t, out, "stale process:", "must include per-process detail line")
 	// Dry-run footer must still appear.
 	assert.Contains(t, out, "run again with --apply")
+}
+
+// TestCleanupCommand_ApplyReapsReparentedAttemptDescendants proves that the
+// `ddx cleanup --apply` surface invokes the broadened cwd-based classifier from
+// ddx-54d9c455: a reparented descendant whose cwd lives under the configured
+// execution worktree root but whose leaf directory does NOT carry the
+// `.execute-bead-wt-*` suffix is still classified as DDx-owned and reaped.
+func TestCleanupCommand_ApplyReapsReparentedAttemptDescendants(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+
+	// A reparented descendant whose cwd lives under tempRoot but does NOT
+	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
+	descendantCwd := filepath.Join(tempRoot, "reparented-orphan-20260628T160000-cafe1234")
+	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(descendantCwd, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-reparented",
+		AttemptID:    "20260628T160000-cafe1234",
+		WorktreePath: descendantCwd,
+	}))
+
+	// Spawn a real process in its own process group with cwd = the reparented
+	// descendant. The /proc scanner will pick this up via the broadened cwd
+	// classifier and the cleanup surface must reap it.
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = descendantCwd
+	sleepCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, sleepCmd.Start())
+	pid := sleepCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_, _ = sleepCmd.Process.Wait()
+	})
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--apply", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	var found map[string]any
+	for _, f := range report.ProcessFindings {
+		if wt, _ := f["worktree"].(string); wt == descendantCwd {
+			found = f
+			break
+		}
+	}
+	require.NotNil(t, found, "reparented descendant must appear in process_findings; got: %#v", report.ProcessFindings)
+	foundPID, _ := found["pid"].(float64)
+	assert.Equal(t, float64(pid), foundPID, "process_findings pid must match spawned process")
+	terminated, _ := found["terminated"].(bool)
+	assert.True(t, terminated, "terminated must be true under --apply")
+
+	// Reap the leader zombie so the polling check sees the PID disappear.
+	go func() { _, _ = sleepCmd.Process.Wait() }()
+	require.Eventually(t, func() bool {
+		return sleepCmd.Process.Signal(syscall.Signal(0)) != nil
+	}, 3*time.Second, 20*time.Millisecond, "reparented descendant process group should be reaped by cleanup --apply")
 }
