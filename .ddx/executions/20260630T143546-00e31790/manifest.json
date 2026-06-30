@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260630T143546-00e31790",
+  "bead_id": "ddx-c6364caf",
+  "base_rev": "5690daf214697de5fc58026744de0d37bc4b959c",
+  "created_at": "2026-06-30T14:35:58.275675663Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c6364caf",
+    "title": "install: route global and project plugin installs to correct skill tiers",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nOperators need `ddx install \u003cname\u003e --global` for machine-wide plugin and skill installs while plain `ddx install \u003cname\u003e` remains project-local in both in-tree and convention modes. The parent bead bundles install routing with init, update, lookup, doctor, and docs, making it too large for one execution.\n\nROOT CAUSE\n- `cli/cmd/install.go:22` owns the `ddx install \u003cname\u003e` command surface and must carry both project-local and `--global` routing.\n- `cli/cmd/install.go:181` is the install-directory decision point that must choose `${XDG_DATA_HOME}/ddx/global/` for global installs or `ddxroot.Path()` for project installs.\n- `cli/cmd/install.go:270` and `cli/cmd/install.go:308` define `ddx plugin list/show`; they need the same `--global` state selection as install.\n- `cli/internal/ddxroot/ddxroot.go:90` defines the global DDx state root required by ddx-06cbaa90.\n\nPROPOSED FIX\nAdd or verify `--global` on `ddx install`, `ddx plugin list`, and `ddx plugin show`. Global installs write plugin content to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/`, record global installed state, and create agent-tier links under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e`. Plain installs write to `ddxroot.Path()/plugins/\u003cname\u003e/`; in in-tree mode that resolves to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/`, and in convention mode to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/`. Plain installs create project-tier skill links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`, with convention-mode links pointing into the XDG project plugin tree.\n\nGOVERNING ARTIFACTS\n- Principle 2 of epic ddx-602ae31a.\n- Depends on ddx-06cbaa90: install paths route through both `ddxroot.Path()` and `${XDG_DATA_HOME}/ddx/global/`.\n- ADR-027 skill install topology or equivalent must stay consistent with this behavior.\n\nPARENT\n- ddx-602ae31a\n\nDEPS\n- ddx-06cbaa90\n\nNON-SCOPE\n- Removing the existing per-project install entirely; global and per-project modes coexist.\n- Migrating `~/.config/ddx/` legacy paths if any exist.\n- Agent-harness path discovery beyond Claude Code and Codex-facing `.agents/skills`; add others only when those harnesses define their skill paths.",
+    "acceptance": "1. `TestInstallGlobal_WritesGlobalTreeAndAgentLinks` asserts `ddx install \u003cname\u003e --global --silent` installs into `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` as symlinks or copies.\n2. `TestInstall_InTreeMode_WritesProjectPluginsAndLinks` asserts plain `ddx install \u003cname\u003e` in in-tree mode writes to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and creates `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`.\n3. `TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks` asserts plain `ddx install \u003cname\u003e` in convention mode writes to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and project-tier links point into that XDG plugin path.\n4. `TestPluginListGlobal_EnumeratesFromGlobalTier` and `TestPluginShowGlobal_ReportsFromGlobalTier` assert `ddx plugin list --global` and `ddx plugin show \u003cname\u003e --global` read global state, while unflagged commands read project state.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... -run 'TestInstallGlobal_WritesGlobalTreeAndAgentLinks|TestInstall_InTreeMode_WritesProjectPluginsAndLinks|TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks|TestPluginListGlobal_EnumeratesFromGlobalTier|TestPluginShowGlobal_ReportsFromGlobalTier' -count=1` passes.\n6. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "parent:ddx-602ae31a",
+      "depends:ddx-06cbaa90"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T143546-00e31790",
+    "prompt": ".ddx/executions/20260630T143546-00e31790/prompt.md",
+    "manifest": ".ddx/executions/20260630T143546-00e31790/manifest.json",
+    "result": ".ddx/executions/20260630T143546-00e31790/result.json",
+    "checks": ".ddx/executions/20260630T143546-00e31790/checks.json",
+    "usage": ".ddx/executions/20260630T143546-00e31790/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-c6364caf-20260630T143546-00e31790"
+  },
+  "prompt_sha": "5b142f06077671dcb3dc441b24de32024707151e0bb25ac92a4fddb297d2ae44"
+}
