@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260630T150356-e5087692",
+  "bead_id": "ddx-61ba671e",
+  "base_rev": "be4bc5f4c47a17653474a8d5814ef21a8e842200",
+  "created_at": "2026-06-30T15:04:07.547700828Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-61ba671e",
+    "title": "update: honor global and project plugin install layers",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\n`ddx update` must update the same install layer the operator selected. `ddx update --global` should mutate only the global plugin tree and global installed state, while plain `ddx update` should mutate only the active project install in in-tree or convention mode. This can be implemented independently from install, init, lookup, doctor, and docs.\n\nROOT CAUSE\n- `cli/cmd/update.go:57` owns the `ddx update` command flow and is the point where `--global` must branch away from project update behavior.\n- `cli/cmd/update.go:204` updates project state and must continue to respect `ddxroot.Path()` for in-tree versus convention mode.\n- `cli/cmd/update.go:296` is the global update path and must operate exclusively under `${XDG_DATA_HOME}/ddx/global/`.\n- `cli/cmd/install.go:213` remaps install targets and should be reused or mirrored so update writes plugin content and skill links to the correct layer.\n\nPROPOSED FIX\nAdd or verify `--global` on `ddx update`. In global mode, load global installed state, reinstall or refresh only `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/`, and refresh home-tier skill links under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` without touching project `.ddx/` or project skill links. Without `--global`, update the project install under `ddxroot.Path()/plugins/\u003cname\u003e/`; in in-tree mode that is `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/`, and in convention mode it is `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/`.\n\nGOVERNING ARTIFACTS\n- Principle 2 of epic ddx-602ae31a.\n- Depends on ddx-06cbaa90: update paths route through `ddxroot.Path()` and `${XDG_DATA_HOME}/ddx/global/`.\n- ADR-027 skill install topology or equivalent must stay consistent with update behavior.\n\nPARENT\n- ddx-602ae31a\n\nDEPS\n- ddx-06cbaa90\n\nNON-SCOPE\n- Removing the existing per-project install entirely; global and per-project modes coexist.\n- Migrating `~/.config/ddx/` legacy paths if any exist.\n- Agent-harness path discovery beyond Claude Code and Codex-facing `.agents/skills`; add others only when those harnesses define their skill paths.",
+    "acceptance": "1. `TestUpdateGlobal_UpdatesGlobalNotProject` asserts `ddx update --global` updates only the global plugin tree and does not modify project plugin content or project skill links.\n2. `TestUpdate_RespectsConventionVsInTreeMode` asserts plain `ddx update` updates the project install in whichever mode is active: `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` for in-tree mode and `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` for convention mode.\n3. `TestUpdateGlobal_RefreshesAgentTierLinks` asserts global update refreshes `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` from the global plugin tree.\n4. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... -run 'TestUpdateGlobal_UpdatesGlobalNotProject|TestUpdate_RespectsConventionVsInTreeMode|TestUpdateGlobal_RefreshesAgentTierLinks' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "area:cli",
+      "area:update",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "parent:ddx-602ae31a",
+      "depends:ddx-06cbaa90"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T150356-e5087692",
+    "prompt": ".ddx/executions/20260630T150356-e5087692/prompt.md",
+    "manifest": ".ddx/executions/20260630T150356-e5087692/manifest.json",
+    "result": ".ddx/executions/20260630T150356-e5087692/result.json",
+    "checks": ".ddx/executions/20260630T150356-e5087692/checks.json",
+    "usage": ".ddx/executions/20260630T150356-e5087692/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-61ba671e-20260630T150356-e5087692"
+  },
+  "prompt_sha": "fb52946dfb62d83daecefa41507f940443ec98c8bfe83043da6527e664458562"
+}
