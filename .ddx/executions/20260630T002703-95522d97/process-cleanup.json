@@ -1,0 +1,139 @@
+{
+  "attempt_id": "20260630T002703-95522d97",
+  "bead_id": "ddx-071e9bd6",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97",
+  "trigger": "",
+  "started_at": "2026-06-30T01:20:56.085476349Z",
+  "finished_at": "2026-06-30T01:20:56.363929589Z",
+  "scanned": 1311,
+  "candidates": [
+    {
+      "pid": 3808516,
+      "ppid": 3807441,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build225388701/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build225388701/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 3808130,
+      "ppid": 3807141,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build3118191855/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build3118191855/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 3807441,
+      "ppid": 3688268,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 3807141,
+      "ppid": 3683405,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 3688268,
+      "ppid": 3688238,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3683405,
+      "ppid": 3683391,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3688238,
+      "ppid": 1,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3683391,
+      "ppid": 1,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3632984,
+      "ppid": 1,
+      "pgid": 3632984,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli/internal/server/graphql",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3808516,
+      "ppid": 3807441,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build225388701/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build225388701/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 3808130,
+      "ppid": 3807141,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build3118191855/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build3118191855/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 3807441,
+      "ppid": 3688268,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 3807141,
+      "ppid": 3683405,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 3688268,
+      "ppid": 3688238,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3683405,
+      "ppid": 3683391,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3688238,
+      "ppid": 1,
+      "pgid": 3688238,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3683391,
+      "ppid": 1,
+      "pgid": 3683391,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/work.go ./internal/server/graphql_adapters.go ./internal/server/server.go ./internal/server/workers.go ./internal/server/workers_managed.go ./internal/server/workers_managed_test.go ./internal/server/workers_managed_unix.go ./internal/server/workers_managed_windows.go ./internal/server/workers_supervisor.go"
+    },
+    {
+      "pid": 3632984,
+      "ppid": 1,
+      "pgid": 3632984,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97/cli/internal/server/graphql",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ]
+}

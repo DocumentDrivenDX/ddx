@@ -1,0 +1,114 @@
+{
+  "attempt_id": "20260630T002703-95522d97",
+  "bead_id": "ddx-071e9bd6",
+  "base_rev": "33213e8f8c66eead20f04dd356472b85acc10be9",
+  "created_at": "2026-06-30T00:27:18.835601367Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-071e9bd6",
+    "title": "server: launch managed worker subprocesses with persisted PID/PGID",
+    "description": "PROBLEM\nServer-managed workers still start through the in-process goroutine path, so the server owns only a cancelable context and cannot prove it owns a killable worker process group. A managed worker also needs its process-group identity persisted in status.json, not just memory, so restart/shutdown can reason about the same worker after a process exit.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:361-462 starts a worker by building a record, creating a context, and launching runWorker in goroutines; there is no OS process boundary in that path.\ncli/internal/server/workers.go:88-135 defines WorkerRecord with PID and PIDAlive, but no persisted PGID/process-group field.\ncli/internal/server/workers.go:1711-1720 writes status.json from the record as-is, so any managed process ownership must be recorded on WorkerRecord to survive a restart.\n\nPROPOSED FIX\n- Add a server-managed launch path that starts ddx work --server-managed \u003cworker-id\u003e in its own process group instead of only launching runWorker in-process.\n- Extend WorkerRecord and the persisted status.json shape to include the managed process-group identity needed for cleanup.\n- Wire the server-owned work start flow through that managed launch path and keep the existing in-process path only as a test seam if needed.\n- Add TestManagedWorkerRecordsProcessGroup to prove the managed worker record and status.json both show nonzero process-group ownership.\n\nNON-SCOPE\n- Do not implement stop, watchdog reap, or shutdown cleanup in this bead.\n- Do not change external reported workers or the UI.\n- Do not alter bead claim semantics beyond what the managed start path needs for its own record.\n\nACCEPTANCE\n1. TestManagedWorkerRecordsProcessGroup proves a server-managed drain worker has nonzero PID/PGID in WorkerRecord and status.json.\n2. cd cli \u0026\u0026 go test ./internal/server/... -run \"TestManagedWorkerRecordsProcessGroup\" passes.\n3. make install is run after the code change lands.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T09:23:25.825045834Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T090840-d64351ac\",\"bead_id\":\"ddx-071e9bd6\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T09:23:28.032260727Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"95fa24e97dd5c257e56262c5fc0b72644fa277ca\",\"classification\":\"no_changes_unjustified\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt ended with a generic exit status 1 and result_rev equals base_rev, with no session log, code changes, verification evidence, or durable blocker proving the bead is satisfied or blocked.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"95fa24e97dd5c257e56262c5fc0b72644fa277ca\",\"session_id\":\"eb-638a9157\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T09:25:12.071597148Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_changes_unjustified\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=95fa24e97dd5c257e56262c5fc0b72644fa277ca\nbase_rev=95fa24e97dd5c257e56262c5fc0b72644fa277ca\nretry_after=2026-06-29T15:25:12Z\noutcome_reason=no_changes_unjustified",
+          "created_at": "2026-06-29T09:25:12.46137225Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T14:27:48.191568689Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T122821-456ff4e8\",\"bead_id\":\"ddx-071e9bd6\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T14:27:52.889547577Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"54ddbb0a5a0aa90ebfbe0a05557d5b0ed9258b23\",\"classification\":\"no_changes_unjustified\",\"detail\":\"exit status 1\",\"rationale\":\"The attempt failed with generic exit status 1 and result_rev equals base_rev, with no implementation changes, verification evidence, session log excerpt, or durable blocker proving the bead is satisfied or externally blocked.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"54ddbb0a5a0aa90ebfbe0a05557d5b0ed9258b23\",\"session_id\":\"eb-cae953da\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T14:29:36.009425783Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_changes_unjustified\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=54ddbb0a5a0aa90ebfbe0a05557d5b0ed9258b23\nbase_rev=54ddbb0a5a0aa90ebfbe0a05557d5b0ed9258b23\nretry_after=2026-06-29T20:29:36Z\noutcome_reason=no_changes_unjustified",
+          "created_at": "2026-06-29T14:29:36.471867812Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "IP-2026-06-13-server-managed-workers",
+      "work-cooldown-base-rev": "54ddbb0a5a0aa90ebfbe0a05557d5b0ed9258b23",
+      "work-last-detail": "exit status 1",
+      "work-last-status": "execution_failed",
+      "work-retry-after": "2026-06-29T20:29:36Z"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260630T002703-95522d97",
+    "prompt": ".ddx/executions/20260630T002703-95522d97/prompt.md",
+    "manifest": ".ddx/executions/20260630T002703-95522d97/manifest.json",
+    "result": ".ddx/executions/20260630T002703-95522d97/result.json",
+    "checks": ".ddx/executions/20260630T002703-95522d97/checks.json",
+    "usage": ".ddx/executions/20260630T002703-95522d97/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-071e9bd6-20260630T002703-95522d97"
+  },
+  "prompt_sha": "3608b031ac85cff1bd415e61737ab87320abaa2c4c90bd21b4b03f5f2ef1b0e5"
+}
