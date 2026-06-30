@@ -119,16 +119,23 @@ type CommandFactory struct {
 	updateChecker *update.Checker
 	updateDone    chan struct{}
 	updateMu      sync.Mutex
+
+	// Update dependency hooks let tests replace network and install behavior
+	// without mutating package-level globals.
+	updateFetchLatestReleaseForRepo func(string) (*update.GitHubRelease, error)
+	updateInstallPackage            func(*registry.Package, string) (registry.InstalledEntry, error)
 }
 
 // NewCommandFactory creates a new command factory with default settings
 func NewCommandFactory(workingDir string) *CommandFactory {
 	return &CommandFactory{
-		Version:       Version,
-		Commit:        Commit,
-		Date:          Date,
-		WorkingDir:    workingDir,
-		viperInstance: viper.New(),
+		Version:                         Version,
+		Commit:                          Commit,
+		Date:                            Date,
+		WorkingDir:                      workingDir,
+		viperInstance:                   viper.New(),
+		updateFetchLatestReleaseForRepo: update.FetchLatestReleaseForRepo,
+		updateInstallPackage:            registry.InstallPackage,
 	}
 }
 
