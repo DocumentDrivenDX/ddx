@@ -206,6 +206,16 @@ func New(addr, workingDir string) *Server {
 	return s
 }
 
+// EnableManagedWorkers switches the live worker manager onto the
+// subprocess-backed server-managed launch path. Tests that construct a Server
+// directly keep the in-process seam unless they call this explicitly.
+func (s *Server) EnableManagedWorkers() {
+	if s == nil || s.workers == nil {
+		return
+	}
+	s.workers.enableManagedLaunch()
+}
+
 // parseOperatorPromptAllowlistEnv parses a comma-separated identity list
 // (DDX_OPERATOR_PROMPT_ALLOWLIST) into a normalized allowlist. Empty entries
 // are skipped; whitespace is trimmed. The literal sentinel "localhost"
