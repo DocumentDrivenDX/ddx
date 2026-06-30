@@ -181,6 +181,10 @@ type workerHandle struct {
 	// no-op and runWorker can preserve the "stopped" state across its final
 	// record write.
 	stopped bool
+	// cleanupPGIDs stores additional child process groups registered for this
+	// worker when the worker itself does not own the full process tree. The
+	// slice is protected by m.mu and consumed by the stop/reap cleanup helper.
+	cleanupPGIDs []int
 	// wakeCh, when non-nil, signals an work worker's idle-poll
 	// sleep to return early so the loop re-scans the ready queue. The
 	// channel is buffered (cap 1) so a non-blocking send coalesces multiple
@@ -270,6 +274,31 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 	}
 	m.applyServerWatchdogConfig(projectRoot)
 	return m
+}
+
+func appendUniqueInt(dst []int, value int) []int {
+	if value <= 0 {
+		return dst
+	}
+	for _, existing := range dst {
+		if existing == value {
+			return dst
+		}
+	}
+	return append(dst, value)
+}
+
+func (m *WorkerManager) registerManagedWorkerProcessGroup(id string, pgid int) {
+	if pgid <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	handle := m.workers[id]
+	if handle == nil {
+		return
+	}
+	handle.cleanupPGIDs = appendUniqueInt(handle.cleanupPGIDs, pgid)
 }
 
 func lifecycleStartDetail(spec ExecuteLoopWorkerSpec) string {
@@ -1143,9 +1172,10 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 // Stop performs a graceful termination of the worker:
 //  1. Mark state=stopping and persist so observers see the transition.
 //  2. Emit bead.stopped event + release the bead claim (if one is held).
-//  3. Send SIGTERM to the worker's process group; escalate to SIGKILL
-//     after WatchdogKillGrace if the leader is still alive. Pure-goroutine
-//     workers have no PID — ctx cancellation below is the only lever.
+//  3. Send SIGTERM to the worker's process group and any registered child
+//     process groups; escalate to SIGKILL after WatchdogKillGrace if
+//     anything remains alive. Pure-goroutine workers have no PID — ctx
+//     cancellation below is the only lever.
 //  4. Cancel the worker's context so the loop and in-flight executor exit.
 //  5. Mark state=stopped and persist. runWorker preserves this terminal
 //     state when it writes its final record.
@@ -1240,6 +1270,7 @@ func (m *WorkerManager) Stop(id string) error {
 		beadID = handle.record.CurrentBead
 	}
 	startedAt := handle.record.StartedAt
+	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
 	handle.record.State = "stopping"
 	handle.record.Status = "stopping"
 	handle.record.Lifecycle = append(handle.record.Lifecycle, WorkerLifecycleEvent{
@@ -1279,11 +1310,11 @@ func (m *WorkerManager) Stop(id string) error {
 		_ = store.Unclaim(beadID)
 	}
 
-	// Escalate to the process group if we know the PID.
+	// Escalate to the worker process tree if we know any server-owned
+	// process groups. This keeps operator Stop scoped to the worker while
+	// still reaching provider shells and their descendants.
 	_, _, _, grace := m.watchdogDeadlines()
-	if pid > 0 {
-		terminateProcessGroup(pid, grace)
-	}
+	cleanupReport := cleanupManagedWorkerProcessTree(pid, cleanupPGIDs, grace)
 
 	// Cancel the worker goroutine so any in-process code sees context.Canceled.
 	cancel()
@@ -1296,6 +1327,12 @@ func (m *WorkerManager) Stop(id string) error {
 	// have their state observable in-memory; callers that need disk
 	// persistence for those can call writeRecord directly.
 	m.mu.Lock()
+	if cleanupSummary := cleanupReport.String(); cleanupSummary != "" {
+		if len(handle.record.Lifecycle) > 0 {
+			handle.record.Lifecycle[len(handle.record.Lifecycle)-1].Detail =
+				fmt.Sprintf("reason=stop pid=%d cleanup=%s", pid, cleanupSummary)
+		}
+	}
 	handle.record.State = "stopped"
 	handle.record.Status = "stopped"
 	// Only stamp FinishedAt for handles with no attached runWorker
@@ -1417,8 +1454,9 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 // reapWorker performs the escalation for a stalled worker:
 //  1. Emit bead.reaped event on the bead tracker (if a bead is claimed).
 //  2. Release the bead claim (Unclaim → status=open).
-//  3. SIGTERM → grace → SIGKILL the worker's process group, if a PID is
-//     registered. Fall back to ctx cancellation for pure-goroutine workers.
+//  3. SIGTERM → grace → SIGKILL the worker's process group and any
+//     registered child process groups, if any are present. Fall back to
+//     ctx cancellation for pure-goroutine workers.
 //  4. Mark the WorkerRecord state=reaped and persist it.
 func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, beadID string, runtime, stalled time.Duration, reason string) {
 	now := time.Now().UTC()
@@ -1450,11 +1488,11 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 		_ = store.Unclaim(beadID)
 	}
 
-	// 2. Escalate to the worker process group if we know the PID.
+	// 2. Escalate to the worker process tree if we know any server-owned
+	//    process groups.
 	_, _, _, grace := m.watchdogDeadlines()
-	if pid > 0 {
-		terminateProcessGroup(pid, grace)
-	}
+	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
+	cleanupReport := cleanupManagedWorkerProcessTree(pid, cleanupPGIDs, grace)
 
 	// 3. Cancel the goroutine so any in-process code sees context.Canceled.
 	if handle.cancel != nil {
@@ -1474,6 +1512,9 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	if handle.record.LastError == "" {
 		handle.record.LastError = fmt.Sprintf("watchdog reaped worker after runtime=%s stalled=%s",
 			runtime.Round(time.Second), stalled.Round(time.Second))
+	}
+	if cleanupSummary := cleanupReport.String(); cleanupSummary != "" {
+		handle.record.LastError = fmt.Sprintf("%s; cleanup=%s", handle.record.LastError, cleanupSummary)
 	}
 	dir := filepath.Join(m.rootDir, id)
 	snapshot := handle.record
