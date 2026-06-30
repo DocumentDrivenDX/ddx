@@ -1,0 +1,3 @@
+status: open
+orchestrator_action: decompose
+reason: parent bead is an oversized umbrella already decomposed into child beads ddx-9ae1192f, ddx-6931d485, and ddx-7e585c0a; no implementation-level changes remain in this worktree.
