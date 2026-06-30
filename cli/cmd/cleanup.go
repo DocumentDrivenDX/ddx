@@ -28,6 +28,9 @@ type cleanupCommandReport struct {
 	Warnings                    []agent.ExecutionCleanupWarning        `json:"warnings"`
 	BlockedErrors               []agent.ExecutionCleanupIssue          `json:"blocked_errors"`
 	Observations                []agent.ExecutionCleanupObservation    `json:"observations"`
+	ProcessFindingsCount        int                                    `json:"process_findings_count"`
+	StaleProcessGroups          int                                    `json:"stale_process_groups"`
+	TerminatedProcessGroups     int                                    `json:"terminated_process_groups"`
 	ProcessFindings             []agent.ExecutionCleanupProcessFinding `json:"process_findings"`
 }
 
@@ -101,6 +104,15 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 			report.BlockedErrors = append(report.BlockedErrors, issue)
 		}
 	}
+	for _, finding := range report.ProcessFindings {
+		report.ProcessFindingsCount++
+		if finding.WouldKill {
+			report.StaleProcessGroups++
+		}
+		if finding.Terminated {
+			report.TerminatedProcessGroups++
+		}
+	}
 	if report.Warnings == nil {
 		report.Warnings = []agent.ExecutionCleanupWarning{}
 	}
@@ -146,21 +158,11 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 	if report.CompleteEvidenceDirs > 0 {
 		fmt.Fprintf(out, "cleanup: preserved %d complete evidence bundle(s)\n", report.CompleteEvidenceDirs)
 	}
-	actionable := 0
-	killed := 0
-	for _, f := range report.ProcessFindings {
-		if f.WouldKill {
-			actionable++
-		}
-		if f.Terminated {
-			killed++
-		}
-	}
-	if actionable > 0 {
+	if report.StaleProcessGroups > 0 {
 		if report.DryRun {
-			fmt.Fprintf(out, "cleanup: found %d stale process group(s) (would kill: %d)\n", actionable, actionable)
+			fmt.Fprintf(out, "cleanup: found %d stale process group(s) (would kill: %d)\n", report.StaleProcessGroups, report.StaleProcessGroups)
 		} else {
-			fmt.Fprintf(out, "cleanup: found %d stale process group(s) (killed: %d)\n", actionable, killed)
+			fmt.Fprintf(out, "cleanup: found %d stale process group(s) (killed: %d)\n", report.StaleProcessGroups, report.TerminatedProcessGroups)
 		}
 		for _, f := range report.ProcessFindings {
 			if f.PID > 0 {

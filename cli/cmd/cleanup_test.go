@@ -37,6 +37,9 @@ type cleanupCommandJSON struct {
 	Warnings                    []map[string]any `json:"warnings"`
 	BlockedErrors               []map[string]any `json:"blocked_errors"`
 	Observations                []map[string]any `json:"observations"`
+	ProcessFindingsCount        int              `json:"process_findings_count"`
+	StaleProcessGroups          int              `json:"stale_process_groups"`
+	TerminatedProcessGroups     int              `json:"terminated_process_groups"`
 	ProcessFindings             []map[string]any `json:"process_findings"`
 }
 
@@ -351,6 +354,9 @@ func TestCleanupCommand_JSONPreservesExistingCleanupFields(t *testing.T) {
 	assert.NotNil(t, report.Warnings)
 	assert.NotNil(t, report.BlockedErrors)
 	assert.NotNil(t, report.Observations)
+	assert.Equal(t, len(report.ProcessFindings), report.ProcessFindingsCount)
+	assert.GreaterOrEqual(t, report.ProcessFindingsCount, report.StaleProcessGroups)
+	assert.GreaterOrEqual(t, report.StaleProcessGroups, report.TerminatedProcessGroups)
 
 	// New process_findings field must be present (may be empty on platforms without process scanning).
 	assert.NotNil(t, report.ProcessFindings, "process_findings must be present in JSON output")
@@ -393,6 +399,9 @@ func TestCleanupCommand_JSONIncludesProcessFindings(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &report))
 
 	require.NotEmpty(t, report.ProcessFindings, "process_findings must include the stale sleep process")
+	assert.Equal(t, 1, report.ProcessFindingsCount)
+	assert.Equal(t, 1, report.StaleProcessGroups)
+	assert.Equal(t, 0, report.TerminatedProcessGroups)
 
 	// Find the finding for our stale worktree.
 	var found map[string]any
@@ -512,6 +521,9 @@ func TestCleanupCommand_ApplyReapsReparentedAttemptDescendants(t *testing.T) {
 	assert.Equal(t, float64(pid), foundPID, "process_findings pid must match spawned process")
 	terminated, _ := found["terminated"].(bool)
 	assert.True(t, terminated, "terminated must be true under --apply")
+	assert.Equal(t, 1, report.ProcessFindingsCount)
+	assert.Equal(t, 1, report.StaleProcessGroups)
+	assert.Equal(t, 1, report.TerminatedProcessGroups)
 
 	// Reap the leader zombie so the polling check sees the PID disappear.
 	go func() { _, _ = sleepCmd.Process.Wait() }()
