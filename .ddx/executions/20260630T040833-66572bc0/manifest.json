@@ -1,0 +1,72 @@
+{
+  "attempt_id": "20260630T040833-66572bc0",
+  "bead_id": "ddx-aef568e7",
+  "base_rev": "812a8304fd9c8ecd57c012f01a4c5bb9e48857fe",
+  "created_at": "2026-06-30T04:08:46.335506197Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aef568e7",
+    "title": "server: stop managed worker process trees idempotently",
+    "description": "PROBLEM\nOperator Stop must fully clean a server-managed worker, including claude, codex, shell, and sleep descendants, without killing unrelated processes or duplicating bead transitions when Stop is called more than once.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:1214-1227 has an idempotence guard for in-memory handles, but the cleanup path still depends on a single recorded PID. cli/internal/server/workers.go:1234 reads WorkerRecord.PID, and cli/internal/server/workers.go:1282-1286 calls terminateProcessGroup only when pid \u003e 0. cli/internal/server/workers.go:1288-1289 then cancels the goroutine, which cannot guarantee cleanup of harness descendants when the server-owned worker lacks a process boundary. cli/internal/server/workers_reap_unix.go:22-32 documents that callers must register only processes spawned in their own process group.\n\nPROPOSED FIX\nIntroduce or reuse one cleanup helper that terminates only server-owned managed worker process groups by PGID when available, falling back to registered child process groups for any transitional in-process harness path. Wire WorkerManager.Stop through that helper after the existing bead.stopped event and Unclaim call. The helper must send SIGTERM, wait WatchdogKillGrace, send SIGKILL to remaining descendants, report what it killed, and make repeated Stop calls no-ops for bead transitions and process cleanup.\n\nNON-SCOPE\nDo not kill external reported workers or interactive Claude/Codex sessions. Do not change bead claim semantics except releasing claims for the stopped/reaped managed worker. Do not implement UI controls.\n\nGOVERNING ARTIFACT AND RELATIONSHIP\nParent bead: ddx-9d1af129. Governing artifact reference: plan:server-managed-workers. No explicit dependency IDs were provided by the parent bead.",
+    "acceptance": "1. TestManagedWorkerStopKillsClaudeCodexDescendants uses fake claude and codex binaries on PATH that spawn sleeping children, calls Stop, and proves none of those descendants remain running.\n2. TestManagedWorkerStopIsIdempotent calls Stop twice and proves exactly one bead.stopped transition, one claim release, and one terminal worker status write.\n3. TestManagedWorkerStopSkipsExternalReportedWorkers proves Stop does not terminate an external reported worker PID, an interactive Claude/Codex session, or an unrelated process in another process group.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerStopIsIdempotent|TestManagedWorkerStopSkipsExternalReportedWorkers' passes.\n5. make install is run after the code change lands.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-29T10:42:09.73838586Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260629T095053-c18b8b18\",\"bead_id\":\"ddx-aef568e7\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-29T10:42:16.70730157Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"898ce4a9d67cd671275504f1f6c020e826682a74\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"Codex harness attempt failed with exit status 1 and result_rev unchanged, with no bead-owned code changes, test failures, blocker evidence, or structured no-op rationale. The available evidence supports a harness/subprocess failure rather than a bead defect.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"898ce4a9d67cd671275504f1f6c020e826682a74\",\"session_id\":\"eb-d8c2a673\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-29T10:44:22.078771Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=898ce4a9d67cd671275504f1f6c020e826682a74\nbase_rev=898ce4a9d67cd671275504f1f6c020e826682a74\noutcome_reason=transport",
+          "created_at": "2026-06-29T10:44:22.230283485Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T040833-66572bc0",
+    "prompt": ".ddx/executions/20260630T040833-66572bc0/prompt.md",
+    "manifest": ".ddx/executions/20260630T040833-66572bc0/manifest.json",
+    "result": ".ddx/executions/20260630T040833-66572bc0/result.json",
+    "checks": ".ddx/executions/20260630T040833-66572bc0/checks.json",
+    "usage": ".ddx/executions/20260630T040833-66572bc0/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260630T040833-66572bc0"
+  },
+  "prompt_sha": "01af5d6c38b7d2f1283d07b9c5515b9ede2c98082f7f061ac7655595170567f7"
+}
