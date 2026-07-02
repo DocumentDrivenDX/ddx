@@ -1,0 +1,57 @@
+{
+  "bead_id": "ddx-89d00d0c",
+  "attempt_id": "20260702T220755-2628a414",
+  "base_rev": "8fbd109d99aa5d65579dddf2b891021b76873a47",
+  "result_rev": "11cf451a7ef3a608e5df9bfe51c5df0a2e5192ff",
+  "implementation_rev": "11cf451a7ef3a608e5df9bfe51c5df0a2e5192ff",
+  "landed_rev": "11cf451a7ef3a608e5df9bfe51c5df0a2e5192ff",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260702T220755-2628a414/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260702T220755-2628a414",
+      "result_rev": "11cf451a7ef3a608e5df9bfe51c5df0a2e5192ff",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-8c54965a",
+  "duration_ms": 237061,
+  "tokens": 828893,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260702T220755-2628a414",
+  "prompt_file": ".ddx/executions/20260702T220755-2628a414/prompt.md",
+  "manifest_file": ".ddx/executions/20260702T220755-2628a414/manifest.json",
+  "result_file": ".ddx/executions/20260702T220755-2628a414/result.json",
+  "usage_file": ".ddx/executions/20260702T220755-2628a414/usage.json",
+  "started_at": "2026-07-02T22:08:08.541027212Z",
+  "finished_at": "2026-07-02T22:12:05.60298985Z"
+}
