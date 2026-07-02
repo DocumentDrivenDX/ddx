@@ -1,0 +1,81 @@
+{
+  "attempt_id": "20260702T094727-dc688879",
+  "bead_id": "ddx-c6364caf",
+  "base_rev": "805e1b7b3a8dc55d829313ed9fc691ac869358cf",
+  "created_at": "2026-07-02T09:47:40.573585414Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c6364caf",
+    "title": "install: route global and project plugin installs to correct skill tiers",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nOperators need `ddx install \u003cname\u003e --global` for machine-wide plugin and skill installs while plain `ddx install \u003cname\u003e` remains project-local in both in-tree and convention modes. The parent bead bundles install routing with init, update, lookup, doctor, and docs, making it too large for one execution.\n\nROOT CAUSE\n- `cli/cmd/install.go:22` owns the `ddx install \u003cname\u003e` command surface and must carry both project-local and `--global` routing.\n- `cli/cmd/install.go:181` is the install-directory decision point that must choose `${XDG_DATA_HOME}/ddx/global/` for global installs or `ddxroot.Path()` for project installs.\n- `cli/cmd/install.go:270` and `cli/cmd/install.go:308` define `ddx plugin list/show`; they need the same `--global` state selection as install.\n- `cli/internal/ddxroot/ddxroot.go:90` defines the global DDx state root required by ddx-06cbaa90.\n\nPROPOSED FIX\nAdd or verify `--global` on `ddx install`, `ddx plugin list`, and `ddx plugin show`. Global installs write plugin content to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/`, record global installed state, and create agent-tier links under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e`. Plain installs write to `ddxroot.Path()/plugins/\u003cname\u003e/`; in in-tree mode that resolves to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/`, and in convention mode to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/`. Plain installs create project-tier skill links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`, with convention-mode links pointing into the XDG project plugin tree.\n\nGOVERNING ARTIFACTS\n- Principle 2 of epic ddx-602ae31a.\n- Depends on ddx-06cbaa90: install paths route through both `ddxroot.Path()` and `${XDG_DATA_HOME}/ddx/global/`.\n- ADR-027 skill install topology or equivalent must stay consistent with this behavior.\n\nPARENT\n- ddx-602ae31a\n\nDEPS\n- ddx-06cbaa90\n\nNON-SCOPE\n- Removing the existing per-project install entirely; global and per-project modes coexist.\n- Migrating `~/.config/ddx/` legacy paths if any exist.\n- Agent-harness path discovery beyond Claude Code and Codex-facing `.agents/skills`; add others only when those harnesses define their skill paths.",
+    "acceptance": "1. `TestInstallGlobal_WritesGlobalTreeAndAgentLinks` asserts `ddx install \u003cname\u003e --global --silent` installs into `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` as symlinks or copies.\n2. `TestInstall_InTreeMode_WritesProjectPluginsAndLinks` asserts plain `ddx install \u003cname\u003e` in in-tree mode writes to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and creates `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e`.\n3. `TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks` asserts plain `ddx install \u003cname\u003e` in convention mode writes to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and project-tier links point into that XDG plugin path.\n4. `TestPluginListGlobal_EnumeratesFromGlobalTier` and `TestPluginShowGlobal_ReportsFromGlobalTier` assert `ddx plugin list --global` and `ddx plugin show \u003cname\u003e --global` read global state, while unflagged commands read project state.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... -run 'TestInstallGlobal_WritesGlobalTreeAndAgentLinks|TestInstall_InTreeMode_WritesProjectPluginsAndLinks|TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks|TestPluginListGlobal_EnumeratesFromGlobalTier|TestPluginShowGlobal_ReportsFromGlobalTier' -count=1` passes.\n6. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "parent:ddx-602ae31a",
+      "depends:ddx-06cbaa90"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-30T14:44:34.774377614Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260630T143546-00e31790\",\"bead_id\":\"ddx-c6364caf\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-30T14:44:36.728544241Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"5690daf214697de5fc58026744de0d37bc4b959c\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"Attempt failed with generic harness/subprocess error \\\"exit status 1\\\" and produced no result revision (base_rev equals result_rev). No log evidence shows bead-owned code changes, red tests, quota, timeout, merge conflict, or an external blocker.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"5690daf214697de5fc58026744de0d37bc4b959c\",\"session_id\":\"eb-85b2df7a\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-30T14:45:23.688680651Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=5690daf214697de5fc58026744de0d37bc4b959c\nbase_rev=5690daf214697de5fc58026744de0d37bc4b959c\noutcome_reason=transport",
+          "created_at": "2026-06-30T14:45:23.766249439Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: All five named test functions already exist in install_global_test.go and install_test.go. The --global flag and resolveInstallDirs routing are already implemented in cli/cmd/install.go. GlobalDir() is present in cli/internal/ddxroot/ddxroot.go at approximately line 90. The prior attempt failure was a transport/harness infrastructure fault, not a code failure, and does not indicate a code-level blocker. The formal dependency ddx-06cbaa90 is in operator_required/proposed state due to structural AC doc issues, but the functional code it provides (GlobalDir, install path routing) has already landed via its decomposed child beads. A score of 7 rather than 8 reflects the formally open dependency; the waiver below covers it.\",\"fingerprint\":\"bbeeec97bd1cc9fe6309bf6caf84dfda66a4b783fcf1f5a8642a76b6900d68bf\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"bbeeec97bd1cc9fe6309bf6caf84dfda66a4b783fcf1f5a8642a76b6900d68bf\"}",
+          "created_at": "2026-07-02T09:45:23.913913706Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260702T094727-dc688879",
+    "prompt": ".ddx/executions/20260702T094727-dc688879/prompt.md",
+    "manifest": ".ddx/executions/20260702T094727-dc688879/manifest.json",
+    "result": ".ddx/executions/20260702T094727-dc688879/result.json",
+    "checks": ".ddx/executions/20260702T094727-dc688879/checks.json",
+    "usage": ".ddx/executions/20260702T094727-dc688879/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-c6364caf-20260702T094727-dc688879"
+  },
+  "prompt_sha": "eb548740d618ae972f5f3c5d3f2295d106c2d95aa2db19ad1999dac44d4e4033"
+}
