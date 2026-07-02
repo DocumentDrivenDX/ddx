@@ -3,7 +3,7 @@
   "bead_id": "ddx-6dcb5798",
   "trigger": "running_phase_non_route_provider_child",
   "active_route": "codex",
-  "scanned_at": "2026-07-02T15:42:48.941943742Z",
+  "scanned_at": "2026-07-02T15:50:00.941945909Z",
   "reaped": [
     {
       "pid": 727790,
@@ -25,6 +25,78 @@
       "pid": 875484,
       "provider": "pi",
       "command": "node /home/linuxbrew/.linuxbrew/bin/pi --list-models",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 943787,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s1266152844/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 942817,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s520069220/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 943200,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2780201394/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 943489,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s980742672/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 945282,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s3999779275/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 945835,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1143358,
+      "provider": "pi",
+      "command": "node /home/linuxbrew/.linuxbrew/bin/pi --list-models",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1143358,
+      "provider": "pi",
+      "command": "node /home/linuxbrew/.linuxbrew/bin/pi --list-models",
+      "age_seconds": 2,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1269286,
+      "provider": "opencode",
+      "command": "opencode models",
       "age_seconds": 0,
       "action": "terminated",
       "reason": "running_phase_non_route_provider_child"
