@@ -1116,6 +1116,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
+	// If the active route's own harness process disappears mid-attempt
+	// (crash, OOM, SIGKILL) without ever emitting a final event, cancelling
+	// dispatchCtx here is what lets the drain loop (agent_runner_service.go's
+	// drainWatchdog.ctx backstop) give up promptly instead of waiting on the
+	// generic multi-hour idle timeout (ddx-f2b7cf89).
+	providerGuard.SetHarnessDeadWatch(routeHarnessDeadGrace, dispatchCancel)
+
 	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
 	stopProviderGuard := providerGuard.Start(dispatchCtx)

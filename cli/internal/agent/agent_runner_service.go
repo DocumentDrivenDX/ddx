@@ -27,6 +27,13 @@ type drainWatchdog struct {
 	// catches individually hung subprocesses, not loops (loopDetector handles
 	// loops).
 	toolCallTimeout time.Duration
+	// ctx, when non-nil, is watched directly by the drain select loop as a
+	// hard backstop independent of the event stream: if ctx is cancelled by
+	// any external actor (e.g. the running-phase guard's harness-liveness
+	// watchdog proving the route's own process died) the drain returns
+	// immediately, even while the provider keeps emitting events that would
+	// otherwise reset idleTimeout indefinitely (ddx-f2b7cf89).
+	ctx context.Context
 }
 
 // loopDetector maintains a window of the last 8 (tool_call, tool_result) pair
@@ -369,8 +376,15 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 		}
 	}()
 
+	var ctxDone <-chan struct{}
+	if wd.ctx != nil {
+		ctxDone = wd.ctx.Done()
+	}
+
 	for {
 		select {
+		case <-ctxDone:
+			return final, routing, progress
 		case ev, ok := <-events:
 			if !ok {
 				return final, routing, progress

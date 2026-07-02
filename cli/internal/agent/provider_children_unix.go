@@ -159,8 +159,17 @@ func terminateProviderChildImpl(pid int) {
 	signalProviderChildGroup(pid, syscall.SIGKILL)
 }
 
+// signalProviderChildGroup signals both the process group led by pid (the
+// common case: provider CLIs are spawned with Setpgid so pid==pgid, and this
+// takes any grandchildren with it) and pid itself. Both are attempted
+// unconditionally rather than treating group-kill ESRCH as "nothing more to
+// do": ESRCH from kill(-pid, sig) only proves no process GROUP has id==pid —
+// it says nothing about whether pid itself is alive. A provider process that
+// forked and is no longer its own group leader (e.g. it retained an ancestor
+// wrapper's pgid, or the wrapper already exited) hits exactly this case, and
+// skipping the bare-pid signal left it running forever while the guard kept
+// reporting it as "terminated" (ddx-f2b7cf89).
 func signalProviderChildGroup(pid int, sig syscall.Signal) {
-	if err := syscall.Kill(-pid, sig); err != nil && err != syscall.ESRCH {
-		_ = syscall.Kill(pid, sig)
-	}
+	_ = syscall.Kill(-pid, sig)
+	_ = syscall.Kill(pid, sig)
 }

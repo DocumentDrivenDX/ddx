@@ -24,6 +24,14 @@ const (
 // reaped within one interval instead of surviving until attempt-end cleanup.
 const runningProviderGuardInterval = 2 * time.Second
 
+// routeHarnessDeadGrace is how long the active route's own process may be
+// absent from the provider-child scan (after having been observed at least
+// once) before SetHarnessDeadWatch declares the harness dead. Comfortably
+// above one runningProviderGuardInterval scan so a single missed ps snapshot
+// never false-positives, and well under the 30s/60s recovery SLAs a dead
+// harness subprocess must meet (ddx-f2b7cf89 AC2/AC3).
+const routeHarnessDeadGrace = 8 * time.Second
+
 var providerCLINames = map[string]struct{}{
 	"claude":   {},
 	"codex":    {},
@@ -215,10 +223,18 @@ type runningProviderGuard struct {
 	rootPID     int
 	interval    time.Duration
 
-	mu         sync.Mutex
-	routeLabel string
-	harness    string
-	reaped     []providerChildReapRecord
+	// harnessDeadGrace and onHarnessDead arm the harness-liveness watchdog
+	// (see SetHarnessDeadWatch). Both zero-value (disabled) by default.
+	harnessDeadGrace time.Duration
+	onHarnessDead    func()
+
+	mu                  sync.Mutex
+	routeLabel          string
+	harness             string
+	reaped              []providerChildReapRecord
+	harnessSeen         bool
+	harnessMissingSince time.Time
+	harnessDeadFired    bool
 }
 
 func newRunningProviderGuard(projectRoot, beadID, attemptID string, rootPID int) *runningProviderGuard {
@@ -252,6 +268,71 @@ func (g *runningProviderGuard) snapshotRoute() (string, string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.routeLabel, g.harness
+}
+
+// SetHarnessDeadWatch arms the harness-liveness watchdog: once the active
+// route/harness's own process has been observed at least once in a scan,
+// if it then disappears for >= grace, onDead is invoked exactly once (from
+// a new goroutine, so onDead may itself block or call back into the guard
+// without deadlocking the ticker). A grace <= 0 or nil onDead disables the
+// watchdog (the default).
+//
+// This closes a gap the generic idle timeout in drainServiceEventsWithRenderer
+// cannot: that timeout only fires on total event silence, and a harness
+// subprocess dying mid-attempt can be masked indefinitely by unrelated
+// provider-CLI noise (e.g. a non-route fallback spawn loop) that keeps
+// resetting it. Watching the process tree directly for the specific
+// route-owned process disappearing gives a bounded, noise-immune signal
+// (ddx-f2b7cf89).
+func (g *runningProviderGuard) SetHarnessDeadWatch(grace time.Duration, onDead func()) {
+	if g == nil {
+		return
+	}
+	g.harnessDeadGrace = grace
+	g.onHarnessDead = onDead
+}
+
+// observeHarnessLiveness updates the harness-liveness state from one scan's
+// children and fires onHarnessDead (once) if the route-owned process has
+// been missing for >= harnessDeadGrace since it was last seen. It is a
+// no-op until the route is known and the watchdog has been armed, and it
+// never fires before the route-owned process has been observed at least
+// once (so attempt startup, before the harness process spawns, is never
+// mistaken for a death).
+func (g *runningProviderGuard) observeHarnessLiveness(route, harness string, children []workerstatus.ProviderChild, now time.Time) {
+	if g == nil || g.harnessDeadGrace <= 0 || g.onHarnessDead == nil {
+		return
+	}
+	if activeRouteOwner(route, harness) == "" {
+		return
+	}
+	seen := false
+	for _, c := range children {
+		if c.RouteOwner != "" {
+			seen = true
+			break
+		}
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if seen {
+		g.harnessSeen = true
+		g.harnessMissingSince = time.Time{}
+		return
+	}
+	if !g.harnessSeen || g.harnessDeadFired {
+		return
+	}
+	if g.harnessMissingSince.IsZero() {
+		g.harnessMissingSince = now
+		return
+	}
+	if now.Sub(g.harnessMissingSince) >= g.harnessDeadGrace {
+		g.harnessDeadFired = true
+		onDead := g.onHarnessDead
+		go onDead()
+	}
 }
 
 // Reaped returns a copy of the running-phase reap evidence accumulated so far,
@@ -292,7 +373,8 @@ func (g *runningProviderGuard) Start(ctx context.Context) func() {
 
 func (g *runningProviderGuard) tick(ctx context.Context, now time.Time) {
 	route, harness := g.snapshotRoute()
-	_, reaped := runningProviderChildGuard(ctx, g.rootPID, route, harness, "running", now)
+	children, reaped := runningProviderChildGuard(ctx, g.rootPID, route, harness, "running", now)
+	g.observeHarnessLiveness(route, harness, children, now)
 	if len(reaped) == 0 {
 		return
 	}

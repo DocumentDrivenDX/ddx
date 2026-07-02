@@ -322,6 +322,12 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		cancel:          cancel,
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
+		// cancelCtx is a child of the caller's ctx, so an external cancel
+		// (e.g. execute_bead.go's dispatchCancel, fired by the running-phase
+		// guard's harness-liveness watchdog) reaches this select even if the
+		// provider keeps emitting events that would otherwise mask the idle
+		// timeout (ddx-f2b7cf89).
+		ctx: cancelCtx,
 	}
 	onRouteResolved := func(harness, provider, model string) {
 		harness = firstNonEmpty(harness, fizeauHarness(strings.TrimSpace(runtime.HarnessOverride)), fizeauHarness(strings.TrimSpace(pt.Harness)))
