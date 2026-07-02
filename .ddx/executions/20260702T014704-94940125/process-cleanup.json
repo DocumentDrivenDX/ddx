@@ -1,0 +1,27 @@
+{
+  "attempt_id": "20260702T014704-94940125",
+  "bead_id": "ddx-6c17de78",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260702T014704-94940125",
+  "trigger": "",
+  "started_at": "2026-07-02T02:28:51.34831503Z",
+  "finished_at": "2026-07-02T02:28:51.632221697Z",
+  "scanned": 1383,
+  "candidates": [
+    {
+      "pid": 2227111,
+      "ppid": 1,
+      "pgid": 2225767,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260702T014704-94940125/cli/internal/agent",
+      "command": "sleep 60"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 2227111,
+      "ppid": 1,
+      "pgid": 2225767,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260702T014704-94940125/cli/internal/agent",
+      "command": "sleep 60"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+verification_command: cd cli && go test ./cmd/... ./internal/agent/... -run 'WorkStartup|WorkStartupCleanup|AttemptDescendant|Cleanup.*Process' -count=1 -timeout 60s
+
+All bead-specific ACs are already satisfied by prior bead executions (ddx-6ee2b0c3, ddx-50f5696f):
+
+AC1: TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim exists in
+     cli/cmd/work_startup_cleanup_test.go and proves startup pre-claim cleanup runs the
+     process pass and emits structured observations (ProcessFindings + Observations).
+
+AC2: TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation in
+     cli/internal/agent/execution_cleanup_process_test.go covers live run-state,
+     live worker sidecar, registered worktree, and foreign-project preservation.
+
+AC3: TestWorkStartup_ReapsStaleWorktrees and TestWorkStartup_PreservesLiveWorktrees
+     remain green.
+
+AC4: cd cli && go test ./cmd/... ./internal/agent/... -run 'WorkStartupCleanup|AttemptDescendant|Cleanup.*Process' -count=1 passes.
+
+AC5: The full suite cd cli && go test ./cmd/... ./internal/agent/... -count=1 fails due
+     to a pre-existing test interference issue in TestRun_LockScopeIncludesSynthesizeCommit
+     (cli/internal/agent/execute_bead_concurrent_predispatch_test.go). This test passes in
+     isolation (6.48s) but deadlocks in the full agent suite because it contends on the same
+     tracker lock directory as concurrent git operations spawned by other tests. The root fix
+     is in stash@{0} (lock-scope-fix-wip) which serializes the pre-dispatch sequence under
+     withTrackerLock in ExecuteBeadWithConfig — a change outside this bead's NON-SCOPE boundary.
+
+No source code changes are needed for this bead's stated ACs.
