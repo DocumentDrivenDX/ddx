@@ -247,6 +247,13 @@ temporary execution directory records enough ownership to answer:
 - whether the attempt reached published evidence
 - whether it was intentionally preserved
 - when its liveness signal was last refreshed
+- which process group (if any) is the attempt's registered descendant group
+- whether the process group leader PID matches the recorded attempt PID
+
+This process ownership evidence is the primary basis for staleness decisions on
+attempt-descendant process groups: a group is stale when its owning attempt is
+terminal, the group leader no longer matches the recorded PID, or no live
+heartbeat confirms the group is still executing bead work.
 
 During the legacy migration window, the manager handles both
 `.ddx/executions/<attempt-id>` and `.ddx/runs/<run-id>` evidence, but it treats
@@ -314,6 +321,9 @@ The manager may delete:
 - stale heartbeat/liveness files for dead PIDs or expired sessions
 - partial setup directories that never reached atomic evidence publication
 - old non-preserved scratch data past configured retention
+- stale attempt-descendant process groups whose owning attempt is terminal,
+  whose process group leader no longer matches the recorded attempt PID, or
+  whose process-group heartbeat has expired
 
 The manager must not delete:
 
@@ -322,6 +332,7 @@ The manager must not delete:
 - attempt backend refs under `refs/ddx/attempt-backend/...`
 - complete `.ddx/runs/<id>` or `.ddx/executions/<attempt-id>` evidence
 - active workspaces with a live PID/session heartbeat
+- active attempt-descendant process groups confirmed live by a current heartbeat
 - paths outside configured DDx roots
 - paths that only loosely resemble DDx names without matching ownership
   metadata or registered worktree evidence
@@ -354,7 +365,16 @@ new beads. It must not continue scanning the ready queue in the same process.
 Cleanup output is structured. Routine passes are trace/debug or worker events.
 Passes that reclaim meaningful bytes or inodes emit an operator-visible summary
 including counts. Failures include path, class, and whether the failure blocked
-progress.
+progress. Operator-visible process findings are emitted separately from
+filesystem reclamation: discovered stale process groups, reaped PIDs, and any
+groups that could not be reaped (with reason) appear in the summary so
+operators can see what the process-reaping census found and what it did.
+
+The cleanup manager supports a **dry-run** mode that reports what would be
+removed or reaped without taking action, and an **apply** mode (default for
+automated passes) that performs the removal and reports results. Both modes
+emit the same structured operator-visible output so the dry-run report and the
+apply report are directly comparable.
 
 Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScratchDirs`,
 `TestWorkResourcePreflight_RunsCleanupBelowSoftFloor`, and
