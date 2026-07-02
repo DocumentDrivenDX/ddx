@@ -1,0 +1,4 @@
+internal/agent/execute_bead_loop_stay_alive_linux_test.go 1 212
+internal/agent/provider_children_unix.go 8 9
+internal/agent/provider_children_unix.go 162 164
+internal/agent/provider_children_unix.go 168 201
