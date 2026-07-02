@@ -56,6 +56,11 @@ var _ Backend = (*Store)(nil)
 var _ BeadDependencyReader = (*Store)(nil)
 var _ BeadDependencyWriter = (*Store)(nil)
 
+// Compile-time checks: *Store satisfies the TD-027 archive/interchange sub-interfaces.
+var _ BeadArchive = (*Store)(nil)
+var _ BeadInterchangeReader = (*Store)(nil)
+var _ BeadInterchangeWriter = (*Store)(nil)
+
 type StoreOption func(*Store)
 
 // WithCollection selects the logical bead collection. The default collection

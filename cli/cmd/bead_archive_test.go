@@ -144,6 +144,67 @@ func TestBeadArchiveFlagOverrides(t *testing.T) {
 	assert.Equal(t, 1, stats.Archived, "--max-count must cap the run")
 }
 
+// TestBeadArchiveCommand_RoundTrip verifies that `ddx bead archive` moves
+// closed beads to the archive and they remain reachable via `ddx bead show`.
+func TestBeadArchiveCommand_RoundTrip(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
+
+	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	rows := strings.Join([]string{
+		`{"id":"ddx-rt01","title":"closed one","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
+		`{"id":"ddx-rt02","title":"open one","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "archive", "--max-size", "0", "--json")
+	require.NoError(t, err)
+
+	archivePath := filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl")
+	require.FileExists(t, archivePath, "archive file must exist after archive run")
+
+	showOut, err := executeCommand(factory.NewRootCommand(), "bead", "show", "ddx-rt01", "--json")
+	require.NoError(t, err)
+	var shown map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &shown))
+	assert.Equal(t, "ddx-rt01", shown["id"], "archived bead must still be readable via show")
+}
+
+// TestBeadExportImport_RoundTripsAllFields verifies that `ddx bead export` followed
+// by `ddx bead import` restores all fields in a fresh store.
+func TestBeadExportImport_RoundTripsAllFields(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
+
+	ts := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	rows := `{"id":"ddx-exp01","title":"Export Me","status":"open","priority":1,"issue_type":"bug","labels":["backend"],"created_at":"` + ts + `","updated_at":"` + ts + `","description":"desc","acceptance":"ac"}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
+
+	exportFile := filepath.Join(t.TempDir(), "export.jsonl")
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "export", exportFile)
+	require.NoError(t, err)
+	require.FileExists(t, exportFile)
+
+	workingDir2 := t.TempDir()
+	factory2 := newBeadTestRoot(t, workingDir2)
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir2, ddxroot.DirName), 0o755))
+
+	_, err = executeCommand(factory2.NewRootCommand(), "bead", "import", "--from", "jsonl", exportFile)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(factory2.NewRootCommand(), "bead", "show", "ddx-exp01", "--json")
+	require.NoError(t, err)
+	var shown map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &shown))
+	assert.Equal(t, "ddx-exp01", shown["id"])
+	assert.Equal(t, "Export Me", shown["title"])
+	assert.Equal(t, "bug", shown["issue_type"])
+	assert.Equal(t, "desc", shown["description"])
+	assert.Equal(t, "ac", shown["acceptance"])
+}
+
 // TestBeadArchiveHelp covers AC1: command exists with help text.
 func TestBeadArchiveHelp(t *testing.T) {
 	workingDir := t.TempDir()

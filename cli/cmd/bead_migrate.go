@@ -150,7 +150,7 @@ the migration via 'ddx bead export | diff'.`,
 				ext, arch = st.EventsExternalized, st.Archived
 			} else {
 				if err := f.withBeadTrackerWriteLock(func() error {
-					st, err := s.Migrate()
+					st, err := s.Migrate(cmd.Context())
 					if err != nil {
 						return err
 					}

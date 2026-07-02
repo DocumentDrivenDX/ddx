@@ -1964,7 +1964,7 @@ func (f *CommandFactory) newBeadImportCommand() *cobra.Command {
 			n := 0
 			if err := f.withBeadTrackerWriteLock(func() error {
 				var err error
-				n, err = s.Import(from, file)
+				n, err = s.Import(cmd.Context(), from, file)
 				if err != nil {
 					return err
 				}
@@ -1995,9 +1995,9 @@ func (f *CommandFactory) newBeadExportCommand() *cobra.Command {
 			stdout, _ := cmd.Flags().GetBool("stdout")
 
 			if stdout || len(args) == 0 {
-				return s.ExportTo(cmd.OutOrStdout())
+				return s.ExportTo(cmd.Context(), cmd.OutOrStdout())
 			}
-			return s.ExportToFile(args[0])
+			return s.ExportToFile(cmd.Context(), args[0])
 		},
 	}
 	cmd.Flags().Bool("stdout", false, "Write to stdout")

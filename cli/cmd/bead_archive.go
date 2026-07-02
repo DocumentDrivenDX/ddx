@@ -80,7 +80,7 @@ duplicate that an interrupted run could leave behind.`,
 			var stats bead.MigrateStats
 			if err := f.withBeadTrackerWriteLock(func() error {
 				var err error
-				stats, err = s.ArchiveWithEvents(policy)
+				stats, err = s.ArchiveWithEvents(cmd.Context(), policy)
 				if err != nil {
 					return err
 				}
