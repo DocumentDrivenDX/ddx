@@ -1,0 +1,2 @@
+status: blocked
+reason: `cd cli && go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/...` does not go green in this execution worktree. `cmd` acceptance tests fail on the execute-bead guard (`ddx init cannot be run inside an execute-bead worktree`) and on git identity requirements for auto-commit cases, so the bead cannot satisfy the required verification without environment or harness changes outside this scope.
