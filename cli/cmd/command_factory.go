@@ -616,6 +616,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newDocCommand())
 	rootCmd.AddCommand(f.newCheckpointCommand())
 	rootCmd.AddCommand(f.newServerCommand())
+	rootCmd.AddCommand(f.newWorkerCommand())
 	rootCmd.AddCommand(f.newSkillsCommand())
 	rootCmd.AddCommand(f.newPluginCommand())
 	rootCmd.AddCommand(f.newInstallCommand())

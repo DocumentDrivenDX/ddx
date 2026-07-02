@@ -37,13 +37,13 @@ guidance, not this overview alone.**
 
 ## Install topology
 
-DDx resolves the default `ddx` package in three layers: project tier
-`ddxroot.Path()/plugins/ddx/` (in-tree or convention mode), then the global
-install at `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in
-package embedded in the binary. This is project > global > baked-in
-precedence. `ddx doctor` reports the project and global layers separately so
-operators can tell whether the project copy is real, missing, or lazily
-resolving to the global layer.
+DDx resolves the default `ddx` package in three layers: the project-local
+tier at `ddxroot.Path()/plugins/ddx/` (in-tree or convention mode), then
+the global install at `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the
+baked-in package embedded in the binary. This is project > global > baked-in precedence.
+`ddx doctor` reports the project and global layers separately so operators
+can tell whether the project copy is real, missing, or lazily resolving to
+the global layer.
 
 For project installs, the agent-facing skill outputs live in
 `<project>/.agents/skills/<name>/` and `<project>/.claude/skills/<name>/`.

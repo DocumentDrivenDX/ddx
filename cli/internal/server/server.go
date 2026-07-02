@@ -163,6 +163,16 @@ type Server struct {
 	// ADR-022 step 5c integration test can swap the freshness clock and so
 	// every /graphql request shares one instance.
 	reportedWorkers *reportedWorkersAdapter
+
+	// supervisor drives the desired-state reconcile loop that keeps
+	// server-managed workers running per `.ddx/workers/desired.json` (Phase 1
+	// of ddx-9d1af129). The goroutine is started by ListenAndServe/TLS via
+	// StartSupervisor and torn down by Shutdown. Constructed unconditionally
+	// so tests that build a Server directly can call StartSupervisor
+	// explicitly.
+	supervisor       *WorkerSupervisor
+	supervisorCancel context.CancelFunc
+	supervisorDone   chan struct{}
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -198,6 +208,7 @@ func New(addr, workingDir string) *Server {
 		workerIngest:                       newWorkerIngestRegistry(workingDir),
 	}
 	s.reportedWorkers = newReportedWorkersAdapterWithWorkingDir(s.workerIngest, workingDir)
+	s.supervisor = NewWorkerSupervisor(workers)
 	state.coordinatorReg = workers.LandCoordinators
 
 	// Register the server's own project immediately.
@@ -278,6 +289,53 @@ func (s *Server) RegisterProject(path string) ProjectEntry {
 	return entry
 }
 
+// defaultSupervisorTick is the reconcile-loop cadence used when
+// DDX_SUPERVISOR_TICK is unset or unparseable. Ten seconds keeps
+// worker-death → restart latency low without producing meaningful load
+// (Reconcile is a cheap directory-scan + WorkerManager membership check
+// when nothing needs to change).
+const defaultSupervisorTick = 10 * time.Second
+
+// StartSupervisor launches the desired-state reconcile goroutine that
+// keeps server-managed workers running per `.ddx/workers/desired.json`.
+// Safe to call multiple times; subsequent calls are no-ops. Tick cadence
+// defaults to defaultSupervisorTick and is overridable via env
+// DDX_SUPERVISOR_TICK (Go duration string, e.g. "2s").
+//
+// The loop is stopped by Shutdown, which cancels the goroutine's context
+// and blocks on its exit.
+func (s *Server) StartSupervisor() {
+	if s == nil || s.supervisor == nil || s.supervisorCancel != nil {
+		return
+	}
+	tick := defaultSupervisorTick
+	if raw := strings.TrimSpace(os.Getenv("DDX_SUPERVISOR_TICK")); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			tick = parsed
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.supervisorCancel = cancel
+	s.supervisorDone = make(chan struct{})
+	go func() {
+		defer close(s.supervisorDone)
+		ticker := time.NewTicker(tick)
+		defer ticker.Stop()
+		// Reconcile once on startup so a freshly-started server with an
+		// existing `.ddx/workers/desired.json` doesn't wait a full tick
+		// before spinning up the desired workers.
+		_ = s.supervisor.Reconcile()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = s.supervisor.Reconcile()
+			}
+		}
+	}()
+}
+
 // Shutdown stops the server's background services: server-owned workers,
 // bead lifecycle subscriptions, and land coordinators. Returns the first error
 // encountered. The cleanup steps are idempotent and safe to call on an idle
@@ -290,6 +348,14 @@ func (s *Server) Shutdown() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		_ = s.ShutdownSpoke(ctx)
 		cancel()
+	}
+	if s.supervisorCancel != nil {
+		s.supervisorCancel()
+		s.supervisorCancel = nil
+		if s.supervisorDone != nil {
+			<-s.supervisorDone
+			s.supervisorDone = nil
+		}
 	}
 	var firstErr error
 	if s.workers != nil {
@@ -316,6 +382,7 @@ func (s *Server) ListenAndServe() error {
 	defer release()
 	s.installSingletonReleaseOnSignal(release)
 	s.writeAddrFile("http")
+	s.StartSupervisor()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 
@@ -353,6 +420,7 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		}
 	}
 	s.writeAddrFile("https")
+	s.StartSupervisor()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 		go func() {
