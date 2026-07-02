@@ -1,0 +1,57 @@
+{
+  "bead_id": "ddx-4a76c375",
+  "attempt_id": "20260702T164245-3f25ff12",
+  "base_rev": "c17c5436c655d0bbf92f0a74f504483268a93a7d",
+  "result_rev": "d707c80af255441da21a0d655fb9ab216dcd9846",
+  "implementation_rev": "d707c80af255441da21a0d655fb9ab216dcd9846",
+  "landed_rev": "d707c80af255441da21a0d655fb9ab216dcd9846",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260702T164245-3f25ff12/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260702T164245-3f25ff12",
+      "result_rev": "d707c80af255441da21a0d655fb9ab216dcd9846",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-fb267173",
+  "duration_ms": 4121315,
+  "tokens": 23850713,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260702T164245-3f25ff12",
+  "prompt_file": ".ddx/executions/20260702T164245-3f25ff12/prompt.md",
+  "manifest_file": ".ddx/executions/20260702T164245-3f25ff12/manifest.json",
+  "result_file": ".ddx/executions/20260702T164245-3f25ff12/result.json",
+  "usage_file": ".ddx/executions/20260702T164245-3f25ff12/usage.json",
+  "started_at": "2026-07-02T16:43:01.332048723Z",
+  "finished_at": "2026-07-02T17:51:42.647315414Z"
+}
