@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,37 +28,8 @@ func assertMissingBeadLifecycleDiagnostic(t *testing.T, msg, projectRoot string)
 	assert.Contains(t, msg, "project_root="+projectRoot)
 	assert.Contains(t, msg, filepath.Join(projectRoot, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"))
 	assert.Contains(t, msg, filepath.Join(projectRoot, ".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"))
-	assert.Contains(t, msg, "ddx plugin sync --force")
+	assert.Contains(t, msg, "ddx update --force")
 	assert.Contains(t, msg, "ddx doctor")
-}
-
-func TestEnsureBeadLifecycleSkillSyncsBuiltinPackageAdapters(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg"))
-	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
-
-	require.NoError(t, ensureBeadLifecycleSkill(projectRoot))
-
-	builtin, err := registry.BuiltinRegistry().Find("ddx")
-	require.NoError(t, err)
-	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
-	require.FileExists(t, filepath.Join(cacheSkillDir, "bead-lifecycle", "SKILL.md"))
-	require.NoDirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx"))
-
-	for _, rel := range []string{
-		filepath.Join(".agents", "skills", "ddx"),
-		filepath.Join(".claude", "skills", "ddx"),
-	} {
-		path := filepath.Join(projectRoot, rel)
-		info, err := os.Lstat(path)
-		require.NoError(t, err)
-		require.NotZero(t, info.Mode()&os.ModeSymlink, "%s must be a generated adapter symlink", rel)
-		resolved, err := filepath.EvalSymlinks(path)
-		require.NoError(t, err)
-		expected, err := filepath.EvalSymlinks(cacheSkillDir)
-		require.NoError(t, err)
-		assert.Equal(t, expected, resolved)
-	}
 }
 
 func TestHasBeadLifecycleSkillDiagnostics_FindsAgentsOrClaudePath(t *testing.T) {

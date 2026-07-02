@@ -3,18 +3,14 @@ package agent
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
-	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
-	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 )
 
 // checkpointPreDispatchDirt captures DDx bookkeeping changes as a commit on
@@ -37,9 +33,6 @@ type PreDispatchDirtyPreservation struct {
 var preDispatchDirtyPathLister = func(projectRoot string) ([]string, error) {
 	return preDispatchCheckpointDirtyPaths(projectRoot)
 }
-
-var preDispatchCheckpointBeforeUpdateRef = func(projectRoot, ref, commit, head string) {}
-var preDispatchIndexLockOwnerLookup = gitlock.IndexLockOwner
 
 func normalizePreDispatchDirtyPaths(paths []string) []string {
 	seen := make(map[string]bool, len(paths))
@@ -247,112 +240,55 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return cmd.CombinedOutput()
 	}
 
+	if out, err := gitWithIndex("read-tree", "HEAD"); err != nil {
+		return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	addArgs := []string{"add", "-A", "--force", "--"}
+	addArgs = append(addArgs, allowedPaths...)
+	if out, err := gitWithIndex(addArgs...); err != nil {
+		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
+	if err != nil {
+		return false, fmt.Errorf("checking checkpoint diff: %w", err)
+	}
+	if len(bytes.TrimSpace(changedOut)) == 0 {
+		return false, nil
+	}
+
+	treeOut, err := gitWithIndex("write-tree")
+	if err != nil {
+		return false, fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
+	}
+	tree := strings.TrimSpace(string(treeOut))
+	msg := "chore: checkpoint pre-execute-bead " + attemptID
+	commitOut, err := internalgit.Command(context.Background(), projectRoot,
+		"-c", "user.name=ddx-checkpoint",
+		"-c", "user.email=checkpoint@ddx.local",
+		"commit-tree", tree, "-p", head, "-m", msg,
+	).CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	commit := strings.TrimSpace(string(commitOut))
+
 	refOut, _ := internalgit.Command(context.Background(), projectRoot, "symbolic-ref", "-q", "HEAD").Output()
 	ref := strings.TrimSpace(string(refOut))
 	if ref == "" {
 		ref = "HEAD"
 	}
-
-	const maxCheckpointRefAttempts = 3
-	for attempt := 1; attempt <= maxCheckpointRefAttempts; attempt++ {
-		headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").CombinedOutput()
-		if err != nil {
-			return false, fmt.Errorf("resolving checkpoint HEAD: %s: %w", strings.TrimSpace(string(headOut)), err)
-		}
-		head = strings.TrimSpace(string(headOut))
-		if head == "" {
-			return false, nil
-		}
-
-		if out, err := gitWithIndex("read-tree", "HEAD"); err != nil {
-			return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
-		}
-
-		addArgs := []string{"add", "-A", "--force", "--"}
-		addArgs = append(addArgs, allowedPaths...)
-		if out, err := gitWithIndex(addArgs...); err != nil {
-			return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
-		}
-
-		changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
-		if err != nil {
-			return false, fmt.Errorf("checking checkpoint diff: %w", err)
-		}
-		if len(bytes.TrimSpace(changedOut)) == 0 {
-			return false, nil
-		}
-
-		treeOut, err := gitWithIndex("write-tree")
-		if err != nil {
-			return false, fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
-		}
-		tree := strings.TrimSpace(string(treeOut))
-		msg := "chore: checkpoint pre-execute-bead " + attemptID
-		commitOut, err := internalgit.Command(context.Background(), projectRoot,
-			"-c", "user.name=ddx-checkpoint",
-			"-c", "user.email=checkpoint@ddx.local",
-			"commit-tree", tree, "-p", head, "-m", msg,
-		).CombinedOutput()
-		if err != nil {
-			return false, fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
-		}
-		commit := strings.TrimSpace(string(commitOut))
-
-		preDispatchCheckpointBeforeUpdateRef(projectRoot, ref, commit, head)
-		out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput()
-		if err == nil {
-			if out, err := runPreDispatchGitWithIndexLockRecovery(projectRoot, "read-tree", "HEAD"); err != nil {
-				return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
-			}
-			if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-
-		refErrMsg := strings.TrimSpace(string(out))
-		if attempt < maxCheckpointRefAttempts && IsLockContentionError(refErrMsg) {
-			continue
-		}
-		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", refErrMsg, err)
+	if out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput(); err != nil {
+		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-	return false, fmt.Errorf("advancing checkpoint ref exceeded retry budget")
-}
-
-func runPreDispatchGitWithIndexLockRecovery(gitDir string, args ...string) ([]byte, error) {
-	timeout := preDispatchIndexGitTimeout()
-	if timeout <= 0 {
-		return runGitWithIndexLockRecovery(context.Background(), gitDir, args...)
+	if out, err := internalgit.Command(context.Background(), projectRoot, "read-tree", "HEAD").CombinedOutput(); err != nil {
+		return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	out, err := runGitWithIndexLockRecovery(ctx, gitDir, args...)
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		recoverStaleIndexLockAfterPreDispatchCancel(gitDir)
-		return out, fmt.Errorf("pre-dispatch git timeout: %w", err)
+	if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
+		return false, err
 	}
-	return out, err
-}
-
-func preDispatchIndexGitTimeout() time.Duration {
-	timeout := lockmetrics.DefaultIndexLockCap
-	if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.Cap > 0 && cfg.Cap < timeout {
-		timeout = cfg.Cap
-	}
-	return timeout - minDuration(timeout/10, time.Second)
-}
-
-func recoverStaleIndexLockAfterPreDispatchCancel(gitDir string) {
-	lockPath := worktreeIndexLockPath(gitDir)
-	if _, statErr := os.Lstat(lockPath); statErr != nil {
-		return
-	}
-	if pid, _ := preDispatchIndexLockOwnerLookup(lockPath); pid > 0 && processAlive(pid) {
-		return
-	}
-	_ = os.Remove(lockPath)
+	return true, nil
 }
 
 func checkpointSkipWorktreePaths(projectRoot string) ([]string, error) {
@@ -443,7 +379,7 @@ func isMaterializedSkillSymlink(projectRoot, path string) bool {
 }
 
 func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
-	out, err := internalgit.CommandNoOptionalLocks(context.Background(), projectRoot,
+	out, err := internalgit.Command(context.Background(), projectRoot,
 		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("listing checkpoint dirt: %s: %w", strings.TrimSpace(string(out)), err)

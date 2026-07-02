@@ -1,429 +1,201 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	urlpkg "net/url"
-	"strings"
-	"syscall"
-	"time"
+	"os"
+	"path/filepath"
 
-	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
 )
 
-var (
-	workerServerReadinessRetryBudget = 30 * time.Second
-	workerServerReadinessRetryDelay  = 200 * time.Millisecond
-)
-
+// newWorkerCommand returns the `ddx worker` subcommand tree. It is the
+// operator-facing surface for server-managed worker supervision (Phase 1
+// of ddx-9d1af129): write and inspect the durable desired-state file that
+// the server-side WorkerSupervisor reconcile loop consumes.
+//
+// `set` and `enable` write `.ddx/workers/desired.json`. They are
+// filesystem-only and do NOT require the server to be running — the next
+// server tick picks up the file. `status` reads the same file.
 func (f *CommandFactory) newWorkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worker",
-		Short: "Manage server-supervised workers",
-		Long:  "Commands for managing server-supervised workers and their desired state.",
-	}
-	cmd.AddCommand(f.newWorkerStatusCommand())
-	cmd.AddCommand(f.newWorkerSetCommand())
-	cmd.AddCommand(f.newWorkerStartCommand())
-	cmd.AddCommand(f.newWorkerStopCommand())
-	cmd.AddCommand(f.newWorkerRestartCommand())
-	cmd.AddCommand(f.newWorkerReconcileCommand())
-	cmd.AddCommand(f.newWorkerCleanupCommand())
-	return cmd
-}
+		Short: "Manage server-managed worker desired state",
+		Long: `Manage the desired-state file that the DDx server's supervisor uses
+to keep queue-drain workers running for a project.
 
-func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
-	var asJSON bool
-	var project string
-	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "Show worker status",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			base := resolveServerURL(f.WorkingDir)
-			req, err := http.NewRequest(http.MethodGet, base+"/api/agent/workers", nil)
-			if err != nil {
-				return err
-			}
-			resp, err := doWorkerServerRequest(req)
-			if err != nil {
-				return fmt.Errorf("server request: %w", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return fmt.Errorf("reading response: %w", err)
-			}
-			var workers []workerRecord
-			if err := json.Unmarshal(body, &workers); err != nil {
-				return fmt.Errorf("parsing response: %w", err)
-			}
-			filtered := workers
-			if project != "" {
-				filtered = filtered[:0]
-				for _, w := range workers {
-					if workerstatus.SamePath(w.ProjectRoot, project) {
-						filtered = append(filtered, w)
-					}
-				}
-			}
-			if asJSON {
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(filtered)
-			}
-			if len(filtered) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No workers.")
-				return nil
-			}
-			for _, w := range filtered {
-				age := formatDuration(time.Since(w.StartedAt))
-				fmt.Fprintf(cmd.OutOrStdout(), "%-36s %-6s %-12s %s\n", w.ID, age, w.State, w.ProjectRoot)
-			}
-			return nil
-		},
+Write commands (set, enable) update .ddx/workers/desired.json. The server
+picks up changes on its next reconcile tick (default 10s). status reports
+what desired state is currently persisted.`,
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Output as JSON")
-	cmd.Flags().StringVar(&project, "project", "", "Filter by project path")
+	cmd.AddCommand(f.newWorkerSetCommand())
+	cmd.AddCommand(f.newWorkerStatusCommand())
+	cmd.AddCommand(f.newWorkerEnableCommand())
 	return cmd
 }
 
 func (f *CommandFactory) newWorkerSetCommand() *cobra.Command {
-	var project string
-	var count int
-	var restartEnabled bool
-	var noRestart bool
+	var (
+		projectFlag       string
+		count             int
+		harness           string
+		provider          string
+		model             string
+		profile           string
+		restartEnabled    bool
+		noRestartEnabled  bool
+		restartMaxPerHour int
+	)
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Set desired worker count and restart policy",
+		Short: "Write desired worker state for a project",
+		Long: `Persist .ddx/workers/desired.json for the given project. The server
+supervisor consumes this file to keep the requested number of workers
+running with the requested default execution spec.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectRoot := project
-			if projectRoot == "" {
-				projectRoot = f.WorkingDir
-			}
-			restart := restartEnabled && !noRestart
-			base := resolveServerURL(f.WorkingDir)
-			body, err := json.Marshal(map[string]interface{}{
-				"project_root":    projectRoot,
-				"desired_count":   count,
-				"restart_enabled": restart,
-			})
+			projectRoot := workerResolveProject(projectFlag, f.WorkingDir)
+			sup, err := workerNewSupervisor(projectRoot)
 			if err != nil {
 				return err
 			}
-			req, err := http.NewRequest(http.MethodPut, base+"/api/agent/workers/desired", bytes.NewReader(body))
-			if err != nil {
-				return err
+			state := server.DefaultWorkerDesiredState(projectRoot)
+			state.DesiredCount = count
+			state.DefaultSpec.Harness = harness
+			state.DefaultSpec.Provider = provider
+			state.DefaultSpec.Model = model
+			if profile != "" {
+				state.DefaultSpec.Profile = profile
 			}
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := doWorkerServerRequest(req)
-			if err != nil {
-				return fmt.Errorf("server request: %w", err)
+			state.Restart.Enabled = restartEnabled && !noRestartEnabled
+			if restartMaxPerHour > 0 {
+				state.Restart.MaxRestartsPerHour = restartMaxPerHour
 			}
-			defer func() { _ = resp.Body.Close() }()
-			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
+			if err := sup.SaveDesiredState(&state); err != nil {
+				return fmt.Errorf("worker set: %w", err)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			reconcileOut, err := requestWorkerReconcile(base, projectRoot)
-			if err != nil {
-				return err
-			}
-			if !emptyWorkerReconcileOutput(reconcileOut) {
-				fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
-			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s (desired_count=%d, restart_enabled=%t)\n",
+				workerDesiredStatePath(projectRoot), state.DesiredCount, state.Restart.Enabled)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "Project path (defaults to current working dir)")
+	cmd.Flags().StringVar(&projectFlag, "project", "", "Project root (defaults to current working directory)")
 	cmd.Flags().IntVar(&count, "count", 1, "Desired worker count")
-	cmd.Flags().BoolVar(&restartEnabled, "restart", true, "Enable automatic restart on exit")
-	cmd.Flags().BoolVar(&noRestart, "no-restart", false, "Disable automatic restart on exit")
+	cmd.Flags().StringVar(&harness, "harness", "", "Preferred harness passthrough (empty = server default)")
+	cmd.Flags().StringVar(&provider, "provider", "", "Preferred provider passthrough (empty = server default)")
+	cmd.Flags().StringVar(&model, "model", "", "Preferred model passthrough (empty = server default)")
+	cmd.Flags().StringVar(&profile, "profile", "", "Preferred profile (empty = keep default)")
+	cmd.Flags().BoolVar(&restartEnabled, "restart-enabled", true, "Restart workers automatically on unexpected exit (on by default; disable with --no-restart-enabled)")
+	cmd.Flags().BoolVar(&noRestartEnabled, "no-restart-enabled", false, "Disable automatic worker restart on unexpected exit (opt-out for --restart-enabled)")
+	cmd.Flags().IntVar(&restartMaxPerHour, "restart-max-per-hour", 0, "Cap restarts per hour (0 = keep supervisor default)")
 	return cmd
 }
 
-func (f *CommandFactory) newWorkerStartCommand() *cobra.Command {
-	var project string
+func (f *CommandFactory) newWorkerEnableCommand() *cobra.Command {
+	var projectFlag string
 	cmd := &cobra.Command{
-		Use:   "start",
-		Short: "Start a worker (sets desired count to 1)",
+		Use:   "enable",
+		Short: "Shortcut: set desired_count=1 with restart enabled",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectRoot := project
-			if projectRoot == "" {
-				projectRoot = f.WorkingDir
-			}
-			base := resolveServerURL(f.WorkingDir)
-			body, err := json.Marshal(map[string]interface{}{
-				"project_root":    projectRoot,
-				"desired_count":   1,
-				"restart_enabled": true,
-			})
+			projectRoot := workerResolveProject(projectFlag, f.WorkingDir)
+			sup, err := workerNewSupervisor(projectRoot)
 			if err != nil {
 				return err
 			}
-			req, err := http.NewRequest(http.MethodPut, base+"/api/agent/workers/desired", bytes.NewReader(body))
-			if err != nil {
-				return err
+			state := server.DefaultWorkerDesiredState(projectRoot)
+			state.DesiredCount = 1
+			state.Restart.Enabled = true
+			if err := sup.SaveDesiredState(&state); err != nil {
+				return fmt.Errorf("worker enable: %w", err)
 			}
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := doWorkerServerRequest(req)
-			if err != nil {
-				return fmt.Errorf("server request: %w", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			reconcileOut, err := requestWorkerReconcile(base, projectRoot)
-			if err != nil {
-				return err
-			}
-			if !emptyWorkerReconcileOutput(reconcileOut) {
-				fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
-			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "enabled server-managed workers for %s (desired_count=1, restart enabled)\n", projectRoot)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "Project path (defaults to current working dir)")
+	cmd.Flags().StringVar(&projectFlag, "project", "", "Project root (defaults to current working directory)")
 	return cmd
 }
 
-func (f *CommandFactory) newWorkerStopCommand() *cobra.Command {
+func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
+	var (
+		projectFlag string
+		asJSON      bool
+	)
 	cmd := &cobra.Command{
-		Use:   "stop <worker-id>",
-		Short: "Stop a worker",
-		Args:  cobra.ExactArgs(1),
+		Use:   "status",
+		Short: "Show desired worker state for a project",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			base := resolveServerURL(f.WorkingDir)
-			req, err := http.NewRequest(http.MethodPost, base+"/api/agent/workers/"+args[0]+"/stop", nil)
+			projectRoot := workerResolveProject(projectFlag, f.WorkingDir)
+			sup, err := workerNewSupervisor(projectRoot)
 			if err != nil {
 				return err
 			}
-			resp, err := doWorkerServerRequest(req)
+			state, err := sup.LoadDesiredState()
 			if err != nil {
-				return fmt.Errorf("server request: %w", err)
+				if errors.Is(err, os.ErrNotExist) {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+						"no desired state persisted for %s (run `ddx worker enable` to start server-managed workers)\n",
+						projectRoot)
+					return nil
+				}
+				return fmt.Errorf("worker status: %w", err)
 			}
-			defer func() { _ = resp.Body.Close() }()
-			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
+			if asJSON {
+				out, err := json.MarshalIndent(state, "", "  ")
+				if err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+				return nil
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(out))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+				"project: %s\ndesired_count: %d\nrestart_enabled: %t\ndefault_spec: harness=%q provider=%q model=%q profile=%q\nupdated_at: %s\n",
+				state.ProjectRoot, state.DesiredCount, state.Restart.Enabled,
+				state.DefaultSpec.Harness, state.DefaultSpec.Provider, state.DefaultSpec.Model, state.DefaultSpec.Profile,
+				state.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&projectFlag, "project", "", "Project root (defaults to current working directory)")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
 	return cmd
 }
 
-func (f *CommandFactory) newWorkerRestartCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "restart <worker-id>",
-		Short: "Restart a worker",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			base := resolveServerURL(f.WorkingDir)
-			req, err := http.NewRequest(http.MethodPost, base+"/api/agent/workers/"+args[0]+"/restart", nil)
-			if err != nil {
-				return err
-			}
-			resp, err := doWorkerServerRequest(req)
-			if err != nil {
-				return fmt.Errorf("server request: %w", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			return nil
-		},
+// workerResolveProject returns an absolute project root. Explicit --project
+// wins; otherwise fall back to CommandFactory.WorkingDir; otherwise CWD.
+func workerResolveProject(flag, workingDir string) string {
+	root := flag
+	if root == "" {
+		root = workingDir
 	}
-	return cmd
-}
-
-func requestWorkerReconcile(base, projectRoot string) ([]byte, error) {
-	reconcileURL := base + "/api/agent/workers/reconcile"
-	if projectRoot != "" {
-		reconcileURL += "?project=" + urlpkg.QueryEscape(projectRoot)
-	}
-	req, err := http.NewRequest(http.MethodPost, reconcileURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := doWorkerServerRequest(req)
-	if err != nil {
-		return nil, fmt.Errorf("server request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	out, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
-	}
-	return out, nil
-}
-
-func emptyWorkerReconcileOutput(out []byte) bool {
-	trimmed := bytes.TrimSpace(out)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("{}")) {
-		return true
-	}
-	var object map[string]any
-	if err := json.Unmarshal(trimmed, &object); err == nil && len(object) == 0 {
-		return true
-	}
-	return false
-}
-
-func (f *CommandFactory) newWorkerReconcileCommand() *cobra.Command {
-	var project string
-	cmd := &cobra.Command{
-		Use:   "reconcile",
-		Short: "Reconcile workers to desired state",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			base := resolveServerURL(f.WorkingDir)
-			url := base + "/api/agent/workers/reconcile"
-			if project != "" {
-				url += "?project=" + urlpkg.QueryEscape(project)
-			}
-			req, err := http.NewRequest(http.MethodPost, url, nil)
-			if err != nil {
-				return err
-			}
-			resp, err := doWorkerServerRequest(req)
-			if err != nil {
-				return fmt.Errorf("server request: %w", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&project, "project", "", "Project path")
-	return cmd
-}
-
-func (f *CommandFactory) newWorkerCleanupCommand() *cobra.Command {
-	var project string
-	cmd := &cobra.Command{
-		Use:   "cleanup",
-		Short: "Clean up stale workers",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			base := resolveServerURL(f.WorkingDir)
-			url := base + "/api/agent/workers/cleanup"
-			if project != "" {
-				url += "?project=" + project
-			}
-			req, err := http.NewRequest(http.MethodPost, url, nil)
-			if err != nil {
-				return err
-			}
-			resp, err := doWorkerServerRequest(req)
-			if err != nil {
-				return fmt.Errorf("server request: %w", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&project, "project", "", "Project path")
-	return cmd
-}
-
-func doWorkerServerRequest(req *http.Request) (*http.Response, error) {
-	client := newLocalServerClient()
-	resp, err := client.Do(req)
-	if err == nil || !shouldRetryWorkerServerReadiness(req, err) {
-		return resp, err
-	}
-	if workerServerReadinessRetryBudget <= 0 {
-		return nil, err
-	}
-
-	deadline := time.Now().Add(workerServerReadinessRetryBudget)
-	lastErr := err
-	for time.Now().Before(deadline) {
-		time.Sleep(workerServerReadinessRetryDelay)
-		retryReq, cloneErr := cloneRequestForRetry(req)
-		if cloneErr != nil {
-			return nil, cloneErr
-		}
-		resp, err = client.Do(retryReq)
-		if err == nil {
-			return resp, nil
-		}
-		if !shouldRetryWorkerServerReadiness(retryReq, err) {
-			return nil, err
-		}
-		lastErr = err
-	}
-	return nil, fmt.Errorf("local server readiness timeout after %s: %w", workerServerReadinessRetryBudget, lastErr)
-}
-
-func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
-	retryReq := req.Clone(req.Context())
-	if req.Body != nil {
-		if req.GetBody == nil {
-			return nil, fmt.Errorf("cannot retry %s %s: request body is not replayable", req.Method, req.URL.Redacted())
-		}
-		body, err := req.GetBody()
-		if err != nil {
-			return nil, fmt.Errorf("replay request body: %w", err)
-		}
-		retryReq.Body = body
-	}
-	return retryReq, nil
-}
-
-func shouldRetryWorkerServerReadiness(req *http.Request, err error) bool {
-	return req != nil && req.URL != nil && isLocalWorkerServerURL(req.URL) && isConnectionRefused(err)
-}
-
-func isLocalWorkerServerURL(u *urlpkg.URL) bool {
-	host := u.Hostname()
-	if host == "" {
-		host = u.Host
-		if splitHost, _, err := net.SplitHostPort(host); err == nil {
-			host = splitHost
+	if root == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			root = cwd
 		}
 	}
-	host = strings.Trim(host, "[]")
-	switch strings.ToLower(host) {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
+	if abs, err := filepath.Abs(root); err == nil {
+		return abs
 	}
+	return root
 }
 
-func isConnectionRefused(err error) bool {
-	if err == nil {
-		return false
+// workerNewSupervisor builds a WorkerSupervisor bound to projectRoot for
+// filesystem-only CLI operations (save/load). Reconcile() would require a
+// live WorkerManager wired to the server; CLI callers must not invoke it.
+func workerNewSupervisor(projectRoot string) (*server.WorkerSupervisor, error) {
+	if projectRoot == "" {
+		return nil, fmt.Errorf("worker: project root is required")
 	}
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return true
-	}
-	if strings.Contains(strings.ToLower(err.Error()), "connection refused") {
-		return true
-	}
-	var urlErr *urlpkg.Error
-	if errors.As(err, &urlErr) {
-		return isConnectionRefused(urlErr.Err)
-	}
-	return false
+	m := server.NewWorkerManager(projectRoot)
+	return server.NewWorkerSupervisor(m), nil
+}
+
+// workerDesiredStatePath returns the on-disk path where SaveDesiredState
+// writes, used by user-facing messages. Delegates to ddxroot so convention-
+// mode projects (state under XDG rather than in-tree .ddx/) report the
+// correct absolute path.
+func workerDesiredStatePath(projectRoot string) string {
+	return ddxroot.JoinProject(projectRoot, "workers", "desired.json")
 }

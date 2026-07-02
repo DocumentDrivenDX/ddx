@@ -558,6 +558,9 @@ func migratePolicy() ArchivePolicy {
 // the internal path used by `ddx bead migrate`.
 func (s *Store) ArchiveWithEvents(ctx context.Context, policy ArchivePolicy) (MigrateStats, error) {
 	var stats MigrateStats
+	if err := ctx.Err(); err != nil {
+		return stats, err
+	}
 	if s.Collection != DefaultCollection {
 		return stats, fmt.Errorf("bead: archive only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
 	}

@@ -100,11 +100,11 @@ download.
 
 ### Project-Local Install (`ddx init`)
 
-`ddx init` writes project metadata and generated agent adapter outputs for the
-default `ddx` skill at `.agents/skills/ddx/` and `.claude/skills/ddx/`. These
-directories are local generated state, not durable project source; `ddx plugin
-sync`, `ddx init`, or a plugin-consuming command can recreate them from the
-project lock, XDG cache, or the baked-in default `ddx` package.
+`ddx init` installs the default `ddx` plugin through the embedded package
+installer, writing project-local real files (not symlinks) to
+`.agents/skills/ddx/` and `.claude/skills/ddx/` for the two major skill
+runtimes. Real files are installed (not symlinked to global) so project
+worktrees can evolve independently and remain git-portable.
 
 ### Local Development Overlay
 
@@ -114,12 +114,11 @@ project-local symlinks to the source for live editing without auto-committing.
 ### Plugin-Declared Skills (`ddx plugin install <plugin>`)
 
 Plugins may declare additional skills in their `package.yaml`. The
-registry installer records the plugin in `.ddx/plugins.lock.yaml`, resolves the
-payload into the shared XDG cache, and materializes generated adapters under
-`.agents/skills/` and `.claude/skills/`. `ddx plugin install <plugin> --local
-<path>` is the developer-overlay exception: it materializes direct symlinks to
-the local checkout. Both modes prune stale plugin-owned skill entries from
-prior plugin versions (FEAT-015 AC-004 / AC-013, tracked by `ddx-20fe27c7`).
+registry installer materializes real files in `.agents/skills/` and
+`.claude/skills/`, while `ddx plugin install <plugin> --local <path>`
+materializes direct symlinks to the local checkout for developer overlays.
+Both modes prune stale plugin-owned skill entries from prior plugin versions
+(FEAT-015 AC-004 / AC-013, tracked by `ddx-20fe27c7`).
 
 ### Manual Management
 
@@ -154,8 +153,7 @@ positional argument guessing.
   the regression harness for router drift.
 - Integration tests for `ddx init` assert the skill directories exist
   at `.agents/skills/ddx/` and `.claude/skills/ddx/` and contain readable
-  `SKILL.md` files after initialization. They also remain safe to remove and
-  regenerate from the resolved plugin source.
+  `SKILL.md` files after initialization.
 - No end-to-end agent execution tests — skill correctness is
   validated by inspecting the skill content and router evals, not by
   running an agent.

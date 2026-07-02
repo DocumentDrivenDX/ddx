@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,11 +65,6 @@ type Event struct {
 	// CapMS is the configured hold-time cap in milliseconds. Set only on a
 	// "violation" event.
 	CapMS int64 `json:"cap_ms,omitempty"`
-	// Recovered marks a release event appended by a supervisor after the holder
-	// process exited before it could emit its own release event.
-	Recovered bool `json:"recovered,omitempty"`
-	// Reason explains recovered release events and other non-standard outcomes.
-	Reason string `json:"reason,omitempty"`
 }
 
 var (
@@ -218,71 +212,4 @@ func Load(projectRoot string) ([]Event, error) {
 		events = append(events, ev)
 	}
 	return events, sc.Err()
-}
-
-// CloseAbandonedForPID appends recovered release events for any acquire events
-// held by pid that do not already have a matching release event. It is intended
-// for supervisors that observe a managed worker exit before that process can run
-// instrumentation defers.
-func CloseAbandonedForPID(projectRoot string, pid int, releasedAt time.Time, reason string) (int, error) {
-	if pid <= 0 {
-		return 0, nil
-	}
-	events, err := Load(projectRoot)
-	if err != nil {
-		return 0, err
-	}
-	open := map[string]Event{}
-	for _, ev := range events {
-		if ev.HolderPID != pid {
-			continue
-		}
-		key := eventKey(ev)
-		switch ev.Event {
-		case "acquire":
-			open[key] = ev
-		case "release":
-			delete(open, key)
-		}
-	}
-	if len(open) == 0 {
-		return 0, nil
-	}
-	path := Path(projectRoot)
-	closed := 0
-	for _, ev := range open {
-		acquiredAt, err := time.Parse(time.RFC3339Nano, ev.AcquiredAt)
-		if err != nil {
-			continue
-		}
-		duration := releasedAt.Sub(acquiredAt)
-		if duration < 0 {
-			duration = 0
-		}
-		if err := appendEvent(path, Event{
-			Event:      "release",
-			LockName:   ev.LockName,
-			Operation:  ev.Operation,
-			HolderPID:  ev.HolderPID,
-			AcquiredAt: ev.AcquiredAt,
-			ReleasedAt: releasedAt.UTC().Format(time.RFC3339Nano),
-			DurationMS: duration.Milliseconds(),
-			Severity:   "error",
-			Recovered:  true,
-			Reason:     reason,
-		}); err != nil {
-			return closed, err
-		}
-		closed++
-	}
-	return closed, nil
-}
-
-func eventKey(ev Event) string {
-	return strings.Join([]string{
-		ev.LockName,
-		ev.Operation,
-		strconv.Itoa(ev.HolderPID),
-		ev.AcquiredAt,
-	}, "\x00")
 }

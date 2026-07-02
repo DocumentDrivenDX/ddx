@@ -16,7 +16,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +34,65 @@ func TestDirtyDurableAuditPathsPreservesLeadingDotForTrackedFiles(t *testing.T) 
 		".ddx/beads-archive.jsonl",
 		".ddx/attachments/ddx-example/events.jsonl",
 	}, dirtyDurableAuditPaths(status))
+}
+
+func TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	// Commit initial state with .gitignore that ignores DDx-managed audit dirs.
+	gitignore := ".ddx/metrics/\n.ddx/attachments/\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(gitignore), 0o644))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed with ignore rules")
+
+	// Write managed audit files that are now ignored by .gitignore.
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("{\"attempt_id\":\"test\"}\n"), 0o644))
+	attDir := filepath.Join(ddxDir, "attachments", "ddx-test")
+	require.NoError(t, os.MkdirAll(attDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(attDir, "events.jsonl"), []byte("{\"event\":\"close\"}\n"), 0o644))
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260627T000000-force-stage"))
+
+	// Managed ignored files must be committed (status clean).
+	metricsStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", ".ddx/metrics/attempts.jsonl")
+	assert.Empty(t, metricsStatus, "managed ignored metrics file must be committed")
+	attStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", ".ddx/attachments")
+	assert.Empty(t, attStatus, "managed ignored attachments must be committed")
+
+	subject := runGitInteg(t, projectRoot, "log", "-1", "--pretty=%s")
+	assert.Equal(t, "chore: update tracker (execute-bead 20260627T000000-force-stage)", subject)
+}
+
+func TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	// .gitignore ignores both a managed path and an unmanaged path.
+	gitignore := ".ddx/metrics/\nunmanaged-ignored.txt\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(gitignore), 0o644))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed with ignore rules")
+
+	// Create the ignored managed file and an unrelated ignored file.
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("{\"attempt_id\":\"test\"}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "unmanaged-ignored.txt"), []byte("secret\n"), 0o644))
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260627T000001-no-unmanaged"))
+
+	// The managed file must be committed.
+	managedStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", ".ddx/metrics/attempts.jsonl")
+	assert.Empty(t, managedStatus, "managed ignored file must be committed")
+
+	// The unmanaged file must NOT be staged or committed.
+	unmanagedStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", "unmanaged-ignored.txt")
+	assert.NotEmpty(t, unmanagedStatus, "unmanaged ignored file must remain uncommitted")
+	headFiles := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+	assert.NotContains(t, headFiles, "unmanaged-ignored.txt", "unmanaged ignored file must not appear in the commit")
 }
 
 func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *testing.T) {
@@ -59,226 +117,6 @@ func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *
 	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
 	assert.Contains(t, show, ".ddx/beads.jsonl")
 	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
-}
-
-// TestCommitDurableAuditOutputs_DoesNotDropManagedEvidence proves that the
-// durable-audit commit keeps the DDx-managed evidence set intact: tracker
-// beads, attempt metrics, and attachment payloads all land even when the
-// project gitignores some of them (ddx-cd99987d).
-func TestCommitDurableAuditOutputs_DoesNotDropManagedEvidence(t *testing.T) {
-	projectRoot := newDurableAuditProject(t)
-	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
-
-	// The project intentionally ignores the managed audit directories.
-	require.NoError(t, os.WriteFile(
-		filepath.Join(projectRoot, ".gitignore"),
-		[]byte(".ddx/metrics\n.ddx/attachments\n"),
-		0o644,
-	))
-	runGitInteg(t, projectRoot, "add", ".gitignore")
-	runGitInteg(t, projectRoot, "commit", "-m", "chore: ignore managed audit dirs")
-
-	metricsDir := filepath.Join(ddxDir, "metrics")
-	beadsPath := filepath.Join(ddxDir, "beads.jsonl")
-	attachmentsDir := filepath.Join(ddxDir, "attachments", "ddx-cd99987d")
-	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
-	require.NoError(t, os.MkdirAll(attachmentsDir, 0o755))
-	require.NoError(t, os.WriteFile(beadsPath, []byte("bead\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("row\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(attachmentsDir, "events.jsonl"), []byte("event\n"), 0o644))
-
-	require.NoError(t, commitDurableAuditOutputsLocked(projectRoot, "20260615T145159-ignored"))
-
-	subject := runGitInteg(t, projectRoot, "log", "-1", "--pretty=%s")
-	assert.Equal(t, "chore: update tracker (execute-bead 20260615T145159-ignored)", subject)
-
-	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
-	assert.Contains(t, show, ".ddx/beads.jsonl")
-	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
-	assert.Contains(t, show, ".ddx/attachments/ddx-cd99987d/events.jsonl")
-
-	// The committed files are no longer dirty.
-	status := runGitInteg(t, projectRoot, "status", "--short", "--ignored=matching", "--",
-		".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl", ".ddx/attachments")
-	assert.Empty(t, status)
-}
-
-// TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles proves
-// that ignored files outside trackerpaths.ManagedPathspecs are never staged or
-// committed by the durable audit commit (ddx-cd99987d non-scope guard).
-func TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles(t *testing.T) {
-	projectRoot := newDurableAuditProject(t)
-	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
-
-	require.NoError(t, os.WriteFile(
-		filepath.Join(projectRoot, ".gitignore"),
-		[]byte(".ddx/metrics\nbuild/\nsecrets.env\n"),
-		0o644,
-	))
-	runGitInteg(t, projectRoot, "add", ".gitignore")
-	runGitInteg(t, projectRoot, "commit", "-m", "chore: ignore dirs")
-
-	// A managed dirty path to force a commit to happen at all.
-	metricsDir := filepath.Join(ddxDir, "metrics")
-	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("row\n"), 0o644))
-
-	// Unmanaged ignored files outside the managed pathspecs.
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "build"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "build", "output.bin"), []byte("binary\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "secrets.env"), []byte("TOKEN=abc\n"), 0o644))
-
-	require.NoError(t, commitDurableAuditOutputsLocked(projectRoot, "20260615T145159-unmanaged"))
-
-	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
-	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
-	assert.NotContains(t, show, "build/output.bin")
-	assert.NotContains(t, show, "secrets.env")
-
-	// The unmanaged ignored files remain untracked/ignored, never committed.
-	tracked := runGitInteg(t, projectRoot, "ls-files", "--", "build/output.bin", "secrets.env")
-	assert.Empty(t, tracked)
-}
-
-func TestCommitDurableAuditOutputsDoesNotHoldTrackerLockAcrossIndexWork(t *testing.T) {
-	projectRoot := testutils.NewFixtureRepo(t, "standard")
-	attemptID := "20260615T200000-lock-scope"
-	evidenceDir := filepath.Join(t.TempDir(), "evidence")
-	trackerPath := trackerLockPath(projectRoot)
-
-	t.Setenv("DDX_LOCK_CAP_INDEX_MS", "100")
-	t.Setenv("DDX_LOCK_CAP_TRACKER_MS", "100")
-	lockmetrics.SetCapEnforcement(projectRoot, evidenceDir)
-	t.Cleanup(func() { lockmetrics.SetCapEnforcement("", "") })
-
-	var eventsMu sync.Mutex
-	var events []lockmetrics.Event
-	lockmetrics.SetSink(func(ev lockmetrics.Event) {
-		eventsMu.Lock()
-		events = append(events, ev)
-		eventsMu.Unlock()
-	})
-	t.Cleanup(func() { lockmetrics.SetSink(nil) })
-
-	origRunner := durableAuditGitRunner
-	t.Cleanup(func() { durableAuditGitRunner = origRunner })
-
-	var sawAdd, sawCommit atomic.Bool
-	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
-		require.NotEmpty(t, args)
-		switch args[0] {
-		case "rev-parse":
-			return []byte("true\n"), nil
-		case "status":
-			return []byte("?? .ddx/metrics/attempts.jsonl\n"), nil
-		case "add":
-			sawAdd.Store(true)
-			_, statErr := os.Stat(trackerPath)
-			assert.True(t, os.IsNotExist(statErr), "git add must run after tracker.lock is released")
-			return nil, nil
-		case "diff":
-			return []byte("diff --git a/.ddx/metrics/attempts.jsonl b/.ddx/metrics/attempts.jsonl\n"), nil
-		case "commit":
-			sawCommit.Store(true)
-			_, statErr := os.Stat(trackerPath)
-			assert.True(t, os.IsNotExist(statErr), "git commit must run after tracker.lock is released")
-			return nil, nil
-		default:
-			return nil, fmt.Errorf("unexpected git command: %v", args)
-		}
-	}
-
-	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
-	assert.True(t, sawAdd.Load(), "test must exercise git add")
-	assert.True(t, sawCommit.Load(), "test must exercise git commit")
-
-	eventsMu.Lock()
-	defer eventsMu.Unlock()
-	for _, ev := range events {
-		assert.NotEqual(t, "violation", ev.Event, "durable audit lock scope must stay under low test caps")
-		if ev.Event == "release" && ev.LockName == "tracker.lock" && ev.Operation == "durable_audit" {
-			assert.Less(t, ev.DurationMS, int64(100))
-		}
-	}
-}
-
-func TestDurableAuditIndexGitCommandUsesIndexLockCap(t *testing.T) {
-	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".git"), 0o755))
-	lockPath := filepath.Join(projectRoot, ".git", "index.lock")
-	require.NoError(t, os.WriteFile(lockPath, nil, 0o644))
-
-	t.Setenv("DDX_LOCK_CAP_INDEX_MS", "25")
-	lockmetrics.SetCapEnforcement(projectRoot, "")
-	t.Cleanup(func() { lockmetrics.SetCapEnforcement("", "") })
-
-	origRunner := durableAuditGitRunner
-	t.Cleanup(func() { durableAuditGitRunner = origRunner })
-
-	var sawDeadline atomic.Bool
-	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
-		<-ctx.Done()
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			sawDeadline.Store(true)
-		}
-		return nil, ctx.Err()
-	}
-
-	start := time.Now()
-	_, err := runDurableAuditGitWithIndexLockRecovery(projectRoot, "commit", "--no-verify")
-	require.Error(t, err)
-	assert.True(t, sawDeadline.Load(), "index-mutating git command must receive the cap-bounded deadline")
-	assert.Less(t, time.Since(start), 250*time.Millisecond, "git command must not outlive the index lock cap by the old 30s budget")
-
-	_, statErr := os.Stat(lockPath)
-	assert.True(t, os.IsNotExist(statErr), "cap release must clear the stale index lock")
-}
-
-func TestCommitDurableAuditOutputsTreatsCleanTreeAfterCommitTimeoutAsSuccess(t *testing.T) {
-	projectRoot := t.TempDir()
-
-	origRunner := durableAuditGitRunner
-	t.Cleanup(func() { durableAuditGitRunner = origRunner })
-
-	var committed atomic.Bool
-	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
-		require.NotEmpty(t, args)
-		switch durableAuditTestGitSubcommand(args) {
-		case "rev-parse":
-			return []byte("true\n"), nil
-		case "status":
-			if committed.Load() {
-				return nil, nil
-			}
-			return []byte("?? .ddx/metrics/attempts.jsonl\n"), nil
-		case "add":
-			return nil, nil
-		case "diff":
-			if committed.Load() {
-				return nil, nil
-			}
-			return []byte("diff --git a/.ddx/metrics/attempts.jsonl b/.ddx/metrics/attempts.jsonl\n"), nil
-		case "commit":
-			committed.Store(true)
-			return []byte("context deadline exceeded"), context.DeadlineExceeded
-		default:
-			return nil, fmt.Errorf("unexpected git command: %v", args)
-		}
-	}
-
-	require.NoError(t, commitDurableAuditOutputsLocked(projectRoot, "20260615T214000-timeout-clean"))
-	assert.True(t, committed.Load(), "test must exercise the timeout-after-commit path")
-}
-
-func durableAuditTestGitSubcommand(args []string) string {
-	for i := 0; i < len(args); i++ {
-		if args[i] == "-c" {
-			i++
-			continue
-		}
-		return args[i]
-	}
-	return ""
 }
 
 func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
@@ -590,66 +428,6 @@ func TestFinalizeDurableAuditOrStop_TrackerLockTimeoutDoesNotStopWorker(t *testi
 		assert.Contains(t, fmt.Sprint(ev.Data["detail"]), "tracker lock timeout")
 	}
 	assert.True(t, sawTransient, "loop.durable_audit_transient event must be emitted")
-}
-
-func TestWork_TransientDurableAuditRetryBlocksNextClaim(t *testing.T) {
-	projectRoot := newDurableAuditProject(t)
-	inner := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, inner.Init(context.Background()))
-	first := &bead.Bead{ID: "ddx-audit-retry-1", Title: "audit retry one", Priority: 0}
-	second := &bead.Bead{ID: "ddx-audit-retry-2", Title: "audit retry two", Priority: 1}
-	require.NoError(t, inner.Create(context.Background(), first))
-	require.NoError(t, inner.Create(context.Background(), second))
-	runGitInteg(t, projectRoot, "add", ".")
-	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
-	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-
-	store := &claimCountingStore{Store: inner}
-	var execCalls int32
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			atomic.AddInt32(&execCalls, 1)
-			return ExecuteBeadReport{
-				BeadID:      beadID,
-				AttemptID:   "20260616T181500-audit-retry",
-				Status:      ExecuteBeadStatusExecutionFailed,
-				Detail:      "implementation failed",
-				BaseRev:     head,
-				ResultRev:   head,
-				SessionID:   "sess-audit-retry",
-				ProjectRoot: projectRoot,
-			}, nil
-		}),
-	}
-
-	oldRetry := retryPendingDurableAuditCommit
-	var retryCalls int32
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	retryPendingDurableAuditCommit = func(projectRoot, attemptID string) error {
-		atomic.AddInt32(&retryCalls, 1)
-		cancel()
-		return context.DeadlineExceeded
-	}
-	t.Cleanup(func() {
-		retryPendingDurableAuditCommit = oldRetry
-	})
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		ProjectRoot: projectRoot,
-		FinalizeDurableAudit: func(report ExecuteBeadReport) error {
-			return fmt.Errorf("commit durable audit outputs: %w", context.DeadlineExceeded)
-		},
-	})
-
-	require.ErrorIs(t, err, context.Canceled)
-	require.NotNil(t, result)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "only the first bead may execute while its audit commit is pending")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "pending durable audit retry must block the next claim")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&retryCalls), "pending durable audit commit should be retried before candidate selection")
 }
 
 // TestIsTransientGitContention_SignalKilledAndDeadline asserts that the

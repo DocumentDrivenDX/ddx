@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260630T202541-176a93f2",
+  "bead_id": "ddx-406ae97b",
+  "base_rev": "7137c677eb018a575a674fc33e14f902de9f0b2d",
+  "created_at": "2026-06-30T20:25:53.744123128Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-406ae97b",
+    "title": "docs: ADR skill-install-topology + CLAUDE.md/SKILL.md install precedence",
+    "description": "PROBLEM (docs child of ddx-937de9fc)\nThe reintroduced two-layer install topology (global vs project, lazy resolution, agent-tier links) must be recorded in the specs. Note this deliberately REVERSES the 'ddx install --global retired / plugins project-local only' statement currently in CLAUDE.md (epic ddx-602ae31a zero-footprint, Principle 2) — the docs must reflect the new precedence.\n\nROOT CAUSE\n- No ADR documents skill/plugin install topology.\n- CLAUDE.md (repo root) Persona System section and the project-local-only note do not describe global vs project precedence.\n- library/skills/ddx/SKILL.md 'How this skill works' and library/skills/ddx/reference/agents.md (and the mirror under cli/internal/registry/defaultplugin/library/skills/ddx/) do not document install locations / agent-tier paths.\n\nPROPOSED FIX\n1. Add or update docs/helix/02-design/adr/ADR-025-skill-install-topology.md (or the next free ADR number) describing: global tier ${XDG_DATA_HOME}/ddx/global/plugins, project tier ddxroot.Path()/plugins (in-tree vs convention), agent-tier links, runtime precedence project\u003eglobal\u003ebaked-in, and that --global is reinstated.\n2. Update repo-root CLAUDE.md: replace the 'plugins project-local only / --global retired' wording with the two-layer precedence and document it in the Persona System section.\n3. Update library/skills/ddx/SKILL.md 'How this skill works' and reference/agents.md to document install locations and agent-tier paths.\n\nThis child should land AFTER the behavior children so it documents the shipped shape.\n\nDEPS: ddx-18e55cd2, ddx-aedb009d, ddx-7c3893ad, ddx-c772fdf9, ddx-ac6d4c22.",
+    "acceptance": "1. An ADR file (docs/helix/02-design/adr/ADR-0NN-skill-install-topology.md) exists describing global vs project tiers, convention vs in-tree, agent-tier links, and project\u003eglobal\u003ebaked-in precedence, and states --global is reinstated under the zero-footprint epic.\n2. Repo-root CLAUDE.md no longer asserts plugins are project-local-only / --global retired; its Persona System (or plugin) section documents the two-layer install precedence.\n3. library/skills/ddx/SKILL.md and library/skills/ddx/reference/agents.md document install locations (global + project) and the agent-tier skill paths; the cli/internal/registry/defaultplugin mirror is kept consistent.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      " area:plugin",
+      " area:cli",
+      " kind:docs",
+      " phase:3",
+      " initiative:zero-footprint",
+      " principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed ddx-937de9fc (1 edge(s))\ndependencies→removed dangling ddx-ac6d4c22 (1 edge(s))\ndependencies→removed dangling ddx-aedb009d (1 edge(s))\ndependencies→removed dangling ddx-c772fdf9 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.443455009Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 4 change(s)"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T202541-176a93f2",
+    "prompt": ".ddx/executions/20260630T202541-176a93f2/prompt.md",
+    "manifest": ".ddx/executions/20260630T202541-176a93f2/manifest.json",
+    "result": ".ddx/executions/20260630T202541-176a93f2/result.json",
+    "checks": ".ddx/executions/20260630T202541-176a93f2/checks.json",
+    "usage": ".ddx/executions/20260630T202541-176a93f2/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-406ae97b-20260630T202541-176a93f2"
+  },
+  "prompt_sha": "fc9faed85c1a65b62fe586fe2b70a0bcc20808f61c59f8a7096a9b753eacb67a"
+}

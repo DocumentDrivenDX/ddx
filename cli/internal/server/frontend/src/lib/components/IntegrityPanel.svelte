@@ -14,8 +14,10 @@
 		relatedPath: string | null;
 	}
 
-	let { issues, pathToDocId = {} }: { issues: GraphIssue[]; pathToDocId?: Record<string, string> } =
-		$props();
+	let {
+		issues,
+		pathToDocId = {}
+	}: { issues: GraphIssue[]; pathToDocId?: Record<string, string> } = $props();
 
 	type RepairStrategy = 'REMOVE_MISSING_DEP' | 'APPLY_SUGGESTED_ID' | 'CLEAN_PATH_MAP';
 
@@ -90,7 +92,13 @@
 		if (docId) {
 			return `/nodes/${nodeId}/projects/${projectId}/artifacts/${encodeURIComponent('doc:' + docId)}`;
 		}
-		return `/nodes/${nodeId}/projects/${projectId}/artifacts?mediaType=text%2Fmarkdown&q=${encodeURIComponent(path)}`;
+		// Fall back to /documents/:path
+		const segments = path
+			.split('/')
+			.filter((s) => s.length > 0)
+			.map(encodeURIComponent)
+			.join('/');
+		return `/nodes/${nodeId}/projects/${projectId}/documents/${segments}`;
 	}
 
 	// Deterministic mirror of cli/internal/docgraph.SuggestUniqueID; we keep a
@@ -191,10 +199,7 @@
 		};
 	}
 
-	function diffApplySuggestedID(
-		issue: GraphIssue,
-		suggested: string
-	): { before: string; after: string } {
+	function diffApplySuggestedID(issue: GraphIssue, suggested: string): { before: string; after: string } {
 		const id = (issue.id ?? '').trim();
 		return {
 			before: `id: ${id}`,
@@ -205,21 +210,19 @@
 
 <section
 	data-testid="integrity-panel"
-	class="border-border-line bg-bg-surface text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink shrink-0 rounded-none border text-sm"
+	class="shrink-0 rounded-none border border-border-line bg-bg-surface text-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
 >
-	<header
-		class="border-border-line text-headline-md font-headline-md dark:border-dark-border-line border-b px-4 py-2"
-	>
+	<header class="border-b border-border-line px-4 py-2 text-headline-md font-headline-md dark:border-dark-border-line">
 		Integrity: {issues.length}
 		{issues.length === 1 ? 'issue' : 'issues'}
 	</header>
-	<ul class="divide-border-line dark:divide-dark-border-line divide-y">
+	<ul class="divide-y divide-border-line dark:divide-dark-border-line">
 		{#each groups as group (group.kind)}
 			{@const isOpen = expanded[group.kind] ?? false}
 			<li data-kind={group.kind}>
 				<button
 					type="button"
-					class="hover:bg-bg-canvas dark:hover:bg-dark-bg-canvas flex w-full items-center gap-2 px-4 py-2 text-left"
+					class="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-bg-canvas dark:hover:bg-dark-bg-canvas"
 					aria-expanded={isOpen}
 					data-testid={`integrity-group-${group.kind}`}
 					onclick={() => toggle(group.kind)}
@@ -233,21 +236,19 @@
 					<span class="text-fg-muted dark:text-dark-fg-muted">({group.issues.length})</span>
 				</button>
 				{#if isOpen}
-					<ul class="bg-bg-canvas dark:bg-dark-bg-canvas px-4 pt-1 pb-3">
+					<ul class="bg-bg-canvas px-4 pb-3 pt-1 dark:bg-dark-bg-canvas">
 						{#each group.issues as issue, idx (`${group.kind}-${idx}`)}
 							{@const repairStrategy = strategyFor(issue)}
 							{@const issueKey = issue.issueId ?? ''}
-							<li
-								class="bg-bg-elevated dark:bg-dark-bg-elevated mt-2 flex flex-col gap-1 rounded-none p-2"
-							>
+							<li class="mt-2 flex flex-col gap-1 rounded-none bg-bg-elevated p-2 dark:bg-dark-bg-elevated">
 								<div class="flex flex-wrap items-center gap-2 font-mono text-xs">
 									{#if issue.path}
 										{@const href = docLink(issue.path)}
 										{#if href}
 											<a
-												{href}
+												href={href}
 												data-testid="integrity-path-link"
-												class="text-accent-lever hover:text-accent-lever/80 dark:text-dark-accent-lever dark:hover:text-dark-accent-lever/80 underline"
+												class="text-accent-lever underline hover:text-accent-lever/80 dark:text-dark-accent-lever dark:hover:text-dark-accent-lever/80"
 												>{issue.path}</a
 											>
 										{:else}
@@ -261,7 +262,7 @@
 											<a
 												href={relHref}
 												data-testid="integrity-related-link"
-												class="text-accent-lever hover:text-accent-lever/80 dark:text-dark-accent-lever dark:hover:text-dark-accent-lever/80 underline"
+												class="text-accent-lever underline hover:text-accent-lever/80 dark:text-dark-accent-lever dark:hover:text-dark-accent-lever/80"
 												>{issue.relatedPath}</a
 											>
 										{:else}
@@ -270,7 +271,7 @@
 									{/if}
 									{#if issue.id}
 										<span
-											class="border-border-line bg-bg-canvas text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-muted rounded-none border px-1.5 py-0.5 text-[10px] uppercase"
+											class="rounded-none border border-border-line bg-bg-canvas px-1.5 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-muted"
 											>{issue.id}</span
 										>
 									{/if}
@@ -279,7 +280,7 @@
 									<p class="break-words">{issue.message}</p>
 									<button
 										type="button"
-										class="border-border-line bg-bg-elevated hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas shrink-0 rounded-none border px-2 py-1 text-xs"
+										class="shrink-0 rounded-none border border-border-line bg-bg-elevated px-2 py-1 text-xs hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas"
 										title="Copy message"
 										aria-label="Copy message"
 										onclick={(e) => copyMessage(issue, e)}
@@ -291,7 +292,7 @@
 									<button
 										type="button"
 										data-testid="integrity-copy-suggestion"
-										class="border-accent-lever bg-accent-lever/10 text-accent-lever hover:bg-accent-lever/20 dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever dark:hover:bg-dark-accent-lever/30 self-start rounded-none border px-2 py-1 text-xs font-medium"
+										class="self-start rounded-none border border-accent-lever bg-accent-lever/10 px-2 py-1 text-xs font-medium text-accent-lever hover:bg-accent-lever/20 dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever dark:hover:bg-dark-accent-lever/30"
 										onclick={(e) => copySuggestion(issue, e)}
 									>
 										Copy suggested unique ID
@@ -302,7 +303,7 @@
 										<button
 											type="button"
 											data-testid="integrity-preview-fix"
-											class="border-border-line bg-bg-elevated hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas rounded-none border px-2 py-1"
+											class="rounded-none border border-border-line bg-bg-elevated px-2 py-1 hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas"
 											onclick={() => togglePreview(issue)}
 										>
 											{previewing[issueKey] ? 'Hide preview' : 'Preview fix'}
@@ -311,7 +312,7 @@
 											type="button"
 											data-testid="integrity-apply-fix"
 											disabled={pending[issueKey]}
-											class="border-accent-lever bg-accent-lever/10 text-accent-lever hover:bg-accent-lever/20 dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever dark:hover:bg-dark-accent-lever/30 rounded-none border px-2 py-1 font-medium disabled:opacity-50"
+											class="rounded-none border border-accent-lever bg-accent-lever/10 px-2 py-1 font-medium text-accent-lever hover:bg-accent-lever/20 disabled:opacity-50 dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever dark:hover:bg-dark-accent-lever/30"
 											onclick={() => applyFix(issue)}
 										>
 											{pending[issueKey] ? 'Applying…' : 'Apply fix'}
@@ -324,20 +325,18 @@
 												: diffApplySuggestedID(issue, previewedSuggestions[issueKey] ?? '')}
 										<div
 											data-testid="integrity-preview-diff"
-											class="border-border-line bg-bg-canvas dark:border-dark-border-line dark:bg-dark-bg-canvas mt-1 grid gap-1 rounded-none border p-2 font-mono text-xs"
+											class="mt-1 grid gap-1 rounded-none border border-border-line bg-bg-canvas p-2 font-mono text-xs dark:border-dark-border-line dark:bg-dark-bg-canvas"
 										>
 											<div class="text-fg-muted dark:text-dark-fg-muted">Before</div>
-											<pre
-												class="text-status-blocked overflow-x-auto whitespace-pre-wrap">{diff.before}</pre>
+											<pre class="overflow-x-auto whitespace-pre-wrap text-status-blocked">{diff.before}</pre>
 											<div class="text-fg-muted dark:text-dark-fg-muted">After</div>
-											<pre
-												class="text-status-closed overflow-x-auto whitespace-pre-wrap">{diff.after}</pre>
+											<pre class="overflow-x-auto whitespace-pre-wrap text-status-closed">{diff.after}</pre>
 										</div>
 									{/if}
 									{#if inlineErrors[issueKey]}
 										<p
 											data-testid="integrity-repair-error"
-											class="text-error dark:text-dark-error text-xs"
+											class="text-xs text-error dark:text-dark-error"
 										>
 											{inlineErrors[issueKey]}
 										</p>
@@ -347,17 +346,17 @@
 									{@const snippet = dependencyRemovalSnippet(issue)}
 									{#if snippet}
 										<div class="flex flex-wrap items-center gap-2 text-xs">
-											<span class="text-fg-muted dark:text-dark-fg-muted font-medium">
+											<span class="font-medium text-fg-muted dark:text-dark-fg-muted">
 												Remove from depends_on
 											</span>
 											<code
 												data-testid="integrity-missing-dep-snippet"
-												class="border-border-line bg-bg-canvas font-mono-code text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-muted rounded-none border px-2 py-1"
+												class="rounded-none border border-border-line bg-bg-canvas px-2 py-1 font-mono-code text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-muted"
 												>{snippet}</code
 											>
 											<button
 												type="button"
-												class="border-border-line bg-bg-elevated hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas rounded-none border px-2 py-1"
+												class="rounded-none border border-border-line bg-bg-elevated px-2 py-1 hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas"
 												title="Copy removal snippet"
 												aria-label="Copy missing dependency removal snippet"
 												onclick={(e) => copyDependencyRemovalSnippet(issue, e)}

@@ -422,7 +422,7 @@ func TestAxonBackend_JSONLImportExportRoundTrip(t *testing.T) {
 	require.NoError(t, src.AppendEvent(a.ID, BeadEvent{Kind: "k", Summary: "s"}))
 
 	var buf bytes.Buffer
-	require.NoError(t, src.ExportTo(context.Background(), &buf))
+	require.NoError(t, src.ExportTo(testCtx(), &buf))
 	require.NotZero(t, buf.Len())
 
 	// Write the export to a temp file and import into a fresh axon-backed
@@ -431,7 +431,7 @@ func TestAxonBackend_JSONLImportExportRoundTrip(t *testing.T) {
 	require.NoError(t, os.WriteFile(jsonlPath, buf.Bytes(), 0o644))
 
 	dst := newAxonStore(t)
-	count, err := dst.Import(context.Background(), "jsonl", jsonlPath)
+	count, err := dst.Import(testCtx(), "jsonl", jsonlPath)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 

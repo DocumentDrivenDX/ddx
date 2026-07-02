@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260627T224238-41d39f7b",
+  "bead_id": "ddx-24a3da84",
+  "base_rev": "ab7be2d57c98771f58fa202ba10a5fabef2d266a",
+  "created_at": "2026-06-27T22:42:49.548780322Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-24a3da84",
+    "title": "server: terminate managed worker process trees without leaks",
+    "description": "PROBLEM\nA server-managed worker must be fully cleanable. Stop, watchdog reap, restart, and server shutdown must not leave ddx work, claude, codex, shell, or sleep descendants behind.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:192 says WorkerManager manages in-process work workers as goroutines. cli/internal/server/workers.go:438 creates a cancelable context, but no OS process boundary. cli/internal/server/workers.go:1234 reads WorkerRecord.PID and :1282-1286 terminates a process group only when pid \u003e 0. cli/internal/server/workers.go:1453-1457 has the same limitation in watchdog reap. Because server-owned workers are often goroutines with PID zero, the server cannot guarantee child harness cleanup.\n\nPROPOSED FIX\nIntroduce a server-managed process boundary. Preferred implementation: spawn a child ddx work --server-managed \u003cworker-id\u003e in its own process group and record PID/PGID in WorkerRecord. If a transitional in-process path remains for tests, every harness child process group must be registered on the worker handle and killed through the same cleanup helper. Stop/reap/shutdown should send SIGTERM, wait WatchdogKillGrace, SIGKILL remaining descendants, release bead claims, persist terminal status, and be idempotent.\n\nNON-SCOPE\nDo not kill external reported workers or interactive Claude/Codex sessions. Do not change bead claim semantics except releasing claims for the stopped/reaped managed worker. Do not implement UI controls.",
+    "acceptance": "1. TestManagedWorkerRecordsProcessGroup proves a server-managed drain worker has nonzero PID/PGID in WorkerRecord and status.json.\n2. TestManagedWorkerStopKillsClaudeCodexDescendants uses fake claude and codex binaries on PATH that spawn sleeping children, then proves Stop leaves none of those descendants running.\n3. TestManagedWorkerWatchdogReapKillsProcessTree proves watchdog reap follows the same SIGTERM-to-SIGKILL cleanup path and releases the claimed bead.\n4. TestWorkerManagerShutdownStopsManagedProcessTrees proves server/manager shutdown cleans all server-owned worker process groups.\n5. TestManagedWorkerStopIsIdempotent calls Stop twice and proves no duplicate bead transition and no unrelated process kill.\n6. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestManagedWorkerRecordsProcessGroup|TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerWatchdogReapKillsProcessTree|TestWorkerManagerShutdownStopsManagedProcessTrees|TestManagedWorkerStopIsIdempotent' passes.\n7. make install is run after the code change lands.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-24a3da84)\",\"fingerprint\":\"7111dfdc66d2fcedbdff7aa440e2941d44c782dee64d1cfd6ef0a46bdb7ea062\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"7111dfdc66d2fcedbdff7aa440e2941d44c782dee64d1cfd6ef0a46bdb7ea062\"}",
+          "created_at": "2026-06-27T22:40:34.561584458Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "queue-rank": 90,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260627T224238-41d39f7b",
+    "prompt": ".ddx/executions/20260627T224238-41d39f7b/prompt.md",
+    "manifest": ".ddx/executions/20260627T224238-41d39f7b/manifest.json",
+    "result": ".ddx/executions/20260627T224238-41d39f7b/result.json",
+    "checks": ".ddx/executions/20260627T224238-41d39f7b/checks.json",
+    "usage": ".ddx/executions/20260627T224238-41d39f7b/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-24a3da84-20260627T224238-41d39f7b"
+  },
+  "prompt_sha": "22939f8ed9017e17a5634fd743782c2dfc758a35acda73a429d84ee3c03dcf87"
+}

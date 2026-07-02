@@ -5,10 +5,7 @@ package server
 import (
 	"bytes"
 	"context"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,19 +24,57 @@ func isPIDAlive(pid int) bool {
 	return syscall.Kill(pid, 0) != syscall.ESRCH
 }
 
-func configureWorkerProcessGroup(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+type unixProcessSample struct {
+	PID  int
+	PPID int
+	PGID int
 }
 
-func processGroupID(pid int) int {
-	if pid <= 0 {
-		return 0
+// cleanupManagedWorkerProcessTree sends SIGTERM, waits grace, then SIGKILLs any
+// still-live server-owned process groups for the worker. When a worker owns a
+// real process group, pid == pgid and that group is targeted directly. Child
+// process groups are discovered from the worker's descendants and any
+// additional registered PGIDs are included as well. The helper is idempotent:
+// already-gone groups are ignored.
+func cleanupManagedWorkerProcessTree(pid int, registeredPGIDs []int, grace time.Duration) managedProcessCleanupReport {
+	report := managedProcessCleanupReport{
+		RootPID:         pid,
+		RegisteredPGIDs: uniqueSortedInts(registeredPGIDs),
 	}
-	pgid, err := syscall.Getpgid(pid)
-	if err != nil {
-		return pid
+	targets := map[int]struct{}{}
+	if pgid, ok := managedWorkerRootPGID(pid); ok {
+		targets[pgid] = struct{}{}
 	}
-	return pgid
+	for _, pgid := range scanManagedWorkerDescendantPGIDs(pid) {
+		targets[pgid] = struct{}{}
+	}
+	for _, pgid := range report.RegisteredPGIDs {
+		targets[pgid] = struct{}{}
+	}
+	if len(targets) == 0 {
+		return report
+	}
+	report.TargetPGIDs = sortedIntSet(targets)
+	for _, pgid := range report.TargetPGIDs {
+		if terminateProcessGroupOnce(pgid, syscall.SIGTERM) {
+			report.TerminatedPGIDs = append(report.TerminatedPGIDs, pgid)
+		}
+	}
+
+	deadline := time.Now().Add(grace)
+	for time.Now().Before(deadline) {
+		if len(aliveManagedProcessGroups(report.TargetPGIDs)) == 0 {
+			return report
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	for _, pgid := range aliveManagedProcessGroups(report.TargetPGIDs) {
+		if terminateProcessGroupOnce(pgid, syscall.SIGKILL) {
+			report.KilledPGIDs = append(report.KilledPGIDs, pgid)
+		}
+	}
+	return report
 }
 
 // terminateProcessGroup sends SIGTERM to the worker's process group; if the
@@ -53,182 +88,74 @@ func processGroupID(pid int) int {
 // — not desirable, so the caller contract is: only register a PID for
 // processes you spawned with their own pgid.
 func terminateProcessGroup(pid int, grace time.Duration) {
+	_ = cleanupManagedWorkerProcessTree(pid, nil, grace)
+}
+
+func managedWorkerRootPGID(pid int) (int, bool) {
 	if pid <= 0 {
-		return
+		return 0, false
 	}
-	// SIGTERM to the process group.
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
-
-	// Poll until grace expires for the leader to exit; then SIGKILL.
-	deadline := time.Now().Add(grace)
-	for time.Now().Before(deadline) {
-		if syscall.Kill(pid, 0) == syscall.ESRCH {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
+	pgid, err := syscall.Getpgid(pid)
+	if err == nil && pgid == pid {
+		return pgid, true
 	}
-	_ = syscall.Kill(-pid, syscall.SIGKILL)
+	if err == syscall.ESRCH && syscall.Kill(-pid, 0) == nil {
+		return pid, true
+	}
+	return 0, false
 }
 
-type workerProcessRow struct {
-	PID     int
-	PPID    int
-	PGID    int
-	Command string
-}
-
-type workerDescendantCleanupCandidate struct {
-	PID     int
-	PGID    int
-	Command string
-	Reason  string
-}
-
-var workerProviderCLINames = map[string]struct{}{
-	"claude":   {},
-	"codex":    {},
-	"gemini":   {},
-	"opencode": {},
-	"pi":       {},
-}
-
-func terminateWorkerDescendants(rootPID int, attemptID string, grace time.Duration) {
+func scanManagedWorkerDescendantPGIDs(rootPID int) []int {
 	if rootPID <= 0 {
-		return
+		return nil
 	}
-	rows, err := scanWorkerProcesses(context.Background())
-	if err != nil {
-		return
-	}
-	candidates := workerDescendantCleanupCandidates(rows, rootPID, attemptID)
-	if len(candidates) == 0 {
-		return
-	}
-	killWorkerDescendants(candidates, grace)
-}
-
-func terminateWorkerDescendantsUntilQuiet(rootPID int, attemptID string, grace time.Duration) {
-	if rootPID <= 0 {
-		return
-	}
-	quietFor := 250 * time.Millisecond
-	deadline := time.Now().Add(grace + quietFor + 2*time.Second)
-	quietSince := time.Now()
-	for {
-		rows, err := scanWorkerProcesses(context.Background())
-		if err != nil {
-			return
-		}
-		candidates := workerDescendantCleanupCandidates(rows, rootPID, attemptID)
-		if len(candidates) > 0 {
-			killWorkerDescendants(candidates, grace)
-			quietSince = time.Now()
-		}
-		if time.Since(quietSince) >= quietFor {
-			return
-		}
-		if time.Now().After(deadline) {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}
-
-func scanWorkerProcesses(ctx context.Context) ([]workerProcessRow, error) {
-	cmd := exec.CommandContext(ctx, "ps", "-axo", "pid=,ppid=,pgid=,command=")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ps", "-axo", "pid=,ppid=,pgid=")
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	return parseWorkerPS(out), nil
+	rows := parseManagedWorkerPS(out)
+	children := map[int][]int{}
+	pgidByPID := map[int]int{}
+	for _, row := range rows {
+		children[row.PPID] = append(children[row.PPID], row.PID)
+		pgidByPID[row.PID] = row.PGID
+	}
+	descendants := collectManagedWorkerDescendants(children, rootPID)
+	targets := make(map[int]struct{}, len(descendants))
+	for pid := range descendants {
+		pgid := pgidByPID[pid]
+		if pgid > 0 {
+			targets[pgid] = struct{}{}
+		}
+	}
+	return sortedIntSet(targets)
 }
 
-func parseWorkerPS(out []byte) []workerProcessRow {
+func parseManagedWorkerPS(out []byte) []unixProcessSample {
 	lines := bytes.Split(out, []byte{'\n'})
-	rows := make([]workerProcessRow, 0, len(lines))
+	rows := make([]unixProcessSample, 0, len(lines))
 	for _, line := range lines {
 		fields := strings.Fields(string(line))
-		if len(fields) < 4 {
+		if len(fields) < 3 {
 			continue
 		}
-		pid, pidErr := strconv.Atoi(fields[0])
-		ppid, ppidErr := strconv.Atoi(fields[1])
-		pgid, pgidErr := strconv.Atoi(fields[2])
-		if pidErr != nil || ppidErr != nil || pgidErr != nil {
+		pid, err1 := strconv.Atoi(fields[0])
+		ppid, err2 := strconv.Atoi(fields[1])
+		pgid, err3 := strconv.Atoi(fields[2])
+		if err1 != nil || err2 != nil || err3 != nil {
 			continue
 		}
-		rows = append(rows, workerProcessRow{
-			PID:     pid,
-			PPID:    ppid,
-			PGID:    pgid,
-			Command: strings.Join(fields[3:], " "),
-		})
+		rows = append(rows, unixProcessSample{PID: pid, PPID: ppid, PGID: pgid})
 	}
 	return rows
 }
 
-func workerDescendantCleanupCandidates(rows []workerProcessRow, rootPID int, attemptID string) []workerDescendantCleanupCandidate {
-	byPID := map[int]workerProcessRow{}
-	children := map[int][]int{}
-	for _, row := range rows {
-		byPID[row.PID] = row
-		children[row.PPID] = append(children[row.PPID], row.PID)
-	}
-	descendants := collectWorkerDescendants(children, rootPID)
-	self := os.Getpid()
-	include := map[int]string{}
-	for pid := range descendants {
-		if pid <= 0 || pid == rootPID || pid == self {
-			continue
-		}
-		row, ok := byPID[pid]
-		if !ok {
-			continue
-		}
-		reason := ""
-		switch {
-		case workerCommandMatchesAttempt(row.Command, attemptID):
-			reason = "attempt_finalization"
-		case workerProviderForCommand(row.Command) != "":
-			reason = "provider_cli"
-		}
-		if reason == "" {
-			continue
-		}
-		include[pid] = reason
-		for childPID := range collectWorkerDescendants(children, pid) {
-			if childPID <= 0 || childPID == rootPID || childPID == self {
-				continue
-			}
-			if _, ok := byPID[childPID]; ok {
-				include[childPID] = reason
-			}
-		}
-	}
-	out := make([]workerDescendantCleanupCandidate, 0, len(include))
-	for pid, reason := range include {
-		row := byPID[pid]
-		out = append(out, workerDescendantCleanupCandidate{
-			PID:     row.PID,
-			PGID:    row.PGID,
-			Command: row.Command,
-			Reason:  reason,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		di := workerProcessDepth(byPID, out[i].PID)
-		dj := workerProcessDepth(byPID, out[j].PID)
-		if di == dj {
-			return out[i].PID > out[j].PID
-		}
-		return di > dj
-	})
-	return out
-}
-
-func collectWorkerDescendants(children map[int][]int, rootPID int) map[int]struct{} {
+func collectManagedWorkerDescendants(children map[int][]int, root int) map[int]struct{} {
 	out := map[int]struct{}{}
-	queue := []int{rootPID}
+	queue := []int{root}
 	for len(queue) > 0 {
 		pid := queue[0]
 		queue = queue[1:]
@@ -243,120 +170,46 @@ func collectWorkerDescendants(children map[int][]int, rootPID int) map[int]struc
 	return out
 }
 
-func workerProcessDepth(byPID map[int]workerProcessRow, pid int) int {
-	depth := 0
-	for pid > 0 {
-		row, ok := byPID[pid]
-		if !ok || row.PPID <= 0 || row.PPID == pid {
-			return depth
-		}
-		depth++
-		pid = row.PPID
+func sortedIntSet(values map[int]struct{}) []int {
+	if len(values) == 0 {
+		return nil
 	}
-	return depth
-}
-
-func workerCommandMatchesAttempt(command, attemptID string) bool {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return false
+	out := make([]int, 0, len(values))
+	for v := range values {
+		out = append(out, v)
 	}
-	if attemptID = strings.TrimSpace(attemptID); attemptID != "" && strings.Contains(command, attemptID) {
-		return true
-	}
-	return strings.Contains(command, "Ddx-Attempt-Id") ||
-		strings.Contains(command, ".git/hooks/pre-commit") ||
-		strings.Contains(command, "lefthook run pre-commit")
-}
-
-func workerProviderForCommand(cmdline string) string {
-	parts := strings.Fields(strings.TrimSpace(cmdline))
-	if len(parts) == 0 {
-		return ""
-	}
-	base := filepath.Base(parts[0])
-	if strings.HasPrefix(base, "[") && strings.HasSuffix(base, "]") {
-		base = strings.TrimSuffix(strings.TrimPrefix(base, "["), "]")
-	}
-	if _, ok := workerProviderCLINames[base]; ok {
-		return base
-	}
-	if base == "node" && len(parts) >= 2 {
-		if argBase := filepath.Base(parts[1]); argBase != "" && argBase != "." {
-			if _, ok := workerProviderCLINames[argBase]; ok {
-				return argBase
-			}
+	// Small slices; insertion order doesn't matter, but the stable sort keeps
+	// lifecycle evidence deterministic for tests.
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j-1] > out[j]; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
 		}
 	}
-	return ""
+	return out
 }
 
-func killWorkerDescendants(candidates []workerDescendantCleanupCandidate, grace time.Duration) {
-	if grace <= 0 || grace > 2*time.Second {
-		grace = 2 * time.Second
+func aliveManagedProcessGroups(pgids []int) []int {
+	if len(pgids) == 0 {
+		return nil
 	}
-	for _, proc := range candidates {
-		signalWorkerCleanupCandidate(proc, syscall.SIGTERM)
-	}
-	deadline := time.Now().Add(grace)
-	for time.Now().Before(deadline) {
-		if allWorkerCleanupCandidatesGone(candidates) {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	for _, proc := range candidates {
-		if !workerProcessAlive(proc.PID) {
+	alive := make([]int, 0, len(pgids))
+	for _, pgid := range pgids {
+		if pgid <= 0 {
 			continue
 		}
-		signalWorkerCleanupCandidate(proc, syscall.SIGKILL)
-	}
-	killDeadline := time.Now().Add(750 * time.Millisecond)
-	for time.Now().Before(killDeadline) {
-		if allWorkerCleanupCandidatesGone(candidates) {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-}
-
-func signalWorkerCleanupCandidate(proc workerDescendantCleanupCandidate, sig syscall.Signal) {
-	if proc.PID <= 0 || proc.PID == os.Getpid() {
-		return
-	}
-	if proc.PGID == proc.PID {
-		if err := syscall.Kill(-proc.PID, sig); err == nil || err == syscall.ESRCH {
-			return
+		if syscall.Kill(-pgid, 0) == nil {
+			alive = append(alive, pgid)
 		}
 	}
-	_ = syscall.Kill(proc.PID, sig)
+	return alive
 }
 
-func allWorkerCleanupCandidatesGone(candidates []workerDescendantCleanupCandidate) bool {
-	allGone := true
-	for _, proc := range candidates {
-		if waitWorkerChildNoHang(proc.PID) {
-			continue
-		}
-		if workerProcessAlive(proc.PID) {
-			allGone = false
-		}
-	}
-	return allGone
-}
-
-func waitWorkerChildNoHang(pid int) bool {
-	if pid <= 0 {
-		return true
-	}
-	var status syscall.WaitStatus
-	waited, err := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
-	return err == nil && waited == pid
-}
-
-func workerProcessAlive(pid int) bool {
-	if pid <= 0 {
+func terminateProcessGroupOnce(pgid int, sig syscall.Signal) bool {
+	if pgid <= 0 {
 		return false
 	}
-	return syscall.Kill(pid, 0) != syscall.ESRCH
+	if err := syscall.Kill(-pgid, sig); err != nil && err != syscall.ESRCH {
+		return false
+	}
+	return true
 }

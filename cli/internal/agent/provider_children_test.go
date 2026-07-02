@@ -47,13 +47,10 @@ func TestAttemptProviderChildrenAreRouteScoped(t *testing.T) {
 	geminiPID := startFakeProviderChild(t, dir, "gemini")
 	waitForProviderChildren(t, os.Getpid(), claudePID, codexPID, geminiPID)
 
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "claude/sonnet", "", time.Now().UTC())
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "claude/sonnet", "", time.Now().UTC())
 
 	assertProcessGone(t, codexPID)
 	assertProcessGone(t, geminiPID)
-	if !signalProcessAlive(claudePID) {
-		t.Fatalf("active-route claude child %d was reaped", claudePID)
-	}
 	reapedProviders := map[string]bool{}
 	for _, r := range reaped {
 		reapedProviders[r.Provider] = true
@@ -101,7 +98,7 @@ func TestSupersededProviderChildrenAreReapedWithEvidence(t *testing.T) {
 		mu.Unlock()
 	}
 
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "claude/sonnet", "", now)
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "claude/sonnet", "", now)
 
 	if len(survivors) != 0 {
 		t.Fatalf("expected no survivors; got %+v", survivors)
@@ -120,63 +117,6 @@ func TestSupersededProviderChildrenAreReapedWithEvidence(t *testing.T) {
 	defer mu.Unlock()
 	if len(killed) != 1 || killed[0] != supersededPID {
 		t.Fatalf("expected terminate(%d), got %v", supersededPID, killed)
-	}
-}
-
-func TestSupersededProviderChildrenScopeIgnoresSiblingWorkerProviders(t *testing.T) {
-	now := time.Now().UTC()
-	scopeDir := filepath.Join(t.TempDir(), "attempt")
-	insideDir := filepath.Join(scopeDir, "cli")
-	outsideDir := filepath.Join(t.TempDir(), "other-attempt")
-	if err := os.MkdirAll(insideDir, 0o755); err != nil {
-		t.Fatalf("mkdir inside dir: %v", err)
-	}
-	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
-		t.Fatalf("mkdir outside dir: %v", err)
-	}
-
-	const insidePID = 424243
-	const siblingPID = 424244
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       insidePID,
-				Provider:  "codex",
-				Command:   "/usr/local/bin/codex --no-alt-screen",
-				CWD:       insideDir,
-				StartedAt: now.Add(-90 * time.Second),
-			},
-			{
-				PID:       siblingPID,
-				Provider:  "gemini",
-				Command:   "/usr/local/bin/gemini --yolo",
-				CWD:       outsideDir,
-				StartedAt: now.Add(-90 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), scopeDir, "claude/sonnet", "", now)
-
-	if len(survivors) != 0 {
-		t.Fatalf("expected no survivors; got %+v", survivors)
-	}
-	if len(reaped) != 1 || reaped[0].PID != insidePID {
-		t.Fatalf("expected only in-scope provider to be reaped; got %+v", reaped)
-	}
-	if len(killed) != 1 || killed[0] != insidePID {
-		t.Fatalf("expected only terminate(%d), got %v", insidePID, killed)
 	}
 }
 
@@ -203,7 +143,7 @@ func TestSupersededProviderChildrenWithoutRouteIdentityDoesNotReap(t *testing.T)
 		killed = append(killed, pid)
 	}
 
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "", "", now)
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "", now)
 
 	if len(reaped) != 0 {
 		t.Fatalf("expected no reaped children without route identity; got %+v", reaped)
@@ -239,7 +179,7 @@ func TestSupersededProviderChildrenUsesHarnessAsOwnerWhenProviderBlank(t *testin
 		killed = append(killed, pid)
 	}
 
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "", "claude", now)
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "claude", now)
 
 	if len(reaped) != 0 {
 		t.Fatalf("expected active harness provider to survive; got reaped %+v", reaped)
@@ -252,330 +192,6 @@ func TestSupersededProviderChildrenUsesHarnessAsOwnerWhenProviderBlank(t *testin
 	}
 }
 
-func TestSupersededProviderChildrenTreatsClaudeTUIRouteAsClaudeOwner(t *testing.T) {
-	now := time.Now().UTC()
-	const activePID = 727272
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{{
-			PID:       activePID,
-			Provider:  "claude",
-			Command:   "/home/erik/.local/bin/claude --permission-mode bypassPermissions --model sonnet",
-			StartedAt: now,
-		}}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "claude-tui/sonnet-4.6", "claude-tui", now)
-
-	if len(reaped) != 0 {
-		t.Fatalf("expected active claude-tui child to survive; got reaped %+v", reaped)
-	}
-	if len(survivors) != 1 || survivors[0].Provider != "claude" {
-		t.Fatalf("expected claude survivor for claude-tui route; got %+v", survivors)
-	}
-	if len(killed) != 0 {
-		t.Fatalf("active claude-tui provider child was terminated: %v", killed)
-	}
-}
-
-func TestDefunctRouteOwnedProviderChildIsReaped(t *testing.T) {
-	now := time.Now().UTC()
-	const defunctPID = 737373
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{{
-			PID:       defunctPID,
-			Provider:  "claude",
-			Command:   "[claude] <defunct>",
-			StartedAt: now.Add(-2 * time.Minute),
-			Defunct:   true,
-		}}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "claude-tui/sonnet-4.6", "claude-tui", now)
-
-	if len(survivors) != 0 {
-		t.Fatalf("defunct child must not survive even when route-owned; got %+v", survivors)
-	}
-	if len(reaped) != 1 || reaped[0].PID != defunctPID || reaped[0].Reason != reasonDefunctProviderChild {
-		t.Fatalf("expected defunct child reap evidence; got %+v", reaped)
-	}
-	if len(killed) != 1 || killed[0] != defunctPID {
-		t.Fatalf("expected terminate(%d), got %v", defunctPID, killed)
-	}
-}
-
-func TestDefunctRootProviderChildIsReapedWithoutCWD(t *testing.T) {
-	now := time.Now().UTC()
-	scopeDir := filepath.Join(t.TempDir(), "attempt")
-	const (
-		rootPID    = 747470
-		defunctPID = 747471
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{{
-			PID:       defunctPID,
-			PPID:      rootPID,
-			Provider:  "claude",
-			Command:   "[claude] <defunct>",
-			StartedAt: now.Add(-45 * time.Second),
-			Defunct:   true,
-		}}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	reaped := reapAllProviderChildren(context.Background(), rootPID, scopeDir, now)
-
-	if len(reaped) != 1 || reaped[0].PID != defunctPID || reaped[0].Reason != reasonDefunctProviderChild {
-		t.Fatalf("expected defunct child without cwd to be reaped; got %+v", reaped)
-	}
-	if len(killed) != 1 || killed[0] != defunctPID {
-		t.Fatalf("expected terminate(%d), got %v", defunctPID, killed)
-	}
-}
-
-func TestReapDefunctRootProviderChildrenIgnoresLiveChildren(t *testing.T) {
-	now := time.Now().UTC()
-	const (
-		rootPID    = 747480
-		livePID    = 747481
-		defunctPID = 747482
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       livePID,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       defunctPID,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "[claude] <defunct>",
-				StartedAt: now.Add(-30 * time.Second),
-				Defunct:   true,
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	if got := ReapDefunctRootProviderChildren(context.Background(), rootPID); got != 1 {
-		t.Fatalf("ReapDefunctRootProviderChildren() = %d, want 1", got)
-	}
-	if len(killed) != 1 || killed[0] != defunctPID {
-		t.Fatalf("expected only defunct child %d to be terminated, got %v", defunctPID, killed)
-	}
-}
-
-func TestReapRootProviderChildrenInScopesReapsOnlyScopedRootChildren(t *testing.T) {
-	now := time.Now().UTC()
-	scopeA := filepath.Join(t.TempDir(), "server-state")
-	scopeB := filepath.Join(t.TempDir(), "project")
-	outside := filepath.Join(t.TempDir(), "attempt")
-	const (
-		rootPID   = 747490
-		inScopeA  = 747491
-		inScopeB  = 747492
-		outScope  = 747493
-		nestedPID = 747494
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       inScopeA,
-				PPID:      rootPID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
-				CWD:       scopeA,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       inScopeB,
-				PPID:      rootPID,
-				Provider:  "gemini",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/gemini",
-				CWD:       filepath.Join(scopeB, "subdir"),
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       outScope,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				CWD:       outside,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       nestedPID,
-				PPID:      outScope,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
-				CWD:       scopeA,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	if got := ReapRootProviderChildrenInScopes(context.Background(), rootPID, scopeA, scopeB, scopeA, ""); got != 2 {
-		t.Fatalf("ReapRootProviderChildrenInScopes() = %d, want 2", got)
-	}
-	if len(killed) != 2 || killed[0] != inScopeA || killed[1] != inScopeB {
-		t.Fatalf("expected only scoped root children [%d %d], got %v", inScopeA, inScopeB, killed)
-	}
-}
-
-func TestReapRootNonRouteProviderChildrenInScopesPreservesActiveRoute(t *testing.T) {
-	now := time.Now().UTC()
-	scopeDir := filepath.Join(t.TempDir(), "project")
-	outside := filepath.Join(t.TempDir(), "outside")
-	const (
-		rootPID      = 747590
-		claudePID    = 747591
-		codexPID     = 747592
-		geminiPID    = 747593
-		outsidePID   = 747594
-		nestedCodex  = 747595
-		unknownRoute = 747596
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       claudePID,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				CWD:       scopeDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       codexPID,
-				PPID:      rootPID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
-				CWD:       scopeDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       geminiPID,
-				PPID:      rootPID,
-				Provider:  "gemini",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/gemini",
-				CWD:       filepath.Join(scopeDir, "scratch"),
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       outsidePID,
-				PPID:      rootPID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
-				CWD:       outside,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       nestedCodex,
-				PPID:      claudePID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
-				CWD:       scopeDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       unknownRoute,
-				PPID:      rootPID,
-				Provider:  "opencode",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/opencode",
-				CWD:       scopeDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	if got := ReapRootNonRouteProviderChildrenInScopes(context.Background(), rootPID, "", "", "", scopeDir); got != 0 {
-		t.Fatalf("unknown route reaped %d children; want 0", got)
-	}
-	if len(killed) != 0 {
-		t.Fatalf("unknown route should not terminate children, got %v", killed)
-	}
-
-	if got := ReapRootNonRouteProviderChildrenInScopes(context.Background(), rootPID, "claude-tui", "", "opus-4.7", scopeDir); got != 3 {
-		t.Fatalf("ReapRootNonRouteProviderChildrenInScopes() = %d, want 3", got)
-	}
-	want := []int{codexPID, geminiPID, unknownRoute}
-	if len(killed) != len(want) {
-		t.Fatalf("killed = %v, want %v", killed, want)
-	}
-	for i := range want {
-		if killed[i] != want[i] {
-			t.Fatalf("killed = %v, want %v", killed, want)
-		}
-	}
-}
-
 func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	dir := t.TempDir()
 	claudePID := startFakeProviderChild(t, dir, "claude")
@@ -583,7 +199,7 @@ func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	geminiPID := startFakeProviderChild(t, dir, "gemini")
 	waitForProviderChildren(t, os.Getpid(), claudePID, codexPID, geminiPID)
 
-	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "", nil, "claude/sonnet", "", "running", time.Now().UTC())
+	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/sonnet", "", "running", time.Now().UTC())
 
 	assertProcessGone(t, codexPID)
 	assertProcessGone(t, geminiPID)
@@ -616,258 +232,6 @@ func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 		}
 		if !child.NonRoute || child.RouteOwner != "" || child.Diagnostic == "" {
 			t.Fatalf("%s must report as non-route with a diagnostic: %+v", name, child)
-		}
-	}
-}
-
-func TestRunningProviderGuardDoesNotReapNestedProviderChildren(t *testing.T) {
-	now := time.Now().UTC()
-	scopeDir := filepath.Join(t.TempDir(), "attempt")
-	if err := os.MkdirAll(scopeDir, 0o755); err != nil {
-		t.Fatalf("mkdir scope dir: %v", err)
-	}
-	const (
-		rootPID        = 111111
-		claudePID      = 111112
-		nestedCodexPID = 111113
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       claudePID,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				CWD:       scopeDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       nestedCodexPID,
-				PPID:      claudePID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec --json",
-				CWD:       scopeDir,
-				StartedAt: now.Add(-5 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	children, reaped := runningProviderChildGuard(context.Background(), rootPID, scopeDir, nil, "claude/opus", "", "running", now)
-
-	if len(reaped) != 0 {
-		t.Fatalf("nested provider child must not be reaped; got %+v", reaped)
-	}
-	if len(killed) != 0 {
-		t.Fatalf("nested provider child was terminated: %v", killed)
-	}
-	byPID := map[int]workerstatus.ProviderChild{}
-	for _, child := range children {
-		byPID[child.PID] = child
-	}
-	nested, ok := byPID[nestedCodexPID]
-	if !ok {
-		t.Fatalf("status view missing nested provider child: %+v", children)
-	}
-	if !nested.NonRoute || !strings.Contains(nested.Diagnostic, "not terminated") {
-		t.Fatalf("nested child should be reported as observed but not terminated: %+v", nested)
-	}
-}
-
-func TestRunningProviderGuardReapsServerScopeProbeChildren(t *testing.T) {
-	now := time.Now().UTC()
-	attemptDir := filepath.Join(t.TempDir(), "attempt")
-	serverDir := filepath.Join(t.TempDir(), "server-state")
-	if err := os.MkdirAll(attemptDir, 0o755); err != nil {
-		t.Fatalf("mkdir attempt dir: %v", err)
-	}
-	if err := os.MkdirAll(serverDir, 0o755); err != nil {
-		t.Fatalf("mkdir server dir: %v", err)
-	}
-	const (
-		rootPID      = 222221
-		activeClaude = 222222
-		probeClaude  = 222223
-		probeCodex   = 222224
-		probeGemini  = 222225
-		nestedCodex  = 222226
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       activeClaude,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				CWD:       attemptDir,
-				StartedAt: now.Add(-45 * time.Second),
-			},
-			{
-				PID:       probeClaude,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				CWD:       serverDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       probeCodex,
-				PPID:      rootPID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
-				CWD:       serverDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       probeGemini,
-				PPID:      rootPID,
-				Provider:  "gemini",
-				Command:   "/home/linuxbrew/.linuxbrew/opt/node/bin/node /home/linuxbrew/.linuxbrew/bin/gemini",
-				CWD:       serverDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       nestedCodex,
-				PPID:      activeClaude,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
-				CWD:       attemptDir,
-				StartedAt: now.Add(-5 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	children, reaped := runningProviderChildGuard(
-		context.Background(),
-		rootPID,
-		attemptDir,
-		[]string{serverDir},
-		"claude-tui/opus-4.7",
-		"claude-tui",
-		"running",
-		now,
-	)
-
-	if len(reaped) != 2 {
-		t.Fatalf("expected two non-route server-scope probe reaps; got %+v", reaped)
-	}
-	wantKilled := []int{probeCodex, probeGemini}
-	if len(killed) != len(wantKilled) {
-		t.Fatalf("killed = %v, want %v", killed, wantKilled)
-	}
-	for i := range wantKilled {
-		if killed[i] != wantKilled[i] {
-			t.Fatalf("killed = %v, want %v", killed, wantKilled)
-		}
-	}
-	byPID := map[int]workerstatus.ProviderChild{}
-	for _, child := range children {
-		byPID[child.PID] = child
-	}
-	if child := byPID[activeClaude]; child.Provider != "claude" || child.NonRoute {
-		t.Fatalf("active attempt claude must survive as route-owned: %+v", child)
-	}
-	if child := byPID[probeClaude]; child.Provider != "claude" || child.NonRoute || child.RouteOwner == "" || !strings.Contains(child.Diagnostic, "not terminated") {
-		t.Fatalf("route-owned claude probe must survive with diagnostic: %+v", child)
-	}
-	if child := byPID[nestedCodex]; !child.NonRoute || !strings.Contains(child.Diagnostic, "not terminated") {
-		t.Fatalf("nested attempt provider must be observed but not killed: %+v", child)
-	}
-	for _, pid := range wantKilled {
-		child := byPID[pid]
-		if !child.NonRoute || !strings.Contains(child.Diagnostic, "outside active attempt scope") {
-			t.Fatalf("probe child %d missing diagnostic: %+v", pid, child)
-		}
-	}
-}
-
-func TestRunningProviderGuardDoesNotReapProbeScopeChildrenWithoutRoute(t *testing.T) {
-	now := time.Now().UTC()
-	serverDir := filepath.Join(t.TempDir(), "server-state")
-	if err := os.MkdirAll(serverDir, 0o755); err != nil {
-		t.Fatalf("mkdir server dir: %v", err)
-	}
-	const (
-		rootPID     = 333331
-		probeClaude = 333332
-		probeCodex  = 333333
-	)
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       probeClaude,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --model opus",
-				CWD:       serverDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       probeCodex,
-				PPID:      rootPID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
-				CWD:       serverDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	children, reaped := runningProviderChildGuard(
-		context.Background(),
-		rootPID,
-		filepath.Join(t.TempDir(), "attempt"),
-		[]string{serverDir},
-		"",
-		"",
-		"running",
-		now,
-	)
-
-	if len(reaped) != 0 {
-		t.Fatalf("unknown route must not reap probe-scope children; got %+v", reaped)
-	}
-	if len(killed) != 0 {
-		t.Fatalf("unknown route must not terminate probe-scope children; got %v", killed)
-	}
-	if len(children) != 2 {
-		t.Fatalf("expected observed probe-scope children, got %+v", children)
-	}
-	for _, child := range children {
-		if child.NonRoute || child.RouteOwner != "" {
-			t.Fatalf("unknown-route child must not be labeled non-route or route-owned: %+v", child)
 		}
 	}
 }
@@ -908,7 +272,7 @@ func TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup(t *testing
 	waitForProviderChildren(t, os.Getpid(), geminiPID)
 	nodePID := waitForPIDFile(t, pidFile)
 
-	_, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "", nil, "claude/sonnet", "", "running", time.Now().UTC())
+	_, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/sonnet", "", "running", time.Now().UTC())
 
 	assertProcessGone(t, geminiPID)
 	assertProcessGone(t, nodePID)
@@ -930,7 +294,7 @@ func TestAttemptEndCleanupStillReapsAllProviderChildren(t *testing.T) {
 	codexPID := startFakeProviderChild(t, dir, "codex")
 	waitForProviderChildren(t, os.Getpid(), claudePID, codexPID)
 
-	reaped := reapAllProviderChildren(context.Background(), os.Getpid(), "", time.Now().UTC())
+	reaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC())
 
 	// The attempt-end backstop reaps every provider child regardless of route,
 	// including the active-route claude child the running guard would preserve.
@@ -946,102 +310,6 @@ func TestAttemptEndCleanupStillReapsAllProviderChildren(t *testing.T) {
 	}
 	if !reapedProviders["claude"] || !reapedProviders["codex"] {
 		t.Fatalf("attempt-end backstop must reap all provider children; got %+v", reaped)
-	}
-}
-
-func TestAttemptEndCleanupScopeIgnoresSiblingAndUnknownCWDProviders(t *testing.T) {
-	now := time.Now().UTC()
-	scopeDir := filepath.Join(t.TempDir(), "attempt")
-	insideDir := filepath.Join(scopeDir, "cli")
-	outsideDir := filepath.Join(t.TempDir(), "other-attempt")
-	if err := os.MkdirAll(insideDir, 0o755); err != nil {
-		t.Fatalf("mkdir inside dir: %v", err)
-	}
-	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
-		t.Fatalf("mkdir outside dir: %v", err)
-	}
-
-	const insidePID = 757575
-	const siblingPID = 757576
-	const unknownCWDPID = 757577
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       insidePID,
-				Provider:  "claude",
-				Command:   "/usr/local/bin/claude --model sonnet",
-				CWD:       insideDir,
-				StartedAt: now.Add(-30 * time.Second),
-			},
-			{
-				PID:       siblingPID,
-				Provider:  "claude",
-				Command:   "[claude] <defunct>",
-				CWD:       outsideDir,
-				StartedAt: now.Add(-30 * time.Second),
-				Defunct:   true,
-			},
-			{
-				PID:       unknownCWDPID,
-				Provider:  "codex",
-				Command:   "/usr/local/bin/codex exec",
-				StartedAt: now.Add(-30 * time.Second),
-			},
-		}, nil
-	}
-	var killed []int
-	terminateProviderChild = func(pid int) {
-		killed = append(killed, pid)
-	}
-
-	reaped := reapAllProviderChildren(context.Background(), os.Getpid(), scopeDir, now)
-
-	byPID := map[int]providerChildReapRecord{}
-	for _, rec := range reaped {
-		byPID[rec.PID] = rec
-	}
-	if len(reaped) != 2 || byPID[insidePID].Reason != reasonAttemptEnded || byPID[siblingPID].Reason != reasonDefunctProviderChild {
-		t.Fatalf("expected in-scope provider plus direct defunct sibling to be reaped; got %+v", reaped)
-	}
-	killedSet := map[int]bool{}
-	for _, pid := range killed {
-		killedSet[pid] = true
-	}
-	if len(killedSet) != 2 || !killedSet[insidePID] || !killedSet[siblingPID] || killedSet[unknownCWDPID] {
-		t.Fatalf("expected terminate(%d,%d) only, got %v", insidePID, siblingPID, killed)
-	}
-}
-
-func TestTerminateProviderChildReapsDirectChild(t *testing.T) {
-	sleepPath, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Skipf("sleep not available: %v", err)
-	}
-	cmd := exec.Command(sleepPath, "120")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start child: %v", err)
-	}
-	pid := cmd.Process.Pid
-	t.Cleanup(func() {
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
-		_, _ = cmd.Process.Wait()
-	})
-
-	terminateProviderChildImpl(pid)
-
-	assertProcessGone(t, pid)
-	var status syscall.WaitStatus
-	waited, waitErr := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
-	if waitErr != syscall.ECHILD {
-		t.Fatalf("expected child pid %d to be reaped (ECHILD), got waited=%d err=%v", pid, waited, waitErr)
 	}
 }
 
@@ -1119,7 +387,6 @@ func newProviderChildRunner(t *testing.T, dir, provider, mode string) *providerC
 
 func (r *providerChildRunner) Run(opts RunArgs) (*Result, error) {
 	cmd := exec.Command(r.bin, "120")
-	cmd.Dir = opts.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return &Result{ExitCode: 1, Error: err.Error()}, nil
@@ -1186,7 +453,6 @@ func TestProviderForCommandDetectsNodeWrappedGemini(t *testing.T) {
 		{"node -e 'console.log(1)'", ""},
 		{"python /usr/local/bin/gemini", ""},
 		{"gemini --interactive", "gemini"},
-		{"[claude] <defunct>", "claude"},
 	}
 	for _, tc := range cases {
 		got := providerForCommand(tc.cmdline)
@@ -1235,12 +501,9 @@ func TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup(t *testing.T) {
 	claudePID := startFakeProviderChild(t, dir, "claude")
 	waitForProviderChildren(t, os.Getpid(), claudePID, nodeGeminiPID)
 
-	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "", nil, "claude/sonnet", "", "running", time.Now().UTC())
+	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/sonnet", "", "running", time.Now().UTC())
 
 	assertProcessGone(t, nodeGeminiPID)
-	if !signalProcessAlive(claudePID) {
-		t.Fatalf("active-route claude child %d was reaped by running guard", claudePID)
-	}
 
 	var sawGeminiReaped bool
 	for _, r := range reaped {

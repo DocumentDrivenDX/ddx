@@ -2,7 +2,6 @@ package graphql_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
 )
 
 // newArtifactGQLHandler builds a GQL handler whose workDir is the project root.
@@ -366,77 +364,6 @@ func TestArtifacts_MissingSidecarGraceful(t *testing.T) {
 	}
 	if errs, ok := result["errors"]; ok {
 		t.Fatalf("resolver crashed on missing sidecars: %v", errs)
-	}
-}
-
-func TestArtifacts_ListsSidecarsFromLockedPluginCache(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	workDir, store := setupIntegrationDir(t)
-
-	cacheRoot := filepath.Join(t.TempDir(), "helix-cache")
-	resourceDir := filepath.Join(cacheRoot, "docs", "resources")
-	if err := os.MkdirAll(resourceDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	artifactPath := filepath.Join(resourceDir, "guide.md")
-	if err := os.WriteFile(artifactPath, []byte("# Cached Guide\n\ncache-only-body-token\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(artifactPath+".ddx.yaml", []byte(
-		"ddx:\n  id: helix.cached-guide\n  title: Cached HELIX Guide\n  media_type: text/markdown\n  description: Marketplace cache artifact\n",
-	), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(workDir, ddxroot.DirName, "plugins", "helix")); !os.IsNotExist(err) {
-		t.Fatalf("expected no project-local plugin payload, stat err=%v", err)
-	}
-
-	lock := &registry.PluginLock{Plugins: []registry.PluginLockEntry{{
-		Name:      "helix",
-		Version:   "0.7.1",
-		Type:      registry.PackageTypePlugin,
-		Source:    "https://github.com/DocumentDrivenDX/helix",
-		CachePath: cacheRoot,
-	}}}
-	if err := registry.SaveProjectPluginLock(context.Background(), workDir, lock); err != nil {
-		t.Fatal(err)
-	}
-
-	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
-	defer srv.Close()
-
-	projID := "proj-integration-" + filepath.Base(workDir)
-	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", search: \"cache-only-body-token\") { totalCount edges { node { id path title mediaType } } } artifact(projectID: \"` + projID + `\", id: \"helix.cached-guide\") { id path content sha256 } }"}`)
-	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatal(err)
-	}
-	if errs, ok := result["errors"]; ok {
-		t.Fatalf("GraphQL errors: %v", errs)
-	}
-
-	data := result["data"].(map[string]interface{})
-	artifacts := data["artifacts"].(map[string]interface{})
-	if got := int(artifacts["totalCount"].(float64)); got != 1 {
-		t.Fatalf("expected exactly one cached plugin artifact search hit, got %d", got)
-	}
-	node := artifacts["edges"].([]interface{})[0].(map[string]interface{})["node"].(map[string]interface{})
-	if got := node["path"].(string); got != "plugin-cache/helix/docs/resources/guide.md" {
-		t.Fatalf("cached artifact path = %q", got)
-	}
-
-	artifact := data["artifact"].(map[string]interface{})
-	if got := artifact["content"].(string); !bytes.Contains([]byte(got), []byte("cache-only-body-token")) {
-		t.Fatalf("cached artifact content was not loaded from cache: %q", got)
-	}
-	if artifact["sha256"] == nil {
-		t.Fatal("expected cached artifact sha256")
 	}
 }
 

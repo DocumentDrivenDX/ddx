@@ -19,61 +19,34 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newInstallCommand creates the retired top-level "ddx install <name>" shim.
+// newInstallCommand creates the "ddx install <name>" command.
 func (f *CommandFactory) newInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install <name>",
-		Short: "Deprecated: use 'ddx plugin install'",
-		Long: `The top-level ddx install command has been retired.
+		Short: "Install a package or resource",
+		Long: `Install a package or resource from the DDx registry.
 
-Use 'ddx plugin install <name>' so plugin lifecycle operations stay under
-the plugin noun. Registry installs write project lock metadata, resolve
-payloads into the XDG cache, and generate agent adapter shims for the current
-project.`,
-		Hidden: true,
-		Args:   cobra.ArbitraryArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := "<name>"
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return fmt.Errorf("ddx install has been retired; use 'ddx plugin install %s' instead", name)
-		},
-	}
-	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
-	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
-	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
-	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
-	return cmd
-}
+Without --global, installs into the current project:
+  - In-tree mode (.ddx/ exists): <project>/.ddx/plugins/<name>/
+  - Convention mode (no .ddx/): ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/
+Skill links are created under <project>/.claude/skills/ and <project>/.agents/skills/.
 
-// newPluginInstallCommand creates the canonical "ddx plugin install <name>" command.
-func (f *CommandFactory) newPluginInstallCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "install <name>",
-		Short: "Install a plugin",
-		Long: `Install a plugin from the DDx registry.
-
-Registry installs behave like an npx-style dependency:
-  - Project metadata: <ddx-root>/plugins.lock.yaml
-  - Payload cache: ${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/
-  - Generated adapters: <project>/.agents/skills/ and <project>/.claude/skills/
-
-Generated adapters can be recreated with 'ddx plugin sync' and should not be
-treated as source payload copies.
+With --global, installs into the machine-wide DDx plugin tree:
+  ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+Skill links are created under ~/.claude/skills/ and ~/.agents/skills/.
 
 Examples:
-  ddx plugin install ddx --force
-  ddx plugin install helix
-  ddx plugin install helix --force
-  ddx plugin install helix --local ../helix --force`,
+  ddx install helix                        # Install HELIX workflow (project-local)
+  ddx install helix --global               # Install HELIX workflow (machine-wide)
+  ddx install helix --force                # Reinstall even if already up to date
+  ddx plugin install helix --local ../helix --force
+  ddx install persona/strict-code-reviewer # Install a single persona`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runInstall,
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
-	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
-	_ = cmd.Flags().MarkHidden("global")
+	cmd.Flags().Bool("global", false, "Install into the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
 	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
 	return cmd
 }
@@ -82,10 +55,6 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
 	global, _ := cmd.Flags().GetBool("global")
-	if global {
-		cmd.SilenceUsage = true
-		return errGlobalPluginInstallRetired()
-	}
 	if silent, _ := cmd.Flags().GetBool("silent"); silent {
 		out = io.Discard
 	}
@@ -105,11 +74,12 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 
 	// Handle --local: install from a local directory instead of registry.
 	if localPath, _ := cmd.Flags().GetString("local"); localPath != "" {
-		return f.installLocal(name, localPath, force, out)
+		return f.installLocal(name, localPath, force, global, out)
 	}
 
 	if registry.IsResourcePath(name) {
-		cmd.SilenceUsage = true
+		// Individual resource install (e.g. "persona/strict-code-reviewer")
+		fmt.Fprintf(out, "Installing resource %s...\n", name)
 		entry, err := registry.InstallResource(name)
 		if err != nil {
 			return fmt.Errorf("install resource: %w", err)
@@ -128,20 +98,17 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if name == "ddx" {
-		pkg, err := registry.BuiltinRegistry().Find("ddx")
-		if err != nil {
-			return err
-		}
-		files, err := syncBuiltinDDxSkillAdapters(f.WorkingDir, force)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "Installed %s %s from built-in cache (%d adapter(s))\n", pkg.Name, pkg.Version, len(files))
-		return nil
+	// Package install (e.g. "helix").
+	// Determine install root and skill directories based on global vs project mode.
+	installRoot, agentSkillsDir, claudeSkillsDir, err := f.resolveInstallDirs(global)
+	if err != nil {
+		return err
 	}
 
-	reg := f.pluginRegistry()
+	// Select the correct state file for global vs project installs.
+	loadState, saveState := selectInstallState(global)
+
+	reg := registry.BuiltinRegistry()
 	pkg, err := reg.Find(name)
 	if err != nil {
 		return err
@@ -152,54 +119,137 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		pkg.Version = strings.TrimPrefix(release.TagName, "v")
 	}
 
-	return f.installProjectRegistryPlugin(cmd.Context(), out, pkg, force)
-}
-
-func errGlobalPluginInstallRetired() error {
-	return fmt.Errorf("global plugin installs are retired; use 'ddx plugin install <name>' per project, with payloads shared through ${XDG_DATA_HOME}/ddx/cache/plugins and adapters recreated by 'ddx plugin sync'")
-}
-
-func (f *CommandFactory) pluginRegistry() *registry.Registry {
-	if f.registryOverride != nil {
-		return f.registryOverride
-	}
-	return registry.BuiltinRegistry()
-}
-
-func (f *CommandFactory) installProjectRegistryPlugin(ctx context.Context, out io.Writer, pkg *registry.Package, force bool) error {
-	lock, err := registry.LoadProjectPluginLock(ctx, f.WorkingDir)
-	if err != nil {
-		return err
-	}
-	if existing := lock.Find(pkg.Name); existing != nil {
-		if existing.Version == pkg.Version {
-			if !force {
-				fmt.Fprintf(out, "%s %s is already up to date\n", existing.Name, existing.Version)
-				return nil
+	// Check if already installed at the latest version.
+	state, err := loadState()
+	if err == nil {
+		for _, e := range state.Installed {
+			if e.Name == name {
+				if e.Version == pkg.Version {
+					if !force {
+						fmt.Fprintf(out, "%s %s is already up to date\n", e.Name, e.Version)
+						return nil
+					}
+					fmt.Fprintf(out, "Reinstalling %s %s...\n", e.Name, e.Version)
+				} else {
+					fmt.Fprintf(out, "Updating %s from %s to %s...\n", e.Name, e.Version, pkg.Version)
+				}
 			}
-			fmt.Fprintf(out, "Reinstalling %s %s...\n", existing.Name, existing.Version)
-		} else {
-			fmt.Fprintf(out, "Updating %s from %s to %s...\n", existing.Name, existing.Version, pkg.Version)
+		}
+	}
+
+	// Capture old file list before installing so we can remove stale files.
+	var oldFiles []string
+	if state != nil {
+		if old := state.FindInstalled(name); old != nil {
+			oldFiles = append([]string{}, old.Files...)
 		}
 	}
 
 	fmt.Fprintf(out, "Installing %s %s from %s...\n", pkg.Name, pkg.Version, pkg.Source)
-	entry, err := registry.CachePackageFromRemote(pkg)
+
+	// Adjust package targets to use the resolved install root and skill dirs.
+	adjustedPkg := adjustInstallTargets(pkg, name, agentSkillsDir, claudeSkillsDir)
+	entry, err := registry.InstallPackage(adjustedPkg, installRoot)
 	if err != nil {
 		return fmt.Errorf("install package: %w", err)
 	}
-	result, err := registry.SyncProjectPlugin(ctx, f.WorkingDir, entry, force)
-	if err != nil {
-		return fmt.Errorf("sync plugin shims: %w", err)
+
+	removed := removeStaleFilesFromInstall(oldFiles, entry.Files)
+	if removed > 0 {
+		fmt.Fprintf(out, "Removed %d stale file(s)\n", removed)
 	}
-	entry.GeneratedFiles = result.GeneratedFiles
-	lock.AddOrUpdate(entry)
-	if err := registry.SaveProjectPluginLock(ctx, f.WorkingDir, lock); err != nil {
-		return fmt.Errorf("saving plugin lock: %w", err)
+
+	state, stateErr := loadState()
+	if stateErr != nil {
+		return fmt.Errorf("loading state: %w", stateErr)
 	}
-	fmt.Fprintf(out, "Installed %s %s (cache: %s, shims: %d)\n", entry.Name, entry.Version, entry.CachePath, len(entry.GeneratedFiles))
-	commitPluginChanges(f.WorkingDir, entry.Name, entry.Version)
+	state.AddOrUpdate(entry)
+	if err := saveState(state); err != nil {
+		return fmt.Errorf("saving state: %w", err)
+	}
+
+	fmt.Fprintf(out, "Installed %s %s (%d file(s))\n", pkg.Name, pkg.Version, len(entry.Files))
+
+	// Auto-commit skill links and other trackable project changes (project installs only).
+	if !global {
+		commitPluginChanges(name, pkg.Version)
+	}
+
 	return nil
+}
+
+// resolveInstallDirs returns the install root directory and agent/claude skill
+// directories for either a global or project-local install. For project installs,
+// the existing in-tree .ddx directory wins when present, otherwise we fall back
+// to the convention root.
+func (f *CommandFactory) resolveInstallDirs(global bool) (installRoot, agentSkillsDir, claudeSkillsDir string, err error) {
+	if global {
+		installRoot = ddxroot.GlobalDir()
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			return "", "", "", fmt.Errorf("getting home dir: %w", herr)
+		}
+		agentSkillsDir = filepath.Join(home, ".agents", "skills")
+		claudeSkillsDir = filepath.Join(home, ".claude", "skills")
+		return
+	}
+	installRoot = resolveBeadStoreRoot(f.WorkingDir)
+	agentSkillsDir = filepath.Join(f.WorkingDir, ".agents", "skills")
+	claudeSkillsDir = filepath.Join(f.WorkingDir, ".claude", "skills")
+	return
+}
+
+// selectInstallState returns load/save functions for the appropriate state file.
+func selectInstallState(global bool) (
+	load func() (*registry.InstalledState, error),
+	save func(*registry.InstalledState) error,
+) {
+	if global {
+		return registry.LoadGlobalState, registry.SaveGlobalState
+	}
+	return registry.LoadState, registry.SaveState
+}
+
+// adjustInstallTargets returns a shallow copy of pkg with Root.Target overridden
+// to "plugins/<name>" (relative to installRoot) and Skills targets remapped to
+// the provided absolute agentSkillsDir/claudeSkillsDir paths.
+func adjustInstallTargets(pkg *registry.Package, name, agentSkillsDir, claudeSkillsDir string) *registry.Package {
+	adjusted := *pkg
+	adjustedInstall := pkg.Install
+
+	src := "."
+	if pkg.Install.Root != nil {
+		src = pkg.Install.Root.Source
+	}
+	adjustedInstall.Root = &registry.InstallMapping{
+		Source: src,
+		Target: filepath.Join("plugins", name),
+	}
+
+	adjustedInstall.Skills = remapSkillTargets(pkg.Install.Skills, agentSkillsDir, claudeSkillsDir)
+	adjusted.Install = adjustedInstall
+	return &adjusted
+}
+
+// remapSkillTargets replaces relative .agents/skills and .claude/skills targets
+// with the provided absolute directory paths.
+func remapSkillTargets(mappings []registry.InstallMapping, agentSkillsDir, claudeSkillsDir string) []registry.InstallMapping {
+	result := make([]registry.InstallMapping, len(mappings))
+	for i, m := range mappings {
+		target := m.Target
+		t := filepath.ToSlash(target)
+		switch {
+		case strings.Contains(t, "agents/skills"):
+			target = strings.TrimRight(agentSkillsDir, "/") + "/"
+		case strings.Contains(t, "claude/skills"):
+			target = strings.TrimRight(claudeSkillsDir, "/") + "/"
+		}
+		result[i] = registry.InstallMapping{
+			Source: m.Source,
+			Target: target,
+		}
+	}
+	return result
 }
 
 func (f *CommandFactory) newPluginCommand() *cobra.Command {
@@ -208,12 +258,12 @@ func (f *CommandFactory) newPluginCommand() *cobra.Command {
 		Aliases: []string{"plugins"},
 		Short:   "Manage DDx plugins",
 	}
-	cmd.AddCommand(f.newPluginInstallCommand())
+	installCmd := f.newInstallCommand()
+	installCmd.Use = "install <name>"
+	installCmd.Short = "Install a plugin"
+	cmd.AddCommand(installCmd)
 	cmd.AddCommand(f.newPluginListCommand())
 	cmd.AddCommand(f.newPluginShowCommand())
-	cmd.AddCommand(f.newPluginSyncCommand())
-	cmd.AddCommand(f.newPluginUpgradeCommand())
-	cmd.AddCommand(f.newPluginUninstallCommand())
 	return cmd
 }
 
@@ -224,131 +274,35 @@ func (f *CommandFactory) newPluginListCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  f.runPluginList,
 	}
-	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
-	_ = cmd.Flags().MarkHidden("global")
-	cmd.Flags().Bool("json", false, "Output project plugin state as JSON")
+	cmd.Flags().Bool("global", false, "List from the machine-wide global plugin tree")
 	return cmd
-}
-
-type projectPluginListEntry struct {
-	Name           string    `json:"name"`
-	Version        string    `json:"version"`
-	Type           string    `json:"type"`
-	Status         string    `json:"status"`
-	Source         string    `json:"source,omitempty"`
-	CachePath      string    `json:"cache_path,omitempty"`
-	Path           string    `json:"path,omitempty"`
-	LocalOverlay   bool      `json:"local_overlay"`
-	GeneratedFiles []string  `json:"generated_files,omitempty"`
-	InstalledAt    time.Time `json:"installed_at,omitempty"`
 }
 
 func (f *CommandFactory) runPluginList(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	global, _ := cmd.Flags().GetBool("global")
-	if global {
-		cmd.SilenceUsage = true
-		return errGlobalPluginInstallRetired()
-	}
-	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	entries, err := f.projectPluginListEntries(cmd.Context())
+	loadState, _ := selectInstallState(global)
+	state, err := loadState()
 	if err != nil {
-		return err
+		return fmt.Errorf("loading state: %w", err)
 	}
-	if jsonOut {
-		enc := json.NewEncoder(out)
-		enc.SetIndent("", "  ")
-		return enc.Encode(entries)
-	}
-	if len(entries) == 0 {
+
+	if len(state.Installed) == 0 {
 		fmt.Fprintln(out, "No plugins installed.")
 		return nil
 	}
+
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS\tSOURCE")
-	for _, e := range entries {
-		source := e.Source
-		if e.LocalOverlay {
-			source = e.Path
+	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS")
+	for _, e := range state.Installed {
+		status := "ok"
+		if !e.VerifyFiles() {
+			status = "BROKEN"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", e.Name, e.Version, e.Type, e.Status, source)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Version, string(e.Type), status)
 	}
 	return w.Flush()
-}
-
-func (f *CommandFactory) projectPluginListEntries(ctx context.Context) ([]projectPluginListEntry, error) {
-	lock, err := registry.LoadProjectPluginLock(ctx, f.WorkingDir)
-	if err != nil {
-		return nil, fmt.Errorf("loading plugin lock: %w", err)
-	}
-	entries := make([]projectPluginListEntry, 0, len(lock.Plugins)+1)
-	seen := map[string]bool{}
-	if entry, err := builtinDDxListEntry(ctx, f.WorkingDir); err != nil {
-		return nil, err
-	} else {
-		entries = append(entries, entry)
-		seen[entry.Name] = true
-	}
-	for _, e := range lock.Plugins {
-		if seen[e.Name] {
-			continue
-		}
-		status := projectPluginLockStatus(ctx, f.WorkingDir, e)
-		cachePath := e.CachePath
-		if cachePath == "" {
-			cachePath = registry.PluginCacheDir(e.Name, e.Version)
-		}
-		localPath, local := projectPluginLocalOverlayPath(ctx, f.WorkingDir, e.Name)
-		entry := projectPluginListEntry{
-			Name:           e.Name,
-			Version:        e.Version,
-			Type:           string(e.Type),
-			Status:         status,
-			Source:         e.Source,
-			CachePath:      cachePath,
-			LocalOverlay:   local,
-			GeneratedFiles: append([]string(nil), e.GeneratedFiles...),
-			InstalledAt:    e.InstalledAt,
-		}
-		if local {
-			entry.Path = localPath
-		}
-		entries = append(entries, entry)
-		seen[e.Name] = true
-	}
-
-	overlayRoot := filepath.Join(ddxroot.Path(ctx, f.WorkingDir), "plugins")
-	children, readErr := os.ReadDir(overlayRoot)
-	if readErr != nil && !os.IsNotExist(readErr) {
-		return nil, fmt.Errorf("reading local plugin overlays: %w", readErr)
-	}
-	for _, child := range children {
-		name := child.Name()
-		if seen[name] {
-			continue
-		}
-		path := filepath.Join(overlayRoot, name)
-		info, statErr := os.Lstat(path)
-		if statErr != nil || info.Mode()&os.ModeSymlink == 0 {
-			continue
-		}
-		target, _ := os.Readlink(path)
-		if target != "" && !filepath.IsAbs(target) {
-			target = filepath.Clean(filepath.Join(filepath.Dir(path), target))
-		}
-		entries = append(entries, projectPluginListEntry{
-			Name:         name,
-			Version:      "local",
-			Type:         string(registry.PackageTypePlugin),
-			Status:       "local-overlay",
-			Source:       target,
-			Path:         target,
-			LocalOverlay: true,
-		})
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-	return entries, nil
 }
 
 func (f *CommandFactory) newPluginShowCommand() *cobra.Command {
@@ -358,8 +312,7 @@ func (f *CommandFactory) newPluginShowCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  f.runPluginShow,
 	}
-	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
-	_ = cmd.Flags().MarkHidden("global")
+	cmd.Flags().Bool("global", false, "Show from the machine-wide global plugin tree")
 	return cmd
 }
 
@@ -367,396 +320,25 @@ func (f *CommandFactory) runPluginShow(cmd *cobra.Command, args []string) error 
 	out := cmd.OutOrStdout()
 	name := args[0]
 	global, _ := cmd.Flags().GetBool("global")
-	if global {
-		cmd.SilenceUsage = true
-		return errGlobalPluginInstallRetired()
+
+	loadState, _ := selectInstallState(global)
+	state, err := loadState()
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
 	}
 
-	lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
-	if err != nil {
-		return fmt.Errorf("loading plugin lock: %w", err)
-	}
-	entry := lock.Find(name)
+	entry := state.FindInstalled(name)
 	if entry == nil {
-		if name == "ddx" {
-			return f.runBuiltinDDxPluginShow(cmd.Context(), out)
-		}
 		return fmt.Errorf("plugin %q is not installed", name)
 	}
-	result, err := registry.SyncProjectPlugin(cmd.Context(), f.WorkingDir, *entry, false)
-	if err != nil {
-		return err
-	}
-	if !sameStringSlices(entry.GeneratedFiles, result.GeneratedFiles) {
-		entry.GeneratedFiles = result.GeneratedFiles
-		if err := registry.SaveProjectPluginLock(cmd.Context(), f.WorkingDir, lock); err != nil {
-			return fmt.Errorf("saving plugin lock: %w", err)
-		}
-	}
+
 	fmt.Fprintf(out, "Name:         %s\n", entry.Name)
 	fmt.Fprintf(out, "Version:      %s\n", entry.Version)
 	fmt.Fprintf(out, "Type:         %s\n", string(entry.Type))
 	fmt.Fprintf(out, "Source:       %s\n", entry.Source)
-	fmt.Fprintf(out, "Cache:        %s\n", entry.CachePath)
 	fmt.Fprintf(out, "Installed at: %s\n", entry.InstalledAt.Format("2006-01-02"))
-	fmt.Fprintf(out, "Shims:        %d\n", len(entry.GeneratedFiles))
+	fmt.Fprintf(out, "Files:        %d\n", len(entry.Files))
 	return nil
-}
-
-func builtinDDxListEntry(ctx context.Context, projectRoot string) (projectPluginListEntry, error) {
-	pkg, err := registry.BuiltinRegistry().Find("ddx")
-	if err != nil {
-		return projectPluginListEntry{}, err
-	}
-	cachePath := registry.PluginCacheDir(pkg.Name, pkg.Version)
-	generatedFiles := []string{
-		filepath.Join(".agents", "skills", "ddx"),
-		filepath.Join(".claude", "skills", "ddx"),
-	}
-	entry := projectPluginListEntry{
-		Name:           pkg.Name,
-		Version:        pkg.Version,
-		Type:           string(pkg.Type),
-		Status:         projectBuiltinDDxStatus(projectRoot, cachePath, generatedFiles),
-		Source:         pkg.Source,
-		CachePath:      cachePath,
-		GeneratedFiles: generatedFiles,
-	}
-	if localPath, local := projectPluginLocalOverlayPath(ctx, projectRoot, pkg.Name); local {
-		entry.Version = "local"
-		entry.Status = "local-overlay"
-		entry.Source = localPath
-		entry.Path = localPath
-		entry.LocalOverlay = true
-	}
-	return entry, nil
-}
-
-func projectBuiltinDDxStatus(projectRoot, cachePath string, generatedFiles []string) string {
-	if info, err := os.Stat(cachePath); err != nil || !info.IsDir() {
-		return "cache-missing"
-	}
-	for _, generated := range generatedFiles {
-		path := filepath.Join(projectRoot, filepath.FromSlash(generated))
-		if _, err := os.Stat(path); err != nil {
-			return "shims-missing"
-		}
-	}
-	return "ok"
-}
-
-func (f *CommandFactory) runBuiltinDDxPluginShow(ctx context.Context, out io.Writer) error {
-	pkg, err := registry.BuiltinRegistry().Find("ddx")
-	if err != nil {
-		return err
-	}
-	files, err := syncBuiltinDDxSkillAdapters(f.WorkingDir, false)
-	if err != nil {
-		return err
-	}
-	cachePath := registry.PluginCacheDir(pkg.Name, pkg.Version)
-	fmt.Fprintf(out, "Name:         %s\n", pkg.Name)
-	fmt.Fprintf(out, "Version:      %s\n", pkg.Version)
-	fmt.Fprintf(out, "Type:         %s\n", string(pkg.Type))
-	if localPath, local := projectPluginLocalOverlayPath(ctx, f.WorkingDir, pkg.Name); local {
-		fmt.Fprintf(out, "Source:       %s\n", localPath)
-		fmt.Fprintf(out, "Status:       local-overlay\n")
-	} else {
-		fmt.Fprintf(out, "Source:       %s\n", pkg.Source)
-		fmt.Fprintf(out, "Status:       built-in\n")
-	}
-	fmt.Fprintf(out, "Cache:        %s\n", cachePath)
-	fmt.Fprintf(out, "Installed at: built-in\n")
-	fmt.Fprintf(out, "Shims:        %d\n", len(files))
-	return nil
-}
-
-func sameStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (f *CommandFactory) newPluginSyncCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "sync",
-		Short: "Recreate generated plugin shims from the project lock",
-		Args:  cobra.NoArgs,
-		RunE:  f.runPluginSync,
-	}
-	cmd.Flags().BoolP("force", "f", false, "Replace existing generated skill directories")
-	return cmd
-}
-
-func (f *CommandFactory) runPluginSync(cmd *cobra.Command, args []string) error {
-	out := cmd.OutOrStdout()
-	force, _ := cmd.Flags().GetBool("force")
-	builtinFiles, err := syncBuiltinDDxSkillAdapters(f.WorkingDir, force)
-	if err != nil {
-		return err
-	}
-	results, err := registry.SyncProjectPlugins(cmd.Context(), f.WorkingDir, force)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "ddx builtin: ok (%d adapter(s))\n", len(builtinFiles))
-	for _, result := range results {
-		status := "ok"
-		if result.LocalOverlay {
-			status = "local-overlay"
-		} else if !result.CachePresent {
-			status = "cache-missing"
-		}
-		fmt.Fprintf(out, "%s %s: %s (%d shim(s))\n", result.Name, result.Version, status, len(result.GeneratedFiles))
-	}
-	return nil
-}
-
-func (f *CommandFactory) newPluginUpgradeCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "upgrade [name]",
-		Short: "Upgrade registry-installed plugins",
-		Long: `Upgrade one or all registry-installed project plugins.
-
-Local overlays are machine-local developer state and are skipped. Registry
-plugins remain lock/cache based: the project lock is updated, payloads resolve
-into the shared XDG cache, and generated adapters are recreated.`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: f.runPluginUpgrade,
-	}
-	cmd.Flags().BoolP("force", "f", false, "Reinstall even when the locked version is current")
-	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
-	return cmd
-}
-
-func (f *CommandFactory) runPluginUpgrade(cmd *cobra.Command, args []string) error {
-	out := cmd.OutOrStdout()
-	if silent, _ := cmd.Flags().GetBool("silent"); silent {
-		out = io.Discard
-	}
-	force, _ := cmd.Flags().GetBool("force")
-
-	lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
-	if err != nil {
-		return fmt.Errorf("loading plugin lock: %w", err)
-	}
-	var targets []registry.PluginLockEntry
-	if len(args) == 1 {
-		name := args[0]
-		if projectPluginLocalOverlay(cmd.Context(), f.WorkingDir, name) {
-			fmt.Fprintf(out, "%s is local-linked; skipped\n", name)
-			return nil
-		}
-		entry := lock.Find(name)
-		if entry == nil {
-			return fmt.Errorf("plugin %q is not installed", name)
-		}
-		targets = append(targets, *entry)
-	} else {
-		targets = append(targets, lock.Plugins...)
-		entries, err := f.projectPluginListEntries(cmd.Context())
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if entry.LocalOverlay && lock.Find(entry.Name) == nil {
-				fmt.Fprintf(out, "%s is local-linked; skipped\n", entry.Name)
-			}
-		}
-	}
-	if len(targets) == 0 {
-		fmt.Fprintln(out, "No registry plugins installed.")
-		return nil
-	}
-
-	reg := f.pluginRegistry()
-	for _, locked := range targets {
-		if projectPluginLocalOverlay(cmd.Context(), f.WorkingDir, locked.Name) {
-			fmt.Fprintf(out, "%s is local-linked; skipped\n", locked.Name)
-			continue
-		}
-		pkg, findErr := reg.Find(locked.Name)
-		if findErr != nil {
-			pkg = &registry.Package{
-				Name:        locked.Name,
-				Version:     locked.Version,
-				Description: locked.Name + " plugin",
-				Type:        locked.Type,
-				Source:      locked.Source,
-			}
-		}
-		if pkg.Source == "" {
-			pkg.Source = locked.Source
-		}
-		if pkg.Version == "" {
-			pkg.Version = locked.Version
-		}
-		if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
-			pkg.Version = strings.TrimPrefix(release.TagName, "v")
-		}
-		if pkg.Version == locked.Version && !force {
-			fmt.Fprintf(out, "%s %s is already up to date\n", locked.Name, locked.Version)
-			continue
-		}
-		if err := f.installProjectRegistryPlugin(cmd.Context(), out, pkg, force); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (f *CommandFactory) newPluginUninstallCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "uninstall <name>",
-		Short: "Remove a project plugin or local overlay",
-		Long: `Remove a project plugin.
-
-For registry-installed plugins, this removes generated adapter files and the
-project lock entry. For local overlays, this removes only project symlinks and
-leaves both the checkout target and any registry version pin untouched.`,
-		Args: cobra.ExactArgs(1),
-		RunE: f.runPluginUninstall,
-	}
-}
-
-func (f *CommandFactory) runPluginUninstall(cmd *cobra.Command, args []string) error {
-	name := args[0]
-	out := cmd.OutOrStdout()
-
-	if overlayPath, local := projectPluginLocalOverlayPath(cmd.Context(), f.WorkingDir, name); local {
-		removed, err := removeLocalPluginOverlay(cmd.Context(), f.WorkingDir, name, overlayPath)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "Uninstalled local overlay %s (%d symlink(s) removed)\n", name, removed)
-		return nil
-	}
-
-	lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
-	if err != nil {
-		return fmt.Errorf("loading plugin lock: %w", err)
-	}
-	entry := lock.Find(name)
-	if entry == nil {
-		return fmt.Errorf("plugin %q is not installed", name)
-	}
-	removed := 0
-	for _, generated := range entry.GeneratedFiles {
-		path := filepath.Join(f.WorkingDir, filepath.FromSlash(generated))
-		if err := os.RemoveAll(path); err == nil {
-			removed++
-		}
-	}
-	lock.Remove(name)
-	if err := registry.SaveProjectPluginLock(cmd.Context(), f.WorkingDir, lock); err != nil {
-		return fmt.Errorf("saving plugin lock: %w", err)
-	}
-	commitPluginChanges(f.WorkingDir, entry.Name, entry.Version)
-	fmt.Fprintf(out, "Uninstalled %s (%d generated adapter(s) removed)\n", name, removed)
-	return nil
-}
-
-func projectPluginLockStatus(ctx context.Context, projectRoot string, entry registry.PluginLockEntry) string {
-	if projectPluginLocalOverlay(ctx, projectRoot, entry.Name) {
-		return "local-overlay"
-	}
-	cachePath := entry.CachePath
-	if cachePath == "" {
-		cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
-	}
-	if info, err := os.Stat(cachePath); err != nil || !info.IsDir() {
-		return "cache-missing"
-	}
-	for _, generated := range entry.GeneratedFiles {
-		path := filepath.Join(projectRoot, filepath.FromSlash(generated))
-		if _, err := os.Stat(path); err != nil {
-			return "shims-missing"
-		}
-	}
-	return "ok"
-}
-
-func projectPluginLocalOverlay(ctx context.Context, projectRoot, name string) bool {
-	_, ok := projectPluginLocalOverlayPath(ctx, projectRoot, name)
-	return ok
-}
-
-func projectPluginLocalOverlayPath(ctx context.Context, projectRoot, name string) (string, bool) {
-	path := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
-	info, err := os.Lstat(path)
-	if err != nil || info.Mode()&os.ModeSymlink == 0 {
-		return "", false
-	}
-	target, err := os.Readlink(path)
-	if err != nil {
-		return path, true
-	}
-	if target != "" && !filepath.IsAbs(target) {
-		target = filepath.Clean(filepath.Join(filepath.Dir(path), target))
-	}
-	return target, true
-}
-
-func removeLocalPluginOverlay(ctx context.Context, projectRoot, name, targetRoot string) (int, error) {
-	removed := 0
-	overlayPath := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
-	if info, err := os.Lstat(overlayPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		if err := os.Remove(overlayPath); err != nil {
-			return removed, fmt.Errorf("removing local plugin overlay %s: %w", overlayPath, err)
-		}
-		removed++
-	}
-
-	if targetRoot == "" {
-		return removed, nil
-	}
-	if abs, err := filepath.Abs(targetRoot); err == nil {
-		targetRoot = abs
-	}
-	for _, surface := range []string{".agents/skills", ".claude/skills"} {
-		dir := filepath.Join(projectRoot, filepath.FromSlash(surface))
-		children, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return removed, fmt.Errorf("reading generated skills %s: %w", dir, err)
-		}
-		for _, child := range children {
-			path := filepath.Join(dir, child.Name())
-			info, err := os.Lstat(path)
-			if err != nil || info.Mode()&os.ModeSymlink == 0 {
-				continue
-			}
-			dest, err := filepath.EvalSymlinks(path)
-			if err != nil {
-				continue
-			}
-			if localPathHasPrefix(dest, targetRoot) {
-				if err := os.Remove(path); err != nil {
-					return removed, fmt.Errorf("removing local skill overlay %s: %w", path, err)
-				}
-				removed++
-			}
-		}
-	}
-	return removed, nil
-}
-
-func localPathHasPrefix(path, prefix string) bool {
-	path = filepath.Clean(path)
-	prefix = filepath.Clean(prefix)
-	if path == prefix {
-		return true
-	}
-	rel, err := filepath.Rel(prefix, path)
-	return err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
 }
 
 func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
@@ -803,28 +385,27 @@ func installPathContainsAny(parent string, files []string) bool {
 
 // commitPluginChanges stages and commits plugin-related changes in the working tree.
 // Non-fatal: if git operations fail (not a repo, nothing to commit), it's silently skipped.
-func commitPluginChanges(projectRoot, name, version string) {
-	// Stage project plugin intent. Skill shims are generated adapter state.
-	lockPath := ddxroot.JoinRelative(registry.ProjectPluginLockFile)
-	ctx := context.Background()
-	if projectRoot == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			projectRoot = cwd
-		}
+func commitPluginChanges(name, version string) {
+	// Stage the project-local plugin tree and the skill copies.
+	paths := []string{ddxroot.JoinRelative("plugins", name) + string(filepath.Separator), ".agents/skills/",
+		".claude/skills/",
 	}
-	if _, err := os.Stat(filepath.Join(projectRoot, lockPath)); err == nil {
-		gitAdd := internalgit.Command(ctx, projectRoot, "add", lockPath)
-		_ = gitAdd.Run()
+	ctx := context.Background()
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			gitAdd := internalgit.Command(ctx, "", "add", p)
+			_ = gitAdd.Run()
+		}
 	}
 
 	// Check if there's anything to commit.
-	status := internalgit.Command(ctx, projectRoot, "diff", "--cached", "--quiet", "--", lockPath)
+	status := internalgit.Command(ctx, "", "diff", "--cached", "--quiet")
 	if status.Run() == nil {
 		return // nothing staged
 	}
 
 	msg := fmt.Sprintf("chore: install %s %s", name, version)
-	gitCommit := internalgit.Command(ctx, projectRoot, "commit", "-m", msg, "--only", "--", lockPath)
+	gitCommit := internalgit.Command(ctx, "", "commit", "-m", msg)
 	_ = gitCommit.Run()
 }
 
@@ -843,13 +424,15 @@ func prepareSymlinkTarget(target string, force bool) error {
 	return nil
 }
 
-// installLocal installs a plugin from a local directory as a project developer
-// overlay (in-tree mode: <project>/.ddx/plugins/<name>; convention mode: XDG
-// project path).
+// installLocal installs a plugin from a local directory as a developer overlay.
+// When global is true, the plugin root is linked into the machine-wide global
+// plugin tree and skills are linked into the home-level harness directories.
+// When global is false, the plugin root and skills land in the project tree
+// (in-tree mode: <project>/.ddx/plugins/<name>; convention mode: XDG project path).
 // Local installs intentionally do not update the recorded installed state and
 // do not auto-commit so the recorded plugin pin remains whatever the project
 // already declares.
-func (f *CommandFactory) installLocal(name, localPath string, force bool, out io.Writer) error {
+func (f *CommandFactory) installLocal(name, localPath string, force bool, global bool, out io.Writer) error {
 	// Resolve to absolute path.
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
@@ -934,13 +517,19 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		return fmt.Errorf("validating package structure: %s", registry.JoinValidationIssues(issues))
 	}
 
-	// Determine the project plugin directory.
-	// In-tree: link into <project>/.ddx/plugins/<name>.
+	// Determine the actual plugin directory based on global vs project mode.
+	// Global: link into the machine-wide global tree.
+	// Project in-tree: link into <project>/.ddx/plugins/<name>.
 	// Project convention: link into the XDG convention root plugins/<name>.
 	// The FEAT-015 check above already validates that pkg.Install.Root.Target
 	// does not start with "~"; we now override the actual destination path.
-	ddxRootDir := resolveBeadStoreRoot(f.WorkingDir)
-	pluginDir := filepath.Join(ddxRootDir, "plugins", name)
+	var pluginDir string
+	if global {
+		pluginDir = filepath.Join(ddxroot.GlobalDir(), "plugins", name)
+	} else {
+		ddxRootDir := resolveBeadStoreRoot(f.WorkingDir)
+		pluginDir = filepath.Join(ddxRootDir, "plugins", name)
+	}
 
 	if err := prepareSymlinkTarget(pluginDir, force); err != nil {
 		return err
@@ -963,9 +552,9 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		Source:  absPath,
 	}
 	// Record entry.Files as project-relative paths when the plugin lives inside
-	// the working directory (in-tree mode). Convention-root absolute paths are
-	// recorded as-is. This keeps removeStaleFilesFromInstall compatible with
-	// relative paths recorded by prior runs.
+	// the working directory (in-tree mode). Convention-root and global absolute
+	// paths are recorded as-is. This keeps removeStaleFilesFromInstall
+	// compatible with relative paths recorded by prior runs.
 	fileToRecord := pluginDir
 	if f.WorkingDir != "" {
 		if rel, relErr := filepath.Rel(f.WorkingDir, pluginDir); relErr == nil && !strings.HasPrefix(rel, "..") {
@@ -974,17 +563,23 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 	}
 	entry.Files = append(entry.Files, fileToRecord)
 
-	// Install local skills as project-local symlinks into each supported
-	// harness surface.
-	if skillMappings := pkg.SkillMappings(); len(skillMappings) > 0 {
-		absProject := f.WorkingDir
-		if absProject == "" {
-			absProject, _ = os.Getwd()
+	// Install local skills as symlinks into each supported harness surface.
+	// For global installs, skills land in the home directory; for project
+	// installs, they land in the project directory.
+	if len(pkg.Install.Skills) > 0 {
+		var absProject string
+		if global {
+			absProject, _ = os.UserHomeDir()
+		} else {
+			absProject = f.WorkingDir
+			if absProject == "" {
+				absProject, _ = os.Getwd()
+			}
 		}
 		if !filepath.IsAbs(absProject) {
 			absProject, _ = filepath.Abs(absProject)
 		}
-		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, skillMappings, force)
+		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, pkg.Install.Skills, force)
 		if err != nil {
 			return fmt.Errorf("installing skills: %w", err)
 		}
@@ -1023,10 +618,13 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		fmt.Fprintf(out, "Removed %d stale file(s) from previous install\n", removed)
 	}
 
-	if hidden, err := markLocalInstallOverlay(projectRoot, entry.Name, entry.Files); err != nil {
-		fmt.Fprintf(out, "Warning: local install is active but git overlay hiding failed: %v\n", err)
-	} else if hidden > 0 {
-		fmt.Fprintf(out, "Marked %d tracked local overlay file(s) skip-worktree\n", hidden)
+	// Git overlay hiding only applies to project-local installs (not global).
+	if !global {
+		if hidden, err := markLocalInstallOverlay(projectRoot, entry.Name, entry.Files); err != nil {
+			fmt.Fprintf(out, "Warning: local install is active but git overlay hiding failed: %v\n", err)
+		} else if hidden > 0 {
+			fmt.Fprintf(out, "Marked %d tracked local overlay file(s) skip-worktree\n", hidden)
+		}
 	}
 
 	fmt.Fprintf(out, "Installed %s from local path %s — %d file(s); recorded plugin pin unchanged\n", entry.Name, absPath, len(entry.Files))
@@ -1469,14 +1067,11 @@ func shouldSkipLocalInstallIssue(rel string) bool {
 // newInstalledCommand creates the "ddx installed" command.
 func (f *CommandFactory) newInstalledCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:    "installed",
-		Short:  "Deprecated: use 'ddx plugin list'",
-		Long:   `The top-level ddx installed command has been retired. Use 'ddx plugin list' instead.`,
-		Hidden: true,
-		Args:   cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("ddx installed has been retired; use 'ddx plugin list' instead")
-		},
+		Use:   "installed",
+		Short: "List installed packages",
+		Long:  `List all packages and resources installed via ddx install.`,
+		Args:  cobra.NoArgs,
+		RunE:  f.runInstalled,
 	}
 }
 
@@ -1514,14 +1109,11 @@ func (f *CommandFactory) runInstalled(cmd *cobra.Command, args []string) error {
 // newUninstallCommand creates the "ddx uninstall <name>" command.
 func (f *CommandFactory) newUninstallCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:    "uninstall <name>",
-		Short:  "Deprecated: plugin lifecycle moved under 'ddx plugin'",
-		Long:   `The top-level ddx uninstall command has been retired. Use 'ddx plugin list' and 'ddx plugin sync' for project plugin state.`,
-		Hidden: true,
-		Args:   cobra.ArbitraryArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("ddx uninstall has been retired; plugin lifecycle is managed under 'ddx plugin'")
-		},
+		Use:   "uninstall <name>",
+		Short: "Remove an installed package",
+		Long:  `Remove a package or resource installed via ddx install.`,
+		Args:  cobra.ExactArgs(1),
+		RunE:  f.runUninstall,
 	}
 }
 
@@ -1555,14 +1147,11 @@ func (f *CommandFactory) runUninstall(cmd *cobra.Command, args []string) error {
 // newVerifyCommand creates the "ddx verify" command.
 func (f *CommandFactory) newVerifyCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:    "verify",
-		Short:  "Deprecated: use 'ddx doctor --plugins'",
-		Long:   `The top-level ddx verify command has been retired. Use 'ddx doctor --plugins' and 'ddx plugin sync' instead.`,
-		Hidden: true,
-		Args:   cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("ddx verify has been retired; use 'ddx doctor --plugins' or 'ddx plugin sync' instead")
-		},
+		Use:   "verify",
+		Short: "Verify installed package integrity",
+		Long:  `Check that all files recorded for installed packages still exist and symlinks resolve correctly.`,
+		Args:  cobra.NoArgs,
+		RunE:  f.runVerify,
 	}
 }
 
@@ -1622,7 +1211,7 @@ func (f *CommandFactory) runVerify(cmd *cobra.Command, args []string) error {
 	}
 
 	if totalIssues > 0 {
-		return fmt.Errorf("%d integrity issue(s) found — run 'ddx plugin install <name> --force' to repair", totalIssues)
+		return fmt.Errorf("%d integrity issue(s) found — run 'ddx install <name> --force' to repair", totalIssues)
 	}
 	return nil
 }
@@ -1665,14 +1254,11 @@ func (f *CommandFactory) runSearch(cmd *cobra.Command, args []string) error {
 
 func (f *CommandFactory) newOutdatedCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "outdated",
-		Short:  "Deprecated: plugin lifecycle moved under 'ddx plugin'",
-		Long:   `The top-level ddx outdated command has been retired. Use 'ddx plugin list' and 'ddx doctor --plugins' instead.`,
-		Hidden: true,
-		Args:   cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("ddx outdated has been retired; use 'ddx plugin list' and 'ddx doctor --plugins' instead")
-		},
+		Use:   "outdated",
+		Short: "List installed packages with available updates",
+		Long:  `Check installed packages against the registry and list those with newer versions available.`,
+		Args:  cobra.NoArgs,
+		RunE:  f.runOutdated,
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd

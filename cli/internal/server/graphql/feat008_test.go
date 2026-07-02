@@ -13,7 +13,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
-	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
@@ -30,9 +29,8 @@ func TestIntegration_FEAT008BackendOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Place the plugin in a cache-backed package root (FEAT-015/018:
-	// marketplace installs do not copy payloads into the project).
-	pluginRoot := filepath.Join(t.TempDir(), "plugins", "local-ui")
+	// Place the plugin at the project-local path (FEAT-015: no global installs).
+	pluginRoot := filepath.Join(workDir, ddxroot.DirName, "plugins", "local-ui")
 	if err := os.MkdirAll(filepath.Join(pluginRoot, "skills", "ui-polish"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -47,22 +45,19 @@ install:
   root:
     source: "."
     target: ".ddx/plugins/local-ui"
-  skills:
-    - source: skills/
-      target: .agents/skills/
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(pluginRoot, "skills", "ui-polish", "SKILL.md"), []byte("---\nname: ui-polish\ndescription: Polish UI\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.SaveProjectPluginLock(context.Background(), workDir, &registry.PluginLock{Plugins: []registry.PluginLockEntry{{
+	if err := registry.SaveState(&registry.InstalledState{Installed: []registry.InstalledEntry{{
 		Name:        "local-ui",
 		Version:     "1.2.3",
 		Type:        registry.PackageTypePlugin,
 		Source:      "file://local-ui",
-		CachePath:   pluginRoot,
 		InstalledAt: time.Now().UTC(),
+		Files:       []string{pluginRoot},
 	}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -268,23 +263,6 @@ install:
 	if _, err := os.Stat(filepath.Join(workDir, ddxroot.DirName, "plugin-dispatches", mutationData.PluginDispatch.ID+".json")); err != nil {
 		t.Fatalf("pluginDispatch did not write an audit record: %v", err)
 	}
-	lock, err := registry.LoadProjectPluginLock(context.Background(), workDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lockedPlugin := lock.Find("local-ui")
-	if lockedPlugin == nil || len(lockedPlugin.GeneratedFiles) != 2 {
-		t.Fatalf("expected pluginDispatch to persist generated adapter metadata, got %+v", lockedPlugin)
-	}
-	for _, rel := range []string{".agents/skills/ui-polish", ".claude/skills/ui-polish"} {
-		info, statErr := os.Lstat(filepath.Join(workDir, filepath.FromSlash(rel)))
-		if statErr != nil {
-			t.Fatalf("expected generated adapter %s: %v", rel, statErr)
-		}
-		if info.Mode()&os.ModeSymlink == 0 {
-			t.Fatalf("expected generated adapter %s to be a symlink, got mode %s", rel, info.Mode())
-		}
-	}
 	if strings.HasPrefix(mutationData.ComparisonDispatch.ID, "queued-comparison-") || mutationData.ComparisonDispatch.State != "queued" || mutationData.ComparisonDispatch.ArmCount != 2 {
 		t.Fatalf("comparisonDispatch did not create a real queued record: %+v", mutationData.ComparisonDispatch)
 	}
@@ -366,49 +344,5 @@ func TestGraphQLQueueSummaryInProgressCountsFreshActiveWorkers(t *testing.T) {
 	}
 	if data.QueueSummary.InProgress != 1 {
 		t.Fatalf("queueSummary.inProgress: want 1 fresh active worker, got %d", data.QueueSummary.InProgress)
-	}
-}
-
-func TestDispatchPluginActionUninstallUsesProjectLock(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	workDir, _ := setupIntegrationDir(t)
-	agentShim := filepath.Join(workDir, ".agents", "skills", "helix")
-	claudeShim := filepath.Join(workDir, ".claude", "skills", "helix")
-	for _, path := range []string{agentShim, claudeShim} {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := registry.SaveProjectPluginLock(context.Background(), workDir, &registry.PluginLock{Plugins: []registry.PluginLockEntry{{
-		Name:    "helix",
-		Version: "0.3.2",
-		Type:    registry.PackageTypeWorkflow,
-		Source:  "https://github.com/DocumentDrivenDX/helix",
-		GeneratedFiles: []string{
-			filepath.Join(".agents", "skills", "helix"),
-			filepath.Join(".claude", "skills", "helix"),
-		},
-	}}}); err != nil {
-		t.Fatal(err)
-	}
-
-	state, err := ddxgraphql.DispatchPluginAction(workDir, "helix", "uninstall")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if state != "uninstalled" {
-		t.Fatalf("DispatchPluginAction uninstall state: got %q", state)
-	}
-	lock, err := registry.LoadProjectPluginLock(context.Background(), workDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if lock.Find("helix") != nil {
-		t.Fatalf("expected helix to be removed from project plugin lock: %+v", lock.Plugins)
-	}
-	for _, path := range []string{agentShim, claudeShim} {
-		if _, err := os.Lstat(path); !os.IsNotExist(err) {
-			t.Fatalf("expected generated adapter %s to be removed, got err=%v", path, err)
-		}
 	}
 }

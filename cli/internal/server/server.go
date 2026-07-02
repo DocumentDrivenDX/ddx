@@ -11,7 +11,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -79,53 +78,6 @@ func serverBuildSHA() string {
 // callers must not mutate it.
 var serverInlineCapBytes = evidence.DefaultMaxInlinedFileBytes
 
-var startupDesiredWorkerReconcileDelays = []time.Duration{
-	250 * time.Millisecond,
-	2 * time.Second,
-	10 * time.Second,
-}
-
-var startupDesiredWorkerReconcileLog io.Writer = os.Stderr
-
-var skipStartupDesiredWorkerReconcileForTestBinary = true
-
-var ensureSelfSignedCertHook = ensureSelfSignedCert
-
-var orphanHomeStateWarnWriter io.Writer = os.Stderr
-var orphanHomeStateDirFn = os.UserHomeDir
-
-// checkOrphanHomeState warns when ~/.ddx/server or ~/.ddx/tsnet exist but the
-// active project state root resolved elsewhere (XDG or in-tree). Stale home
-// state is never read by the new server path helpers and can confuse TLS and
-// tsnet trust debugging.
-func checkOrphanHomeState(workingDir string) {
-	home, err := orphanHomeStateDirFn()
-	if err != nil {
-		return
-	}
-	activeRoot := ddxroot.Path(context.Background(), workingDir)
-	homeStateRoot := ddxroot.JoinHome(home)
-	if filepath.Clean(activeRoot) == filepath.Clean(homeStateRoot) {
-		return
-	}
-	for _, sub := range []string{"server", "tsnet"} {
-		orphan := ddxroot.JoinHome(home, sub)
-		if info, statErr := os.Stat(orphan); statErr == nil && info.IsDir() {
-			fmt.Fprintf(orphanHomeStateWarnWriter,
-				"ddx-server: warning: orphaned home state at %s (active state root: %s); this directory is no longer used and can be safely removed\n",
-				orphan, activeRoot)
-		}
-	}
-}
-
-var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
-	manager := startupManager
-	if !sameCanonicalPath(projectRoot, startupRoot) {
-		manager = NewWorkerManager(projectRoot)
-	}
-	return manager.ReconcileDesiredWorkers()
-}
-
 // mcpText constructs a text-typed mcpContent whose Text body is bounded by
 // serverInlineCapBytes via evidence.ClampOutput. The Truncated and
 // OriginalBytes fields are always populated (false/len(text) when the body
@@ -142,7 +94,7 @@ func mcpText(text string) mcpContent {
 // beadHubCloser is the minimal interface the Server requires from its bead
 // lifecycle hub. *bead.WatcherHub satisfies this interface.
 type beadHubCloser interface {
-	SubscribeLifecycle(ctx context.Context, projectID string) (<-chan bead.LifecycleEvent, func(), error)
+	bead.LifecycleSubscriber
 	Close()
 }
 
@@ -211,6 +163,16 @@ type Server struct {
 	// ADR-022 step 5c integration test can swap the freshness clock and so
 	// every /graphql request shares one instance.
 	reportedWorkers *reportedWorkersAdapter
+
+	// supervisor drives the desired-state reconcile loop that keeps
+	// server-managed workers running per `.ddx/workers/desired.json` (Phase 1
+	// of ddx-9d1af129). The goroutine is started by ListenAndServe/TLS via
+	// StartSupervisor and torn down by Shutdown. Constructed unconditionally
+	// so tests that build a Server directly can call StartSupervisor
+	// explicitly.
+	supervisor       *WorkerSupervisor
+	supervisorCancel context.CancelFunc
+	supervisorDone   chan struct{}
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -221,8 +183,9 @@ func New(addr, workingDir string) *Server {
 	state.workingDir = workingDir
 
 	workers := NewWorkerManager(workingDir)
-	beadHub := bead.NewWatcherHub(func(ctx context.Context, projectID string) (bead.BeadReader, error) {
-		return bead.NewStore(ddxroot.JoinProjectContext(ctx, projectID)), nil
+	workers.ReconcileStaleWorkers()
+	beadHub := bead.NewWatcherHub(func(projectID string) (bead.BeadReader, error) {
+		return bead.NewStore(ddxroot.JoinProject(projectID)), nil
 	}, 250*time.Millisecond)
 	csrfStore, err := ddxgraphql.NewStaticCSRFTokenStore()
 	if err != nil {
@@ -245,15 +208,25 @@ func New(addr, workingDir string) *Server {
 		workerIngest:                       newWorkerIngestRegistry(workingDir),
 	}
 	s.reportedWorkers = newReportedWorkersAdapterWithWorkingDir(s.workerIngest, workingDir)
+	s.supervisor = NewWorkerSupervisor(workers)
 	state.coordinatorReg = workers.LandCoordinators
 
 	// Register the server's own project immediately.
 	state.RegisterProject(workingDir)
 	_ = state.save()
 
-	checkOrphanHomeState(workingDir)
 	s.routes()
 	return s
+}
+
+// EnableManagedWorkers switches the live worker manager onto the
+// subprocess-backed server-managed launch path. Tests that construct a Server
+// directly keep the in-process seam unless they call this explicitly.
+func (s *Server) EnableManagedWorkers() {
+	if s == nil || s.workers == nil {
+		return
+	}
+	s.workers.enableManagedLaunch()
 }
 
 // parseOperatorPromptAllowlistEnv parses a comma-separated identity list
@@ -316,9 +289,57 @@ func (s *Server) RegisterProject(path string) ProjectEntry {
 	return entry
 }
 
-// Shutdown stops the server's background services: closes the bead lifecycle
-// hub and stops all land coordinators. Returns the first error encountered.
-// Both operations are idempotent and safe to call on an idle server.
+// defaultSupervisorTick is the reconcile-loop cadence used when
+// DDX_SUPERVISOR_TICK is unset or unparseable. Ten seconds keeps
+// worker-death → restart latency low without producing meaningful load
+// (Reconcile is a cheap directory-scan + WorkerManager membership check
+// when nothing needs to change).
+const defaultSupervisorTick = 10 * time.Second
+
+// StartSupervisor launches the desired-state reconcile goroutine that
+// keeps server-managed workers running per `.ddx/workers/desired.json`.
+// Safe to call multiple times; subsequent calls are no-ops. Tick cadence
+// defaults to defaultSupervisorTick and is overridable via env
+// DDX_SUPERVISOR_TICK (Go duration string, e.g. "2s").
+//
+// The loop is stopped by Shutdown, which cancels the goroutine's context
+// and blocks on its exit.
+func (s *Server) StartSupervisor() {
+	if s == nil || s.supervisor == nil || s.supervisorCancel != nil {
+		return
+	}
+	tick := defaultSupervisorTick
+	if raw := strings.TrimSpace(os.Getenv("DDX_SUPERVISOR_TICK")); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			tick = parsed
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.supervisorCancel = cancel
+	s.supervisorDone = make(chan struct{})
+	go func() {
+		defer close(s.supervisorDone)
+		ticker := time.NewTicker(tick)
+		defer ticker.Stop()
+		// Reconcile once on startup so a freshly-started server with an
+		// existing `.ddx/workers/desired.json` doesn't wait a full tick
+		// before spinning up the desired workers.
+		_ = s.supervisor.Reconcile()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = s.supervisor.Reconcile()
+			}
+		}
+	}()
+}
+
+// Shutdown stops the server's background services: server-owned workers,
+// bead lifecycle subscriptions, and land coordinators. Returns the first error
+// encountered. The cleanup steps are idempotent and safe to call on an idle
+// server.
 func (s *Server) Shutdown() error {
 	// Best-effort spoke deregister so the hub registry does not show this
 	// node as stale after a graceful shutdown. Errors are swallowed inside
@@ -328,10 +349,27 @@ func (s *Server) Shutdown() error {
 		_ = s.ShutdownSpoke(ctx)
 		cancel()
 	}
-	s.beadHub.Close()
-	s.workers.StopAll()
-	s.workers.LandCoordinators.StopAll()
-	return nil
+	if s.supervisorCancel != nil {
+		s.supervisorCancel()
+		s.supervisorCancel = nil
+		if s.supervisorDone != nil {
+			<-s.supervisorDone
+			s.supervisorDone = nil
+		}
+	}
+	var firstErr error
+	if s.workers != nil {
+		if err := s.workers.Shutdown(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if s.beadHub != nil {
+		s.beadHub.Close()
+	}
+	if s.workers != nil && s.workers.LandCoordinators != nil {
+		s.workers.LandCoordinators.StopAll()
+	}
+	return firstErr
 }
 
 // ListenAndServe starts the server. If TsnetConfig.Enabled is true, a parallel
@@ -344,6 +382,7 @@ func (s *Server) ListenAndServe() error {
 	defer release()
 	s.installSingletonReleaseOnSignal(release)
 	s.writeAddrFile("http")
+	s.StartSupervisor()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 
@@ -357,15 +396,9 @@ func (s *Server) ListenAndServe() error {
 			errCh <- s.listenTsnet()
 		}()
 
-		s.reconcileDesiredWorkersAfterStartup()
 		return <-errCh
 	}
-	ln, err := net.Listen("tcp", s.Addr)
-	if err != nil {
-		return err
-	}
-	s.reconcileDesiredWorkersAfterStartup()
-	return (&http.Server{Addr: s.Addr, Handler: s.mux}).Serve(ln)
+	return http.ListenAndServe(s.Addr, s.mux)
 }
 
 // ListenAndServeTLS starts the server with TLS. If certFile and keyFile are
@@ -378,15 +411,16 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	}
 	defer release()
 	s.installSingletonReleaseOnSignal(release)
-	s.writeAddrFile("https")
 	if certFile == "" || keyFile == "" {
 		var err error
 		tlsDir := ddxroot.JoinProject(s.WorkingDir, "server", "tls")
-		certFile, keyFile, err = ensureSelfSignedCertHook(tlsDir)
+		certFile, keyFile, err = ensureSelfSignedCert(tlsDir)
 		if err != nil {
 			return fmt.Errorf("generating self-signed cert: %w", err)
 		}
 	}
+	s.writeAddrFile("https")
+	s.StartSupervisor()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 		go func() {
@@ -395,168 +429,9 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		go func() {
 			errCh <- s.listenTsnet()
 		}()
-		s.reconcileDesiredWorkersAfterStartup()
 		return <-errCh
 	}
-	ln, err := net.Listen("tcp", s.Addr)
-	if err != nil {
-		return err
-	}
-	s.reconcileDesiredWorkersAfterStartup()
-	return (&http.Server{Addr: s.Addr, Handler: s.mux}).ServeTLS(ln, certFile, keyFile)
-}
-
-func (s *Server) reconcileDesiredWorkersAfterStartup() {
-	if s == nil || s.workers == nil {
-		return
-	}
-	if skipStartupDesiredWorkerReconcileForTestBinary && strings.HasSuffix(os.Args[0], ".test") {
-		return
-	}
-	go func() {
-		// Let the listener enter Serve before child workers report lifecycle
-		// events back through the server. A few follow-up passes cover startup
-		// races while server state and desired-worker files settle.
-		for _, delay := range startupDesiredWorkerReconcileDelays {
-			time.Sleep(delay)
-			for _, err := range s.reconcileDesiredWorkersOnce() {
-				_, _ = fmt.Fprintf(os.Stderr, "ddx-server: startup worker reconcile: %v\n", err)
-			}
-		}
-	}()
-}
-
-func (s *Server) reconcileDesiredWorkersOnce() []error {
-	if s == nil || s.workers == nil {
-		return nil
-	}
-	roots, errs := s.desiredWorkerProjectRoots()
-	for _, projectRoot := range roots {
-		result, err := startupDesiredWorkerReconcileProject(projectRoot, s.WorkingDir, s.workers)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: reconcile desired workers: %w", projectRoot, err))
-			continue
-		}
-		logStartupDesiredWorkerReconcileResult(projectRoot, result)
-	}
-	return errs
-}
-
-func logStartupDesiredWorkerReconcileProjectStatus(projectRoot, status, reason string) {
-	if startupDesiredWorkerReconcileLog == nil {
-		return
-	}
-	projectRoot = strings.TrimSpace(projectRoot)
-	status = strings.TrimSpace(status)
-	reason = strings.TrimSpace(reason)
-	if projectRoot == "" && status == "" && reason == "" {
-		return
-	}
-	if reason != "" {
-		_, _ = fmt.Fprintf(
-			startupDesiredWorkerReconcileLog,
-			"ddx-server: startup worker reconcile project=%s status=%s reason=%s\n",
-			projectRoot, status, reason,
-		)
-		return
-	}
-	_, _ = fmt.Fprintf(
-		startupDesiredWorkerReconcileLog,
-		"ddx-server: startup worker reconcile project=%s status=%s\n",
-		projectRoot, status,
-	)
-}
-
-func logStartupDesiredWorkerReconcileResult(projectRoot string, result ReconcileResult) {
-	if startupDesiredWorkerReconcileLog == nil {
-		return
-	}
-	if len(result.Started) == 0 &&
-		len(result.Restarted) == 0 &&
-		len(result.Stopped) == 0 &&
-		len(result.StaleMarked) == 0 &&
-		len(result.RestartSkipped) == 0 &&
-		len(result.Errors) == 0 {
-		return
-	}
-	_, _ = fmt.Fprintf(
-		startupDesiredWorkerReconcileLog,
-		"ddx-server: startup worker reconcile project=%s started=%d restarted=%d stopped=%d stale_marked=%d restart_skipped=%d errors=%d\n",
-		projectRoot,
-		len(result.Started),
-		len(result.Restarted),
-		len(result.Stopped),
-		len(result.StaleMarked),
-		len(result.RestartSkipped),
-		len(result.Errors),
-	)
-}
-
-func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
-	if s == nil {
-		return nil, nil
-	}
-	seen := map[string]bool{}
-	var candidates []string
-	var errs []error
-	add := func(path string) {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			return
-		}
-		canonical := canonicalizePath(path)
-		if canonical == "" {
-			canonical = path
-		}
-		if seen[canonical] {
-			return
-		}
-		seen[canonical] = true
-		candidates = append(candidates, canonical)
-	}
-	add(s.WorkingDir)
-	if s.state != nil {
-		for _, project := range s.state.GetProjects(false) {
-			add(project.Path)
-		}
-	}
-	if s.workers != nil {
-		records, err := s.workers.List()
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list worker records for startup reconcile: %w", err))
-		} else {
-			for _, rec := range records {
-				add(rec.ProjectRoot)
-			}
-		}
-	}
-
-	roots := make([]string, 0, len(candidates))
-	for _, projectRoot := range candidates {
-		info, err := os.Stat(projectRoot)
-		if err != nil {
-			if os.IsNotExist(err) {
-				logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "project root missing")
-				continue
-			}
-			logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "project root unavailable")
-			continue
-		}
-		if !info.IsDir() {
-			logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "project root not a directory")
-			continue
-		}
-		if _, err := LoadWorkerDesiredState(projectRoot); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "desired worker state missing")
-				continue
-			}
-			errs = append(errs, fmt.Errorf("%s: load desired worker state: %w", projectRoot, err))
-			continue
-		}
-		roots = append(roots, projectRoot)
-	}
-	return roots, errs
+	return http.ListenAndServeTLS(s.Addr, certFile, keyFile, s.mux)
 }
 
 // writeAddrFile writes the server's address to a user-level file so CLI
@@ -628,23 +503,16 @@ func ReadServerAddr() string {
 	return af.URL
 }
 
-// installSingletonReleaseOnSignal arranges for graceful teardown on
-// SIGTERM/SIGINT: server-managed worker process trees are stopped and the
-// singleton lock is released so the next ddx-server can start without having to
-// wait for stale-lock detection. The handler exits the process with a
-// conventional non-zero status; defers in ListenAndServe(TLS) do not run, so
-// the worker cleanup and lock release fire explicitly here.
-//
-// Shutdown() runs before release() so that managed workers (external
-// `ddx work` subprocesses and their agent child process groups) are reaped
-// while the server still owns them; skipping it leaks the whole worker tree on
-// every signal-driven restart.
+// installSingletonReleaseOnSignal arranges for the singleton lock to be
+// released on SIGTERM/SIGINT so that the next ddx-server can start without
+// having to wait for stale-lock detection. The handler exits the process
+// with a conventional non-zero status; defers in ListenAndServe(TLS) do not
+// run, but the lock release fires explicitly here.
 func (s *Server) installSingletonReleaseOnSignal(release func()) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-ch
-		_ = s.Shutdown()
 		release()
 		os.Exit(130)
 	}()
@@ -1021,18 +889,6 @@ func (s *Server) workingDirForRequest(r *http.Request) string {
 	return s.WorkingDir
 }
 
-func (s *Server) workerControlProjectRootForRequest(r *http.Request) (string, bool) {
-	project := strings.TrimSpace(r.URL.Query().Get("project"))
-	if project == "" {
-		return s.workingDirForRequest(r), true
-	}
-	entry, ok := s.resolveProject(project)
-	if !ok {
-		return "", false
-	}
-	return entry.Path, true
-}
-
 // libraryPathForRequest returns the library path for the request's project.
 func (s *Server) libraryPathForRequest(r *http.Request) string {
 	return s.libraryPathFor(s.workingDirForRequest(r))
@@ -1059,39 +915,10 @@ func (s *Server) execStoreForRequest(r *http.Request) *ddxexec.Store {
 // to s.workers.
 func (s *Server) workerManagerForRequest(r *http.Request) *WorkerManager {
 	dir := s.workingDirForRequest(r)
-	return s.workerManagerForProjectRoot(dir)
-}
-
-func (s *Server) workerManagerForProjectRoot(dir string) *WorkerManager {
-	if dir == "" || sameCanonicalPath(dir, s.WorkingDir) {
+	if dir == s.WorkingDir {
 		return s.workers
 	}
-	m := NewWorkerManager(dir)
-	m.BeadWorkerFactory = s.workers.BeadWorkerFactory
-	m.workerBinaryPath = s.workers.workerBinaryPath
-	return m
-}
-
-func (s *Server) workerManagerForWorkerID(id string, r *http.Request) (*WorkerManager, bool) {
-	roots := []string{s.workingDirForRequest(r), s.WorkingDir}
-	if s.state != nil {
-		for _, project := range s.state.GetProjects(false) {
-			roots = append(roots, project.Path)
-		}
-	}
-	seen := map[string]bool{}
-	for _, root := range roots {
-		root = strings.TrimSpace(root)
-		if root == "" || seen[root] {
-			continue
-		}
-		seen[root] = true
-		m := s.workerManagerForProjectRoot(root)
-		if _, err := m.Show(id); err == nil {
-			return m, true
-		}
-	}
-	return nil, false
+	return NewWorkerManager(dir)
 }
 
 // runsRedirectSunset is the deprecation date advertised in the Sunset header
@@ -1248,10 +1075,6 @@ func (s *Server) routes() {
 	trusted("POST /api/agent/workers/prune", s.handlePruneAgentWorkers)
 	legacy("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
 	trusted("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
-	trusted("PUT /api/agent/workers/desired", s.handleSetWorkerDesiredState)
-	trusted("POST /api/agent/workers/{id}/restart", s.handleRestartAgentWorker)
-	trusted("POST /api/agent/workers/reconcile", s.handleReconcileWorkers)
-	trusted("POST /api/agent/workers/cleanup", s.handleCleanupWorkers)
 	legacy("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
 	legacy("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
 	legacy("GET /api/agent/coordinators", s.handleAgentCoordinators)
@@ -1549,7 +1372,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ready := true
 
 	// Check library path
-	if s.libraryPathForRequest(r) != "" {
+	if s.libraryPath() != "" {
 		checks["library"] = "ok"
 	} else {
 		checks["library"] = "not_configured"
@@ -2773,6 +2596,7 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 	// Scoped/singleton: return workers for just the resolved project.
 	if _, ok := projectFromContext(r.Context()); ok {
 		m := s.workerManagerForRequest(r)
+		m.ReconcileStaleWorkers()
 		recs, err := m.List()
 		if err != nil {
 			writeJSON(w, http.StatusOK, []WorkerRecord{})
@@ -2792,11 +2616,12 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 
 	for _, proj := range projects {
 		var m *WorkerManager
-		if sameCanonicalPath(proj.Path, s.WorkingDir) {
+		if proj.Path == s.WorkingDir {
 			m = s.workers
 		} else {
 			m = NewWorkerManager(proj.Path)
 		}
+		m.ReconcileStaleWorkers()
 		recs, err := m.List()
 		if err != nil {
 			continue
@@ -2879,8 +2704,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	m := s.workerManagerForProjectRoot(projectRoot)
-	record, err := m.StartExecuteLoop(workerSpec)
+	record, err := s.workers.StartExecuteLoop(workerSpec)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2906,11 +2730,6 @@ func (s *Server) resolveRequestedProject(requested string) string {
 	// Exact path match via the state's lookup method.
 	if entry, ok := s.state.GetProjectByPath(requested); ok {
 		return entry.Path
-	}
-	if canonical := canonicalizePath(requested); canonical != "" {
-		if entry, ok := s.state.GetProjectByPath(canonical); ok {
-			return entry.Path
-		}
 	}
 	// Name (basename) match — only unambiguous if exactly one project has that name.
 	projects := s.state.GetProjects()
@@ -2958,120 +2777,11 @@ func (s *Server) handleStopAgentWorker(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	m, ok := s.workerManagerForWorkerID(id, r)
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "worker not found"})
-		return
-	}
-	if err := m.RequestStop(id); err != nil {
+	if err := s.workers.Stop(id); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"id": id, "status": "stopping"})
-}
-
-func (s *Server) handleSetWorkerDesiredState(w http.ResponseWriter, r *http.Request) {
-	if !isTrusted(r) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
-		return
-	}
-	var input struct {
-		ProjectRoot    string `json:"project_root"`
-		DesiredCount   int    `json:"desired_count"`
-		RestartEnabled bool   `json:"restart_enabled"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body: " + err.Error()})
-		return
-	}
-	projectRoot := input.ProjectRoot
-	if projectRoot == "" {
-		projectRoot = s.workingDirForRequest(r)
-	}
-	if canonical := canonicalizePath(projectRoot); canonical != "" {
-		projectRoot = canonical
-	}
-	if s.state != nil {
-		s.state.RegisterProject(projectRoot)
-		_ = s.state.save()
-	}
-	state := &WorkerDesiredState{
-		Version:      WorkerDesiredStateVersion,
-		ProjectRoot:  projectRoot,
-		DesiredCount: input.DesiredCount,
-		Restart:      WorkerRestartPolicy{Enabled: input.RestartEnabled},
-	}
-	if err := SaveWorkerDesiredState(projectRoot, state); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"project_root":    projectRoot,
-		"desired_count":   input.DesiredCount,
-		"restart_enabled": input.RestartEnabled,
-		"status":          "saved",
-	})
-}
-
-func (s *Server) handleRestartAgentWorker(w http.ResponseWriter, r *http.Request) {
-	if !isTrusted(r) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
-		return
-	}
-	id := r.PathValue("id")
-	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
-		return
-	}
-	m, ok := s.workerManagerForWorkerID(id, r)
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "worker not found"})
-		return
-	}
-	rec, err := m.RestartWorker(id, 0)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"id": rec.ID, "old_id": id, "status": rec.State})
-}
-
-func (s *Server) handleReconcileWorkers(w http.ResponseWriter, r *http.Request) {
-	if !isTrusted(r) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
-		return
-	}
-	wd, ok := s.workerControlProjectRootForRequest(r)
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
-		return
-	}
-	m := s.workerManagerForProjectRoot(wd)
-	result, err := m.ReconcileDesiredWorkers()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (s *Server) handleCleanupWorkers(w http.ResponseWriter, r *http.Request) {
-	if !isTrusted(r) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
-		return
-	}
-	wd, ok := s.workerControlProjectRootForRequest(r)
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
-		return
-	}
-	m := s.workerManagerForProjectRoot(wd)
-	result, err := m.ReconcileDesiredWorkers()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "stopping"})
 }
 
 func (s *Server) handlePruneAgentWorkers(w http.ResponseWriter, r *http.Request) {
@@ -3166,7 +2876,7 @@ func (s *Server) resolveWorkerManager(projectKey string) (*WorkerManager, bool) 
 	if !ok {
 		return nil, false
 	}
-	if sameCanonicalPath(entry.Path, s.WorkingDir) {
+	if entry.Path == s.WorkingDir {
 		return s.workers, true
 	}
 	// Return a read-only manager for the registered project (no live workers)
@@ -4366,12 +4076,10 @@ func (s *Server) pluginMcpTools() []mcpTool {
 		},
 		{
 			Name:        "ddx_list_plugins",
-			Description: "List installed DDx plugins for a project",
+			Description: "List installed DDx plugins",
 			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"project": mcpProjectProp(),
-				},
+				"type":       "object",
+				"properties": map[string]any{},
 			},
 		},
 	}
@@ -4406,6 +4114,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_provider_show":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpProviderShow(harness)
+	case "ddx_list_plugins":
+		return s.mcpListPlugins()
 	}
 
 	// From here on: project-local tools. Resolve the project arg to a working
@@ -4416,8 +4126,6 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	}
 
 	switch call.Name {
-	case "ddx_list_plugins":
-		return s.mcpListPlugins(workingDir)
 	case "ddx_list_documents":
 		return s.mcpListDocuments(workingDir)
 	case "ddx_read_document":
@@ -5510,11 +5218,18 @@ func (s *Server) libraryPath() string {
 
 // libraryPathFor resolves the library path rooted at workingDir.
 func (s *Server) libraryPathFor(workingDir string) string {
-	p, err := config.ResolveLibraryPath(workingDir)
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
 		return ""
 	}
-	if info, err := os.Stat(p); err != nil || !info.IsDir() {
+	if cfg.Library == nil || cfg.Library.Path == "" {
+		return ""
+	}
+	p := cfg.Library.Path
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(workingDir, p)
+	}
+	if _, err := os.Stat(p); err != nil {
 		return ""
 	}
 	return p
@@ -5610,7 +5325,6 @@ func (s *Server) graphqlHandler() http.Handler {
 		resolver.Workers = s.workers
 		resolver.BeadBus = s.beadHub
 		resolver.Actions = &workerDispatchAdapter{manager: s.workers}
-		resolver.WorkerState = &workerStateManagerAdapter{manager: s.workers}
 		resolver.ExecLogs = &execLogAdapter{}
 		resolver.CoordMetrics = &coordMetricsAdapter{reg: s.workers.LandCoordinators}
 		resolver.CSRFTokens = s.csrfTokens
@@ -5678,7 +5392,7 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) mcpWorkerManager(workingDir string) *WorkerManager {
-	if sameCanonicalPath(workingDir, s.WorkingDir) {
+	if workingDir == s.WorkingDir {
 		return s.workers
 	}
 	return NewWorkerManager(workingDir)
@@ -5686,6 +5400,7 @@ func (s *Server) mcpWorkerManager(workingDir string) *WorkerManager {
 
 func (s *Server) mcpWorkerList(workingDir string) mcpToolResult {
 	m := s.mcpWorkerManager(workingDir)
+	m.ReconcileStaleWorkers()
 	recs, err := m.List()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}

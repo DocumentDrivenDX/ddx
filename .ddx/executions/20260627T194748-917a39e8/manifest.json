@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260627T194748-917a39e8",
+  "bead_id": "ddx-3c8e5566",
+  "base_rev": "752d8cdd312ffb76deebf2d3e1af8153eac3bb56",
+  "created_at": "2026-06-27T19:47:59.710658622Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3c8e5566",
+    "title": "server: restore green worker manager test baseline",
+    "description": "PROBLEM\nAfter syncing main at afc8b6408 and reinstalling ddx, the focused server worker sanity command fails in four existing tests. Server-managed worker supervision cannot safely land while the worker-manager baseline is red.\n\nROOT CAUSE WITH FILE:LINE\nThe failing tests are cli/internal/server/workers_resolve_route_test.go:152 TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel, cli/internal/server/workers_test.go:799 TestWorkerLiveCounters, cli/internal/server/workers_test.go:890 TestWorkerLandsCommitViaCoordinator, and cli/internal/server/workers_test.go:1012 TestWorkerLandsEvidenceViaCoordinator. cli/internal/server/workers.go:361 starts the worker goroutine path and cli/internal/server/workers.go:718 runs the worker; current behavior no longer reaches Execute promptly, no longer updates live counters before finish, and no longer advances the landing repository/evidence as those tests require.\n\nPROPOSED FIX\nDiagnose and repair the worker test regression without weakening the assertions. Keep the tests as executable contracts for route bypass, live counters, coordinator landing, and evidence landing. If the failure is environmental, isolate the test fixture so it is deterministic.\n\nNON-SCOPE\nDo not implement desired-state supervision in this bead. Do not delete or relax the four named tests. Do not touch unrelated frontend files currently dirty in the operator worktree.",
+    "acceptance": "1. cd cli \u0026\u0026 go test ./internal/server -run 'TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel|TestWorkerLiveCounters|TestWorkerLandsCommitViaCoordinator|TestWorkerLandsEvidenceViaCoordinator' passes.\n2. cd cli \u0026\u0026 go test ./internal/server/... -run 'Worker|workers|Queue|Resolver' passes or any remaining failures are filed as separate beads with exact test names.\n3. The fix preserves the intent of the four named tests: route resolution is skipped for pinned profile/model, live counters update before FinishedAt, worker commit landing advances main, and evidence landing appears in git history.\n4. make install is run after the code change lands.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:server",
+      "area:test",
+      "area:workers",
+      "kind:bug",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "queue-rank": 20,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260627T194748-917a39e8",
+    "prompt": ".ddx/executions/20260627T194748-917a39e8/prompt.md",
+    "manifest": ".ddx/executions/20260627T194748-917a39e8/manifest.json",
+    "result": ".ddx/executions/20260627T194748-917a39e8/result.json",
+    "checks": ".ddx/executions/20260627T194748-917a39e8/checks.json",
+    "usage": ".ddx/executions/20260627T194748-917a39e8/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-3c8e5566-20260627T194748-917a39e8"
+  },
+  "prompt_sha": "89404382f562b9bf68d73edb61d7cb13a557700ee4377662a04b139832d5a7e7"
+}

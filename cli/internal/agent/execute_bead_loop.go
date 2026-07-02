@@ -155,10 +155,6 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID              string
 	WorkerID               string
 	ProjectRoot            string
-	// DisableLivenessSidecar is used by server-managed workers whose
-	// authoritative status.json is owned by the server WorkerRecord. The loop
-	// still emits run state and workerprobe events.
-	DisableLivenessSidecar bool
 	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
 	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
 	// to dispatch a single specific bead through the same claim → executor →
@@ -182,11 +178,6 @@ type ExecuteBeadLoopRuntime struct {
 	// threshold (>= 2). A nil hook or Attempted=false result falls through to
 	// the existing loop path unchanged.
 	PostLadderExhaustionHook PostLadderExhaustionHook
-	// IdleAutoRemediation configures the idle-path diagnose→remediate→rescan
-	// pass run before the loop reports NoReadyWork (FEAT-010 §Idle-Path
-	// Diagnosis and Auto-Remediation). The zero value disables it, preserving
-	// the legacy idle behavior.
-	IdleAutoRemediation IdleAutoRemediationConfig
 }
 
 func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
@@ -305,6 +296,11 @@ func (r ExecuteBeadLoopRuntime) effectiveServerHealthProbeInterval() time.Durati
 // pre-claim warn fingerprints across distinct bead IDs required to trip the
 // operator-attention guard.
 const DefaultPreClaimWarnRepeatThreshold = 5
+
+const (
+	preClaimIntakeProjectRootMutationRejectedCode   = "project_root_mutation_rejected"
+	preClaimIntakeProjectRootMutationRejectedDetail = "project root mutation rejected"
+)
 
 // effectivePreClaimWarnRepeatThreshold returns the configured pre-claim warn
 // repeat threshold, falling back to DefaultPreClaimWarnRepeatThreshold when
@@ -522,7 +518,7 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return decision
 	}
 
-	childIDs, decompErr := applyDecompositionChildrenAndEvent(ctx, w.Store, candidate, decomp, assignee, at)
+	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
 	decision.ChildIDs = append([]string(nil), childIDs...)
 	if decompErr != nil {
 		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
@@ -545,9 +541,6 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return decision
 	}
 	if len(backEdgeChildIDs) == 0 {
-		if err := closeDecomposedParent(w.Store, candidate.ID); err != nil && runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition close failed: %v\n", err)
-		}
 		return decision
 	}
 	if runtime.Log != nil {
@@ -1427,13 +1420,6 @@ func isTransientGitContention(err error) bool {
 	return gitlock.IsTransientGitContention("", err)
 }
 
-var retryPendingDurableAuditCommit = CommitDurableAuditOutputs
-
-type pendingDurableAuditCommit struct {
-	BeadID string
-	Report ExecuteBeadReport
-}
-
 type executeBeadLoopState struct {
 	now                        func() time.Time
 	assignee                   string
@@ -1473,8 +1459,6 @@ type executeBeadLoopState struct {
 	exitReason                 string
 	cleanupLog                 io.Writer
 	attemptStarted             *bool
-	idleRecoverySpentUSD       float64
-	pendingDurableAudit        *pendingDurableAuditCommit
 }
 
 type executeBeadIterationOutcome struct {
@@ -1551,7 +1535,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	// claimed — that order keeps loop.start as the first envelope on the
 	// EventSink so structured-event consumers continue to see it.
 	var liveness *work.SidecarLivenessReporter
-	if runtime.ProjectRoot != "" && runtime.SessionID != "" && !runtime.DisableLivenessSidecar {
+	if runtime.ProjectRoot != "" && runtime.SessionID != "" {
 		liveness = work.NewSidecarLivenessReporter(runtime.ProjectRoot, runtime.SessionID, runtime.SessionID, runtime.EventSink)
 		workerPID := os.Getpid()
 		liveness.SetChildProbe(func(route, harness, phase string) []workerstatus.ProviderChild {
@@ -1808,19 +1792,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	if state.attemptStarted != nil {
 		attemptStarted = *state.attemptStarted
 	}
-	claimedBeadID := ""
-	claimReleased := false
 	defer func() {
-		if ctx.Err() != nil && claimedBeadID != "" && !claimReleased {
-			if current, err := w.Store.Get(context.Background(), claimedBeadID); err == nil && current != nil {
-				if current.Status == bead.StatusClosed || current.Status == bead.StatusCancelled {
-					return
-				}
-			}
-			if err := releaseWorkerClaim(w.Store, claimedBeadID, assignee); err != nil && runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "cancel cleanup release failed for %s: %v\n", claimedBeadID, err)
-			}
-		}
 		state.resultsResetIdx = resultsResetIdx
 		state.pausedInfraUntil = pausedInfraUntil
 		state.workLog = workLog
@@ -1964,16 +1936,13 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		if err := runtime.FinalizeDurableAudit(report); err != nil {
 			// Transient .git/index.lock contention from concurrent workers must
 			// not stop the drain (ddx-23ac2796). The pending tracker/audit
-			// changes are retried before the next claim so autonomous work never
-			// advances while durable audit metadata is still dirty.
+			// changes remain staged and are committed on a later iteration, so
+			// treat lock contention as retryable rather than operator attention --
+			// a transient lock conflict must never halt an unattended worker.
 			if isTransientGitContention(err) {
-				state.pendingDurableAudit = &pendingDurableAuditCommit{
-					BeadID: candidateID,
-					Report: report,
-				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log,
-						"transient git/tracker contention committing durable audit outputs for %s; not stopping (will retry before the next claim): %v\n",
+						"transient git/tracker contention committing durable audit outputs for %s; not stopping (will retry next iteration): %v\n",
 						candidateID, err)
 				}
 				emit("loop.durable_audit_transient", map[string]any{
@@ -2022,68 +1991,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			applyStop(work.StopInput{ContextErr: err})
 		}
 		return executeBeadIterationOutcome{Stop: true}, err
-	}
-	if pending := state.pendingDurableAudit; pending != nil {
-		projectRoot := strings.TrimSpace(firstNonEmpty(pending.Report.ProjectRoot, runtime.ProjectRoot))
-		if err := retryPendingDurableAuditCommit(projectRoot, pending.Report.AttemptID); err != nil {
-			if isTransientGitContention(err) {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log,
-						"transient git/tracker contention retrying durable audit outputs for %s; holding before next claim: %v\n",
-						pending.BeadID, err)
-				}
-				emit("loop.durable_audit_retry_transient", map[string]any{
-					"reason":     "git_tracker_contention",
-					"bead_id":    pending.BeadID,
-					"attempt_id": pending.Report.AttemptID,
-					"detail":     strings.TrimSpace(err.Error()),
-				})
-				sleepDur := idleInterval
-				if sleepDur <= 0 {
-					sleepDur = time.Second
-				}
-				if err := sleepOrWake(ctx, sleepDur, runtime.WakeCh); err != nil {
-					if exitReason == "" {
-						applyStop(work.StopInput{ContextErr: err})
-					}
-					return executeBeadIterationOutcome{Stop: true}, err
-				}
-				return executeBeadIterationOutcome{Continue: true}, nil
-			}
-			dirtyPaths := append([]string(nil), trackerpaths.ManagedPathspecs()...)
-			result.OperatorAttention = &OperatorAttentionStop{
-				Reason:      "durable_audit_commit_failed",
-				BeadID:      pending.BeadID,
-				ProjectRoot: projectRoot,
-				DirtyPaths:  dirtyPaths,
-				Message:     "DDx could not commit pending durable audit outputs; resolve the git failure before continuing autonomous work.",
-			}
-			setExit("OperatorAttention", "operator_attention")
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log,
-					"operator attention: failed to commit pending durable audit outputs for %s; stopping work. %v\n",
-					pending.BeadID,
-					err,
-				)
-			}
-			emit("loop.operator_attention", map[string]any{
-				"reason":       "durable_audit_commit_failed",
-				"bead_id":      pending.BeadID,
-				"project_root": projectRoot,
-				"dirty_paths":  dirtyPaths,
-				"message":      result.OperatorAttention.Message,
-				"detail":       strings.TrimSpace(err.Error()),
-			})
-			return executeBeadIterationOutcome{Stop: true}, nil
-		}
-		state.pendingDurableAudit = nil
-		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "committed pending durable audit outputs for %s before next claim\n", pending.BeadID)
-		}
-		emit("loop.durable_audit_retry_committed", map[string]any{
-			"bead_id":    pending.BeadID,
-			"attempt_id": pending.Report.AttemptID,
-		})
 	}
 	if loopMode == executeloop.ModeWatch && serverOutage.Active() {
 		if !serverUnavailableLogged && runtime.Log != nil {
@@ -2398,32 +2305,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 
 		result.NoReadyWork = true
-		var idleBreakdown bead.ReadyExecutionBreakdown
-		haveBreakdown := false
 		if diag, ok := w.Store.(readyDiagnoser); ok {
 			if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
-				idleBreakdown = breakdown
-				haveBreakdown = true
 				result.NoReadyWorkDetail = noReadyWorkBreakdownFromLifecycle(breakdown)
 				snapshot := queueSnapshotFromLifecycle(breakdown)
 				result.QueueSnapshot = &snapshot
-			}
-		}
-
-		// Idle-path diagnose→remediate→rescan (FEAT-010 §Idle-Path Diagnosis
-		// and Auto-Remediation): before declaring no ready work, diagnose every
-		// non-ready bead and fire matching idle-path remediators. If at least
-		// one remediation succeeded, re-scan immediately without sleeping —
-		// those mutations may unblock downstream work.
-		if haveBreakdown && runtime.IdleAutoRemediation.enabled() {
-			recoverySpent := state.idleRecoverySpentUSD
-			remediated := w.runIdleAutoRemediation(ctx, runtime, idleBreakdown, emit, &recoverySpent)
-			state.idleRecoverySpentUSD = recoverySpent
-			if remediated {
-				result.NoReadyWork = false
-				clearTransientCandidateSkips()
-				resetPreClaimIdleStreak()
-				return executeBeadIterationOutcome{Continue: true}, nil
 			}
 		}
 		if applyStop(work.StopInput{
@@ -2567,7 +2453,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		recordClaimAttempt(false, candidate.ID)
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
-	claimedBeadID = candidate.ID
 	recordClaimAttempt(true, candidate.ID)
 
 	overrideRetryAfter := ""
@@ -2692,41 +2577,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			"status_rechecked": gitRepair.StatusSucceeded,
 			"stage":            "readiness",
 		})
-	}
-
-	if freshForHold, err := w.Store.Get(ctx, candidate.ID); err == nil && freshForHold != nil {
-		candidate = *freshForHold
-	}
-	if detail, held := activeDesignHoldDetail(candidate, now().UTC()); held {
-		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "design hold parked bead %s: %s\n", candidate.ID, detail)
-		}
-		emit("pre_claim_intake.blocked", readinessDecisionBody(
-			"pre_claim_intake.operator_required",
-			"operator_required",
-			"pre_claim_intake",
-			"block",
-			"park",
-			"review intake result and accept, rewrite, split, block, or cancel",
-			map[string]any{
-				"bead_id": candidate.ID,
-				"outcome": string(PreClaimIntakeOperatorRequired),
-				"detail":  detail,
-			},
-		))
-		parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", detail, now().UTC())
-		if berr != nil && runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-		}
-		_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-		if berr != nil || !parked {
-			transientCandidateSkips[candidate.ID] = "operator_required"
-		}
-		if stopAfterNonAttemptSkip() {
-			applyStop(work.StopInput{Once: true})
-			return executeBeadIterationOutcome{Stop: true}, nil
-		}
-		return executeBeadIterationOutcome{Continue: true}, nil
 	}
 
 	skipPreClaimIntake := false
@@ -2914,21 +2764,14 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 			classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
-			schemaDrift := classified.SystemReason == ReadinessSystemReasonSchemaDrift
-			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+			warningCode, warningDetail := normalizePreClaimSystemUnreadyWarning(warning)
+			message := fmt.Sprintf("check unavailable: %s (continuing)", warningDetail)
 			eventType := "pre_claim_intake.warn"
 			policyMode := "warn-only"
 			decision := "warn"
 			suggestedAction := "check the readiness route or harness configuration and retry"
-			if schemaDrift {
-				message = fmt.Sprintf("readiness schema drift: %s (continuing)", warning)
-				suggestedAction = "fix the readiness producer/provider so it emits a classification in the accepted enum"
-			}
 			if rootMutationError {
-				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
-				eventType = "pre_claim_intake.error"
-				policyMode = "error"
-				decision = "error"
+				message = fmt.Sprintf("check unavailable: %s (code=%s; continuing)", warningDetail, warningCode)
 				suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
 			}
 			if runtime.Log != nil {
@@ -2952,19 +2795,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"bead_id":       candidate.ID,
 					"outcome":       string(PreClaimIntakeError),
 					"system_reason": classified.SystemReason,
-					"detail":        warning,
+					"detail":        warningDetail,
+					"error_detail":  warning,
 				},
 			)
-			if schemaDrift {
-				eventBody["rule_id"] = "pre_claim_intake.schema_drift"
-				eventBody["diagnostic"] = classified.Diagnostic
-				eventBody["accepted_classifications"] = AcceptedReadinessClassifications
-			}
-			if rootMutationError {
-				eventBody["severity"] = "error"
+			if warningCode != "" {
+				eventBody["code"] = warningCode
 			}
 			emit(eventType, eventBody)
-			if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+			if appendPreClaimWarn(candidate.ID, "system_unready", warningDetail, now().UTC()) {
 				return executeBeadIterationOutcome{Stop: true}, nil
 			}
 		case intakeOutcome == PreClaimIntakeActionableAtomic:
@@ -3005,21 +2844,14 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				systemReason = classified.SystemReason
 			}
 			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
-			schemaDrift := systemReason == ReadinessSystemReasonSchemaDrift
-			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+			warningCode, warningDetail := normalizePreClaimSystemUnreadyWarning(warning)
+			message := fmt.Sprintf("check unavailable: %s (continuing)", warningDetail)
 			eventType := "pre_claim_intake.warn"
 			policyMode := "warn-only"
 			decision := "warn"
 			suggestedAction := "check the readiness route or harness configuration and retry"
-			if schemaDrift {
-				message = fmt.Sprintf("readiness schema drift: %s (continuing)", warning)
-				suggestedAction = "fix the readiness producer/provider so it emits a classification in the accepted enum"
-			}
 			if rootMutationError {
-				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
-				eventType = "pre_claim_intake.error"
-				policyMode = "error"
-				decision = "error"
+				message = fmt.Sprintf("check unavailable: %s (code=%s; continuing)", warningDetail, warningCode)
 				suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
 			}
 			if runtime.Log != nil {
@@ -3043,19 +2875,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"bead_id":       candidate.ID,
 					"outcome":       string(PreClaimIntakeError),
 					"system_reason": systemReason,
-					"detail":        warning,
+					"detail":        warningDetail,
+					"error_detail":  warning,
 				},
 			)
-			if schemaDrift {
-				eventBody["rule_id"] = "pre_claim_intake.schema_drift"
-				eventBody["diagnostic"] = schemaDriftDiagnostic("", warning)
-				eventBody["accepted_classifications"] = AcceptedReadinessClassifications
-			}
-			if rootMutationError {
-				eventBody["severity"] = "error"
+			if warningCode != "" {
+				eventBody["code"] = warningCode
 			}
 			emit(eventType, eventBody)
-			if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+			if appendPreClaimWarn(candidate.ID, "system_unready", warningDetail, now().UTC()) {
 				return executeBeadIterationOutcome{Stop: true}, nil
 			}
 		case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
@@ -3191,8 +3019,8 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				"bead_id":   candidate.ID,
 				"child_ids": childIDs,
 			})
-			// Parent is now closed after decomposition; release any residual claim
-			// so liveness monitors do not flag it as stale.
+			// Parent stays open (not proposed) — it is now execution-ineligible
+			// and will close once the decomposed children reach terminal state.
 			_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 			if stopAfterNonAttemptSkip() {
 				applyStop(work.StopInput{Once: true})
@@ -3200,11 +3028,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			return executeBeadIterationOutcome{Continue: true}, nil
 		default:
-			// Refinement-class intake outcomes are warnings during broad
-			// queue drain: the worker can attempt and let review/follow-up
-			// work handle gaps. Operator-required findings are different:
-			// they represent explicit human/design/external blockers and must
-			// be parked even outside targeted execution.
+			// Terminal non-actionable intake outcomes are warnings during
+			// broad queue drain: the worker should prefer making an attempt
+			// and letting review/follow-up work handle gaps. Explicit
+			// targeted execution keeps the stricter parking behavior.
 			warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
 			if warning == "" {
 				warning = string(intakeOutcome)
@@ -3212,22 +3039,14 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (%s)\n", warning, candidate.ID)
 			}
-			policyMode := "best-effort"
-			decision := "attempt"
-			suggestedAction := "continue with implementation; review should create follow-up work for remaining gaps"
-			if intakeOutcome == PreClaimIntakeOperatorRequired {
-				policyMode = "block"
-				decision = "park"
-				suggestedAction = "review intake result and accept, rewrite, split, block, or cancel"
-			}
-			operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", policyMode, decision, suggestedAction)
+			operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", "best-effort", "attempt", "continue with implementation; review should create follow-up work for remaining gaps")
 			emit("pre_claim_intake.blocked", readinessDecisionBody(
 				"pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)),
 				intakeResult.Reason,
 				"pre_claim_intake",
-				policyMode,
-				decision,
-				suggestedAction,
+				"best-effort",
+				"attempt",
+				"continue with implementation; review should create follow-up work for remaining gaps",
 				map[string]any{
 					"bead_id":           candidate.ID,
 					"operator_override": operatorOverrideTerminal,
@@ -3235,7 +3054,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"detail":            warning,
 				},
 			))
-			if strictIntakeBlocking() || intakeOutcome == PreClaimIntakeOperatorRequired {
+			if strictIntakeBlocking() {
 				if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 				} else if parked {
@@ -3645,35 +3464,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			"message":      gitRepairStop.Message,
 			"detail":       detail,
 			"git_stderr":   detail,
-		})
-		return executeBeadIterationOutcome{Stop: true}, nil
-	}
-	if timeoutStop, detail, ok := preDispatchGitTimeoutStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
-		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
-			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
-			})
-			if ctx.Err() != nil {
-				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
-			}
-			return executeBeadIterationOutcome{Stop: true}, unclaimErr
-		}
-		result.OperatorAttention = timeoutStop
-		setExit("OperatorAttention", "operator_attention")
-		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log,
-				"operator attention: pre-dispatch git timeout for %s at %s; released bead. %s\n",
-				candidate.ID,
-				runtime.ProjectRoot,
-				detail,
-			)
-		}
-		emit("loop.operator_attention", map[string]any{
-			"reason":       timeoutStop.Reason,
-			"bead_id":      candidate.ID,
-			"project_root": runtime.ProjectRoot,
-			"message":      timeoutStop.Message,
-			"detail":       detail,
 		})
 		return executeBeadIterationOutcome{Stop: true}, nil
 	}
@@ -5073,29 +4863,6 @@ func candidateSkipDetail(reason string, fresh *bead.Bead) string {
 	}
 }
 
-var designHoldUntilRe = regexp.MustCompile(`(?i)(?:design\s+hold|cooldown)[^.:\n;]*\buntil\s+([0-9]{4}-[0-9]{2}-[0-9]{2})`)
-
-func activeDesignHoldDetail(candidate bead.Bead, at time.Time) (string, bool) {
-	notes := strings.TrimSpace(candidate.Notes)
-	if notes == "" {
-		return "", false
-	}
-	match := designHoldUntilRe.FindStringSubmatch(notes)
-	if len(match) < 2 {
-		return "", false
-	}
-	until, err := time.Parse("2006-01-02", match[1])
-	if err != nil {
-		return "", false
-	}
-	// Treat the date as inclusive through the end of that UTC day. A hold
-	// "until 2027-01-01" should not execute during 2027-01-01 itself.
-	if at.UTC().Before(until.AddDate(0, 0, 1)) {
-		return fmt.Sprintf("active design hold until %s", until.Format("2006-01-02")), true
-	}
-	return "", false
-}
-
 type preClaimWarnRepeatState struct {
 	Fingerprint      string
 	Count            int
@@ -5191,6 +4958,13 @@ func preClaimIntakeWarningFingerprint(reason, detail string) string {
 
 func isProjectRootMutationRejectedDetail(detail string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(detail)), "project root mutation rejected")
+}
+
+func normalizePreClaimSystemUnreadyWarning(detail string) (code, normalizedDetail string) {
+	if isProjectRootMutationRejectedDetail(detail) {
+		return preClaimIntakeProjectRootMutationRejectedCode, preClaimIntakeProjectRootMutationRejectedDetail
+	}
+	return "", detail
 }
 
 func emitStaleCandidateSkip(emit func(string, map[string]any), beadID string, skip *candidateSkipDecision, fresh *bead.Bead, stage string) {
@@ -5979,60 +5753,10 @@ func storeBeadDepth(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bea
 	return depth
 }
 
-// applyDecompositionChildrenAndEvent creates the child beads and appends a
-// triage-decomposed event to the parent. It does NOT change the parent's
-// lifecycle status so the caller can apply the appropriate terminal transition
-// (close or park) after inspecting for back-edges or other conditions.
-func applyDecompositionChildrenAndEvent(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
-	childIDs := make([]string, 0, len(decomp.Children))
-	for _, child := range decomp.Children {
-		nb := &bead.Bead{
-			Title:       child.Title,
-			Description: child.Description,
-			Acceptance:  child.Acceptance,
-			Labels:      append([]string(nil), child.Labels...),
-			Parent:      parent.ID,
-		}
-		if err := store.Create(ctx, nb); err != nil {
-			return childIDs, fmt.Errorf("decompose: create child %q: %w", child.Title, err)
-		}
-		childIDs = append(childIDs, nb.ID)
-	}
-
-	// Park the parent so it does not re-enter execution while children are
-	// outstanding. The caller is responsible for the final lifecycle transition
-	// (close on the pre-claim path; close or park-to-proposed on the
-	// post-attempt path depending on back-edge detection).
-	if err := store.Update(ctx, parent.ID, func(b *bead.Bead) {
-		ensureBeadExtra(b)
-		b.Extra[bead.ExtraExecutionElig] = false
-	}); err != nil {
-		return childIDs, fmt.Errorf("decompose: park parent %s after decomposition: %w", parent.ID, err)
-	}
-
-	body, _ := json.Marshal(map[string]any{
-		"child_ids": childIDs,
-		"rationale": decomp.Rationale,
-		"ac_map":    decomp.ACMap,
-	})
-	return childIDs, store.AppendEvent(parent.ID, bead.BeadEvent{
-		Kind:      "triage-decomposed",
-		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
-		Body:      string(body),
-		Actor:     actor,
-		Source:    "ddx work",
-		CreatedAt: at,
-	})
-}
-
-// applyPreClaimDecomposition creates child beads, closes the parent through
-// the lifecycle/store API, clears claim metadata, and appends a
-// triage-decomposed event to the parent. It returns the IDs of the created
-// children so the caller can log or record them.
-//
-// The post-attempt path uses applyDecompositionChildrenAndEvent directly so
-// that back-edge detection can still park the parent to proposed before the
-// final close.
+// applyPreClaimDecomposition creates child beads, parks the parent as
+// execution-ineligible, and appends a triage-decomposed event to the parent.
+// It returns the IDs of the created children so the caller can log or record
+// them.
 func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
 	childIDs := make([]string, 0, len(decomp.Children))
 	for _, child := range decomp.Children {
@@ -6049,26 +5773,13 @@ func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore,
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	// Close the parent after children are durably created. Clearing Owner and
-	// claim keys prevents a half-owned closed parent from confusing liveness
-	// checks. execution-eligible=false is set defensively so that any reader
-	// that does not filter by status also treats the parent as ineligible.
-	if err := store.UpdateWithLifecycleStatus(parent.ID, bead.StatusClosed, bead.LifecycleTransitionOptions{
-		ManualClose: true,
-		Reason:      "decomposed into children",
-		Actor:       actor,
-		Source:      "ddx work",
-	}, func(b *bead.Bead) error {
+	// Park the parent so it does not re-enter execution while the generated
+	// children are outstanding.
+	if err := store.Update(ctx, parent.ID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		b.Extra[bead.ExtraExecutionElig] = false
-		b.Owner = ""
-		for _, k := range bead.ClaimMetadataExtraKeys {
-			delete(b.Extra, k)
-		}
-		delete(b.Extra, bead.ClaimHeartbeatExtraKey)
-		return nil
 	}); err != nil {
-		return childIDs, fmt.Errorf("decompose: close parent %s after decomposition: %w", parent.ID, err)
+		return childIDs, fmt.Errorf("decompose: park parent %s after decomposition: %w", parent.ID, err)
 	}
 
 	body, _ := json.Marshal(map[string]any{

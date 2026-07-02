@@ -7,13 +7,11 @@ from the repository's live `.ddx/` state.
 
 Contents:
 
-- `.ddx/config.yaml` — minimal DDx config for the copied fixture workspace.
+- `.ddx/config.yaml` — minimal DDx config pointing at the local plugin library.
 - `.ddx/beads.jsonl` — open, closed, and blocked beads so the bead API endpoints
   return non-empty data.
-- `.ddx/plugins/ddx/` — fixture-only local overlay data for local-overlay and
-  legacy-compatibility endpoint coverage. Marketplace plugin payloads should
-  not be copied into project fixtures; normal installs use `.ddx/plugins.lock.yaml`,
-  the shared XDG cache, and generated adapters.
+- `.ddx/plugins/ddx/` — minimal personas, prompts, and templates so the document
+  and persona endpoints have something to list.
 - `docs/` — small docs library for the document graph endpoint.
 
 The fixture is read-only; the harness copies it to a `mktemp -d` workspace at

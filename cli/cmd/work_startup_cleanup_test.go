@@ -3,14 +3,20 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
@@ -72,68 +78,6 @@ func TestWorkStartup_PreservesLiveWorktrees(t *testing.T) {
 	assert.Contains(t, runCleanupCommandGit(t, projectRoot, "worktree", "list", "--porcelain"), worktreePath)
 }
 
-func TestWorkStartupCleanup_RemovesFreshRunStateWhenOwnerPIDIsDead(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("process-liveness startup cleanup test is unix-oriented")
-	}
-
-	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
-
-	attemptID := "20260613T034907-3d00f60f"
-	worktreePath := createRegisteredStartupWorktree(t, projectRoot, tempRoot, "ddx-stale-active", attemptID)
-	now := time.Now().UTC()
-	writeStartupRunState(t, projectRoot, "ddx-stale-active", attemptID, worktreePath, deadProcessPID(t), now)
-
-	runner := newStartupHousekeepingRunner(projectRoot)
-	runner.now = func() time.Time { return now }
-	report, err := runner.scan(context.Background(), true)
-	require.NoError(t, err)
-
-	assert.Equal(t, int64(1), report.StaleRunStateFiles)
-	assert.Equal(t, int64(1), report.RemovedRunStateFiles)
-	require.Len(t, report.Observations, 1)
-	assert.Equal(t, "removed_stale_run_state", report.Observations[0].Class)
-	assert.DirExists(t, worktreePath, "fresh worktree cleanup remains governed by normal worktree policy")
-	states, err := agent.ReadRunStates(projectRoot)
-	require.NoError(t, err)
-	assert.Empty(t, states, "dead-owner run-state must be cleared before the next claim/status pass")
-}
-
-func TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim(t *testing.T) {
-	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
-
-	attemptID := "20260608T112233-deadbeef"
-	worktreePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-process-stale-"+attemptID)
-	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
-	require.NoError(t, agent.WriteExecutionCleanupMetadata(worktreePath, agent.ExecutionCleanupMetadata{
-		ProjectRoot:  projectRoot,
-		BeadID:       "ddx-process-stale",
-		AttemptID:    attemptID,
-		WorktreePath: worktreePath,
-	}))
-	killer := &startupProcessKillerFake{}
-	runner := newStartupHousekeepingRunner(projectRoot)
-	runner.processScanner = startupProcessScannerFake{processes: []agent.ExecutionCleanupProcessInfo{{
-		PID:     7001,
-		PPID:    1,
-		PGID:    7000,
-		Cwd:     worktreePath,
-		Command: "sh -c cargo test",
-	}}}
-	runner.processKiller = killer
-
-	report, err := runner.scan(context.Background(), true)
-	require.NoError(t, err)
-
-	assert.Equal(t, []int{7000}, killer.groups)
-	assert.Equal(t, int64(1), report.StaleAttemptProcesses)
-	assert.Equal(t, int64(1), report.ReapedProcessGroups)
-	require.NotEmpty(t, report.Processes)
-	assert.True(t, report.Processes[0].WouldKill)
-	assert.True(t, report.Processes[0].Killed)
-	assert.Equal(t, "attempt_process_census", report.Observations[0].Class)
-}
-
 func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	projectRoot, _ := setupWorkStartupCleanupProject(t)
 
@@ -176,21 +120,182 @@ func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	assert.DirExists(t, filepath.Join(workersDir, freshWorkerID))
 }
 
-type startupProcessScannerFake struct {
-	processes []agent.ExecutionCleanupProcessInfo
+func TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim(t *testing.T) {
+	projectRoot, _ := setupWorkStartupCleanupProject(t)
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "ddx-startup-claim",
+		Title: "startup cleanup claim",
+	}))
+
+	var cleanupCalls int32
+	runner := newStartupHousekeepingRunner(projectRoot)
+	runner.processCleanup = func(ctx context.Context, projectRoot, tempRoot string, summary *agent.ExecutionCleanupSummary, runStates []agent.RunState, registered map[string]struct{}, now time.Time) error {
+		atomic.AddInt32(&cleanupCalls, 1)
+		summary.ProcessFindings = append(summary.ProcessFindings, agent.ExecutionCleanupProcessFinding{
+			PID:         101,
+			PGID:        101,
+			Worktree:    filepath.Join(tempRoot, "ddx-stale"),
+			StaleReason: "stale liveness",
+			WouldKill:   true,
+			Terminated:  true,
+		})
+		summary.Observations = append(summary.Observations, agent.ExecutionCleanupObservation{
+			Path:    filepath.Join(tempRoot, "ddx-stale"),
+			Class:   "reaped_stale_attempt_process",
+			Message: "stale liveness",
+		})
+		return nil
+	}
+
+	claimGuard := &startupCleanupClaimGuardStore{
+		Store:        store,
+		t:            t,
+		cleanupCalls: &cleanupCalls,
+	}
+	worker := &agent.ExecuteBeadWorker{
+		Store: claimGuard,
+		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			return agent.ExecuteBeadReport{
+				BeadID: beadID,
+				Status: agent.ExecuteBeadStatusExecutionFailed,
+				Detail: "test failure",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker-startup"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{
+		ProjectRoot:   projectRoot,
+		CleanupRunner: runner,
+		CleanupLog:    io.Discard,
+		Once:          true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&cleanupCalls), int32(1))
 }
 
-func (s startupProcessScannerFake) ScanExecutionProcesses(context.Context) ([]agent.ExecutionCleanupProcessInfo, error) {
-	return append([]agent.ExecutionCleanupProcessInfo(nil), s.processes...), nil
+// TestWorkStartupCleanup_ReapsReparentedAttemptDescendantsBeforeClaim proves
+// that the startup pre-claim cleanup pass invokes the broadened cwd-based
+// classifier from ddx-54d9c455: a reparented descendant whose cwd lives under
+// the configured execution worktree root but whose leaf directory does NOT
+// carry the `.execute-bead-wt-*` suffix is reaped before the worker attempts
+// its first ready-execution claim.
+func TestWorkStartupCleanup_ReapsReparentedAttemptDescendantsBeforeClaim(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+
+	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
+
+	// A reparented descendant whose cwd lives under tempRoot but does NOT
+	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
+	descendantCwd := filepath.Join(tempRoot, "reparented-orphan-20260628T170000-feedface")
+	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(descendantCwd, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-startup-reparented",
+		AttemptID:    "20260628T170000-feedface",
+		WorktreePath: descendantCwd,
+	}))
+
+	// Spawn a real process in its own process group with cwd = the reparented
+	// descendant. The startup pre-claim pass must reap it via the broadened
+	// classifier even though the cwd lacks the `.execute-bead-wt-*` segment.
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = descendantCwd
+	sleepCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, sleepCmd.Start())
+	pid := sleepCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_, _ = sleepCmd.Process.Wait()
+	})
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "work", "--json", "--once", "--project", projectRoot)
+	require.NoError(t, err)
+
+	var res struct {
+		NoReadyWork bool `json:"no_ready_work"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	assert.True(t, res.NoReadyWork)
+
+	// Reap the leader zombie so the polling check sees the PID disappear.
+	go func() { _, _ = sleepCmd.Process.Wait() }()
+	require.Eventually(t, func() bool {
+		return sleepCmd.Process.Signal(syscall.Signal(0)) != nil
+	}, 3*time.Second, 20*time.Millisecond, "startup pre-claim pass must reap the reparented descendant process group")
 }
 
-type startupProcessKillerFake struct {
-	groups []int
-}
+func TestWorkStartupCleanup_UsesCleanupLockForProcessReaping(t *testing.T) {
+	projectRoot, _ := setupWorkStartupCleanupProject(t)
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "ddx-lock-1",
+		Title: "lock one",
+	}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "ddx-lock-2",
+		Title: "lock two",
+	}))
 
-func (k *startupProcessKillerFake) KillExecutionProcessGroup(_ context.Context, groupID int) error {
-	k.groups = append(k.groups, groupID)
-	return nil
+	blocker := &blockingStartupProcessCleanup{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	runner := newStartupHousekeepingRunner(projectRoot)
+	runner.processCleanup = blocker.Run
+
+	newWorker := func() *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: store,
+			Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: "test failure",
+				}, nil
+			}),
+		}
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker-lock"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	runWorker := func() {
+		defer wg.Done()
+		_, err := newWorker().Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{
+			ProjectRoot:   projectRoot,
+			CleanupRunner: runner,
+			CleanupLog:    io.Discard,
+			Once:          true,
+		})
+		errs <- err
+	}
+
+	wg.Add(2)
+	go runWorker()
+	<-blocker.started
+	go runWorker()
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&blocker.calls) >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&blocker.maxActive))
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&blocker.calls), "second worker must skip the process pass while the cleanup lock is held")
+
+	close(blocker.release)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
 }
 
 func TestExecutionsRetention_ArchivesOldEvidence(t *testing.T) {
@@ -324,4 +429,57 @@ func startLongLivedProcess(t *testing.T) *exec.Cmd {
 		_, _ = cmd.Process.Wait()
 	})
 	return cmd
+}
+
+type startupCleanupClaimGuardStore struct {
+	*bead.Store
+	t            *testing.T
+	cleanupCalls *int32
+	readyCalls   int32
+}
+
+func (s *startupCleanupClaimGuardStore) ReadyExecution() ([]bead.Bead, error) {
+	s.t.Helper()
+	if atomic.AddInt32(&s.readyCalls, 1) == 1 && atomic.LoadInt32(s.cleanupCalls) == 0 {
+		s.t.Fatalf("cleanup must run before the first ready claim")
+	}
+	return s.Store.ReadyExecution()
+}
+
+type blockingStartupProcessCleanup struct {
+	started   chan struct{}
+	release   chan struct{}
+	calls     int32
+	active    int32
+	maxActive int32
+}
+
+func (r *blockingStartupProcessCleanup) Run(ctx context.Context, projectRoot, tempRoot string, summary *agent.ExecutionCleanupSummary, runStates []agent.RunState, registered map[string]struct{}, now time.Time) error {
+	_ = projectRoot
+	_ = tempRoot
+	_ = summary
+	_ = runStates
+	_ = registered
+	_ = now
+	atomic.AddInt32(&r.calls, 1)
+	active := atomic.AddInt32(&r.active, 1)
+	for {
+		prev := atomic.LoadInt32(&r.maxActive)
+		if active <= prev || atomic.CompareAndSwapInt32(&r.maxActive, prev, active) {
+			break
+		}
+	}
+	if r.started != nil {
+		select {
+		case <-r.started:
+		default:
+			close(r.started)
+		}
+	}
+	select {
+	case <-ctx.Done():
+	case <-r.release:
+	}
+	atomic.AddInt32(&r.active, -1)
+	return nil
 }

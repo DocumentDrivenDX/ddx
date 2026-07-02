@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +11,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
@@ -95,31 +91,18 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	now := time.Now().UTC()
-	liveWorkers := enrichWorkersWithRunState(
-		workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
-		now,
-	)
-	liveWorkers = mergeServerManagedWorkers(
-		liveWorkers,
-		f.serverManagedWorkerRecords(projectRoot),
-		projectRoot,
-		allProjects,
-		now,
-	)
-	active, err := collectWorkStatusActiveWork(projectRoot, liveWorkers, allProjects, now)
-	if err != nil {
-		return fmt.Errorf("work status: active work query: %w", err)
-	}
-	activeWorkProjectRoot := projectRoot
-	if allProjects {
-		activeWorkProjectRoot = ""
-	}
-	liveWorkers = enrichWorkersWithActiveWork(liveWorkers, active, activeWorkProjectRoot)
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
-		Workers:     liveWorkers,
-		ActiveWork:  active,
+		Workers: enrichWorkersWithRunState(
+			workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
+			now,
+		),
+	}
+	if active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now); err == nil {
+		report.ActiveWork = active
+	} else {
+		return fmt.Errorf("work status: active work query: %w", err)
 	}
 	if allProjects {
 		report.Scope = "all-projects"
@@ -133,43 +116,6 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func collectWorkStatusActiveWork(projectRoot string, workers []workerstatus.LiveWorker, allProjects bool, now time.Time) (activework.Snapshot, error) {
-	if !allProjects {
-		return collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now)
-	}
-	roots := workStatusProjectRoots(projectRoot, workers)
-	snapshots := make([]activework.Snapshot, 0, len(roots))
-	for _, root := range roots {
-		snap, err := collectActiveWorkSnapshot(root, bead.NewStore(resolveBeadStoreRoot(root)), now)
-		if err != nil {
-			return activework.Snapshot{}, err
-		}
-		snapshots = append(snapshots, snap)
-	}
-	return activework.Merge(snapshots...), nil
-}
-
-func workStatusProjectRoots(projectRoot string, workers []workerstatus.LiveWorker) []string {
-	var roots []string
-	add := func(root string) {
-		root = strings.TrimSpace(root)
-		if root == "" {
-			return
-		}
-		for _, existing := range roots {
-			if workerstatus.SamePath(existing, root) {
-				return
-			}
-		}
-		roots = append(roots, root)
-	}
-	add(projectRoot)
-	for _, worker := range workers {
-		add(worker.ProjectRoot)
-	}
-	return roots
-}
-
 func (f *CommandFactory) workerScanner() workerStatusScanner {
 	if f.workerScannerOverride != nil {
 		return f.workerScannerOverride
@@ -177,28 +123,17 @@ func (f *CommandFactory) workerScanner() workerStatusScanner {
 	return workerstatus.New()
 }
 
-// enrichWorkersWithRunState reconciles each live worker with the freshest
+// enrichWorkersWithRunState fills bead/attempt/worktree from a fresh
 // per-attempt run-state record (.ddx/run-state/<attempt>.json) whose PID
-// matches it. Run-state is read from each worker's own project root, so
-// all-projects scope does not leak attempts across projects.
-//
-// Two cases are handled so that workers[], active_work.records[], and text
-// status all report one stable canonical attempt id for a single live worker
-// (ddx-f93e6ef9):
-//
-//   - Fill: liveness enrichment did not supply bead/attempt/worktree (sidecar
-//     absent, start-time-skewed, or its attempt id missing) — run-state fills
-//     the empty fields (ddx-f9b41107).
-//   - Canonical override: the liveness sidecar supplied a *stale* attempt id
-//     while run-state holds a fresher record for the same PID. When run-state
-//     reports a different attempt and was refreshed more recently than the
-//     liveness record's last activity, run-state is the canonical execution
-//     attempt and its bead/attempt/worktree win over the stale liveness fields.
+// matches a live worker, when liveness enrichment did not supply them — e.g.
+// the liveness sidecar was absent, start-time-skewed, or its attempt id was
+// stale (ddx-f9b41107). Run-state is read from each worker's own project root,
+// so all-projects scope does not leak attempts across projects.
 func enrichWorkersWithRunState(workers []workerstatus.LiveWorker, now time.Time) []workerstatus.LiveWorker {
 	byProject := make(map[string][]agent.RunState)
 	for i := range workers {
 		w := &workers[i]
-		if w.PID <= 0 {
+		if w.PID <= 0 || (w.BeadID != "" && w.AttemptID != "" && w.ExecutionWorktree != "") {
 			continue
 		}
 		states, ok := byProject[w.ProjectRoot]
@@ -208,20 +143,6 @@ func enrichWorkersWithRunState(workers []workerstatus.LiveWorker, now time.Time)
 		}
 		rec, ok := freshestRunStateForPID(states, w.PID, now)
 		if !ok {
-			continue
-		}
-		if rec.AttemptID != "" && rec.AttemptID != w.AttemptID && rec.RefreshedAt.After(w.LastActivityAt) {
-			// Stale liveness attempt; run-state is canonical for this PID.
-			if rec.BeadID != "" {
-				w.BeadID = rec.BeadID
-			}
-			w.AttemptID = rec.AttemptID
-			if rec.WorktreePath != "" {
-				w.ExecutionWorktree = rec.WorktreePath
-			}
-			if !rec.RefreshedAt.IsZero() {
-				w.LastActivityAt = rec.RefreshedAt.UTC()
-			}
 			continue
 		}
 		if w.BeadID == "" {
@@ -257,84 +178,6 @@ func freshestRunStateForPID(states []agent.RunState, pid int, now time.Time) (ag
 	return best, found
 }
 
-// enrichWorkersWithActiveWork uses the project-scoped active-work snapshot as
-// a fallback for long-lived server-managed workers whose process row is present
-// but whose liveness/run-state sidecars are not yet fresh enough to fill bead
-// fields. It only fills blanks, preserving run-state as the canonical attempt
-// source when both surfaces exist.
-func enrichWorkersWithActiveWork(workers []workerstatus.LiveWorker, active activework.Snapshot, projectRoot string) []workerstatus.LiveWorker {
-	if len(workers) == 0 || len(active.Records) == 0 {
-		return workers
-	}
-	byWorkerID := make(map[string]activework.Record, len(active.Records))
-	byAttemptID := make(map[string]activework.Record, len(active.Records))
-	for _, rec := range active.Records {
-		if rec.WorkerID != "" {
-			byWorkerID[activeWorkLookupKey(rec.ProjectRoot, rec.WorkerID)] = rec
-			byWorkerID[activeWorkLookupKey("", rec.WorkerID)] = rec
-		}
-		if rec.AttemptID != "" {
-			byAttemptID[activeWorkLookupKey(rec.ProjectRoot, rec.AttemptID)] = rec
-			byAttemptID[activeWorkLookupKey("", rec.AttemptID)] = rec
-		}
-	}
-	for i := range workers {
-		w := &workers[i]
-		if projectRoot != "" && w.ProjectRoot != "" && !workerstatus.SamePath(w.ProjectRoot, projectRoot) {
-			continue
-		}
-		rec, ok := activework.Record{}, false
-		if workerID := workerIDFromCommand(w.Command); workerID != "" {
-			rec, ok = byWorkerID[activeWorkLookupKey(w.ProjectRoot, workerID)]
-			if !ok {
-				rec, ok = byWorkerID[activeWorkLookupKey("", workerID)]
-			}
-		}
-		if !ok && w.AttemptID != "" {
-			rec, ok = byAttemptID[activeWorkLookupKey(w.ProjectRoot, w.AttemptID)]
-			if !ok {
-				rec, ok = byAttemptID[activeWorkLookupKey("", w.AttemptID)]
-			}
-		}
-		if !ok {
-			continue
-		}
-		if w.BeadID == "" {
-			w.BeadID = rec.BeadID
-		}
-		if w.AttemptID == "" {
-			w.AttemptID = rec.AttemptID
-		}
-		if w.Phase == "" {
-			w.Phase = rec.Phase
-		}
-		if !rec.LastActivityAt.IsZero() && (w.LastActivityAt.IsZero() || rec.LastActivityAt.After(w.LastActivityAt)) {
-			w.LastActivityAt = rec.LastActivityAt.UTC()
-		}
-	}
-	return workers
-}
-
-func activeWorkLookupKey(projectRoot, id string) string {
-	return projectRoot + "|" + id
-}
-
-func workerIDFromCommand(command string) string {
-	fields := strings.Fields(command)
-	for i, field := range fields {
-		if field == "--server-managed-worker-id" && i+1 < len(fields) {
-			return fields[i+1]
-		}
-		if strings.HasPrefix(field, "--server-managed-worker-id=") {
-			return strings.TrimPrefix(field, "--server-managed-worker-id=")
-		}
-	}
-	if len(fields) >= 4 && fields[0] == "server-managed" && fields[1] == "ddx" && fields[2] == "work" {
-		return fields[3]
-	}
-	return ""
-}
-
 func filterAndSortWorkers(all []workerstatus.LiveWorker, projectRoot string, allProjects bool) []workerstatus.LiveWorker {
 	var filtered []workerstatus.LiveWorker
 	if allProjects {
@@ -349,239 +192,6 @@ func filterAndSortWorkers(all []workerstatus.LiveWorker, projectRoot string, all
 		return filtered[i].StartedAt.Before(filtered[j].StartedAt)
 	})
 	return filtered
-}
-
-func (f *CommandFactory) serverManagedWorkerRecords(projectRoot string) []serverpkg.WorkerRecord {
-	if f.workerScannerOverride == nil || os.Getenv("DDX_SERVER_URL") != "" {
-		if records, ok := fetchServerManagedWorkerRecords(projectRoot); ok {
-			return records
-		}
-	}
-	records, err := readServerManagedWorkerRecords(projectRoot)
-	if err != nil {
-		return nil
-	}
-	return records
-}
-
-func fetchServerManagedWorkerRecords(projectRoot string) ([]serverpkg.WorkerRecord, bool) {
-	base := strings.TrimRight(resolveServerURL(projectRoot), "/")
-	req, err := http.NewRequest(http.MethodGet, base+"/api/agent/workers", nil)
-	if err != nil {
-		return nil, false
-	}
-	resp, err := newLocalServerClient().Do(req)
-	if err != nil {
-		return nil, false
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, false
-	}
-	var records []serverpkg.WorkerRecord
-	if err := json.NewDecoder(resp.Body).Decode(&records); err != nil {
-		return nil, false
-	}
-	return records, true
-}
-
-func mergeServerManagedWorkers(workers []workerstatus.LiveWorker, records []serverpkg.WorkerRecord, projectRoot string, allProjects bool, now time.Time) []workerstatus.LiveWorker {
-	if len(records) == 0 {
-		return workers
-	}
-	seen := make(map[string]bool, len(workers))
-	for _, w := range workers {
-		if w.AttemptID != "" {
-			seen["attempt:"+w.AttemptID] = true
-		}
-		if w.PID > 0 {
-			seen[fmt.Sprintf("pid:%d", w.PID)] = true
-		}
-	}
-	for _, rec := range records {
-		if !isLiveServerManagedWorker(rec, now) {
-			continue
-		}
-		if !allProjects && !workerstatus.SamePath(rec.ProjectRoot, projectRoot) {
-			continue
-		}
-		w := liveWorkerFromServerRecord(rec, now)
-		if w.AttemptID != "" && seen["attempt:"+w.AttemptID] {
-			continue
-		}
-		if w.PID > 0 && seen[fmt.Sprintf("pid:%d", w.PID)] {
-			continue
-		}
-		if w.AttemptID != "" {
-			seen["attempt:"+w.AttemptID] = true
-		}
-		if w.PID > 0 {
-			seen[fmt.Sprintf("pid:%d", w.PID)] = true
-		}
-		workers = append(workers, w)
-	}
-	sort.SliceStable(workers, func(i, j int) bool {
-		if workers[i].StartedAt.Equal(workers[j].StartedAt) {
-			return workers[i].PID < workers[j].PID
-		}
-		return workers[i].StartedAt.Before(workers[j].StartedAt)
-	})
-	return workers
-}
-
-func readServerManagedWorkerRecords(projectRoot string) ([]serverpkg.WorkerRecord, error) {
-	dir := workerstatus.LivenessDir(projectRoot)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	out := make([]serverpkg.WorkerRecord, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name(), "status.json"))
-		if err != nil {
-			continue
-		}
-		var rec serverpkg.WorkerRecord
-		if err := json.Unmarshal(data, &rec); err != nil {
-			continue
-		}
-		if rec.Status == "" {
-			rec.Status = rec.State
-		}
-		if rec.ID == "" || rec.Kind == "" || rec.State == "" {
-			continue
-		}
-		out = append(out, rec)
-	}
-	return out, nil
-}
-
-func isLiveServerManagedWorker(rec serverpkg.WorkerRecord, now time.Time) bool {
-	if rec.State != "running" && rec.State != "stopping" {
-		return false
-	}
-	if !rec.FinishedAt.IsZero() {
-		return false
-	}
-	if rec.PID > 0 && rec.PIDAlive != nil && !*rec.PIDAlive {
-		return false
-	}
-	if rec.State == "stopping" && now.Sub(serverWorkerLastActivity(rec, rec.StartedAt)) > 2*time.Minute {
-		return false
-	}
-	return true
-}
-
-func liveWorkerFromServerRecord(rec serverpkg.WorkerRecord, now time.Time) workerstatus.LiveWorker {
-	rec = enrichServerRecordWithRunState(rec, now)
-	startedAt := rec.StartedAt.UTC()
-	if startedAt.IsZero() && rec.CurrentAttempt != nil {
-		startedAt = rec.CurrentAttempt.StartedAt.UTC()
-	}
-	age := now.Sub(startedAt)
-	if startedAt.IsZero() || age < 0 {
-		age = 0
-	}
-	beadID := rec.CurrentBead
-	attemptID := ""
-	phase := rec.State
-	if rec.CurrentAttempt != nil {
-		if rec.CurrentAttempt.BeadID != "" {
-			beadID = rec.CurrentAttempt.BeadID
-		}
-		attemptID = rec.CurrentAttempt.AttemptID
-		if rec.CurrentAttempt.Phase != "" {
-			phase = rec.CurrentAttempt.Phase
-		}
-	}
-	message := ""
-	if rec.LastError != "" && rec.LastError != "success" {
-		message = rec.LastError
-	}
-	return workerstatus.LiveWorker{
-		PID:            rec.PID,
-		Command:        "server-managed ddx work " + rec.ID,
-		StartedAt:      startedAt,
-		AgeSeconds:     age.Seconds(),
-		Age:            workerstatus.FormatAge(age),
-		ProjectRoot:    rec.ProjectRoot,
-		BeadID:         beadID,
-		AttemptID:      attemptID,
-		Phase:          phase,
-		Message:        message,
-		LastActivityAt: serverWorkerLastActivity(rec, now),
-	}
-}
-
-func enrichServerRecordWithRunState(rec serverpkg.WorkerRecord, now time.Time) serverpkg.WorkerRecord {
-	if rec.State != "running" || rec.ProjectRoot == "" {
-		return rec
-	}
-	if rec.CurrentAttempt != nil && rec.CurrentAttempt.AttemptID != "" {
-		return rec
-	}
-	state, err := agent.ReadRunState(rec.ProjectRoot)
-	if err != nil || state == nil || state.AttemptID == "" {
-		return rec
-	}
-	if rec.CurrentBead != "" && state.BeadID != "" && rec.CurrentBead != state.BeadID {
-		return rec
-	}
-	if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
-		return rec
-	}
-	if rec.CurrentBead == "" {
-		rec.CurrentBead = state.BeadID
-	}
-	rec.CurrentAttempt = &serverpkg.CurrentAttemptInfo{
-		AttemptID: state.AttemptID,
-		BeadID:    state.BeadID,
-		Harness:   state.Harness,
-		Model:     state.Model,
-		Profile:   rec.Profile,
-		Phase:     "running",
-		StartedAt: state.StartedAt,
-	}
-	if rec.Harness == "" {
-		rec.Harness = state.Harness
-	}
-	if rec.Model == "" {
-		rec.Model = state.Model
-	}
-	return rec
-}
-
-func serverWorkerLastActivity(rec serverpkg.WorkerRecord, fallback time.Time) time.Time {
-	best := fallback.UTC()
-	if best.IsZero() && !rec.StartedAt.IsZero() {
-		best = rec.StartedAt.UTC()
-	}
-	consider := func(ts time.Time) {
-		if ts.IsZero() {
-			return
-		}
-		ts = ts.UTC()
-		if best.IsZero() || ts.After(best) {
-			best = ts
-		}
-	}
-	consider(rec.StartedAt)
-	for _, evt := range rec.Lifecycle {
-		consider(evt.Timestamp)
-	}
-	for _, phase := range rec.RecentPhases {
-		consider(phase.TS)
-	}
-	if rec.CurrentAttempt != nil {
-		consider(rec.CurrentAttempt.StartedAt)
-	}
-	return best
 }
 
 func writeWorkStatusJSON(out io.Writer, report WorkStatusReport) error {

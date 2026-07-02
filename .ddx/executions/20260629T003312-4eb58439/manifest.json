@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260629T003312-4eb58439",
+  "bead_id": "ddx-5588db08",
+  "base_rev": "b485407a591d6ebf5f21e538981507ee9b4e7489",
+  "created_at": "2026-06-29T00:33:27.705709351Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5588db08",
+    "title": "tests: add hermetic provider-discovery guard for the cmd suite",
+    "description": "PROBLEM\nDuring ddx-0be85773 dogfood on 2026-06-13, `go test ./cmd/...` spawned real provider CLI children and repeatedly read `/home/erik/.cache/fizeau/discovery/*-subscription.refreshing`. There is no cmd-test-wide guard that forces Fizeau discovery/cache paths into a temp root or blocks real provider CLI lookup, so discovery falls through to the operator's real cache and live auth paths. Tests must be hermetic.\n\nROOT CAUSE WITH FILE:LINE\ncli/cmd/testutils_test.go and cli/cmd/run_test_helpers_test.go set some hermetic env but do NOT redirect the Fizeau discovery/cache directories into the per-test temp root, and do NOT rewrite PATH so codex/claude/gemini resolve to fake binaries. Discovery therefore falls through to the real ~/.cache/fizeau/discovery and resolves real provider CLIs found on PATH.\n\nPROPOSED FIX\n- Add a shared cmd-test helper that, for each test: (a) points HOME/XDG_CACHE_HOME and the Fizeau discovery+cache env at a per-test t.TempDir(); (b) rewrites PATH so codex/claude/gemini resolve only to harmless fake binaries; (c) disables subscription refresh/network calls in tests.\n- Wire this helper into the existing setup in cli/cmd/testutils_test.go and cli/cmd/run_test_helpers_test.go so it applies suite-wide.\n\nNON-SCOPE\nDo not weaken production provider discovery. Do not skip the affected tests. Do not kill unrelated interactive provider sessions as part of test cleanup. Process-leak assertion and the zero-config/underspecified-routing test rewrites are handled in sibling beads.",
+    "acceptance": "1. TestProviderDiscoveryGuard_RedirectsCacheToTempRoot asserts the guard sets the Fizeau discovery/cache env under t.TempDir() and that the cmd suite does not read from the real ~/.cache/fizeau/discovery.\n2. TestProviderDiscoveryGuard_FakeProviderCLIsOnPath asserts the guard rewrites PATH so codex, claude, and gemini resolve only to fake binaries, not real provider CLIs.\n3. With the guard active, `cd cli \u0026\u0026 go test ./cmd/...` no longer reads or loops on `/home/*/.cache/fizeau/discovery/*.refreshing`.\n4. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestProviderDiscoveryGuard_RedirectsCacheToTempRoot|TestProviderDiscoveryGuard_FakeProviderCLIsOnPath'` passes.\n5. `cd cli \u0026\u0026 go test ./cmd/...` green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-69607adb",
+    "labels": [
+      "phase:build",
+      "area:tests",
+      "area:agent",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T003312-4eb58439",
+    "prompt": ".ddx/executions/20260629T003312-4eb58439/prompt.md",
+    "manifest": ".ddx/executions/20260629T003312-4eb58439/manifest.json",
+    "result": ".ddx/executions/20260629T003312-4eb58439/result.json",
+    "checks": ".ddx/executions/20260629T003312-4eb58439/checks.json",
+    "usage": ".ddx/executions/20260629T003312-4eb58439/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-5588db08-20260629T003312-4eb58439"
+  },
+  "prompt_sha": "7aeeeca7346a28d9dfa002e11f4142f21a715b4686e21c47dfdf3d4d62aadfc6"
+}

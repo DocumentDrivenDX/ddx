@@ -10,7 +10,6 @@ ddx:
 
 **Status:** Accepted
 **Date:** 2026-06-01
-**Amended:** 2026-06-17
 
 ## Context
 
@@ -18,116 +17,65 @@ DDx ships the `ddx` skill as a package, and operators need to know which
 install layer they are actually using. Before this decision, the install
 topology was spread across implementation details and a handful of docs:
 
-- the project plugin lock under the resolved DDx root;
-- registry payloads under `${XDG_DATA_HOME}/ddx/cache/plugins/`;
+- the project-local package install under `<project>/.ddx/plugins/ddx/`;
+- the global fallback under `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`;
 - the baked-in default package embedded in the binary;
 - the agent-facing skill outputs under `.agents/skills/` and
   `.claude/skills/`.
 
-HELIX is now distributed as a marketplace plugin. That changes the practical
-cost of the older "copy real files into every repository" model: installing
-workflow plugins by copying full skill/template/artifact trees into each
-project causes repository bloat and stale checked-in assets. DDx needs the
-same operator experience as `npx`: declare the dependency, resolve it from an
-XDG cache, and materialize only the local adapter files needed by the current
-agent.
-
 Without one documented precedence rule, `ddx doctor` could not tell whether a
-project had a valid plugin lock, a missing cache payload, or missing generated
-adapters, and the agent docs had no single place to describe where the skill
-surfaces live.
-
-The HELIX marketplace plugin also changes the shape of DDx's own built-in
-fallback. The binary no longer needs to carry the whole reusable DDx library
-payload. Offline bootstrap needs only package metadata and the portable
-`skills/ddx` tree; personas, prompts, MCP examples, environments, templates,
-tools, prose-check packs, and artifact templates are optional library assets
-that should resolve through registry/cache packages instead of being embedded
-in every DDx binary.
+project was using its own package copy or falling through to the global layer,
+and the agent docs had no single place to describe where the skill surfaces
+live.
 
 ## Decision
 
 DDx resolves the default `ddx` package in this order:
 
-1. project plugin lock entry plus cache payload
-2. built-in cache payload materialized from the binary under
-   `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/`
+1. project-local `<project>/.ddx/plugins/ddx/`
+2. global install `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`
 3. baked-in package embedded in the binary
 
-For registry/marketplace plugins, "project-local" means the project has a
-durable dependency and lock entry, not necessarily a copied payload tree.
-Payloads resolve from the XDG plugin cache; the baked-in layer exists only for
-the default `ddx` package so the binary remains usable offline.
+This is project > global > baked-in precedence. The project-local package is
+the authoritative install for a repository. The global install is a fallback
+and may be used when the project copy is absent. The baked-in layer exists only
+for the default `ddx` package so the binary remains usable offline.
 
-The built-in `ddx` package follows the same adapter shape as marketplace
-plugins without becoming a normal project dependency: `ddx init` and
-`ddx plugin sync` may materialize the embedded bootstrap package into the XDG
-plugin cache, then create `.agents/skills/ddx` and `.claude/skills/ddx` as
-generated shims/links to `skills/ddx` in that cache. They do not create
-`.ddx/plugins/ddx`, do not write a project plugin-lock entry for `ddx`, and do
-not require network access. If the cache is missing, the embedded bootstrap
-package is the fallback source used to recreate it.
+DDx supports two install modes with distinct agent-tier outputs:
 
-The embedded bootstrap package contains only:
+**Project-local (default, `ddx install <name>`):**
+- Plugin content: `ddxroot.Path()/plugins/<name>/` (that is
+  `<project>/.ddx/plugins/<name>/` in-tree or
+  `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` in convention
+  mode)
+- Agent-tier skill outputs: `<project>/.agents/skills/<name>/` and
+  `<project>/.claude/skills/<name>/`
 
-- `package.yaml`
-- `skills/ddx/SKILL.md`
-- `skills/ddx/reference/*`
-- DDx-owned subskills and their small examples/eval fixtures under
-  `skills/ddx/`
+**Global (`ddx install <name> --global`):**
+- Plugin content: `${XDG_DATA_HOME}/ddx/global/plugins/<name>/`
+- Agent-tier skill outputs: `~/.agents/skills/<name>/` and
+  `~/.claude/skills/<name>/`
 
-It explicitly excludes optional reusable-library payloads such as
-`personas/`, `prompts/`, `templates/`, `environments/`, `mcp-servers/`,
-`checks/`, `tools/`, `patterns/`, and artifact templates. Those assets belong
-to registry/cache packages and can be installed or synced lazily when a project
-declares them.
+The `--global` surface is reinstated under the zero-footprint epic and enables
+machine-wide installs so operators can share a single skill across every
+project on the machine without per-project setup.
+State for global installs is recorded in a separate global state file
+(`${XDG_DATA_HOME}/ddx/global/installed.json`) and does not pollute per-project
+state. The `ddx plugin list --global` and `ddx plugin show <name> --global`
+commands enumerate from the global state.
 
-DDx supports one forward registry install mode with generated agent-tier
-outputs:
-
-**Project dependency (default, `ddx plugin install <name>`):**
-- Project metadata: a plugin intent/lock entry under the resolved DDx root.
-- Plugin payload: resolved into `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`
-  not copied into the repository.
-- Agent-tier skill outputs: generated shims/links under
-  `<project>/.agents/skills/<name>/` and `<project>/.claude/skills/<name>/`.
-  These are generated files and should be ignored by git.
-
-The top-level plugin lifecycle verbs (`ddx install`, `ddx installed`,
-`ddx uninstall`, `ddx outdated`, and `ddx verify`) are retired compatibility
-surfaces. New operator guidance must use `ddx plugin install`, `ddx plugin
-list`, `ddx plugin show`, `ddx plugin sync`, and `ddx doctor --plugins`.
-
-Global/home-directory plugin installs are not the forward model. Sharing
-downloaded payloads across projects happens through the XDG cache; each project
-records its own plugin intent and can regenerate its agent adapters from that
-lock.
-
-Unmanaged legacy home-directory skill installs are retired and should not be
-created manually.
-
-Local developer overlays remain the exception: `ddx plugin install <name>
---local <path>` may symlink directly to a checkout because the operator has
-explicitly chosen machine-local development state.
+Unmanaged legacy home-directory skill installs (those not created by DDx's
+`--global` surface) are retired and should not be created manually.
 
 ## Consequences
 
-- `ddx doctor` can report project plugin lock, cache, and generated adapter
-  states distinctly.
-- Operators can distinguish `ok`, `cache-missing`, and `shims-missing` for the
-  project plugin lock.
+- `ddx doctor` can report the project install and the global fallback as
+  distinct states.
+- Operators can distinguish `ok`, `missing`, and
+  `lazy-resolves-to-global` for the project layer.
 - The docs can point agents and operators to the same project-local surfaces
   instead of describing competing home-directory and project-directory
   locations.
-- The default package remains available offline through a minimal embedded
-  bootstrap layer.
-- Optional reusable-library assets are no longer part of the built-in fallback;
-  they are resolved lazily from registry/cache packages when declared.
-- The default package no longer needs a full copied skill tree in every project;
-  projects get generated adapters that can be recreated from the XDG cache or
-  the binary.
-- Registry plugin payloads no longer need to be checked into every project.
-  Clone portability comes from project metadata plus lazy materialization.
-- Agent skill directories become generated adapter state. They may be removed
-  and recreated by `ddx plugin sync`, `ddx init`, or the first command that
-  needs the plugin.
+- The default package remains available offline through the embedded layer.
+- `ddx install --global` satisfies the common case where an operator wants a
+  skill on every project without repeating the install per repository.

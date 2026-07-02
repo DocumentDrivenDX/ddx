@@ -230,7 +230,7 @@ Callers get JSON-shaped data and a stable interface.
 10. **Prompt migration.** Replace `prompt.NewMetaPromptInjectorWithPaths`, `prompt.NewFromPreset` with `ExecuteRequest.PromptPreset` + `ContextFiles`. Drop `prompt` import.
 11. **Sessions/observations migration.** Drop `session.NewLogger` (Service writes its own log; expose path via response). Drop `observations` (subscribe to `ExecuteStream` events).
 12. **Compaction migration.** Already covered by `agent-6f8caa00`/`ddx-76df1a46`, subsumed: delete `embeddedCompactionConfig` and the entire `compaction` import.
-13. **Virtual provider for tests.** Today DDx imports `virtual.New`/`virtual.Config`/`virtual.InlineResponse` directly. New shape: `Options{ConfigPath: "testdata/test-config.yaml"}` where the config selects the virtual provider; or expose `agentlib.NewWithFakeProvider(responses []FakeResponse)` as a test-only helper.
+13. **Virtual provider for tests.** Today DDx imports `virtual.New`/`virtual.Config`/`virtual.InlineResponse` directly. New shape: `Options{ConfigPath: "/tmp/test-config.yaml"}` where the config selects the virtual provider; or expose `agentlib.NewWithFakeProvider(responses []FakeResponse)` as a test-only helper.
 14. **Bump go.mod to v0.5.0.** Confirm DDx compiles with no `agent/{prompt,tool,session,compaction,observations,modelcatalog,provider/...}` imports — only `agent` (the Service) and possibly `agent/types` for the public structs.
 15. **Cleanup.** Delete dead code paths in DDx that supported the old DI-heavy API (CompactorOverride, etc.).
 

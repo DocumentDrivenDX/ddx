@@ -20,9 +20,12 @@ type LifecycleEvent struct {
 	Timestamp time.Time
 }
 
-// WatcherHub manages per-project bead file watchers by polling beads.jsonl
-// for changes. It satisfies the BeadLifecycleSubscriber interface used by
-// the GraphQL subscription resolver.
+// StoreFactory creates the bead reader used to watch one project.
+type StoreFactory func(projectID string) (BeadReader, error)
+
+// WatcherHub manages per-project bead readers by polling for changes. It
+// satisfies the BeadLifecycleSubscriber interface used by the GraphQL
+// subscription resolver.
 type WatcherHub struct {
 	mu       sync.Mutex
 	factory  StoreFactory
@@ -31,8 +34,6 @@ type WatcherHub struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
-
-type StoreFactory func(ctx context.Context, projectID string) (BeadReader, error)
 
 var _ LifecycleSubscriber = (*WatcherHub)(nil)
 
@@ -50,6 +51,9 @@ func NewWatcherHub(factory StoreFactory, interval time.Duration) *WatcherHub {
 
 // Close stops all background watchers.
 func (h *WatcherHub) Close() {
+	if h == nil || h.cancel == nil {
+		return
+	}
 	h.cancel()
 }
 
@@ -57,25 +61,41 @@ func (h *WatcherHub) Close() {
 // projectID (the project root directory). A new per-project watcher is
 // started on first Subscribe call. The returned func unsubscribes.
 func (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error) {
-	if h.factory == nil {
-		return nil, nil, fmt.Errorf("bead watcher store factory is required")
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if h == nil {
+		return nil, nil, fmt.Errorf("bead watcher hub is nil")
+	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	pw, ok := h.watchers[projectID]
+	created := false
 	if !ok {
-		store, err := h.factory(ctx, projectID)
+		if h.factory == nil {
+			h.mu.Unlock()
+			return nil, nil, fmt.Errorf("bead watcher factory not configured")
+		}
+		reader, err := h.factory(projectID)
 		if err != nil {
+			h.mu.Unlock()
 			return nil, nil, err
 		}
-		pw = newProjectWatcher(store, h.interval)
+		if reader == nil {
+			h.mu.Unlock()
+			return nil, nil, fmt.Errorf("bead watcher factory returned nil reader for project %q", projectID)
+		}
+		pw = newProjectWatcher(reader, h.interval)
 		h.watchers[projectID] = pw
+		created = true
+	}
+	h.mu.Unlock()
+	ch, unsub := pw.subscribe()
+	if created {
 		go pw.run(h.ctx)
 	}
-	ch, unsub := pw.subscribe()
 	return ch, unsub, nil
 }
 
@@ -86,9 +106,9 @@ type beadState struct {
 	title  string
 }
 
-// projectWatcher polls a single bead store and broadcasts lifecycle events.
+// projectWatcher polls a single bead reader and broadcasts lifecycle events.
 type projectWatcher struct {
-	store    BeadReader
+	reader   BeadReader
 	interval time.Duration
 
 	mu       sync.Mutex
@@ -96,9 +116,9 @@ type projectWatcher struct {
 	snapshot map[string]beadState
 }
 
-func newProjectWatcher(store BeadReader, interval time.Duration) *projectWatcher {
+func newProjectWatcher(reader BeadReader, interval time.Duration) *projectWatcher {
 	return &projectWatcher{
-		store:    store,
+		reader:   reader,
 		interval: interval,
 		snapshot: make(map[string]beadState),
 	}
@@ -148,7 +168,10 @@ func (pw *projectWatcher) run(ctx context.Context) {
 }
 
 func (pw *projectWatcher) poll(ctx context.Context) {
-	beads, err := pw.store.ReadAll(ctx)
+	if pw.reader == nil {
+		return
+	}
+	beads, err := pw.reader.ReadAll(ctx)
 	if err != nil {
 		return
 	}

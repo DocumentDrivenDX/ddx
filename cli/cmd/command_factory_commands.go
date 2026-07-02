@@ -7,23 +7,20 @@ import (
 // newInitCommand creates a fresh init command
 func (f *CommandFactory) newInitCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "init [path]",
-		Short: "Initialize DDx in a project directory",
-		Long: `Initialize DDx in a project directory.
+		Use:   "init",
+		Short: "Initialize DDx in current project",
+		Long: `Initialize DDx in the current project.
 
 This command:
 • Creates a .ddx/config.yaml configuration file
-• Writes DDx version metadata
-• Creates generated agent adapter files
-• Commits initialized project metadata to git
+• Installs the default DDx library plugin
+• Commits the config file to git
 
 Examples:
   ddx init                  # Initialize DDx in current project
-  ddx init .                # Initialize DDx in the current directory
-  ddx init ../project       # Initialize DDx in another directory
   ddx init --force          # Reinitialize existing project
   ddx init --no-git         # Skip git operations`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.NoArgs,
 		RunE: f.runInit,
 	}
 
@@ -33,8 +30,7 @@ Examples:
 	cmd.Flags().Bool("skip-claude-injection", false, "Skip injecting meta-prompts into CLAUDE.md")
 	cmd.Flags().String("repository", "", "Library repository URL (default: https://github.com/DocumentDrivenDX/ddx-library)")
 	cmd.Flags().String("branch", "", "Library repository branch (default: main)")
-	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
-	_ = cmd.Flags().MarkHidden("global")
+	cmd.Flags().Bool("global", false, "Perform one-time global machine setup (installs default plugin and agent-tier skill links into the XDG global layer)")
 
 	return cmd
 }
@@ -109,20 +105,17 @@ The doctor helps identify and resolve:
 func (f *CommandFactory) newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [target]",
-		Short: "Refresh generated DDx project adapters",
-		Long: `Refresh generated DDx project adapters and AGENTS.md guidance.
+		Short: "Update shipped skills and installed plugins",
+		Long: `Update shipped skills and installed plugins to their latest versions.
 
 Targets:
-  ddx        - Refresh the built-in DDx adapters (default)
-  all        - Refresh generated DDx adapters (default)
-
-Marketplace plugin versions are managed by 'ddx plugin upgrade'.
+  helix      - Update helix plugin to latest version
+  all        - Update shipped skills and installed plugins (default)
 
 Examples:
-  ddx update                    # Refresh generated DDx adapters
-  ddx update ddx                # Refresh generated DDx adapters
-  ddx plugin upgrade helix      # Upgrade a marketplace plugin
-  ddx update --check            # Check without applying`,
+  ddx update           # Refresh shipped skills and update installed packages
+  ddx update helix    # Update helix plugin only
+  ddx update --check   # Check for updates without applying`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: f.runUpdate,
 	}
@@ -130,7 +123,7 @@ Examples:
 	cmd.Flags().Bool("check", false, "Check for updates without applying")
 	cmd.Flags().Bool("force", false, "Force update even if already latest")
 	cmd.Flags().Bool("discard-local", false, "Overwrite uncommitted local changes (backs up originals to .ddx/update-backup/)")
-	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
+	cmd.Flags().Bool("global", false, "Update only the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
 
 	return cmd
 }
@@ -250,7 +243,7 @@ func (f *CommandFactory) newPromptsShowCommand() *cobra.Command {
 		Short: "Show a specific prompt",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return f.runPromptsShow(cmd, args)
+			return runPromptsShow(cmd, args)
 		},
 	}
 }

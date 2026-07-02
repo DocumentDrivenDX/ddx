@@ -50,25 +50,6 @@ type preClaimIntakePromptRewrite struct {
 	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
-func (r *preClaimIntakePromptRewrite) UnmarshalJSON(data []byte) error {
-	var raw struct {
-		Description   string          `json:"description,omitempty"`
-		Acceptance    json.RawMessage `json:"acceptance,omitempty"`
-		ChangedFields []string        `json:"changed_fields,omitempty"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	acceptance, err := decodeReadinessAcceptanceList(raw.Acceptance, "rewrite.acceptance")
-	if err != nil {
-		return err
-	}
-	r.Description = raw.Description
-	r.Acceptance = strings.Join(acceptance, "\n")
-	r.ChangedFields = raw.ChangedFields
-	return nil
-}
-
 // preClaimReadinessPromptResult is the canonical readiness JSON schema returned
 // by skills that use the FEAT-010/ADR-023 outcome vocabulary.
 type preClaimReadinessPromptResult struct {
@@ -81,7 +62,7 @@ type preClaimReadinessPromptResult struct {
 
 type preClaimReadinessClassificationPromptResult struct {
 	Classification    string                                 `json:"classification"`
-	Tractability      readinessTractability                  `json:"tractability,omitempty"`
+	Tractability      string                                 `json:"tractability,omitempty"`
 	Score             preClaimReadinessScore                 `json:"score,omitempty"`
 	Rationale         string                                 `json:"rationale,omitempty"`
 	Detail            string                                 `json:"detail,omitempty"`
@@ -99,37 +80,6 @@ type preClaimReadinessCheck struct {
 	Verdict                readinessVerdict `json:"verdict,omitempty"`
 	Evidence               string           `json:"evidence,omitempty"`
 	CheckableBeforeAttempt bool             `json:"checkable_before_attempt,omitempty"`
-}
-
-// readinessTractability is documented as a string enum, but some models emit
-// a boolean when they interpret the field as "is this tractable?". Accept both
-// shapes so intake can continue while the prompt keeps the canonical contract.
-type readinessTractability string
-
-func (t *readinessTractability) UnmarshalJSON(data []byte) error {
-	trimmed := strings.TrimSpace(string(data))
-	if trimmed == "" || trimmed == "null" {
-		*t = ""
-		return nil
-	}
-	switch trimmed {
-	case "true":
-		*t = "tractable"
-		return nil
-	case "false":
-		*t = "unknown"
-		return nil
-	}
-	var value string
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf("tractability must be a string enum or boolean: %w", err)
-	}
-	*t = readinessTractability(strings.ToLower(strings.TrimSpace(value)))
-	return nil
-}
-
-func (t readinessTractability) String() string {
-	return string(t)
 }
 
 // readinessVerdict is the verdict reported for a single readiness check.
@@ -625,19 +575,7 @@ func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agen
 }
 
 func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
-	payload, err := dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
-	if err == nil {
-		return payload, nil
-	}
-	if !shouldRetryPreClaimIntakeWithStrongestProfile(err, runtime) {
-		return "", err
-	}
-	retryRuntime := runtime
-	retryRuntime.ProfileOverride = selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile)
-	if retryRuntime.ProfileOverride == "" || retryRuntime.ProfileOverride == runtime.ProfileOverride {
-		return "", err
-	}
-	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, retryRuntime)
+	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
 
 func preClaimIntakeRouteUnavailableDetail(err error) string {
@@ -651,20 +589,6 @@ func preClaimIntakeRouteUnavailableDetail(err error) string {
 		return "readiness route unavailable"
 	}
 	return "readiness route unavailable: " + detail
-}
-
-func shouldRetryPreClaimIntakeWithStrongestProfile(err error, runtime AgentRunRuntime) bool {
-	if err == nil || strings.TrimSpace(runtime.ProfileOverride) == "" {
-		return false
-	}
-	if strings.TrimSpace(runtime.HarnessOverride) != "" ||
-		strings.TrimSpace(runtime.ProviderOverride) != "" ||
-		strings.TrimSpace(runtime.ModelOverride) != "" {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "no live provider supports") ||
-		strings.Contains(text, "no viable routing candidate")
 }
 
 func dispatchPreClaimIntakePayloadOnce(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
@@ -722,7 +646,6 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Canonical schema: " + readinessChecksSchemaPath + ". Treat it as the source of truth for readiness_checks[].verdict and for forward-compatible extra fields.\n")
 	sb.WriteString("readiness_checks[].verdict may be a JSON bool, string, null, or omitted; match the schema and the Go decoder contract exactly.\n")
 	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, difficulty, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
-	sb.WriteString("tractability MUST be a string enum: tractable, too_large, ambiguous, blocked, or unknown. Do not emit a boolean for tractability.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
 	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")
 	sb.WriteString("suggested_child_beads MUST be a JSON array of objects. When a child includes acceptance, prefer a JSON string array of numbered criteria; the decoder tolerates a single string fallback, but do not rely on it.\n")
@@ -732,7 +655,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Use easy only for work suitable for cheap dispatch: narrow mechanical edits such as typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius.\n")
 	sb.WriteString("Use hard only for work suitable for smart dispatch: architecture or ambiguous tradeoff judgment, multiple subsystems with high blast radius, security/data-loss/concurrency risk, or prior attempts showing standard power is insufficient.\n")
 	sb.WriteString("Do not choose hard just because a bead is important, long, or could be written more cleanly. Readiness score and difficulty are separate: low readiness means refine/split/block, not hard.\n")
-	sb.WriteString("If the bead is not executable as written but can be made executable by a narrow, semantics-preserving metadata/AC rewrite, emit rewrite with changed_fields, description, and acceptance. rewrite.description must be a string; rewrite.acceptance may be a string or a string array of numbered criteria.\n")
+	sb.WriteString("If the bead is not executable as written but can be made executable by a narrow, semantics-preserving metadata/AC rewrite, emit rewrite with changed_fields, description, and acceptance.\n")
 	sb.WriteString("Put prompt-quality improvements in suggested_fixes only; keep operator_required for actual blockers.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
 	sb.WriteString("Classify as operator_required only when ambiguity, missing prerequisites, hidden external blockers, or unsafe scope choices prevent an implementation attempt.\n")
@@ -792,7 +715,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 	var probe struct {
 		Classification  string                                 `json:"classification"`
 		Outcome         string                                 `json:"outcome"`
-		Tractability    readinessTractability                  `json:"tractability"`
+		Tractability    string                                 `json:"tractability"`
 		Rationale       string                                 `json:"rationale"`
 		Score           preClaimReadinessScore                 `json:"score"`
 		Difficulty      preClaimReadinessDifficulty            `json:"difficulty"`
@@ -806,7 +729,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 		return decodeCanonicalReadinessPayloadWithMode(payload, qualityMode)
 	}
 	if probe.Classification != "" {
-		if isReadinessClassificationPayload(probe.Classification, probe.Tractability.String(), probe.Rationale, probe.Score.Present, normalizeReadinessEstimatedDifficulty(probe.Difficulty.EstimatedDifficulty) != "", probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
+		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score.Present, normalizeReadinessEstimatedDifficulty(probe.Difficulty.EstimatedDifficulty) != "", probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
 			return decodeReadinessClassificationPayloadWithMode(payload, qualityMode)
 		}
 		return decodeLegacyIntakePayload(payload)
@@ -823,8 +746,6 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 		ReadinessClassificationNeedsSplit,
 		ReadinessClassificationOperatorRequired,
 		"ambiguous",
-		"refine",
-		"refinable",
 		"safely_refinable",
 		"split":
 		return true
@@ -1011,7 +932,7 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
 	}
 	switch strings.ToLower(strings.TrimSpace(out.Classification)) {
-	case "atomic", "ok", "ready", "actionable", "pass", "executable", "executable_as_written":
+	case "atomic", "ok", "ready", "actionable", "pass":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
 	case "rewritten":
 		return PreClaimIntakeResult{

@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260630T125813-4114eb07",
+  "bead_id": "ddx-71d3a2de",
+  "base_rev": "54defcbea9189f6948ee5f1abf7444b2a080ef22",
+  "created_at": "2026-06-30T12:58:25.329959833Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71d3a2de",
+    "title": "A: Archive + Interchange — add ctx, satisfy BeadArchive/InterchangeR/W; signature-only (TD-027 §6)",
+    "description": "# PROBLEM\n`*Store` exposes 6 archive/interchange methods (`Archive`, `ArchiveWithEvents`, `Migrate`, `Import`, `ExportTo`, `ExportToFile`). Per TD-027 §6 archive belongs on `BeadArchive` interface; interchange on `BeadInterchangeReader`/`BeadInterchangeWriter`. All take ctx per AC #1. These are signature-only changes — no helper migration needed; the methods stay as direct storage primitives.\n\n# ROOT CAUSE\n`cli/internal/bead/store.go`, `cli/internal/bead/archive.go`, `cli/internal/bead/import.go` define these 6 methods without ctx. Callers: `cli/cmd/bead_archive.go`, `cli/cmd/bead.go` (export/import subcommands).\n\n# PROPOSED FIX\n1. Update `*Store.Archive`, `ArchiveWithEvents`, `Migrate`, `Import`, `ExportTo`, `ExportToFile` to take `ctx context.Context` first.\n2. Compile-time assertions: `var _ BeadArchive = (*Store)(nil)`, `var _ BeadInterchangeReader = (*Store)(nil)`, `var _ BeadInterchangeWriter = (*Store)(nil)`.\n3. Thread ctx through callers (`cli/cmd/bead_archive.go`, `cli/cmd/bead.go`).\n\n# NON-SCOPE\n- Archive policy (TD-027 §16) — not modified.\n- Attachment storage layout (TD-027 §17) — not modified.\n- bd/br interchange shape (TD-027 §20) — wire format unchanged.\n- Migration tooling (`MigrateLifecycle`/`MigrateFromHelix`/etc.) — separate concern, handled in MIG bead.\n- Other concerns — separate beads.\n- Module boundary lockdown — `ddx-74452926`.\n\n# Acceptance criteria\n\n1. The 6 methods take ctx as first parameter. Compile-time assertions for `BeadArchive`, `BeadInterchangeReader`, `BeadInterchangeWriter` compile.\n2. Callers thread ctx. Existing archive/import/export tests pass.\n3. `ddx bead archive`, `ddx bead export`, `ddx bead import` CLI commands continue to work end-to-end. Test: `TestBeadArchiveCommand_RoundTrip`, `TestBeadExportImport_RoundTripsAllFields`.\n4. Schema round-trip preserved (per TD-027 §20 — bd/br interchange compatibility). Test: `TestBead_ExportImportRoundTrip_PreservesExtras`.\n5. `cd cli \u0026\u0026 go test ./...` is green.\n6. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:archive, area:interchange, kind:refactor, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: ddx-c6317784.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:archive",
+      "area:bead",
+      "area:interchange",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.448253792Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T125813-4114eb07",
+    "prompt": ".ddx/executions/20260630T125813-4114eb07/prompt.md",
+    "manifest": ".ddx/executions/20260630T125813-4114eb07/manifest.json",
+    "result": ".ddx/executions/20260630T125813-4114eb07/result.json",
+    "checks": ".ddx/executions/20260630T125813-4114eb07/checks.json",
+    "usage": ".ddx/executions/20260630T125813-4114eb07/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-71d3a2de-20260630T125813-4114eb07"
+  },
+  "prompt_sha": "df5cbfd46ad1d8fcc41ef157e946278fba6e5ce8a5b23b11ee423bcfaf932613"
+}

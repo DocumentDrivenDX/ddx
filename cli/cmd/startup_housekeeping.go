@@ -39,24 +39,20 @@ type executionRetentionPolicy struct {
 type startupHousekeepingReport struct {
 	ProjectRoot string
 	TempRoot    string
+	runStates   []agent.RunState
+	registered  map[string]struct{}
 
-	StaleWorktrees        int64
-	StaleWorkerDirs       int64
-	StaleRunStateFiles    int64
-	StaleExecutionDirs    int64
-	StaleAttemptProcesses int64
+	StaleWorktrees     int64
+	StaleWorkerDirs    int64
+	StaleExecutionDirs int64
 
 	RemovedRegisteredWorktrees  int64
 	RemovedUnregisteredTempDirs int64
 	RemovedWorkerDirs           int64
-	RemovedRunStateFiles        int64
-	ReapedProcessGroups         int64
 	ArchivedExecutionDirs       int64
 	DeletedExecutionDirs        int64
 
-	Warnings     []agent.ExecutionCleanupWarning
-	Observations []agent.ExecutionCleanupObservation
-	Processes    []agent.ExecutionCleanupProcessFinding
+	Warnings []agent.ExecutionCleanupWarning
 }
 
 type startupHousekeepingRunner struct {
@@ -66,8 +62,7 @@ type startupHousekeepingRunner struct {
 	workerDirMaxAge time.Duration
 	now             func() time.Time
 	retentionPolicy executionRetentionPolicy
-	processScanner  agent.ExecutionCleanupProcessScanner
-	processKiller   agent.ExecutionCleanupProcessKiller
+	processCleanup  startupProcessCleanupFunc
 }
 
 func newStartupHousekeepingRunner(projectRoot string) *startupHousekeepingRunner {
@@ -77,6 +72,7 @@ func newStartupHousekeepingRunner(projectRoot string) *startupHousekeepingRunner
 		worktreeMaxAge:  worktreeReapMaxAgeFromEnv(),
 		workerDirMaxAge: defaultWorkerDirStaleAge,
 		retentionPolicy: resolveExecutionRetentionPolicy(projectRoot),
+		processCleanup:  defaultStartupProcessCleanup,
 	}
 }
 
@@ -91,20 +87,25 @@ func (r *startupHousekeepingRunner) Cleanup(ctx context.Context) (agent.Executio
 			TempRoot:    r.tempRoot,
 		}, err
 	}
-	return agent.ExecutionCleanupSummary{
+	summary := agent.ExecutionCleanupSummary{
 		ProjectRoot:                 report.ProjectRoot,
 		TempRoot:                    report.TempRoot,
 		RemovedRegisteredWorktrees:  report.RemovedRegisteredWorktrees,
 		RemovedUnregisteredTempDirs: report.RemovedUnregisteredTempDirs,
 		RemovedWorkerDirs:           report.RemovedWorkerDirs,
-		RemovedRunStateFiles:        report.RemovedRunStateFiles,
-		StaleAttemptProcesses:       report.StaleAttemptProcesses,
-		ReapedProcessGroups:         report.ReapedProcessGroups,
 		RemovedEvidenceDirs:         report.ArchivedExecutionDirs + report.DeletedExecutionDirs,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), report.Warnings...),
-		Observations:                append([]agent.ExecutionCleanupObservation(nil), report.Observations...),
-		Processes:                   append([]agent.ExecutionCleanupProcessFinding(nil), report.Processes...),
-	}, nil
+	}
+	if r.processCleanup != nil {
+		now := time.Now().UTC()
+		if r.now != nil {
+			now = r.now()
+		}
+		if procErr := r.processCleanup(ctx, report.ProjectRoot, report.TempRoot, &summary, report.runStates, report.registered, now); procErr != nil {
+			return summary, procErr
+		}
+	}
+	return summary, nil
 }
 
 func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (startupHousekeepingReport, error) {
@@ -127,10 +128,7 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 	if err != nil {
 		return report, err
 	}
-	runStates = r.scanRunStates(ctx, now, runStates, apply, &report)
-	if err := r.scanAttemptDescendantProcesses(ctx, apply, &report); err != nil {
-		return report, err
-	}
+	report.runStates = append([]agent.RunState(nil), runStates...)
 	if err := r.scanWorktrees(ctx, now, runStates, apply, &report); err != nil {
 		return report, err
 	}
@@ -141,64 +139,6 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 		return report, err
 	}
 	return report, nil
-}
-
-func (r *startupHousekeepingRunner) scanRunStates(ctx context.Context, now time.Time, runStates []agent.RunState, apply bool, report *startupHousekeepingReport) []agent.RunState {
-	if len(runStates) == 0 {
-		return runStates
-	}
-	kept := make([]agent.RunState, 0, len(runStates))
-	for _, state := range runStates {
-		if ctx != nil {
-			if err := ctx.Err(); err != nil {
-				kept = append(kept, state)
-				continue
-			}
-		}
-		reason := agent.RunStateStaleReason(state, now)
-		if reason == "" {
-			kept = append(kept, state)
-			continue
-		}
-		report.StaleRunStateFiles++
-		if !apply {
-			continue
-		}
-		if err := agent.ClearRunStateRecord(r.projectRoot, state); err != nil {
-			report.Warnings = append(report.Warnings, agent.ExecutionCleanupWarning{
-				Path:    r.projectRoot,
-				Class:   "run_state_clear",
-				Message: err.Error(),
-			})
-			kept = append(kept, state)
-			continue
-		}
-		report.RemovedRunStateFiles++
-		report.Observations = append(report.Observations, agent.ExecutionCleanupObservation{
-			Path:    r.projectRoot,
-			Class:   "removed_stale_run_state",
-			Message: fmt.Sprintf("%s: bead=%s attempt=%s pid=%d", reason, state.BeadID, state.AttemptID, state.PID),
-		})
-	}
-	return kept
-}
-
-func (r *startupHousekeepingRunner) scanAttemptDescendantProcesses(ctx context.Context, apply bool, report *startupHousekeepingReport) error {
-	mgr := agent.NewExecutionCleanupManager(r.projectRoot, &agent.RealGitOps{})
-	mgr.TempRoot = report.TempRoot
-	mgr.DryRun = !apply
-	mgr.ProcessScanner = r.processScanner
-	mgr.ProcessKiller = r.processKiller
-	summary, err := mgr.CleanupAttemptDescendantProcesses(ctx)
-	if err != nil {
-		return err
-	}
-	report.StaleAttemptProcesses += summary.StaleAttemptProcesses
-	report.ReapedProcessGroups += summary.ReapedProcessGroups
-	report.Warnings = append(report.Warnings, summary.Warnings...)
-	report.Observations = append(report.Observations, summary.Observations...)
-	report.Processes = append(report.Processes, summary.Processes...)
-	return nil
 }
 
 func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.Time, runStates []agent.RunState, apply bool, report *startupHousekeepingReport) error {
@@ -224,6 +164,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			registered[filepath.Clean(path)] = struct{}{}
 		}
 	}
+	report.registered = registered
 
 	for _, entry := range entries {
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {

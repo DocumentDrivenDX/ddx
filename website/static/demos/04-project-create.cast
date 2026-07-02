@@ -1,7 +1,7 @@
 {"version": 2, "width": 80, "height": 24, "timestamp": 1776827657, "env": {"SHELL": null, "TERM": null}}
 [0.010266, "o", "\r\n$ ddx init\r\n"]
 [0.532398, "o", "🚀 Initializing DDx in current project...\r\n\r\n"]
-[0.995871, "o", "✅ DDx initialized successfully!\r\n\r\nNext steps:\r\n  ddx plugin install helix   - Install HELIX workflow (optional)\r\n  ddx doctor                 - Check installation health\r\n\r\n"]
+[0.995871, "o", "✅ DDx initialized successfully!\r\n\r\nNext steps:\r\n  ddx install helix   - Install HELIX workflow (optional)\r\n  ddx doctor          - Check installation health\r\n\r\n"]
 [1.998122, "o", "\r\n$ ddx bead create Build task tracker --type epic --labels helix,phase:build\r\n"]
 [2.548468, "o", "tmp.JuJSaftZyp-3dc3a24f\r\n"]
 [3.555359, "o", "\r\n$ ddx bead create Add task CRUD --type task --labels helix,phase:build\r\n"]

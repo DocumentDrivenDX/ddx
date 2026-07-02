@@ -79,29 +79,22 @@ test_ac002_plugin_install() {
         set -e
 
         # Install helix plugin into the project
-        cd /tmp/proj && ddx init && ddx plugin install helix
+        cd /tmp/proj && ddx init && ddx install helix
 
-        # Verify plugin intent is project-local while payloads are cache-backed
-        if [ ! -f ".ddx/plugins.lock.yaml" ]; then
-            echo "FAIL: plugin lock not created"
+        # Verify plugin directory (project-local)
+        if [ ! -d ".ddx/plugins/helix" ]; then
+            echo "FAIL: helix not in .ddx/plugins/"
             exit 1
         fi
 
-        if [ -e ".ddx/plugins/helix" ]; then
-            echo "FAIL: marketplace helix should not be vendored into .ddx/plugins/"
+        # Verify skills copied into project
+        if [ ! -d ".agents/skills/helix-align" ]; then
+            echo "FAIL: helix-align skill not found in .agents/skills/"
             exit 1
         fi
 
-        ddx plugin list | grep -q helix
-
-        # Verify generated adapters exist in project-facing agent locations
-        if [ ! -d ".agents/skills/helix" ]; then
-            echo "FAIL: helix adapter not found in .agents/skills/"
-            exit 1
-        fi
-
-        if [ ! -d ".claude/skills/helix" ]; then
-            echo "FAIL: helix adapter not found in .claude/skills/"
+        if [ ! -d ".claude/skills/helix-align" ]; then
+            echo "FAIL: helix-align skill not found in .claude/skills/"
             exit 1
         fi
 
@@ -130,19 +123,20 @@ test_ac003_repo_init() {
             exit 1
         fi
         
-        # Verify bootstrap adapters are generated without vendoring plugin payloads
-        if [ ! -d ".agents/skills/ddx" ]; then
-            echo "FAIL: ddx adapter not generated in .agents/skills/"
+        # Verify bootstrap skills
+        if [ ! -d ".ddx/skills/ddx-doctor" ]; then
+            echo "FAIL: ddx-doctor not copied"
             exit 1
         fi
-
-        if [ ! -d ".claude/skills/ddx" ]; then
-            echo "FAIL: ddx adapter not generated in .claude/skills/"
+        
+        if [ ! -d ".ddx/skills/ddx-run" ]; then
+            echo "FAIL: ddx-run not copied"
             exit 1
         fi
-
-        if [ -e ".ddx/plugins/ddx" ]; then
-            echo "FAIL: ddx bootstrap payload should not be vendored into .ddx/plugins/"
+        
+        # Verify .agents/skills symlink
+        if [ ! -L ".agents/skills" ]; then
+            echo "FAIL: .agents/skills not symlinked"
             exit 1
         fi
         
@@ -197,7 +191,7 @@ test_ac006_plugin_update() {
     docker run --rm ddx-test:with-ddx /bin/bash -c '
         set -e
         
-        ddx plugin upgrade helix --help
+        ddx update helix --help
         
         echo "PASS: AC-006 (command exists)"
     '

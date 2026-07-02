@@ -16,15 +16,11 @@ type cleanupCommandReport struct {
 	ScannedEvidenceDirs         int                                    `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs        int                                    `json:"complete_evidence_dirs"`
 	ScannedScratchDirs          int                                    `json:"scanned_scratch_dirs"`
-	ScannedProcesses            int                                    `json:"scanned_processes"`
 	RemovedUnregisteredTempDirs int64                                  `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64                                  `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64                                  `json:"removed_run_state_files"`
 	RemovedScratchDirs          int64                                  `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64                                  `json:"preserved_active_scratch_dirs"`
-	StaleAttemptProcesses       int64                                  `json:"stale_attempt_processes"`
-	ReapedProcessGroups         int64                                  `json:"reaped_process_groups"`
-	PreservedAttemptProcesses   int64                                  `json:"preserved_attempt_processes"`
 	BytesReclaimed              int64                                  `json:"bytes_reclaimed"`
 	InodesReclaimed             int64                                  `json:"inodes_reclaimed"`
 	ScratchBytesReclaimed       int64                                  `json:"scratch_bytes_reclaimed"`
@@ -32,7 +28,10 @@ type cleanupCommandReport struct {
 	Warnings                    []agent.ExecutionCleanupWarning        `json:"warnings"`
 	BlockedErrors               []agent.ExecutionCleanupIssue          `json:"blocked_errors"`
 	Observations                []agent.ExecutionCleanupObservation    `json:"observations"`
-	Processes                   []agent.ExecutionCleanupProcessFinding `json:"processes"`
+	ProcessFindingsCount        int                                    `json:"process_findings_count"`
+	StaleProcessGroups          int                                    `json:"stale_process_groups"`
+	TerminatedProcessGroups     int                                    `json:"terminated_process_groups"`
+	ProcessFindings             []agent.ExecutionCleanupProcessFinding `json:"process_findings"`
 }
 
 func (f *CommandFactory) newCleanupCommand() *cobra.Command {
@@ -87,26 +86,31 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 		ScannedEvidenceDirs:         summary.ScannedEvidenceDirs,
 		CompleteEvidenceDirs:        summary.CompleteEvidenceDirs,
 		ScannedScratchDirs:          summary.ScannedScratchDirs,
-		ScannedProcesses:            summary.ScannedProcesses,
 		RemovedUnregisteredTempDirs: summary.RemovedUnregisteredTempDirs,
 		RemovedRegisteredWorktrees:  summary.RemovedRegisteredWorktrees,
 		RemovedRunStateFiles:        summary.RemovedRunStateFiles,
 		RemovedScratchDirs:          summary.RemovedScratchDirs,
 		PreservedActiveScratchDirs:  summary.PreservedActiveScratchDirs,
-		StaleAttemptProcesses:       summary.StaleAttemptProcesses,
-		ReapedProcessGroups:         summary.ReapedProcessGroups,
-		PreservedAttemptProcesses:   summary.PreservedAttemptProcesses,
 		BytesReclaimed:              summary.BytesReclaimed,
 		InodesReclaimed:             summary.InodesReclaimed,
 		ScratchBytesReclaimed:       summary.ScratchBytesReclaimed,
 		ScratchInodesReclaimed:      summary.ScratchInodesReclaimed,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), summary.Warnings...),
 		Observations:                append([]agent.ExecutionCleanupObservation(nil), summary.Observations...),
-		Processes:                   append([]agent.ExecutionCleanupProcessFinding(nil), summary.Processes...),
+		ProcessFindings:             append([]agent.ExecutionCleanupProcessFinding(nil), summary.ProcessFindings...),
 	}
 	for _, issue := range summary.Issues {
 		if issue.Blocking {
 			report.BlockedErrors = append(report.BlockedErrors, issue)
+		}
+	}
+	for _, finding := range report.ProcessFindings {
+		report.ProcessFindingsCount++
+		if finding.WouldKill {
+			report.StaleProcessGroups++
+		}
+		if finding.Terminated {
+			report.TerminatedProcessGroups++
 		}
 	}
 	if report.Warnings == nil {
@@ -118,8 +122,8 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 	if report.Observations == nil {
 		report.Observations = []agent.ExecutionCleanupObservation{}
 	}
-	if report.Processes == nil {
-		report.Processes = []agent.ExecutionCleanupProcessFinding{}
+	if report.ProcessFindings == nil {
+		report.ProcessFindings = []agent.ExecutionCleanupProcessFinding{}
 	}
 
 	if asJSON {
@@ -154,24 +158,16 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 	if report.CompleteEvidenceDirs > 0 {
 		fmt.Fprintf(out, "cleanup: preserved %d complete evidence bundle(s)\n", report.CompleteEvidenceDirs)
 	}
-	if report.StaleAttemptProcesses > 0 || report.PreservedAttemptProcesses > 0 {
-		fmt.Fprintf(out, "cleanup: found %d stale attempt process group(s), reaped %d, preserved %d process(es)\n",
-			report.StaleAttemptProcesses,
-			report.ReapedProcessGroups,
-			report.PreservedAttemptProcesses,
-		)
-		for _, proc := range report.Processes {
-			if proc.WouldKill || proc.Preserved {
-				fmt.Fprintf(out, "process: pid=%d pgid=%d worktree=%s command=%q reason=%s would_kill=%t killed=%t preserved=%t\n",
-					proc.PID,
-					proc.PGID,
-					proc.WorktreePath,
-					proc.Command,
-					proc.Reason,
-					proc.WouldKill,
-					proc.Killed,
-					proc.Preserved,
-				)
+	if report.StaleProcessGroups > 0 {
+		if report.DryRun {
+			fmt.Fprintf(out, "cleanup: found %d stale process group(s) (would kill: %d)\n", report.StaleProcessGroups, report.StaleProcessGroups)
+		} else {
+			fmt.Fprintf(out, "cleanup: found %d stale process group(s) (killed: %d)\n", report.StaleProcessGroups, report.TerminatedProcessGroups)
+		}
+		for _, f := range report.ProcessFindings {
+			if f.PID > 0 {
+				fmt.Fprintf(out, "  stale process: pid=%d pgid=%d command=%q worktree=%s reason=%s\n",
+					f.PID, f.PGID, f.Command, f.Worktree, f.StaleReason)
 			}
 		}
 	}

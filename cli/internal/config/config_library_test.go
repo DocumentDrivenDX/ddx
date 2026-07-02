@@ -105,33 +105,12 @@ func TestResolveLibraryResource_FallbackWithoutConfig(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 	t.Setenv("DDX_LIBRARY_BASE_PATH", "")
 
-	// No config.yaml written. LoadWithWorkingDir returns DefaultConfig with an
-	// empty Library.Path, so the resolver falls back to the working directory.
-	// We assert the documented behavior: result ends with the resource path.
+	// No config.yaml written. LoadWithWorkingDir returns DefaultConfig whose
+	// Library.Path is ".ddx/plugins/ddx" (does not exist), so the resolver
+	// returns that joined path. We assert the documented behavior: result
+	// ends with the resource path.
 	got, err := ResolveLibraryResource("prompts/x.md", "", tempDir)
 	require.NoError(t, err)
 	assert.True(t, filepath.IsAbs(got) || got != "", "expected non-empty result, got %q", got)
 	assert.Contains(t, got, filepath.Join("prompts", "x.md"))
-}
-
-func TestResolveLibraryPathFallsBackToBuiltinCacheWhenConfigHasNoPath(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", filepath.Join(tempDir, "xdg"))
-	t.Setenv("DDX_LIBRARY_BASE_PATH", "")
-
-	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
-library:
-  repository:
-    url: "https://github.com/DocumentDrivenDX/ddx"
-    branch: "main"
-`), 0o644))
-
-	got, err := ResolveLibraryPath(tempDir)
-	require.NoError(t, err)
-	assert.Contains(t, got, filepath.Join("ddx", "cache", "plugins", "ddx"))
-	info, statErr := os.Stat(filepath.Join(got, "skills", "ddx", "SKILL.md"))
-	require.NoError(t, statErr)
-	assert.False(t, info.IsDir())
 }

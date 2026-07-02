@@ -1,0 +1,33 @@
+# go-production-reachability — TEMPLATE
+#
+# Copy this file to .ddx/checks/production-reachability.yaml in your project
+# and customize the `--module-dir` and `--packages` flags below to point at
+# your Go module and entry-root packages.
+#
+# This check fails (status=block) when the diff introduces a Go function or
+# method that is not reachable from any main entry point under the configured
+# package roots, ensuring new code is wired into the production call graph
+# before it can be merged.
+#
+# REQUIREMENTS
+#   - golang.org/x/tools/cmd/deadcode on PATH, or `go` available so the
+#     check can `go run golang.org/x/tools/cmd/deadcode@v0.42.0` on demand.
+#   - PROJECT_ROOT is a git working tree.
+#
+# ESCAPE HATCH
+#   Annotate a deliberately-unwired declaration with
+#       // wiring:pending <bead-id>
+#   on the doc-comment line preceding the func. The check looks up the bead
+#   in .ddx/beads.jsonl and accepts the annotation only if the bead exists
+#   and is open / in_progress / ready. Closed or missing beads → violation.
+
+name: production-reachability
+when: pre_merge
+applies_to:
+  paths:
+    - "*.go"
+command: |
+  cd library/checks/go-production-reachability && \
+    go run . \
+      --module-dir=cli \
+      --packages=./...

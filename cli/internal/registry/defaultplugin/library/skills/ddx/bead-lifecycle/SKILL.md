@@ -149,7 +149,7 @@ consumable replacement contract DDx may apply before claim when classification
 is `needs_refine`.
 `rewrite.changed_fields` is required whenever `rewrite` is present, and every
 field listed there must also be present in `rewrite`.
-`rewrite.description` must be a string; `rewrite.acceptance` may be a string or a string array, so
+`rewrite.description` / `rewrite.acceptance` must be strings, not arrays, so
 the hook can write them directly through supported bead update commands.
 
 Use `ready` only when the bead is tractable and the sufficient-prompt rubric

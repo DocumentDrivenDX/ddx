@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,12 +32,6 @@ type federationHub struct {
 	warnings       []string // captured plain-HTTP warnings (test introspection)
 	conflictsLog   []string // captured 409 conflict log lines (test introspection)
 	now            func() time.Time
-	forwardReplay  map[string]forwardMutationReplay
-}
-
-type forwardMutationReplay struct {
-	response *federation.ForwardMutationResponse
-	err      error
 }
 
 // EnableHubMode mounts the /api/federation/* routes on this server, switches
@@ -77,7 +70,6 @@ func (s *Server) EnableHubMode(allowPlainHTTP bool) {
 		hubSchemaVer:   federation.CurrentSchemaVersion,
 		warnLog:        func(format string, args ...any) { log.Printf("WARN: "+format, args...) },
 		now:            time.Now,
-		forwardReplay:  make(map[string]forwardMutationReplay),
 	}
 	s.HubMode = true
 
@@ -390,45 +382,22 @@ func (s *Server) handleFederationForwardMutation(w http.ResponseWriter, r *http.
 		}
 		headers[k] = strings.Join(values, ",")
 	}
-	resp, err := newHubFederationProvider(s).ForwardMutation(r.Context(), &federation.ForwardMutationRequest{
-		OriginIdentity:       originIdentity,
-		ForwardingPath:       []string{coordinatorIdentity, target.NodeID},
-		RequestID:            r.Header.Get("X-DDx-Request-ID"),
-		IdempotencyKey:       r.Header.Get("X-DDx-Idempotency-Key"),
-		TargetNodeID:         target.NodeID,
-		TargetProjectID:      projectID,
-		RequiredCapabilities: []string{"write"},
-		Body:                 body,
-		Headers:              headers,
-	})
+	headers[federationOriginIdentityHeader] = originIdentity
+	headers[federationCoordinatorIdentityHeader] = coordinatorIdentity
+
+	resp, err := federation.NewFanOutClient().ForwardMutation(r.Context(), target, body, headers)
 	if err != nil {
-		writeFederationForwardMutationError(w, err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "forward mutation: " + err.Error()})
 		return
 	}
-	for k, values := range resp.Headers {
+	defer func() { _ = resp.Body.Close() }()
+	for k, values := range resp.Header {
 		for _, v := range values {
 			w.Header().Add(k, v)
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write(resp.Body)
-}
-
-func writeFederationForwardMutationError(w http.ResponseWriter, err error) {
-	switch {
-	case err == nil:
-		return
-	case errors.Is(err, federation.ErrForwardMutationMissingOwner):
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-	case errors.Is(err, federation.ErrForwardMutationBroadcastLike):
-		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-	case errors.Is(err, federation.ErrForwardMutationReadOnly):
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
-	case errors.Is(err, federation.ErrForwardMutationOffline), errors.Is(err, federation.ErrForwardMutationStale):
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
-	default:
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "forward mutation: " + err.Error()})
-	}
+	_, _ = io.Copy(w, resp.Body)
 }
 
 // persistFederationLocked saves the registry to disk if a state path is set.

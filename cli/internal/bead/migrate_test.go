@@ -2,7 +2,6 @@ package bead
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,7 +60,7 @@ func TestMigrateExternalizesAndArchives(t *testing.T) {
 		},
 	}))
 
-	stats, err := s.Migrate(context.Background())
+	stats, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.EventsExternalized, "only ddx-c1 had inline events")
 	assert.Equal(t, 2, stats.Archived, "both closed beads should archive")
@@ -90,7 +89,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 		migrateSeed("ddx-c2", "closed", false),
 	}))
 
-	first, err := s.Migrate(context.Background())
+	first, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	assert.True(t, first.Changed())
 
@@ -99,7 +98,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	beforeArchive, err := os.ReadFile(filepath.Join(s.Dir, BeadsArchiveCollection+".jsonl"))
 	require.NoError(t, err)
 
-	second, err := s.Migrate(context.Background())
+	second, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	assert.False(t, second.Changed(), "second pass must be a no-op")
 
@@ -131,7 +130,7 @@ func TestMigratePreservesData(t *testing.T) {
 	beforeStatus, err := s.Status()
 	require.NoError(t, err)
 
-	_, err = s.Migrate(context.Background())
+	_, err = s.Migrate(testCtx())
 	require.NoError(t, err)
 
 	afterStatus, err := s.Status()
@@ -242,7 +241,7 @@ func TestMigrateLargeFixtureSplits(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, info.Size(), int64(4*1024*1024), "fixture must exceed 4MB to be a meaningful split test")
 
-	stats, err := s.Migrate(context.Background())
+	stats, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 600, stats.Archived)
 	assert.Equal(t, 600, stats.EventsExternalized)
@@ -262,7 +261,7 @@ func TestMigrateLargeFixtureSplits(t *testing.T) {
 	require.NoError(t, err)
 
 	// AC3 / AC6: re-running is a no-op.
-	second, err := s.Migrate(context.Background())
+	second, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	assert.False(t, second.Changed())
 }
@@ -284,7 +283,7 @@ func loadMigrateToAxonFixture(t *testing.T) (*Store, bytes.Buffer) {
 	jsonlStore := NewStore(dir)
 
 	var preBuf bytes.Buffer
-	require.NoError(t, jsonlStore.ExportTo(context.Background(), &preBuf))
+	require.NoError(t, jsonlStore.ExportTo(testCtx(), &preBuf))
 	require.NotZero(t, preBuf.Len(), "fixture must produce a non-empty pre-migration export")
 	return jsonlStore, preBuf
 }
@@ -319,7 +318,7 @@ func TestMigrate_AxonBackend_RoundTrip(t *testing.T) {
 	axStore := NewStore(jsonlStore.Dir)
 	axStore.backend = NewAxonBackend(jsonlStore.Dir, axStore.LockWait)
 	var postBuf bytes.Buffer
-	require.NoError(t, axStore.ExportTo(context.Background(), &postBuf))
+	require.NoError(t, axStore.ExportTo(testCtx(), &postBuf))
 
 	pre := sortedNonEmptyLines(preBuf.String())
 	post := sortedNonEmptyLines(postBuf.String())
@@ -456,7 +455,7 @@ func TestMigratePreservesReferencedDeps(t *testing.T) {
 		},
 	}))
 
-	stats, err := s.Migrate(context.Background())
+	stats, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 0, stats.Archived, "closed dep referenced by open bead must not archive")
 

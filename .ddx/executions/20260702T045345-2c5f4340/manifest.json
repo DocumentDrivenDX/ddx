@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260702T045345-2c5f4340",
+  "bead_id": "ddx-2741b935",
+  "base_rev": "d75d9f96e426f53fbee464b449618ec0ff03cf0f",
+  "created_at": "2026-07-02T04:53:57.691362445Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2741b935",
+    "title": "docs: update task-execution cleanup contract for descendant reaping",
+    "description": "PROBLEM\nThe task-execution docs still describe cleanup as file/liveness cleanup only. They do not mention stale attempt-descendant process groups, dry-run/apply process reporting, or the startup pre-claim cleanup pass, so the documented contract would lag the implementation after the process-cleanup work lands.\n\nROOT CAUSE\n`docs/helix/01-frame/features/FEAT-010-task-execution.md:833-884` and `:1241-1249` describe DDx-owned cleanup scope, visibility, and resource preflight, but they do not mention descendant process-group reaping or the operator-visible process findings that the new cleanup path will report.\n`docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md:234-357` describes the cleanup manager and its conservative deletion rules, but it likewise lacks the new process-census/reaper contract and the startup pre-claim process pass.\n\nPROPOSED FIX\n- Update FEAT-010's cleanup section so it explicitly mentions stale attempt-descendant process-group reaping, dry-run/apply reporting, and the startup pre-claim pass.\n- Update SD-025's cleanup-manager section so it names the process ownership/liveness evidence used to decide staleness and the operator-visible process findings emitted by cleanup.\n- Keep the rest of the task-execution vocabulary and lifecycle layering unchanged.\n\nNON-SCOPE\n- No code changes, no tests, and no tracker mutations beyond this split.\n- No new feature scope outside task-execution cleanup.\n- No changes to unrelated specs or docs.",
+    "acceptance": "1. FEAT-010's cleanup section (`docs/helix/01-frame/features/FEAT-010-task-execution.md:833-884` and `:1241-1249`) explicitly mentions stale attempt-descendant process-group reaping, dry-run/apply reporting, and the startup pre-claim cleanup pass.\n2. SD-025's cleanup-manager section (`docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md:234-357`) explicitly mentions the process ownership/liveness evidence used for staleness decisions and the operator-visible process findings emitted by cleanup.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260702T045345-2c5f4340",
+    "prompt": ".ddx/executions/20260702T045345-2c5f4340/prompt.md",
+    "manifest": ".ddx/executions/20260702T045345-2c5f4340/manifest.json",
+    "result": ".ddx/executions/20260702T045345-2c5f4340/result.json",
+    "checks": ".ddx/executions/20260702T045345-2c5f4340/checks.json",
+    "usage": ".ddx/executions/20260702T045345-2c5f4340/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-2741b935-20260702T045345-2c5f4340"
+  },
+  "prompt_sha": "c428a6e4696994432ddc701c2be1c079bc663ea4874b7777ddcc81efbc15eb23"
+}

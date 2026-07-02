@@ -1,7 +1,6 @@
 package bead
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +20,7 @@ func TestImportJSONL(t *testing.T) {
 {"id":"bx-aaaa0002","title":"Imported B","type":"bug","status":"open","priority":1,"labels":["backend"],"deps":[],"created":"2026-01-02T00:00:00Z","updated":"2026-01-02T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	n, err := s.Import(context.Background(), "jsonl", importFile)
+	n, err := s.Import(testCtx(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 
@@ -40,7 +39,7 @@ func TestImportPreservesAllLifecycleStatuses(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(importFile, []byte(strings.Join(lines, "\n")), 0o644))
 
-	n, err := s.Import(context.Background(), "jsonl", importFile)
+	n, err := s.Import(testCtx(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, len(CanonicalStatuses), n)
 
@@ -60,7 +59,7 @@ func TestImportRejectsLegacyPseudoStatusesOutsideLifecycleMigrator(t *testing.T)
 			jsonl := fmt.Sprintf(`{"id":"bx-legacy01","title":"Legacy status","type":"task","status":"%s","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`, pseudoStatus)
 			require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-			n, err := s.Import(context.Background(), "jsonl", importFile)
+			n, err := s.Import(testCtx(), "jsonl", importFile)
 			require.Error(t, err)
 			assert.Equal(t, 0, n)
 			assert.Contains(t, err.Error(), pseudoStatus)
@@ -85,7 +84,7 @@ func TestImportSkipsDuplicates(t *testing.T) {
 {"id":"bx-new00001","title":"New one","type":"task","status":"open","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	n, err := s.Import(context.Background(), "jsonl", importFile)
+	n, err := s.Import(testCtx(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n) // only the new one
 
@@ -101,7 +100,7 @@ func TestImportJSONArray(t *testing.T) {
 	jsonArr := `[{"id":"bx-arr00001","title":"From array","type":"task","status":"open","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}]`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonArr), 0o644))
 
-	n, err := s.Import(context.Background(), "jsonl", importFile)
+	n, err := s.Import(testCtx(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 }
@@ -113,7 +112,7 @@ func TestImportPreservesUnknownFields(t *testing.T) {
 	jsonl := `{"id":"hx-helix001","title":"HELIX issue","type":"task","status":"open","priority":1,"labels":["helix","phase:build"],"deps":[],"spec-id":"FEAT-001","execution-eligible":true,"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	n, err := s.Import(context.Background(), "jsonl", importFile)
+	n, err := s.Import(testCtx(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
@@ -121,54 +120,6 @@ func TestImportPreservesUnknownFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "FEAT-001", got.Extra["spec-id"])
 	assert.Equal(t, true, got.Extra["execution-eligible"])
-}
-
-func TestImport_StripsDanglingDependenciesAndReportsCount(t *testing.T) {
-	s := newTestStore(t)
-
-	archive := s.archivePartner()
-	require.NoError(t, archive.Init(testCtx()))
-
-	activeID := "bx-active-target"
-	archiveID := "bx-archive-target"
-	missingID := "bx-missing-target"
-
-	require.NoError(t, s.WriteAll([]Bead{{
-		ID:        activeID,
-		Title:     "Active target",
-		Status:    StatusOpen,
-		Priority:  2,
-		IssueType: DefaultType,
-	}}))
-	require.NoError(t, archive.WriteAll([]Bead{{
-		ID:        archiveID,
-		Title:     "Archive target",
-		Status:    StatusClosed,
-		Priority:  2,
-		IssueType: DefaultType,
-	}}))
-
-	importFile := filepath.Join(t.TempDir(), "import.jsonl")
-	jsonl := fmt.Sprintf(`{"id":"bx-imported","title":"Imported","issue_type":"task","status":"open","priority":2,"dependencies":[{"issue_id":"bx-imported","depends_on_id":"%s","type":"blocks"},{"issue_id":"bx-imported","depends_on_id":"%s","type":"blocks"},{"issue_id":"bx-imported","depends_on_id":"%s","type":"blocks"}],"created_at":"2026-01-02T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`, activeID, archiveID, missingID)
-	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
-
-	var (
-		n   int
-		err error
-	)
-	stderr := captureStderr(t, func() {
-		n, err = s.Import(context.Background(), "jsonl", importFile)
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 1, n)
-	assert.Contains(t, stderr, "stripped 1 dangling dep")
-	assert.NotContains(t, stderr, "skipped")
-
-	got, err := s.Get(testCtx(), "bx-imported")
-	require.NoError(t, err)
-	require.Len(t, got.Dependencies, 2)
-	assert.Equal(t, []string{activeID, archiveID}, got.DepIDs())
-	assert.NotContains(t, got.DepIDs(), missingID)
 }
 
 func TestExportRoundTrip(t *testing.T) {
@@ -179,11 +130,11 @@ func TestExportRoundTrip(t *testing.T) {
 
 	// Export
 	exportFile := filepath.Join(t.TempDir(), "export.jsonl")
-	require.NoError(t, s.ExportToFile(context.Background(), exportFile))
+	require.NoError(t, s.ExportToFile(testCtx(), exportFile))
 
 	// Import into fresh store
 	s2 := newTestStore(t)
-	n, err := s2.Import(context.Background(), "jsonl", exportFile)
+	n, err := s2.Import(testCtx(), "jsonl", exportFile)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 
@@ -194,6 +145,41 @@ func TestExportRoundTrip(t *testing.T) {
 
 func TestImportNonexistentFile(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Import(context.Background(), "jsonl", "/nonexistent/file.jsonl")
+	_, err := s.Import(testCtx(), "jsonl", "/nonexistent/file.jsonl")
 	assert.Error(t, err)
+}
+
+// TestBead_ExportImportRoundTrip_PreservesExtras validates TD-027 §20 schema
+// round-trip: Extra fields (spec-id, execution-eligible, etc.) survive the
+// Export → Import cycle intact (bd/br interchange compatibility).
+func TestBead_ExportImportRoundTrip_PreservesExtras(t *testing.T) {
+	s := newTestStore(t)
+
+	b := &Bead{
+		ID:        "ddx-extras01",
+		Title:     "Extras bead",
+		IssueType: DefaultType,
+		Status:    StatusOpen,
+		Priority:  2,
+		Extra: map[string]any{
+			"spec-id":            "FEAT-042",
+			"execution-eligible": true,
+			"custom-key":         "custom-val",
+		},
+	}
+	require.NoError(t, s.Create(testCtx(), b))
+
+	exportFile := filepath.Join(t.TempDir(), "extras.jsonl")
+	require.NoError(t, s.ExportToFile(testCtx(), exportFile))
+
+	s2 := newTestStore(t)
+	n, err := s2.Import(testCtx(), "jsonl", exportFile)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	got, err := s2.Get(testCtx(), "ddx-extras01")
+	require.NoError(t, err)
+	assert.Equal(t, "FEAT-042", got.Extra["spec-id"])
+	assert.Equal(t, true, got.Extra["execution-eligible"])
+	assert.Equal(t, "custom-val", got.Extra["custom-key"])
 }

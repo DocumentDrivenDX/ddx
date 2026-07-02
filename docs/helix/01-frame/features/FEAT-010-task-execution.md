@@ -240,11 +240,9 @@ The readiness assessment result is one of:
   claim, with before/after hashes and enough evidence to audit the replacement.
 - `too_large_decomposed` — DDx created child, sibling, or replacement beads,
   mapped every parent AC to generated ACs or an explicit operator-required /
-  `non_scope` marker, and closed the oversized bead as
-  `completed-by-decomposition` when the split is lossless. Generated children
-  carry `Parent` metadata only and must not depend on the decomposed parent.
-  The queue advances through the generated executable work. Lossy splits or
-  those requiring operator judgment move the parent to `status=proposed`.
+  `non_scope` marker, left the oversized bead `status=open` with dependency,
+  execution-eligibility, or supersession metadata that lets the queue advance,
+  and did not execute the oversized bead directly.
 - `ambiguous_requires_operator` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
   DDx moves the bead to `status=proposed` and does not claim it.
@@ -291,11 +289,9 @@ bead was too large or the worker could not legally decompose inside its
 worktree/depth context, the layer-3 worker must invoke the same orchestrator
 decomposition path used by `BeadReadinessHook`. This is machine-actionable
 work: DDx files child, sibling, or replacement beads, records the AC map, and
-closes the oversized bead as `completed-by-decomposition` when the split is
-lossless. Generated children carry `Parent` metadata only and must not depend
-on the decomposed parent. Only lossy or ambiguous splits require operator
-attention and move the bead to `status=proposed`. Historical open
-`execution-eligible=false` containers are legacy backfill cases only.
+leaves the oversized bead open with dependency, execution-eligibility, or
+supersession metadata that lets the queue advance. Only lossy or ambiguous
+splits require operator attention.
 The operator is not required merely because the implementer could not split
 from inside the attempted execution.
 
@@ -324,10 +320,7 @@ across ready beads until a stop condition is met. It owns:
   claim release, and shutdown/interruption cleanup for claimed beads, using the
   TD-027 §12 claim-state contract
 - Durable bead action after each layer-2 attempt, using TD-031 §2 outcome,
-  no_changes, cooldown, and stale-metadata rules; transient durable-audit commit
-  contention stays on the retry path and does not become operator attention,
-  while genuine git failures such as permissions, ENOSPC, or corruption still
-  surface as operator attention.
+  no_changes, cooldown, and stale-metadata rules
 - No-progress / stop-condition evaluation
 - A loop-level record that references its child layer-2 records by
   attempt id and reports terminal disposition (drained, blocked,
@@ -343,6 +336,8 @@ operator cancel before a terminal bead mutation, it follows TD-027 §12.2: prese
 evidence, record the interruption/disruption, release the claim, and leave the
 bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
 Shutdown is not itself a reason to park a bead on `work-retry-after`.
+
+Transient durable-audit commit contention, including lock-acquire timeouts and git children that exit with `signal: killed` or a context deadline while staging audit outputs, is retried and does not become `operator_attention`; only non-transient git failures such as permissions, ENOSPC, or corruption still escalate to operator attention.
 
 #### Idle-Path Diagnosis and Auto-Remediation
 
@@ -839,12 +834,10 @@ path or ref.
 
 DDx-owned cleanup scope includes execution workspaces, helper scratch roots
 created beside the configured execution root, legacy `$TMPDIR/ddx-exec-wt`
-resources, DDx-created test and e2e scratch roots, generated test binaries, and
-run-state or liveness files. It also includes stale descendant process groups
-whose cwd or command context is inside a DDx-owned execution worktree for the
-current project and whose owning attempt is no longer live. The cleanup manager
-may delete or terminate only DDx-owned paths and process groups. Recognized
-DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
+resources, DDx-created test and e2e scratch roots, generated test binaries,
+run-state or liveness files, and stale attempt-descendant process groups whose
+owning attempt has reached a terminal state or whose process-group heartbeat
+has expired. The cleanup manager may delete only DDx-owned paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
 `ddx-test-bin-`, `ddx-test-binary-`, `ddx-lifecycle-`,
 `ddx-agent-support-keepalive`, `ddx-config-anchor-`, `ddx-exec-keepalive`,
 `ddx-metric-keepalive`, `ddx-metaprompt-keepalive`,
@@ -860,15 +853,18 @@ Deletion is permitted only when all of the following hold:
   the owning attempt has reached a terminal state.
 - **Metadata-less recognized-prefix paths**: the directory's mtime is at least
   **6 hours** old and no live PID or active session is attached.
+- **Attempt-descendant process groups**: the owning attempt is terminal, or the
+  process group leader no longer matches the recorded attempt PID, or no live
+  heartbeat confirms the group is still executing bead work.
 
 The manager must preserve published evidence, active workspaces, and anything
-outside DDx-owned roots. It must also preserve process groups tied to live
-run-state, live liveness metadata, registered active worktrees, or another
-project.
+outside DDx-owned roots.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
-- once at startup, before the first queue claim
+- once at startup, before the first queue claim; this pass includes a
+  process-group census to reap any stale attempt-descendant groups left by
+  prior runs
 - before the next claim after any setup/finalization failure
 - periodically while a long-lived poll worker remains active
 - during graceful signal shutdown before exit
@@ -880,11 +876,7 @@ remove stale unregistered directories under DDx temp roots, registered DDx
 worktrees or metadata-backed workspaces whose attempt is terminal or whose
 liveness marker is stale, stale
 heartbeat/liveness files for dead PIDs, and partial setup directories that were
-never published as complete evidence. Startup and operator cleanup also run a
-stale attempt-descendant process census; dry-run reports matching PIDs, process
-groups, commands, cwd, worktree, bead/attempt when inferable, and whether
-`--apply` would terminate them. Apply may terminate only stale DDx-owned attempt
-process groups after the same ownership/liveness checks pass. It must not remove preserved workspaces,
+never published as complete evidence. It must not remove preserved workspaces,
 `refs/ddx/iterations/...`, complete `.ddx/runs/<id>` or
 `.ddx/executions/<attempt-id>` evidence, active workspaces with live
 PID/session liveness, or non-DDx directories.
@@ -895,9 +887,16 @@ summary such as `cleanup: removed 37 stale ddx worktrees, freed 14210 inodes`.
 Resource exhaustion after cleanup is a hard visible stop message and a layer-3
 `resource_exhausted` disposition.
 
+Cleanup supports a **dry-run** mode that reports what would be removed or reaped
+without taking action, and an **apply** mode that performs the removal and
+reports results. Both modes emit operator-visible process findings separately
+from filesystem reclamation: discovered stale process groups, reaped PIDs, and
+any groups that could not be reaped are included in the summary so operators
+can see what process cleanup found and what it did.
+
 Cleanup reporting includes scratch roots removed, bytes and inodes reclaimed,
-stale process findings, reaped process groups, preserved paths, and blocked
-warnings so operators can see why cleanup stopped short.
+preserved paths, process groups reaped, and blocked warnings so operators can
+see why cleanup stopped short.
 
 ### `ddx work` Run Modes
 
@@ -1170,7 +1169,7 @@ root, the exact checked paths, and remediation:
 
 ```text
 Run:
-  ddx plugin sync --force
+  ddx update --force
   ddx doctor
 ```
 
@@ -1256,8 +1255,12 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     `.ddx/config.yaml`.
 14. **Execution cleanup** — `ddx try` and `ddx work` remove stale DDx-owned
     execution worktrees, DDx-created test/e2e scratch roots, generated test
-    binaries, and liveness files through inline, loop, and background cleanup
-    paths without deleting preserved attempts or published evidence.
+    binaries, liveness files, and stale attempt-descendant process groups
+    through inline, loop, and background cleanup paths without deleting
+    preserved attempts or published evidence. The startup pre-claim pass
+    includes a process-group census to reap stale descendants from prior runs.
+    Cleanup supports dry-run and apply modes; both report operator-visible
+    process findings separately from filesystem reclamation.
 15. **Resource preflight** — `ddx try` validates writable execution roots and
     free bytes/inodes before claim; failed validation may trigger one cleanup
     retry, and `ddx work` / server-managed workers run cleanup before claim

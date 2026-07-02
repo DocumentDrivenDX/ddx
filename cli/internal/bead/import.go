@@ -14,6 +14,9 @@ import (
 // Import reads beads from an external source and merges them into the store.
 // Returns the number of beads imported.
 func (s *Store) Import(ctx context.Context, source, filePath string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if source == "" || source == "auto" {
 		return s.importAuto(filePath)
 	}
@@ -44,7 +47,10 @@ func (s *Store) Import(ctx context.Context, source, filePath string) (int, error
 // the active store's attachment dir (where Migrate writes them) before
 // emission.
 func (s *Store) ExportTo(ctx context.Context, w io.Writer) error {
-	beads, err := s.ReadAll(context.Background())
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	beads, err := s.ReadAll(ctx)
 	if err != nil {
 		return err
 	}
@@ -69,7 +75,7 @@ func (s *Store) ExportTo(ctx context.Context, w io.Writer) error {
 		return nil
 	}
 	archive := s.archivePartner()
-	archived, aerr := archive.ReadAll(context.Background())
+	archived, aerr := archive.ReadAll(ctx)
 	if aerr != nil {
 		// Treat a missing/unreadable archive partner as empty — the
 		// active collection is still a valid export.
@@ -101,6 +107,9 @@ func (s *Store) ExportTo(ctx context.Context, w io.Writer) error {
 
 // ExportToFile writes all beads as JSONL to the given file path.
 func (s *Store) ExportToFile(ctx context.Context, filePath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("bead: export mkdir: %w", err)
@@ -248,15 +257,6 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 		for _, b := range existing {
 			existingIDs[b.ID] = true
 		}
-		if archive := s.archivePartner(); archive != nil {
-			archiveBeads, err := archive.ReadAll(context.Background())
-			if err != nil {
-				return err
-			}
-			for _, b := range archiveBeads {
-				existingIDs[b.ID] = true
-			}
-		}
 
 		// Collect IDs from incoming for cross-reference validation
 		incomingIDs := make(map[string]bool)
@@ -284,24 +284,11 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 			if b.Priority > MaxPriority {
 				b.Priority = MaxPriority
 			}
-			// Strip dependency edges that still point at nowhere after
-			// considering both active and archived beads plus the current
-			// import batch.
-			if len(b.Dependencies) > 0 {
-				filtered := make([]Dependency, 0, len(b.Dependencies))
-				stripped := 0
-				for _, dep := range b.Dependencies {
-					depID := dep.DependsOnID
-					if !existingIDs[depID] && !incomingIDs[depID] {
-						stripped++
-						continue
-					}
-					filtered = append(filtered, dep)
+			// Validate deps exist in either existing or incoming set
+			for _, depID := range b.DepIDs() {
+				if !existingIDs[depID] && !incomingIDs[depID] {
+					fmt.Fprintf(os.Stderr, "bead: import: %s has dangling dep %s (skipped)\n", b.ID, depID)
 				}
-				if stripped > 0 {
-					fmt.Fprintf(os.Stderr, "bead: import: %s stripped %d dangling dep(s)\n", b.ID, stripped)
-				}
-				b.Dependencies = filtered
 			}
 			existing = append(existing, b)
 			existingIDs[b.ID] = true

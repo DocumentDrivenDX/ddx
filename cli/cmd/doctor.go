@@ -301,16 +301,6 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	checkInstalledLaunchers(verbose)
 
 	if auditPlugins {
-		projectPluginIssues := checkProjectPluginLockState(cmd.Context(), projectRoot, verbose)
-		if len(projectPluginIssues) > 0 {
-			allGood = false
-			issues = append(issues, projectPluginIssues...)
-		}
-		unpinnedPluginIssues := checkUnpinnedMarketplacePluginAssets(cmd.Context(), projectRoot, registry.BuiltinRegistry())
-		if len(unpinnedPluginIssues) > 0 {
-			allGood = false
-			issues = append(issues, unpinnedPluginIssues...)
-		}
 		pluginIssues := checkInstalledPlugins(verbose)
 		if len(pluginIssues) > 0 {
 			allGood = false
@@ -405,15 +395,15 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check 14: Legacy DDx skill symlinks under project skill directories
-	// (FEAT-015). The DDx-managed ddx skill may be a generated shim to a
-	// cache-backed package. Other ddx symlinks indicate a pre-migration install;
+	// (FEAT-015). In the project-local model the DDx-managed ddx skill is a
+	// real directory. A symlink indicates a pre-migration DDx install;
 	// project-owned non-DDx skill symlinks are allowed.
 	if legacyDirs := legacySkillSymlinkDirs(f.WorkingDir); len(legacyDirs) > 0 {
 		errOut := cmd.ErrOrStderr()
 		for _, dir := range legacyDirs {
 			fmt.Fprintf(errOut, "DDx skill symlink detected under %s; pre-migration DDx skill install detected\n", dir)
 		}
-		fmt.Fprintln(errOut, "run: ddx plugin sync --force")
+		fmt.Fprintln(errOut, "run: ddx update --force")
 		return fmt.Errorf("legacy DDx skill symlinks detected")
 	}
 
@@ -436,53 +426,46 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// reportSkillInstallTopology prints retired legacy payload locations plus the
-// cache-backed built-in package used for the default DDx adapters.
+// reportSkillInstallTopology prints the global and project install layers for
+// the default ddx package so operators can see whether the project copy exists
+// or is falling through to the global layer.
 func reportSkillInstallTopology(projectRoot string) {
 	ctx := context.Background()
 
 	globalPath := filepath.Join(ddxroot.GlobalDir(), "plugins", "ddx")
 	globalStatus := "missing"
 	if info, err := os.Stat(globalPath); err == nil && info.IsDir() {
-		globalStatus = "retired-stale"
+		globalStatus = "ok"
 	}
 
-	projectLegacyPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx")
-	projectLegacyStatus := "missing"
+	projectPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx")
+	projectStatus := "missing"
 	if existingRoot, ok := ddxroot.ExistingPath(ctx, projectRoot); ok {
-		projectLegacyPath = filepath.Join(existingRoot, "plugins", "ddx")
-		if info, err := os.Lstat(projectLegacyPath); err == nil && info.Mode()&os.ModeSymlink == 0 {
-			projectLegacyStatus = "retired-stale"
-		} else if err == nil {
-			projectLegacyStatus = "local-overlay"
-		} else if !os.IsNotExist(err) {
-			projectLegacyStatus = "unreadable"
+		projectPath = filepath.Join(existingRoot, "plugins", "ddx")
+		if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
+			switch layer {
+			case "project":
+				projectStatus = "ok"
+			case "global":
+				projectStatus = "lazy-resolves-to-global"
+			case "baked-in":
+				projectStatus = "missing"
+			}
+		} else if globalStatus == "ok" {
+			projectStatus = "lazy-resolves-to-global"
 		}
+	} else if globalStatus == "ok" {
+		projectStatus = "lazy-resolves-to-global"
 	}
 
-	builtinCachePath, cacheErr := registry.BuiltinDDxCachePath()
-	builtinStatus := "cache-missing"
-	if cacheErr != nil {
-		builtinStatus = "cache-error"
-	} else if info, err := os.Stat(builtinCachePath); err == nil && info.IsDir() {
-		builtinStatus = "cache-backed"
-	} else if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil && layer == "baked-in" {
-		builtinStatus = "embedded-fallback"
-	}
-
-	fmt.Printf("   Retired Global Install (%s) — %s\n", globalPath, globalStatus)
-	fmt.Printf("   Legacy Project Payload (%s) — %s\n", projectLegacyPath, projectLegacyStatus)
-	if cacheErr != nil {
-		fmt.Printf("   Built-in DDx Package — %s (%v)\n", builtinStatus, cacheErr)
-	} else {
-		fmt.Printf("   Built-in DDx Package (%s) — %s\n", builtinCachePath, builtinStatus)
-	}
+	fmt.Printf("   Global Install (%s) — %s\n", globalPath, globalStatus)
+	fmt.Printf("   Project Install (%s) — %s\n", projectPath, projectStatus)
 }
 
 // legacySkillSymlinkDirs returns the relative names of project-local skill
 // directories (e.g. ".agents/skills", ".claude/skills") whose DDx-managed
-// ddx entry is a symlink that does not resolve to an approved generated cache
-// shim. Unrelated project-owned skill symlinks are ignored.
+// ddx entry is still a symlink. That symlink indicates a pre-FEAT-015 DDx
+// install; unrelated project-owned skill symlinks are ignored.
 func legacySkillSymlinkDirs(workingDir string) []string {
 	if workingDir == "" {
 		return nil
@@ -495,57 +478,10 @@ func legacySkillSymlinkDirs(workingDir string) []string {
 			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			if isGeneratedDDxSkillShim(workingDir, ddxSkillDir) {
-				continue
-			}
 			found = append(found, rel)
 		}
 	}
 	return found
-}
-
-func isGeneratedDDxSkillShim(projectRoot, skillDir string) bool {
-	target, err := os.Readlink(skillDir)
-	if err != nil {
-		return false
-	}
-	resolved := target
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(filepath.Dir(skillDir), resolved)
-	}
-	if _, err := os.Stat(filepath.Join(resolved, "SKILL.md")); err != nil {
-		return false
-	}
-
-	if builtin, err := registry.BuiltinRegistry().Find("ddx"); err == nil {
-		if sameExistingPath(resolved, filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")) {
-			return true
-		}
-	}
-	lock, err := registry.LoadProjectPluginLock(context.Background(), projectRoot)
-	if err == nil {
-		if entry := lock.Find("ddx"); entry != nil {
-			cachePath := entry.CachePath
-			if cachePath == "" {
-				cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
-			}
-			if sameExistingPath(resolved, filepath.Join(cachePath, "skills", "ddx")) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func sameExistingPath(a, b string) bool {
-	aInfo, aErr := os.Stat(a)
-	bInfo, bErr := os.Stat(b)
-	if aErr == nil && bErr == nil {
-		return os.SameFile(aInfo, bInfo)
-	}
-	aAbs, aAbsErr := filepath.Abs(a)
-	bAbs, bAbsErr := filepath.Abs(b)
-	return aAbsErr == nil && bAbsErr == nil && filepath.Clean(aAbs) == filepath.Clean(bAbs)
 }
 
 // runDoctorScoped runs only the checks relevant to the staged file paths,
@@ -811,12 +747,23 @@ func checkPermissions() bool {
 
 // checkLibraryPath verifies library path is accessible
 func checkLibraryPathFromWorkingDir(workingDir string) bool {
-	libPath, err := resolveCommandLibraryPath(workingDir)
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
 		return false
 	}
-	info, err := os.Stat(libPath)
-	return err == nil && info.IsDir()
+
+	if cfg.Library == nil || cfg.Library.Path == "" {
+		return false
+	}
+
+	// Resolve library path relative to working directory
+	libPath := cfg.Library.Path
+	if !filepath.IsAbs(libPath) {
+		libPath = filepath.Join(workingDir, libPath)
+	}
+
+	_, err = os.Stat(libPath)
+	return err == nil
 }
 
 // suggestPathFix provides suggestions for PATH configuration
@@ -900,7 +847,11 @@ func getDirectoryPermissions(workingDir string) string {
 
 // getLibraryPathInfo returns information about the DDX library path
 func getLibraryPathInfo(workingDir string) string {
-	if libPath, err := resolveCommandLibraryPath(workingDir); err == nil {
+	if cfg, err := config.LoadWithWorkingDir(workingDir); err == nil && cfg.Library != nil && cfg.Library.Path != "" {
+		libPath := cfg.Library.Path
+		if !filepath.IsAbs(libPath) {
+			libPath = filepath.Join(workingDir, libPath)
+		}
 		return libPath
 	}
 	return "not configured"
@@ -943,7 +894,7 @@ func checkInstalledLaunchers(verbose bool) {
 
 		li, err := os.Lstat(dst)
 		if os.IsNotExist(err) {
-			fmt.Printf("❌ MISSING (%s not found, run: ddx plugin install %s)\n", dst, pkg.Name)
+			fmt.Printf("❌ MISSING (%s not found, run: ddx install %s)\n", dst, pkg.Name)
 			continue
 		}
 		if err != nil {
@@ -995,9 +946,6 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 		default:
 			continue
 		}
-		if !legacyInstalledEntryHasLivePath(entry) {
-			continue
-		}
 		for _, issue := range registry.AuditInstalledEntry(entry, fallback) {
 			diag := DiagnosticIssue{
 				Type:        "plugin_validation",
@@ -1018,169 +966,6 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 	}
 
 	return issues
-}
-
-func legacyInstalledEntryHasLivePath(entry registry.InstalledEntry) bool {
-	if root := installedEntryRootCandidate(entry); root != "" {
-		return legacyInstalledPathExists(root)
-	}
-	return false
-}
-
-func legacyInstalledPathExists(candidate string) bool {
-	candidate = strings.TrimSpace(candidate)
-	if candidate == "" || strings.Contains(candidate, "://") {
-		return false
-	}
-	path := registry.ExpandHome(candidate)
-	if _, err := os.Lstat(path); err == nil {
-		return true
-	}
-	if filepath.IsAbs(path) {
-		return false
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	homePath := ddxroot.JoinHome(home, candidate)
-	_, err = os.Lstat(homePath)
-	return err == nil
-}
-
-func checkProjectPluginLockState(ctx context.Context, projectRoot string, verbose bool) []DiagnosticIssue {
-	lock, err := registry.LoadProjectPluginLock(ctx, projectRoot)
-	if err != nil || len(lock.Plugins) == 0 {
-		return nil
-	}
-
-	fmt.Print("✓ Checking Project Plugin Lock... ")
-	var issues []DiagnosticIssue
-	var details []string
-	for _, entry := range lock.Plugins {
-		status := projectPluginLockStatus(ctx, projectRoot, entry)
-		cachePath := entry.CachePath
-		if cachePath == "" {
-			cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
-		}
-		detail := fmt.Sprintf("%s %s: lock present, cache %s, shims %s",
-			entry.Name, entry.Version, boolWord(status != "cache-missing"), boolWord(status != "shims-missing"))
-		if status == "local-overlay" {
-			detail = fmt.Sprintf("%s %s: lock present, local overlay active", entry.Name, entry.Version)
-		}
-		if verbose && status != "local-overlay" {
-			detail += fmt.Sprintf(" (%s)", cachePath)
-		}
-		details = append(details, detail)
-		switch status {
-		case "ok", "local-overlay":
-		default:
-			issues = append(issues, DiagnosticIssue{
-				Type:        "plugin_lock_state",
-				Description: fmt.Sprintf("%s %s: %s", entry.Name, entry.Version, status),
-				Remediation: []string{
-					fmt.Sprintf("Run 'ddx plugin sync' to recreate generated shims for %s", entry.Name),
-					fmt.Sprintf("Run 'ddx plugin install %s --force' if the plugin cache is missing", entry.Name),
-				},
-				SystemInfo: map[string]string{
-					"plugin": entry.Name,
-					"cache":  cachePath,
-					"status": status,
-				},
-			})
-		}
-	}
-	if len(issues) == 0 {
-		fmt.Println("✅ Project Plugin Lock")
-	} else {
-		fmt.Printf("⚠️  Project Plugin Lock (%d issue(s))\n", len(issues))
-	}
-	for _, detail := range details {
-		fmt.Printf("   %s\n", detail)
-	}
-	return issues
-}
-
-func checkUnpinnedMarketplacePluginAssets(ctx context.Context, projectRoot string, reg *registry.Registry) []DiagnosticIssue {
-	if reg == nil {
-		return nil
-	}
-	lock, err := registry.LoadProjectPluginLock(ctx, projectRoot)
-	if err != nil {
-		return []DiagnosticIssue{{
-			Type:        "plugin_lock_state",
-			Description: fmt.Sprintf("unable to read project plugin lock: %v", err),
-			Remediation: []string{
-				"Fix .ddx/plugins.lock.yaml, then run 'ddx plugin sync --force'",
-			},
-		}}
-	}
-
-	var issues []DiagnosticIssue
-	for _, pkg := range reg.Packages {
-		if pkg.Name == "ddx" || lock.Find(pkg.Name) != nil {
-			continue
-		}
-		if pkg.Type != registry.PackageTypePlugin && pkg.Type != registry.PackageTypeWorkflow {
-			continue
-		}
-		paths := unpinnedPluginAssetPaths(ctx, projectRoot, pkg.Name)
-		if len(paths) == 0 {
-			continue
-		}
-		issues = append(issues, DiagnosticIssue{
-			Type:        "unpinned_plugin_assets",
-			Description: fmt.Sprintf("%s assets are present without a project plugin lock entry", pkg.Name),
-			Remediation: []string{
-				fmt.Sprintf("Run 'ddx plugin install %s --force' to pin the marketplace plugin and regenerate adapters", pkg.Name),
-				fmt.Sprintf("Remove stale generated assets for %s if this project no longer uses it", pkg.Name),
-			},
-			SystemInfo: map[string]string{
-				"plugin": pkg.Name,
-				"paths":  strings.Join(paths, ", "),
-			},
-		})
-	}
-	if len(issues) == 0 {
-		fmt.Println("✓ Checking Unpinned Plugin Assets... ✅ No unpinned marketplace plugin assets")
-	} else {
-		fmt.Printf("✓ Checking Unpinned Plugin Assets... ⚠️  %d unpinned plugin asset set(s)\n", len(issues))
-		for _, issue := range issues {
-			fmt.Printf("   ⚠️  %s\n", issue.Description)
-			for _, r := range issue.Remediation {
-				fmt.Printf("   💡 %s\n", r)
-			}
-		}
-	}
-	return issues
-}
-
-func unpinnedPluginAssetPaths(ctx context.Context, projectRoot, name string) []string {
-	var paths []string
-	pluginPath := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
-	if info, err := os.Lstat(pluginPath); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		paths = append(paths, ddxroot.JoinRelative("plugins", name))
-	}
-	for _, rel := range []string{
-		filepath.Join(".agents", "skills", name),
-		filepath.Join(".claude", "skills", name),
-	} {
-		path := filepath.Join(projectRoot, rel)
-		if _, err := os.Lstat(path); err == nil {
-			paths = append(paths, rel)
-		}
-	}
-	return paths
-}
-
-func boolWord(ok bool) string {
-	if ok {
-		return "present"
-	}
-	return "missing"
 }
 
 func looksLikePluginInstall(entry registry.InstalledEntry) bool {
@@ -1211,21 +996,9 @@ func looksLikePluginInstall(entry registry.InstalledEntry) bool {
 
 func installedEntryRootCandidate(entry registry.InstalledEntry) string {
 	if len(entry.Files) > 0 && strings.TrimSpace(entry.Files[0]) != "" {
-		return legacyRootFromRecordedPath(entry.Files[0])
+		return entry.Files[0]
 	}
 	return strings.TrimSpace(entry.Source)
-}
-
-func legacyRootFromRecordedPath(raw string) string {
-	raw = strings.TrimSpace(raw)
-	slash := filepath.ToSlash(raw)
-	if !filepath.IsAbs(raw) && strings.HasPrefix(slash, "plugins/") {
-		parts := strings.Split(slash, "/")
-		if len(parts) >= 2 {
-			return filepath.FromSlash(parts[0] + "/" + parts[1])
-		}
-	}
-	return raw
 }
 
 // checkGitRepoHealth detects git-repo corruption from prior ddx incidents:
@@ -1335,15 +1108,10 @@ func checkMetaPromptSync(workingDir string) error {
 		// Meta-prompt disabled - not an issue
 		return nil
 	}
-	libraryPath, err := resolveCommandLibraryPath(workingDir)
-	if err != nil {
-		// Could not resolve the library; the library-path check reports this.
-		return nil
-	}
 
 	injector := metaprompt.NewMetaPromptInjectorWithPaths(
 		"CLAUDE.md",
-		libraryPath,
+		cfg.Library.Path,
 		workingDir,
 	)
 

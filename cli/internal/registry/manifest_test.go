@@ -22,7 +22,6 @@ install:
   root:
     source: .
     target: .ddx/plugins/sample-plugin
-materialize:
   skills:
     - source: skills/
       target: .agents/skills/
@@ -45,9 +44,9 @@ keywords:
 	require.NotNil(t, pkg.Install.Root)
 	assert.Equal(t, ".", pkg.Install.Root.Source)
 	assert.Equal(t, ".ddx/plugins/sample-plugin", pkg.Install.Root.Target)
-	require.Len(t, pkg.Materialize.Skills, 1)
-	assert.Equal(t, "skills/", pkg.Materialize.Skills[0].Source)
-	assert.Equal(t, ".agents/skills/", pkg.Materialize.Skills[0].Target)
+	require.Len(t, pkg.Install.Skills, 1)
+	assert.Equal(t, "skills/", pkg.Install.Skills[0].Source)
+	assert.Equal(t, ".agents/skills/", pkg.Install.Skills[0].Target)
 }
 
 func TestLoadPackageManifestReportsUnsupportedAPIVersion(t *testing.T) {

@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
 )
 
 func TestDoctorProseChecker_MissingVale(t *testing.T) {
@@ -172,8 +170,8 @@ func TestDoctor_FlagsLegacyDDxSkillSymlinks(t *testing.T) {
 	if !strings.Contains(stderr, "DDx skill symlink detected under .agents/skills") {
 		t.Errorf("stderr missing DDx skill symlink diagnostic; got:\n%s", stderr)
 	}
-	if !strings.Contains(stderr, "run: ddx plugin sync --force") {
-		t.Errorf("stderr missing 'run: ddx plugin sync --force'; got:\n%s", stderr)
+	if !strings.Contains(stderr, "run: ddx update --force") {
+		t.Errorf("stderr missing 'run: ddx update --force'; got:\n%s", stderr)
 	}
 }
 
@@ -208,41 +206,84 @@ func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
 	}
 }
 
-func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
+func TestSkillInstallTopologyDocsMentionGlobalProjectAndPrecedence(t *testing.T) {
 	cases := []struct {
-		name             string
-		projectInstalled bool
-		globalInstalled  bool
-		wantLegacyStatus string
-		wantGlobalStatus string
+		name string
+		path string
 	}{
 		{
-			name:             "legacy project install present",
-			projectInstalled: true,
-			globalInstalled:  false,
-			wantLegacyStatus: "retired-stale",
-			wantGlobalStatus: "missing",
+			name: "ADR-027",
+			path: filepath.Join("..", "..", "docs", "helix", "02-design", "adr", "ADR-027-skill-install-topology.md"),
 		},
 		{
-			name:             "legacy global install ignored",
-			projectInstalled: false,
-			globalInstalled:  true,
-			wantLegacyStatus: "missing",
-			wantGlobalStatus: "retired-stale",
+			name: "library skill",
+			path: filepath.Join("..", "..", "library", "skills", "ddx", "SKILL.md"),
 		},
 		{
-			name:             "project install missing",
-			projectInstalled: false,
-			globalInstalled:  false,
-			wantLegacyStatus: "missing",
-			wantGlobalStatus: "missing",
+			name: "library agents reference",
+			path: filepath.Join("..", "..", "library", "skills", "ddx", "reference", "agents.md"),
 		},
 		{
-			name:             "both legacy project and global present",
-			projectInstalled: true,
-			globalInstalled:  true,
-			wantLegacyStatus: "retired-stale",
-			wantGlobalStatus: "retired-stale",
+			name: "CLAUDE persona system",
+			path: filepath.Join("..", "..", "CLAUDE.md"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tc.path, err)
+			}
+			text := string(data)
+			for _, want := range []string{
+				"project-local",
+				"global install",
+				"project > global > baked-in precedence",
+			} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("%s missing required phrase %q", tc.path, want)
+				}
+			}
+		})
+	}
+}
+
+func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
+	cases := []struct {
+		name              string
+		projectInstalled  bool
+		globalInstalled   bool
+		wantProjectStatus string
+		wantGlobalStatus  string
+	}{
+		{
+			name:              "project install present",
+			projectInstalled:  true,
+			globalInstalled:   false,
+			wantProjectStatus: "ok",
+			wantGlobalStatus:  "missing",
+		},
+		{
+			name:              "project falls through to global",
+			projectInstalled:  false,
+			globalInstalled:   true,
+			wantProjectStatus: "lazy-resolves-to-global",
+			wantGlobalStatus:  "ok",
+		},
+		{
+			name:              "project install missing",
+			projectInstalled:  false,
+			globalInstalled:   false,
+			wantProjectStatus: "missing",
+			wantGlobalStatus:  "missing",
+		},
+		{
+			name:              "both project and global present",
+			projectInstalled:  true,
+			globalInstalled:   true,
+			wantProjectStatus: "ok",
+			wantGlobalStatus:  "ok",
 		},
 	}
 
@@ -278,21 +319,12 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 
 			projectPath := filepath.Join(ddxroot.JoinProject(workDir), "plugins", "ddx")
 			globalPath := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
-			builtinCachePath, cacheErr := registry.BuiltinDDxCachePath()
-			if cacheErr != nil {
-				t.Fatalf("BuiltinDDxCachePath: %v", cacheErr)
-			}
 
-			if !strings.Contains(output, "Retired Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
+			if !strings.Contains(output, "Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
 				t.Fatalf("output missing global install status %q:\n%s", tc.wantGlobalStatus, output)
 			}
-			if !strings.Contains(output, "Legacy Project Payload ("+projectPath+") — "+tc.wantLegacyStatus) {
-				t.Fatalf("output missing legacy project payload status %q:\n%s", tc.wantLegacyStatus, output)
-			}
-			builtinCacheLine := "Built-in DDx Package (" + builtinCachePath + ") — "
-			if !strings.Contains(output, builtinCacheLine+"cache-backed") &&
-				!strings.Contains(output, builtinCacheLine+"embedded-fallback") {
-				t.Fatalf("output missing built-in package cache/fallback status:\n%s", output)
+			if !strings.Contains(output, "Project Install ("+projectPath+") — "+tc.wantProjectStatus) {
+				t.Fatalf("output missing project install status %q:\n%s", tc.wantProjectStatus, output)
 			}
 		})
 	}
@@ -449,77 +481,6 @@ func TestDoctorLegacySkillSymlinkDirsIgnoresNonDDxProjectSkillSymlink(t *testing
 	}
 }
 
-func TestCheckLibraryPathUsesBuiltinCacheWhenConfigHasNoPath(t *testing.T) {
-	workDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg"))
-	if err := os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755); err != nil {
-		t.Fatalf("mkdir .ddx: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"), []byte(`version: "1.0"
-library:
-  repository:
-    url: https://github.com/DocumentDrivenDX/ddx
-    branch: main
-`), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	if !checkLibraryPathFromWorkingDir(workDir) {
-		t.Fatal("expected empty library.path to resolve through built-in DDx cache")
-	}
-	info := getLibraryPathInfo(workDir)
-	if !strings.Contains(info, filepath.Join("ddx", "cache", "plugins", "ddx")) {
-		t.Fatalf("expected built-in cache path, got %q", info)
-	}
-}
-
-func TestCheckUnpinnedMarketplacePluginAssetsFlagsHelixWithoutLock(t *testing.T) {
-	workDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(workDir, ddxroot.DirName, "plugins", "helix"), 0o755); err != nil {
-		t.Fatalf("mkdir plugin payload: %v", err)
-	}
-	for _, rel := range []string{
-		filepath.Join(".agents", "skills", "helix"),
-		filepath.Join(".claude", "skills", "helix"),
-	} {
-		dir := filepath.Join(workDir, rel)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", rel, err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# HELIX\n"), 0o644); err != nil {
-			t.Fatalf("write skill: %v", err)
-		}
-	}
-
-	issues := checkUnpinnedMarketplacePluginAssets(context.Background(), workDir, registry.BuiltinRegistry())
-	if len(issues) != 1 {
-		t.Fatalf("expected one unpinned plugin issue, got %d: %+v", len(issues), issues)
-	}
-	if issues[0].Type != "unpinned_plugin_assets" {
-		t.Fatalf("issue.Type = %q, want unpinned_plugin_assets", issues[0].Type)
-	}
-	if !strings.Contains(issues[0].Description, "helix") {
-		t.Fatalf("expected HELIX issue, got %q", issues[0].Description)
-	}
-}
-
-func TestCheckUnpinnedMarketplacePluginAssetsAllowsLocalOverlaySymlink(t *testing.T) {
-	workDir := t.TempDir()
-	localCheckout := t.TempDir()
-	overlayRoot := filepath.Join(workDir, ddxroot.DirName, "plugins")
-	if err := os.MkdirAll(overlayRoot, 0o755); err != nil {
-		t.Fatalf("mkdir overlays: %v", err)
-	}
-	if err := os.Symlink(localCheckout, filepath.Join(overlayRoot, "helix")); err != nil {
-		t.Fatalf("symlink helix overlay: %v", err)
-	}
-
-	issues := checkUnpinnedMarketplacePluginAssets(context.Background(), workDir, registry.BuiltinRegistry())
-	if len(issues) != 0 {
-		t.Fatalf("expected no issue for explicit local overlay symlink, got %+v", issues)
-	}
-}
-
 // TestDoctorLegacySkillSymlinkDirsFlagsDDxSymlink verifies that a DDx-managed
 // ddx symlink under either supported skill root is still treated as legacy.
 func TestDoctorLegacySkillSymlinkDirsFlagsDDxSymlink(t *testing.T) {
@@ -544,40 +505,6 @@ func TestDoctorLegacySkillSymlinkDirsFlagsDDxSymlink(t *testing.T) {
 				t.Fatalf("legacySkillSymlinkDirs() = %v, want [%s]", got, tc.rel)
 			}
 		})
-	}
-}
-
-// TestDoctorLegacySkillSymlinkDirsAllowsBuiltinCacheShim verifies that the
-// cache-backed built-in ddx adapter is not classified as a legacy symlink.
-func TestDoctorLegacySkillSymlinkDirsAllowsBuiltinCacheShim(t *testing.T) {
-	workDir := t.TempDir()
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
-
-	builtin, err := registry.BuiltinRegistry().Find("ddx")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
-	if err := os.MkdirAll(cacheSkillDir, 0o755); err != nil {
-		t.Fatalf("mkdir cache skill: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(cacheSkillDir, "SKILL.md"), []byte("# DDx\n"), 0o644); err != nil {
-		t.Fatalf("write cache skill: %v", err)
-	}
-	for _, rel := range []string{filepath.Join(".agents", "skills"), filepath.Join(".claude", "skills")} {
-		root := filepath.Join(workDir, rel)
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", rel, err)
-		}
-		if err := os.Symlink(cacheSkillDir, filepath.Join(root, "ddx")); err != nil {
-			t.Fatalf("symlink %s/ddx: %v", rel, err)
-		}
-	}
-
-	got := legacySkillSymlinkDirs(workDir)
-	if len(got) != 0 {
-		t.Fatalf("legacySkillSymlinkDirs() = %v, want no legacy dirs for built-in cache shim", got)
 	}
 }
 

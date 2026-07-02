@@ -11,6 +11,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
 )
@@ -65,9 +66,20 @@ func (f *CommandFactory) runList(cmd *cobra.Command, args []string) error {
 
 // listResources is the pure business logic function
 func listResources(workingDir, resourceType, filter string) (*ListResponse, error) {
-	libPath, err := resolveCommandLibraryPath(workingDir)
+	// Load config to get library path
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	var libPath string
+	if cfg.Library != nil {
+		libPath = cfg.Library.Path
+	}
+
+	// Resolve library path relative to working directory if it's relative
+	if !filepath.IsAbs(libPath) {
+		libPath = filepath.Join(workingDir, libPath)
 	}
 
 	// Check if library exists
@@ -230,7 +242,7 @@ func outputListHuman(cmd *cobra.Command, response *ListResponse, filter, resourc
 
 		cmd.Println("📦 Installed Packages:")
 		if len(state.Installed) == 0 {
-			cmd.Println("  (none — run 'ddx plugin install <name>' to install)")
+			cmd.Println("  (none — run 'ddx install <name>' to install)")
 		} else {
 			for _, entry := range state.Installed {
 				cmd.Printf("  %-12s %-8s %-14s (installed %s)\n",

@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -103,10 +102,8 @@ func InstrumentCapped(lockName, operation string, cfg CapConfig, critical func()
 	})
 
 	var timer *time.Timer
-	var capViolated atomic.Bool
 	if cfg.Cap > 0 {
 		timer = time.AfterFunc(cfg.Cap, func() {
-			capViolated.Store(true)
 			enforceCapViolation(lockName, operation, pid, acquiredAt, cfg)
 		})
 	}
@@ -114,9 +111,6 @@ func InstrumentCapped(lockName, operation string, cfg CapConfig, critical func()
 	defer func() {
 		if timer != nil {
 			timer.Stop()
-		}
-		if capViolated.Load() && cfg.LockPath != "" {
-			_ = os.RemoveAll(cfg.LockPath)
 		}
 		releasedAt := time.Now()
 		Emit(Event{

@@ -149,11 +149,7 @@ plan text should be read as `ddxroot.Path()/...`.
 
 ## Skill library (DDx-shipped workflows)
 
-Per FEAT-011's current package model: source at `library/skills/ddx/`,
-embedded default package fixture at
-`cli/internal/registry/defaultplugin/library/skills/ddx/`, and init-time
-generated adapters at `.claude/skills/ddx/` and `.agents/skills/ddx/` pointing
-to the XDG plugin cache.
+Per FEAT-011's path model: source at `skills/ddx/`, embedded at `cli/internal/skills/ddx/`, init-time copies to `.claude/skills/ddx/`, `.agents/skills/ddx/`, `ddxroot.Path()/skills/ddx/`.
 
 - `compare-prompts` — N-arm dispatch + aggregation (replaces `--quorum` flag and `agent benchmark`)
 - `replay-bead` — re-run with altered conditions, baseline diff (replaces `agent replay`)

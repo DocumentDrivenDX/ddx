@@ -1625,30 +1625,6 @@ func TestStoreReleaseClearsClaimAtomically(t *testing.T) {
 	assert.Equal(t, 1, counts.Open, "released bead must be counted open")
 }
 
-func TestStoreReleaseDoesNotClearLeaseOwnedByDifferentWorker(t *testing.T) {
-	s := newTestStore(t)
-	b := &Bead{ID: "ddx-release-different-owner", Title: "Release preserves newer lease", IssueType: "task", Status: StatusOpen}
-	require.NoError(t, s.Create(testCtx(), b))
-	require.NoError(t, s.ClaimWithOptions(b.ID, "worker-new", "attempt-new", "/tmp/new-worktree"))
-
-	require.NoError(t, s.Release(b.ID, "worker-old", ""))
-
-	got, err := s.Get(testCtx(), b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, StatusOpen, got.Status, "sidecar-only worker claims must not rewrite tracker status")
-	assert.Empty(t, got.Owner, "sidecar-only worker claims must not set tracker owner")
-
-	lease, found, err := s.ClaimLease(b.ID)
-	require.NoError(t, err)
-	require.True(t, found, "stale worker release must not remove a newer worker lease")
-	assert.Equal(t, "worker-new", lease.Owner)
-	assert.Equal(t, "attempt-new", lease.Session)
-
-	ready, err := s.ReadyExecution()
-	require.NoError(t, err)
-	assert.Empty(t, ready, "bead leased by the newer worker must remain absent from ready execution")
-}
-
 // TestClaimReleaseStatusReflectsLease runs the claim/release lifecycle across a
 // worker goroutine while the test goroutine inspects status: while claimed the
 // bead reports in_progress with an owner; after release it reports open with no
@@ -1870,90 +1846,11 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 	assert.Equal(t, "worker-a", got.Owner)
 }
 
-func TestClaimLeasePathIgnoresTempDir(t *testing.T) {
-	root := t.TempDir()
-	cacheRoot := filepath.Join(root, "cache")
-	tmpA := filepath.Join(root, "tmp-a")
-	tmpB := filepath.Join(root, "tmp-b")
-	t.Setenv("XDG_CACHE_HOME", cacheRoot)
-	t.Setenv("TMPDIR", tmpA)
-
-	ddxDir := filepath.Join(root, "repo", ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	s := NewStore(ddxDir)
-
-	pathA := claimLivenessPath(s.Dir, "ddx-temp-stable")
-	t.Setenv("TMPDIR", tmpB)
-	pathB := claimLivenessPath(s.Dir, "ddx-temp-stable")
-
-	require.Equal(t, pathA, pathB)
-	assert.Contains(t, pathA, filepath.Join("cache", "ddx", claimLivenessNamespace))
-	assert.NotContains(t, pathA, "tmp-a")
-	assert.NotContains(t, pathA, "tmp-b")
-}
-
-func TestWriteClaimHeartbeatRemovesLegacyTempLease(t *testing.T) {
-	root := t.TempDir()
-	cacheRoot := filepath.Join(root, "cache")
-	tmpRoot := filepath.Join(root, "tmp")
-	t.Setenv("XDG_CACHE_HOME", cacheRoot)
-	t.Setenv("TMPDIR", tmpRoot)
-
-	ddxDir := filepath.Join(root, "repo", ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	s := NewStore(ddxDir)
-	require.NoError(t, s.Init(context.Background()))
-
-	const beadID = "ddx-legacy-lease"
-	require.NoError(t, s.Create(context.Background(), &Bead{
-		ID:        beadID,
-		Title:     "legacy lease cleanup",
-		IssueType: DefaultType,
-		Status:    StatusOpen,
-	}))
-
-	legacy := legacyClaimLivenessPaths(s.Dir, beadID)
-	require.NotEmpty(t, legacy)
-	var sawFleetTmp bool
-	for _, path := range legacy {
-		if strings.Contains(path, filepath.Join("cache", "fleet-tmp", claimLivenessNamespace)) {
-			sawFleetTmp = true
-		}
-		require.NoError(t, writeAtomicClaimFile(path, []byte(`{"bead_id":"`+beadID+`","owner":"old"}`+"\n")))
-	}
-	require.True(t, sawFleetTmp, "fleet temp compatibility path should be cleaned")
-
-	require.NoError(t, s.ClaimWithOptions(beadID, "worker-new", "session-new", ""))
-
-	lease, found, err := s.ClaimLease(beadID)
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, "worker-new", lease.Owner)
-	for _, path := range legacy {
-		_, err := os.Stat(path)
-		assert.True(t, os.IsNotExist(err), "legacy lease should be removed: %s", path)
-	}
-}
-
 func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-hb-no-tracker", Title: "Heartbeat stays out of JSONL"}
 	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
-
-	var (
-		mu      sync.Mutex
-		samples []LockSample
-	)
-	prevSink := LockMetricsSink
-	LockMetricsSink = func(sample LockSample) {
-		mu.Lock()
-		samples = append(samples, sample)
-		mu.Unlock()
-	}
-	t.Cleanup(func() {
-		LockMetricsSink = prevSink
-	})
 
 	before, err := os.ReadFile(s.File)
 	require.NoError(t, err)
@@ -1965,9 +1862,6 @@ func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	leasePath := claimLivenessPath(s.Dir, b.ID)
 	_, err = os.Stat(leasePath)
 	require.NoError(t, err, "heartbeat must be recorded in the external lease file")
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Empty(t, samples, "heartbeat must not take the tracker lock")
 }
 
 func TestWorkerClaimLeaseDoesNotMutateTracker(t *testing.T) {

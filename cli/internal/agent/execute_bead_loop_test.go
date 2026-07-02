@@ -977,73 +977,6 @@ func TestExecuteBeadLoop_NiflheimEvidence_LandCoordinationFailureDoesNotRerunImp
 	}
 }
 
-// TestWorkRetryEscalation_NiflheimEvidence_LandCoordinationDoesNotRaiseMinPower
-// proves that land/ref/index/evidence-staging outcomes do not raise the
-// requested min power or profile and do not request stronger model escalation
-// (AC2, ddx-e2fd88f3). Specifically: neither EscalationNextFloor is invoked nor
-// any min-power hint metadata is written to the bead's extra fields.
-func TestWorkRetryEscalation_NiflheimEvidence_LandCoordinationDoesNotRaiseMinPower(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-	}{
-		{
-			name: "cannot lock ref does not raise min power",
-			err:  errors.New("git update-ref refs/heads/main: fatal: cannot lock ref 'refs/heads/main': is at abc but expected def: exit status 128"),
-		},
-		{
-			name: "staged generated DDx evidence does not raise min power",
-			err:  errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260608T010203-retry/result.json"),
-		},
-		{
-			name: "staged implementation paths do not raise min power",
-			err:  errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\tcli/internal/agent/foo.go"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store, first, _ := newExecuteLoopTestStore(t)
-			var escalationCalls atomic.Int32
-			worker := &ExecuteBeadWorker{
-				Store: store,
-				Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-					res := &ExecuteBeadResult{
-						BeadID:    beadID,
-						AttemptID: "20260608T010203-minpower",
-						BaseRev:   "base-minpower",
-						ResultRev: "result-minpower",
-						ExitCode:  0,
-						Outcome:   ExecuteBeadOutcomeTaskSucceeded,
-						SessionID: "sess-minpower",
-					}
-					MarkResultLandError(t.TempDir(), res, tt.err)
-					return ReportFromExecuteBeadResult(res, "standard"), nil
-				}),
-				EscalationNextFloor: func(actualPower int) (int, error) {
-					escalationCalls.Add(1)
-					return actualPower + 10, nil
-				},
-			}
-
-			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-			require.NoError(t, err)
-
-			assert.Zero(t, escalationCalls.Load(),
-				"EscalationNextFloor must not be called for land coordination failures")
-
-			got, err := store.Get(context.Background(), first.ID)
-			require.NoError(t, err)
-			assert.NotContains(t, got.Extra, legacyRetryFloorKey,
-				"land coordination must not write work-next-min-power hint")
-			assert.NotContains(t, got.Extra, executeLoopNoChangesNextMinPowerKey,
-				"land coordination must not write work-no-changes-next-min-power hint")
-		})
-	}
-}
-
 func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	preserveRef := "refs/ddx/iterations/" + first.ID + "/attempt-1"
@@ -3059,15 +2992,7 @@ func claimHeartbeatPathForTest(store *bead.Store, beadID string) string {
 		root = real
 	}
 	sum := sha1.Sum([]byte(root))
-	baseDir := os.Getenv("DDX_CLAIM_HEARTBEAT_DIR")
-	if baseDir == "" {
-		if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
-			baseDir = filepath.Join(cacheDir, "ddx", "ddx-claim-heartbeats")
-		} else {
-			baseDir = filepath.Join(os.TempDir(), "ddx", "ddx-claim-heartbeats")
-		}
-	}
-	return filepath.Join(filepath.Clean(baseDir), hex.EncodeToString(sum[:]), beadID+".json")
+	return filepath.Join(os.TempDir(), "ddx-claim-heartbeats", hex.EncodeToString(sum[:]), beadID+".json")
 }
 
 // errorInjectingStore wraps a real ExecuteBeadLoopStore and allows individual
@@ -3127,7 +3052,6 @@ func (s *errorInjectingStore) AppendEvent(id string, event bead.BeadEvent) error
 
 func TestWorkerFailurePathsReleaseClaimAtomically(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DDX_CLAIM_HEARTBEAT_DIR", filepath.Join(dir, "claim-heartbeats"))
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 

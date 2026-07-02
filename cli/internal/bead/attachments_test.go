@@ -2,7 +2,6 @@ package bead
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -107,7 +106,7 @@ func TestAttachmentExportInlinesEvents(t *testing.T) {
 	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	var buf bytes.Buffer
-	require.NoError(t, s.ExportTo(context.Background(), &buf))
+	require.NoError(t, s.ExportTo(testCtx(), &buf))
 
 	out := strings.TrimSpace(buf.String())
 	require.NotEmpty(t, out)
@@ -148,7 +147,7 @@ func TestExportStreamsArchiveAndAttachmentEvents(t *testing.T) {
 	require.NoError(t, s.AppendEvent(closed.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "ship"}))
 	require.NoError(t, s.Close(testCtx(), closed.ID))
 
-	stats, err := s.Migrate(context.Background())
+	stats, err := s.Migrate(testCtx())
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, stats.Archived, 1, "migrate should archive the closed bead")
 
@@ -160,7 +159,7 @@ func TestExportStreamsArchiveAndAttachmentEvents(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, s.ExportTo(context.Background(), &buf))
+	require.NoError(t, s.ExportTo(testCtx(), &buf))
 
 	out := strings.TrimSpace(buf.String())
 	lines := strings.Split(out, "\n")

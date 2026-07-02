@@ -56,7 +56,7 @@ func emitPreflightWarning(w io.Writer, result projectRuntimePreflightResult) {
 	for _, dir := range result.LegacySymlinkDirs {
 		fmt.Fprintf(w, "  legacy DDx skill symlink under %s\n", dir)
 	}
-	fmt.Fprintf(w, "  run: ddx plugin sync --force\n")
+	fmt.Fprintf(w, "  run: ddx update --force\n")
 	fmt.Fprintf(w, "  run: ddx doctor\n")
 }
 
@@ -78,6 +78,6 @@ func emitServerPreflightDiagnostics(w io.Writer, result projectRuntimePreflightR
 	for _, dir := range result.LegacySymlinkDirs {
 		fmt.Fprintf(w, "  legacy DDx skill symlink under %s\n", dir)
 	}
-	fmt.Fprintf(w, "  run: ddx plugin sync --force\n")
+	fmt.Fprintf(w, "  run: ddx update --force\n")
 	fmt.Fprintf(w, "  run: ddx doctor\n")
 }

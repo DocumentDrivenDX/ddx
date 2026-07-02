@@ -13,7 +13,7 @@
 		returnFocusTo?: HTMLElement | null;
 		summary?: Snippet;
 		children?: Snippet;
-		onConfirm?: () => void | boolean | Promise<void | boolean>;
+		onConfirm?: () => void | Promise<void>;
 		onCancel?: (reason: Exclude<ConfirmDialogCloseReason, 'confirm'>) => void;
 		onOpenChange?: (open: boolean) => void;
 	}
@@ -106,10 +106,8 @@
 
 		confirming = true;
 		try {
-			const shouldClose = await onConfirm?.();
-			if (shouldClose !== false) {
-				setOpen(false);
-			}
+			await onConfirm?.();
+			setOpen(false);
 		} finally {
 			confirming = false;
 		}

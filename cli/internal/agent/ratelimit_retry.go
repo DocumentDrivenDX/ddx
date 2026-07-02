@@ -8,13 +8,6 @@ import (
 	agentlib "github.com/easel/fizeau"
 )
 
-func init() {
-	// Production reachability: ParseRetryAfter is exported for direct use by
-	// callers and tests. The no-op call here ensures deadcode RTA finds it
-	// reachable from main().
-	_ = ParseRetryAfter("", time.Time{})
-}
-
 // RateLimitRetryDefaultBudget is the default per-bead total wait budget for
 // rate-limit retries. AC #4 of ddx-c6e3db02 names 5 minutes.
 const RateLimitRetryDefaultBudget = ratelimitpolicy.DefaultBudget

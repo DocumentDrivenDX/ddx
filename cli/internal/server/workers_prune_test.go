@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
-	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,177 +124,6 @@ func TestWorkerManagerPruneReapsDeadPID(t *testing.T) {
 	assert.Equal(t, "prune", events[0].Summary)
 }
 
-func TestWorkerManagerReconcileStaleWorkersReleasesOwnedClaimWithoutCurrentBead(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBeadByOwner(t, root, "ddx-restart-owned", "worker-restart-owned")
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	workerID := "worker-restart-owned"
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, m.writeRecord(dir, WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "running",
-		Status:      "running",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-time.Minute),
-		PID:         9999999,
-	}))
-
-	m.ReconcileStaleWorkers()
-
-	b, err := store.Get(context.Background(), "ddx-restart-owned")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, b.Status)
-	assert.Empty(t, b.Owner)
-
-	_, found, err := store.ClaimLease("ddx-restart-owned")
-	require.NoError(t, err)
-	assert.False(t, found, "server-restart reconcile must remove the stale owned claim lease")
-
-	events, err := store.EventsByKind("ddx-restart-owned", "bead.reaped")
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "server-restart", events[0].Summary)
-
-	rec, err := m.readRecord(dir)
-	require.NoError(t, err)
-	assert.Equal(t, "exited", rec.State)
-	assert.Equal(t, "server-restart", rec.ReapReason)
-}
-
-func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOwnedClaim(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBeadByOwner(t, root, "ddx-terminal-owned", "worker-terminal-owned")
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	workerID := "worker-terminal-owned"
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, m.writeRecord(dir, WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "exited",
-		Status:      "exited",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-time.Hour),
-		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
-		PID:         9999998,
-	}))
-
-	m.ReconcileStaleWorkers()
-
-	b, err := store.Get(context.Background(), "ddx-terminal-owned")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, b.Status)
-	assert.Empty(t, b.Owner)
-
-	_, found, err := store.ClaimLease("ddx-terminal-owned")
-	require.NoError(t, err)
-	assert.False(t, found, "terminal-worker reconcile must remove stale owned claim lease")
-
-	events, err := store.EventsByKind("ddx-terminal-owned", "bead.reaped")
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "terminal-worker-claim", events[0].Summary)
-
-	rec, err := m.readRecord(dir)
-	require.NoError(t, err)
-	assert.Equal(t, "exited", rec.State)
-	assert.Equal(t, "terminal-worker-claim", rec.ReapReason)
-}
-
-func TestReconcileStaleWorkersDoesNotRecoverLocksForTerminalHistory(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBeadByOwner(t, root, "ddx-terminal-history", "worker-terminal-history")
-
-	lockmetrics.SetSink(lockmetrics.FileSink(root))
-	t.Cleanup(func() { lockmetrics.SetSink(nil) })
-	lockmetrics.Emit(lockmetrics.Event{
-		Event:      "acquire",
-		LockName:   "index.lock",
-		Operation:  "index.commit",
-		HolderPID:  9999997,
-		AcquiredAt: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano),
-	})
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	workerID := "worker-terminal-history"
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, m.writeRecord(dir, WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "exited",
-		Status:      "exited",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-2 * time.Hour),
-		FinishedAt:  time.Now().UTC().Add(-90 * time.Minute),
-		PID:         9999997,
-	}))
-
-	m.ReconcileStaleWorkers()
-
-	b, err := store.Get(context.Background(), "ddx-terminal-history")
-	require.NoError(t, err)
-	assert.Empty(t, b.Owner, "terminal history still releases stale bead ownership")
-
-	lockEvents, err := lockmetrics.Load(root)
-	require.NoError(t, err)
-	require.Len(t, lockEvents, 1, "terminal historical records must not rescan lock metrics on every reconcile")
-	assert.Equal(t, "acquire", lockEvents[0].Event)
-}
-
-func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOpenLegacyOwner(t *testing.T) {
-	root := t.TempDir()
-	ddx := testutils.MakeInitializedDDxRoot(t, root)
-	store := bead.NewStore(ddx)
-	const beadID = "ddx-terminal-open-owner"
-	const workerID = "worker-terminal-open-owner"
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        beadID,
-		Title:     "terminal open owner",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-		Owner:     workerID,
-	}))
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, m.writeRecord(dir, WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "exited",
-		Status:      "exited",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-time.Hour),
-		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
-		PID:         9999997,
-	}))
-
-	m.ReconcileStaleWorkers()
-
-	b, err := store.Get(context.Background(), beadID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, b.Status)
-	assert.Empty(t, b.Owner)
-
-	events, err := store.EventsByKind(beadID, "bead.reaped")
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "terminal-worker-claim", events[0].Summary)
-}
-
 // TestWorkerManagerPruneByMaxAge verifies that Prune reaps a worker older
 // than the maxAge threshold. A PID=0 goroutine-only worker not in m.workers
 // is already caught by the goroutine-not-running path; we just verify the
@@ -333,51 +160,6 @@ func TestWorkerManagerPruneByMaxAge(t *testing.T) {
 	rec, err := m.readRecord(dir)
 	require.NoError(t, err)
 	assert.Equal(t, "reaped", rec.State)
-}
-
-func TestWorkerManagerPruneReapsStaleStoppingWorker(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBead(t, root, "ddx-prune-stopping")
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	workerID := "worker-20260101T000000-stopprune"
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-
-	stale := WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "stopping",
-		Status:      "stopping",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-2 * time.Hour),
-		PID:         0,
-		CurrentBead: "ddx-prune-stopping",
-		CurrentAttempt: &CurrentAttemptInfo{
-			AttemptID: workerID + "-a1",
-			BeadID:    "ddx-prune-stopping",
-			Phase:     "running",
-			StartedAt: time.Now().UTC().Add(-2 * time.Hour),
-		},
-	}
-	require.NoError(t, m.writeRecord(dir, stale))
-
-	results, err := m.Prune(0)
-	require.NoError(t, err)
-	require.Len(t, results, 1, "Prune must reap disk-only stopping workers")
-	assert.Equal(t, workerID, results[0].ID)
-
-	rec, err := m.readRecord(dir)
-	require.NoError(t, err)
-	assert.Equal(t, "reaped", rec.State)
-	assert.Equal(t, "reaped", rec.Status)
-	assert.False(t, rec.FinishedAt.IsZero())
-
-	b, err := store.Get(context.Background(), "ddx-prune-stopping")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, b.Status)
 }
 
 // TestWorkerManagerPruneByMaxAgeOnly verifies that Prune reaps a worker solely
@@ -547,42 +329,6 @@ func TestWorkerManagerPIDAliveInList(t *testing.T) {
 	// We just verify the field is present (not nil).
 }
 
-func TestWorkerManagerHasLiveWorkerUsesRecordedPID(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	workerID := "worker-20260101T000000-live"
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-
-	rec := WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "running",
-		Status:      "running",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC(),
-		PID:         os.Getpid(),
-	}
-	require.NoError(t, m.writeRecord(dir, rec))
-
-	assert.True(t, m.HasLiveWorker(workerID), "live external PID must count as a live worker")
-	require.NoError(t, m.MarkManaged(workerID))
-
-	got, err := m.Show(workerID)
-	require.NoError(t, err)
-	assert.True(t, got.Managed, "MarkManaged must persist managed=true on disk-only records")
-
-	rec.Managed = true
-	rec.State = workerStateStopped
-	rec.Status = workerStateStopped
-	require.NoError(t, m.writeRecord(dir, rec))
-	assert.False(t, m.HasLiveWorker(workerID), "terminal records must not count as live even when PID exists")
-}
-
 // TestWorkerManagerPIDAliveNilForGoroutineWorker verifies that List omits
 // pid_alive for goroutine-only workers (PID == 0).
 func TestWorkerManagerPIDAliveNilForGoroutineWorker(t *testing.T) {
@@ -652,15 +398,6 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 		},
 	}
 	require.NoError(t, m.writeRecord(dir, stale))
-	lockmetrics.SetSink(lockmetrics.FileSink(root))
-	t.Cleanup(func() { lockmetrics.SetSink(nil) })
-	lockmetrics.Emit(lockmetrics.Event{
-		Event:      "acquire",
-		LockName:   "index.lock",
-		Operation:  "index.commit",
-		HolderPID:  stale.PID,
-		AcquiredAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
-	})
 
 	if isPIDAlive(9999996) {
 		t.Skip("PID 9999996 is alive on this host; skipping test")
@@ -682,56 +419,4 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"ReconcileStaleWorkers must release bead claims for dead workers")
-
-	events, err := lockmetrics.Load(root)
-	require.NoError(t, err)
-	require.Len(t, events, 2)
-	assert.Equal(t, "release", events[1].Event)
-	assert.True(t, events[1].Recovered)
-	assert.Equal(t, "error", events[1].Severity)
-	assert.Contains(t, events[1].Reason, "server restart")
-}
-
-func TestReconcileStaleWorkersOnStartupHandlesStopping(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBead(t, root, "ddx-reconcile-stopping")
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	workerID := "worker-20260101T000000-rcn-stop"
-	dir := filepath.Join(m.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-
-	stale := WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "stopping",
-		Status:      "stopping",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-3 * time.Hour),
-		PID:         0,
-		CurrentBead: "ddx-reconcile-stopping",
-		CurrentAttempt: &CurrentAttemptInfo{
-			AttemptID: workerID + "-a1",
-			BeadID:    "ddx-reconcile-stopping",
-			Phase:     "running",
-			StartedAt: time.Now().UTC().Add(-3 * time.Hour),
-		},
-	}
-	require.NoError(t, m.writeRecord(dir, stale))
-
-	m2 := NewWorkerManager(root)
-	defer m2.StopWatchdog()
-	m2.ReconcileStaleWorkers()
-
-	rec, err := m2.readRecord(dir)
-	require.NoError(t, err)
-	assert.Equal(t, "exited", rec.State)
-	assert.Equal(t, "exited", rec.Status)
-	assert.False(t, rec.FinishedAt.IsZero())
-
-	b, err := store.Get(context.Background(), "ddx-reconcile-stopping")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, b.Status)
 }

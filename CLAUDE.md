@@ -26,14 +26,15 @@ This monorepo produces three artifacts:
   - `internal/` - Internal packages (config, bead, persona, git, mcp, metaprompt, etc.)
   - `main.go` - Application entry point
 - `website/` - Hugo site with Hextra theme
-- `library/` - DDx default plugin source embedded in the binary and used to
-  generate local adapters during `ddx init` / `ddx plugin sync`.
-  `ddx plugin install <name>` uses an npx-style project dependency model:
-  project metadata lives in `.ddx/plugins.lock.yaml`, payloads resolve from
-  `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`, and generated agent
-  adapters land under `<project>/.agents/skills/` and
-  `<project>/.claude/skills/`. Do not check in plugin payloads or generated
-  adapters.
+- `library/` - DDx default plugin source (installed to `ddxroot.Path()/plugins/ddx/` by `ddx init`, which resolves to `<projectRoot>/.ddx/plugins/ddx/` in-tree or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/ddx/` in convention mode).
+  `ddx install <name>` supports two install modes:
+  - **Project-local** (default): writes to `ddxroot.Path()/plugins/<name>/` (that is
+    `<projectRoot>/.ddx/plugins/<name>/` in-tree or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/`
+    in convention mode); skill links land under `<project>/.agents/skills/` and
+    `<project>/.claude/skills/`.
+  - **Global** (`--global`): writes to `${XDG_DATA_HOME}/ddx/global/plugins/<name>/`; skill
+    links land under `~/.agents/skills/` and `~/.claude/skills/` so the skill is available
+    across every project on the machine without per-project setup.
   - `templates/` - Project templates
   - `patterns/` - Reusable code patterns
   - `prompts/` - AI prompts and instructions
@@ -215,15 +216,9 @@ DDX includes a persona system that provides consistent AI personalities for diff
 - **Roles**: Abstract functions that personas fulfill (e.g., `code-reviewer`, `test-engineer`)
 - **Bindings**: Project-specific mappings between roles and personas in `.ddx.yml`
 
-Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. The built-in `ddx` package is bootstrap-only; install a marketplace or project-specific plugin to provide persona files, prompts, workflow skills, checks, and other reusable assets without checking those payloads into every project.
+Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `library/personas/` for available personas and `library/personas/README.md` for detailed documentation.
 
-Plugin and persona lookup follows ADR-027: project plugin lock plus XDG cache
-payload first, then the baked-in binary default for the `ddx` package only.
-Registry plugins such as HELIX are project dependencies, not copied source
-trees. Use `ddx plugin install <name>` to pin a plugin and generate local
-adapters, and `ddx plugin sync` to recreate those adapters after clone or
-cleanup. See `docs/helix/02-design/adr/ADR-027-skill-install-topology.md` for
-the full decision record.
+Plugin and persona lookup follows project > global > baked-in precedence: project-local (`ddxroot.Path()/plugins/<name>/`, which is `<project>/.ddx/plugins/<name>/` in-tree or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` in convention mode) → global install (`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`) → baked-in binary default (only for the `ddx` plugin). The project layer always wins when present. `ddx doctor` reports both the global install layer and the project install layer, including when the project copy is absent and falls through to the global layer (`lazy-resolves-to-global`). `ddx install <name> --global` is reinstated under the zero-footprint epic for machine-wide installs (skills land in `~/.claude/skills/` and `~/.agents/skills/`); omit `--global` for per-project installs. See `docs/helix/02-design/adr/ADR-027-skill-install-topology.md` for the full decision record.
 
 ## When filing beads
 

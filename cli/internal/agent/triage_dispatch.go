@@ -7,9 +7,6 @@ import "strings"
 // lock and ddx's own staging/tracker locks.
 func IsLockContentionError(errMsg string) bool {
 	lower := strings.ToLower(errMsg)
-	if isGitRefCompareAndSwapContention(lower) {
-		return true
-	}
 	return containsAny(lower,
 		".git/index.lock",
 		"unable to create '.git/index.lock'",
@@ -21,8 +18,3 @@ func IsLockContentionError(errMsg string) bool {
 	)
 }
 
-func isGitRefCompareAndSwapContention(lower string) bool {
-	return strings.Contains(lower, "cannot lock ref") &&
-		strings.Contains(lower, " is at ") &&
-		strings.Contains(lower, " expected ")
-}

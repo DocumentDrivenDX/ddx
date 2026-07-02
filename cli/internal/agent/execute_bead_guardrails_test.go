@@ -84,8 +84,6 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "decompose_dep_edges_are_child_specific", any: []string{"legitimate child-to-child or sibling/replacement edges", "never the parent"}},
 		{name: "decompose_bead_update", any: []string{"ddx bead update"}},
 		{name: "current_bead_lifecycle_orchestrator_owned", any: []string{"Current-bead lifecycle is orchestrator-owned"}},
-		{name: "decompose_close_parent", any: []string{"ddx bead close <bead-id>", "lossless durable split"}},
-		{name: "decompose_parent_metadata_only", any: []string{"Parent=<parent-id>"}},
 		{name: "review_is_a_gate", any: []string{"review is a gate", "review is a gate, not an escape hatch"}},
 		{name: "blocking_review_findings", any: []string{"BLOCKING `<review-findings>`", "BLOCKING <review-findings>"}},
 		{name: "no_no_changes_with_blocking", any: []string{"do not declare `no_changes` with blocking findings open"}},
@@ -93,10 +91,6 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "agent_use_tools_not_bash", variants: []string{"agent"}, any: []string{"`bash: cat`", "`bash: rg`"}},
 		{name: "long_running_matrix_plan", any: []string{"Long-running matrix/benchmark beads", "matrix plan", "output paths", "completion criteria"}},
 		{name: "long_running_rerun_justification", any: []string{"Do not re-run the same long-running command", "document why prior output is invalid"}},
-		{name: "background_verification_completion", any: []string{
-			"auto-backgrounded by the harness, wait for its completion",
-			"auto-backgrounded by the harness",
-		}},
 	}
 
 	cases := []struct{ variant, harness string }{
@@ -193,18 +187,18 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 		"ddx bead update <bead-id> --claim",
 		"ddx bead update <bead-id> --status <status>",
 		"ddx bead update <bead-id> --unclaim",
+		"ddx bead close <bead-id>",
 	}
 	allowed := []string{
 		"ddx bead create",
-		"Parent=<parent-id>",
-		"lossless durable split",
-		"ddx bead close <bead-id>",
+		"parent=<parent-id>",
+		"parent -> child",
 		"ddx bead dep add",
 		"child-to-child or sibling/replacement edges",
+		"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
 	}
 	mustNotContain := []string{
 		"ddx bead dep add <parent-id> <child-id>",
-		"ddx bead dep add <child-id> <parent-id>",
 	}
 	for _, c := range cases {
 		c := c
@@ -229,39 +223,10 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 	}
 }
 
-func TestExecuteBeadPrompt_Step0DecompositionMayCloseParent(t *testing.T) {
+func TestExecuteBeadPromptSnapshotsUseParentToChildDecompositionEdges(t *testing.T) {
 	cases := []struct{ variant, harness string }{
 		{"claude", "claude"},
 		{"agent", "agent"},
-	}
-	required := []string{
-		"lossless durable split",
-		"ddx bead create",
-		"ddx bead close <bead-id>",
-		"once child/sibling/replacement beads are filed",
-	}
-	for _, c := range cases {
-		c := c
-		t.Run(c.variant, func(t *testing.T) {
-			rendered := renderInstructionsForGuardrails(t, c.harness, "")
-			for _, sub := range required {
-				if !strings.Contains(rendered, sub) {
-					t.Errorf("rendered %s prompt missing decomposition-close substring %q", c.variant, sub)
-				}
-			}
-		})
-	}
-}
-
-func TestExecuteBeadPrompt_DecompositionForbidsParentDependency(t *testing.T) {
-	cases := []struct{ variant, harness string }{
-		{"claude", "claude"},
-		{"agent", "agent"},
-	}
-	required := []string{
-		"Parent=<parent-id>",
-		"legitimate child-to-child or sibling/replacement edges",
-		"do not add the decomposed parent as a dependency",
 	}
 	for _, c := range cases {
 		c := c
@@ -270,12 +235,13 @@ func TestExecuteBeadPrompt_DecompositionForbidsParentDependency(t *testing.T) {
 			if strings.Contains(rendered, "ddx bead dep add <child-id> <parent-id>") {
 				t.Fatalf("rendered %s prompt still contains deprecated child-to-parent dep-add instruction", c.variant)
 			}
-			if strings.Contains(rendered, "ddx bead dep add <parent-id> <child-id>") {
-				t.Fatalf("rendered %s prompt still contains deprecated parent-to-child dep-add instruction", c.variant)
-			}
-			for _, sub := range required {
+			for _, sub := range []string{
+				"parent=<parent-id>",
+				"parent -> child",
+				"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
+			} {
 				if !strings.Contains(rendered, sub) {
-					t.Errorf("rendered %s prompt missing parent-dependency guardrail substring %q", c.variant, sub)
+					t.Errorf("rendered %s prompt missing parent-to-child decomposition substring %q", c.variant, sub)
 				}
 			}
 		})
@@ -394,11 +360,10 @@ func TestExecuteBeadInstructionsMissingGoverningGate(t *testing.T) {
 // at HEAD before the shared-block extraction dep landed.
 func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 	// Pre-tightening baselines from TestPromptSizeReport before ddx-fcdbc731.
-	// Updated for FEAT-010 (long-running matrix guardrails) and ddx-e665942c
-	// (background verification completion guardrail, +19 words per variant).
+	// Updated for FEAT-010 (long-running matrix guardrails).
 	const (
-		baselineClaude = 1150
-		baselineAgent  = 1110
+		baselineClaude = 1105
+		baselineAgent  = 1065
 		floor          = 0.70 // ≥30% reduction; words ≤ 0.70 * baseline
 	)
 	cases := []struct {

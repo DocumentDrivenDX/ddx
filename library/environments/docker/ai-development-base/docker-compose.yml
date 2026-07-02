@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  ai-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ddx/ai-development-base:latest
+    container_name: ai-dev-env
+
+    # Mount current directory as workspace
+    volumes:
+      - .:/workspace
+      - ~/.gitconfig:/root/.gitconfig:ro
+      - ~/.ssh:/root/.ssh:ro
+      # Docker socket for Docker-in-Docker capability
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # Environment variables (customize in .env file)
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - NODE_ENV=development
+      - PYTHONPATH=/workspace
+
+    # Network configuration
+    networks:
+      - ai-dev-network
+
+    # Keep container running
+    stdin_open: true
+    tty: true
+
+    # Resource limits (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+  # Optional: Local PostgreSQL for development
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-dev-postgres
+    environment:
+      POSTGRES_DB: ai_development
+      POSTGRES_USER: developer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-development}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai-dev-network
+    profiles:
+      - with-db
+
+  # Optional: Local Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: ai-dev-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-dev-network
+    profiles:
+      - with-cache
+
+  # Optional: Local ChromaDB for vector storage
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: ai-dev-chromadb
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    volumes:
+      - chroma_data:/chroma
+    ports:
+      - "8000:8000"
+    networks:
+      - ai-dev-network
+    profiles:
+      - with-vectordb
+
+networks:
+  ai-dev-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:

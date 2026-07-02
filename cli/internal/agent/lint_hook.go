@@ -12,7 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -341,7 +341,7 @@ func beadLifecycleSkillMissingError(diag BeadLifecycleSkillDiagnostics, cause er
 	if cause != nil {
 		parts = append(parts, "auto-install failed: "+cause.Error())
 	}
-	parts = append(parts, "remediation: run `ddx plugin sync --force` from the project root, then run `ddx doctor`")
+	parts = append(parts, "remediation: run `ddx update --force` from the project root, then run `ddx doctor`")
 	return errors.New(strings.Join(parts, "; "))
 }
 
@@ -350,7 +350,7 @@ func ensureBeadLifecycleSkill(projectRoot string) error {
 	if ok {
 		return nil
 	}
-	if err := syncBuiltinDDxSkillAdaptersForProject(projectRoot); err != nil {
+	if err := skills.Install(skills.SkillFiles, projectRoot, skills.Options{Force: true}); err != nil {
 		return beadLifecycleSkillMissingError(diag, err)
 	}
 	ok, diag = HasBeadLifecycleSkillDiagnostics(projectRoot)
@@ -358,25 +358,6 @@ func ensureBeadLifecycleSkill(projectRoot string) error {
 		return nil
 	}
 	return beadLifecycleSkillMissingError(diag, nil)
-}
-
-func syncBuiltinDDxSkillAdaptersForProject(projectRoot string) error {
-	pkg, err := registry.BuiltinRegistry().Find("ddx")
-	if err != nil {
-		return err
-	}
-	cachePath := registry.PluginCacheDir(pkg.Name, pkg.Version)
-	if err := registry.EnsureBuiltinDDxCache(cachePath, false); err != nil {
-		return err
-	}
-	_, err = registry.SyncProjectPlugin(context.Background(), projectRoot, registry.PluginLockEntry{
-		Name:      pkg.Name,
-		Version:   pkg.Version,
-		Type:      pkg.Type,
-		Source:    pkg.Source,
-		CachePath: cachePath,
-	}, true)
-	return err
 }
 
 func isUnknownHarnessError(err error) bool {

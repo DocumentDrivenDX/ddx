@@ -179,8 +179,7 @@ func AutoDecomposeEpic(
 		return DecomposeResult{Failed: true, Reason: reason}, nil
 	}
 
-	// Success: create child beads from the decomposition, then close the parent
-	// through the store lifecycle so the decomposed epic leaves the queue.
+	// Success: create child beads from the decomposition, set execution-eligible=false
 	childIDs := make([]string, 0, len(decomp.Children))
 	totalCost := 0.0
 
@@ -198,9 +197,11 @@ func AutoDecomposeEpic(
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	if err := closeDecomposedParent(store, beadID); err != nil {
-		return DecomposeResult{Failed: true, Reason: "close_error"}, err
-	}
+	// Set parent's execution-eligible to false
+	_ = store.Update(ctx, beadID, func(updated *bead.Bead) {
+		ensureBeadExtra(updated)
+		updated.Extra[bead.ExtraExecutionElig] = false
+	})
 
 	// Emit auto_decompose_attempted event
 	body, _ := json.Marshal(decomposerEventBody{

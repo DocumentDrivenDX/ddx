@@ -12,8 +12,9 @@ forwards raw passthrough constraints for harness, provider, model,
 and profile while power travels as `MinPower`/`MaxPower` bounds;
 Fizeau owns concrete routing, provider/model discovery, aliases,
 fuzzy matching, catalog lookups, and transcript/session rendering), a
-persona binding surface backed by installed plugins, a marketplace
-plugin registry, and git-aware synchronization. This skill makes any skills-compatible coding agent
+persona system (bindable AI personalities), a library registry
+(plugins with prompts, templates, personas), and git-aware
+synchronization. This skill makes any skills-compatible coding agent
 (Claude Code, OpenAI Codex, Gemini CLI, etc.) understand and operate
 the DDx surface correctly.
 
@@ -22,10 +23,12 @@ the DDx surface correctly.
 The skill body you're reading is an **overview** plus an **intent
 router**. The real domain guidance lives in `reference/*.md` files.
 
-Install locations: this skill is resolved from project plugin lock metadata
-plus the XDG plugin cache, or from the binary's baked-in default package for
-DDx itself — see **Install topology** below. `ddx doctor --plugins` reports
-lock, cache, and generated adapter state.
+Install locations: this skill is resolved from the project tier
+(`ddxroot.Path()/plugins/ddx/`, which is `<project>/.ddx/plugins/ddx/` in-tree
+or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/ddx/` in convention
+mode), the global machine layer (`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`),
+or the binary's baked-in default — see **Install topology** below. `ddx doctor`
+reports which layer is active.
 
 **Directive: before responding to any DDx-related request, read the
 matching reference file from the router table below. The router is
@@ -34,17 +37,21 @@ guidance, not this overview alone.**
 
 ## Install topology
 
-DDx resolves marketplace plugins through project lock metadata under the
-resolved DDx root plus payloads in
-`${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`. Agent-facing skill
-outputs are generated adapters under `<project>/.agents/skills/<name>/` and
-`<project>/.claude/skills/<name>/`; they can be recreated with
-`ddx plugin sync` and should not be treated as checked-in source payload.
+DDx resolves the default `ddx` package in three layers: the project-local
+tier at `ddxroot.Path()/plugins/ddx/` (in-tree or convention mode), then
+the global install at `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the
+baked-in package embedded in the binary. This is project > global > baked-in precedence.
+`ddx doctor` reports the project and global layers separately so operators
+can tell whether the project copy is real, missing, or lazily resolving to
+the global layer.
 
-The default `ddx` package can fall back to the copy embedded in the binary so
-the CLI remains usable offline. Home-directory/global plugin installs are
-retired as the forward model; share downloaded payloads through the XDG cache
-and record plugin intent per project with `ddx plugin install <name>`.
+For project installs, the agent-facing skill outputs live in
+`<project>/.agents/skills/<name>/` and `<project>/.claude/skills/<name>/`.
+For machine-wide installs (`ddx install <name> --global`), the plugin lands in
+`${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and skill links are created under
+`~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. `ddx install
+--global` is reinstated under the zero-footprint epic; unmanaged home-directory
+skill placements outside these managed paths are retired.
 
 ## Vocabulary
 
@@ -105,12 +112,10 @@ exact definitions.
 - **Power bounds** — `MinPower` and optional `MaxPower` integers passed to the
   upstream execution service. DDx may raise `MinPower` on eligible retries;
   Fizeau owns concrete route selection within those bounds.
-- **Plugin** — a self-contained extension recorded in the project plugin lock,
-  cached under XDG, and exposed to agents through generated adapters. The
-  built-in `ddx` plugin is a bootstrap skill package only; workflow payloads
-  such as personas, prompts, patterns, templates, checks, tools, and MCP
-  definitions belong in separately versioned marketplace plugins. `ddx plugin
-  install <name>`.
+- **Plugin** — a self-contained extension installed to
+  `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
+  prompts, patterns, templates) is auto-installed by `ddx init`.
+  `ddx install <name>`.
 - **Skill** — an agentskills.io-standard directory (SKILL.md +
   optional `reference/`, `evals/`, `scripts/`). This `ddx` skill is
   the one DDx ships. Plugins can ship additional skills.
@@ -118,12 +123,8 @@ exact definitions.
   isolated context (Claude Code's `.claude/agents/` + `context:
   fork`; Codex's `agents/`; others differ). DDx does not specify subagent
   orchestration; that remains harness business.
-- **Plugin sync** — recreate project-local generated adapters from the project
-  plugin lock plus XDG cache. `ddx plugin sync`.
-- **Plugin upgrade** — move one or more marketplace plugin locks to newer
-  versions and refresh adapters. `ddx plugin upgrade [<plugin>]`.
-- **Update** — compatibility refresh for generated DDx adapters only. It does
-  not upgrade marketplace plugins; use `ddx plugin upgrade` for that.
+- **Update** — refresh plugin/toolkit content to a newer version.
+  `ddx update [<plugin>]`.
 - **Upgrade** — replace the DDx binary with a newer release.
   `ddx upgrade`.
 - **Review** — two distinct concepts. **Bead review**
@@ -186,8 +187,7 @@ reference file; do not violate them.
 - Governing feature specs: see `FEAT-*` documents under your
   project's `docs/` tree — especially the CLI, beads, agent-service,
   executions, and skills features.
-- Persona guidance: install a marketplace plugin such as `helix` or another
-  project-specific plugin that ships persona files. The built-in `ddx`
-  bootstrap package does not provide a default persona roster.
+- Personas README: shipped by the default `ddx` plugin at
+  `.ddx/plugins/ddx/personas/README.md`.
 - Open standard this skill conforms to:
   [agentskills.io](https://agentskills.io).

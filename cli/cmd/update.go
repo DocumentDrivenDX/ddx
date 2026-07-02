@@ -12,7 +12,8 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
-	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,7 @@ type UpdateOptions struct {
 	DryRun       bool
 	Resource     string // selective update resource
 	DiscardLocal bool   // discard local changes when overwriting
-	Global       bool   // deprecated compatibility flag; rejected when set
+	Global       bool   // update global plugin tree instead of project tree
 }
 
 // ConflictInfo represents information about a detected conflict
@@ -60,13 +61,17 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// --global updates only the machine-wide plugin tree.
 	if opts.Global {
-		cmd.SilenceUsage = true
-		return errGlobalPluginInstallRetired()
+		result, err := f.performGlobalUpdate(opts)
+		if err != nil {
+			return err
+		}
+		return displayUpdateResult(cmd, result, opts)
 	}
 
 	// Call pure business logic
-	result, err := performUpdate(f.WorkingDir, opts)
+	result, err := f.performUpdate(opts)
 	if err != nil {
 		return err
 	}
@@ -111,15 +116,15 @@ func isUpdateTargetDirty(workingDir, filePath string) bool {
 	return false
 }
 
-// enumerateSkillUpdateTargets returns legacy real-file adapter paths that
-// refreshGeneratedAdapters may replace while migrating to cache-backed shims.
+// enumerateSkillUpdateTargets returns the destination paths that
+// refreshShippedSkills would write to (files from the embedded ddx skill).
 func enumerateSkillUpdateTargets(workingDir string) []string {
 	var result []string
-	_ = fs.WalkDir(defaultplugin.FS(), "skills/ddx", func(p string, d fs.DirEntry, _ error) error {
+	_ = fs.WalkDir(skills.SkillFiles, "ddx", func(p string, d fs.DirEntry, _ error) error {
 		if d == nil || d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(filepath.FromSlash("skills/ddx"), filepath.FromSlash(p))
+		rel, err := filepath.Rel("ddx", filepath.FromSlash(p))
 		if err != nil {
 			return nil
 		}
@@ -142,12 +147,30 @@ func collectDirtyUpdateTargets(workingDir string) ([]string, error) {
 		return nil, nil
 	}
 
+	baseDir := workingDir
+	if existingRoot, ok := ddxroot.ExistingPath(context.Background(), workingDir); ok {
+		baseDir = existingRoot
+	}
+
 	var candidates []string
 	candidates = append(candidates, enumerateSkillUpdateTargets(workingDir)...)
 
+	state, err := registry.LoadState()
+	if err == nil {
+		for _, entry := range state.Installed {
+			for _, recorded := range entry.Files {
+				expanded := registry.ExpandHome(recorded)
+				if !filepath.IsAbs(expanded) {
+					expanded = filepath.Join(baseDir, expanded)
+				}
+				candidates = append(candidates, expanded)
+			}
+		}
+	}
+
 	var dirty []string
 	for _, c := range candidates {
-		if isUpdateTargetDirty(workingDir, c) {
+		if isUpdateTargetDirty(baseDir, c) {
 			dirty = append(dirty, c)
 		}
 	}
@@ -175,28 +198,33 @@ func backupUpdateFile(workingDir, filePath, backupBase string) error {
 	return os.WriteFile(dst, data, 0o644)
 }
 
-// performUpdate refreshes generated built-in `ddx` adapters and the AGENTS.md
-// block so projects that ran `ddx init` under an older DDx version pick up
-// current guidance without copying plugin payloads into the project. Binary
-// updates are intentionally explicit via `ddx upgrade`; plugin version changes
-// are explicit via `ddx plugin upgrade`.
-func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
-	if opts.Resource != "" && opts.Resource != "all" && opts.Resource != "ddx" {
-		return nil, fmt.Errorf("ddx update no longer updates plugins directly; use 'ddx plugin upgrade %s'", opts.Resource)
-	}
+func (f *CommandFactory) resolveProjectUpdateDirs() (installRoot, agentSkillsDir, claudeSkillsDir string, err error) {
+	installRoot = resolveBeadStoreRoot(f.WorkingDir)
+	agentSkillsDir = filepath.Join(f.WorkingDir, ".agents", "skills")
+	claudeSkillsDir = filepath.Join(f.WorkingDir, ".claude", "skills")
+	return
+}
 
+// performUpdate checks GitHub for the latest version of each installed plugin
+// and updates any that are outdated (or all if --force). Always refreshes the
+// embedded `ddx` skill and the AGENTS.md block so projects that ran `ddx init`
+// under an older DDx version pick up current skill content without re-running
+// init. Binary updates are intentionally explicit via `ddx upgrade`; `ddx
+// update` must not replace a locally-built dogfood binary with the latest
+// public release.
+func (f *CommandFactory) performUpdate(opts *UpdateOptions) (*UpdateResult, error) {
 	// Pre-check: detect dirty update targets before writing anything (atomic
 	// refuse — no file is mutated if any target is dirty without --discard-local).
-	dirtyFiles, _ := collectDirtyUpdateTargets(workingDir)
+	dirtyFiles, _ := collectDirtyUpdateTargets(f.WorkingDir)
 	if len(dirtyFiles) > 0 && !opts.DiscardLocal {
 		var sb strings.Builder
 		sb.WriteString("ddx update: uncommitted changes in files that would be overwritten:\n")
-		for _, f := range dirtyFiles {
+		for _, dirtyFile := range dirtyFiles {
 			sb.WriteString("  ")
-			if rel, err := filepath.Rel(workingDir, f); err == nil {
+			if rel, err := filepath.Rel(f.WorkingDir, dirtyFile); err == nil {
 				sb.WriteString(rel)
 			} else {
-				sb.WriteString(f)
+				sb.WriteString(dirtyFile)
 			}
 			sb.WriteString("\n")
 		}
@@ -207,28 +235,151 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	// Backup dirty files before overwriting when --discard-local is set.
 	var backupPath string
 	if len(dirtyFiles) > 0 && opts.DiscardLocal {
-		backupPath = ddxroot.JoinProject(workingDir, "update-backup",
+		backupPath = ddxroot.JoinProject(f.WorkingDir, "update-backup",
 			time.Now().UTC().Format("20060102T150405"))
-		for _, f := range dirtyFiles {
-			_ = backupUpdateFile(workingDir, f, backupPath)
+		for _, dirtyFile := range dirtyFiles {
+			_ = backupUpdateFile(f.WorkingDir, dirtyFile, backupPath)
 		}
 	}
 
-	// Refresh the built-in `ddx` adapter + AGENTS.md block first, regardless of
-	// whether any plugins are installed. This keeps the default package on the
-	// same cache-backed materialization path as `ddx init` and `ddx plugin sync`.
-	if err := refreshGeneratedAdapters(workingDir); err != nil {
+	installRoot, agentSkillsDir, claudeSkillsDir, err := f.resolveProjectUpdateDirs()
+	if err != nil {
 		return nil, err
 	}
 
-	return &UpdateResult{Success: true, Message: "Generated adapters refreshed. Use 'ddx plugin upgrade' for marketplace plugins.", BackupPath: backupPath}, nil
+	// Refresh the shipped `ddx` skill copy + AGENTS.md block first, regardless
+	// of whether any plugins are installed. This is what lets older projects
+	// pick up new SKILL.md / reference/*.md content without re-init.
+	refreshShippedSkills(f.WorkingDir)
+
+	state, err := registry.LoadState()
+	if err != nil || len(state.Installed) == 0 {
+		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. No packages installed.", BackupPath: backupPath}, nil
+	}
+
+	reg := registry.BuiltinRegistry()
+
+	var updated []string
+
+	for _, entry := range state.Installed {
+		// Filter to specific target if requested.
+		if opts.Resource != "" && entry.Name != opts.Resource {
+			continue
+		}
+
+		pkg, err := reg.Find(entry.Name)
+		if err != nil {
+			continue // not in registry, skip
+		}
+
+		// Fetch actual latest version from GitHub.
+		latestVersion := pkg.Version
+		if release, err := f.updateFetchLatestReleaseForRepo(pkg.Source); err == nil {
+			latestVersion = strings.TrimPrefix(release.TagName, "v")
+		}
+
+		if !opts.Force && entry.Version == latestVersion {
+			continue
+		}
+
+		// Install the latest version.
+		installPkg := *pkg
+		installPkg.Version = latestVersion
+		adjustedPkg := adjustInstallTargets(&installPkg, entry.Name, agentSkillsDir, claudeSkillsDir)
+		newEntry, err := f.updateInstallPackage(adjustedPkg, installRoot)
+		if err != nil {
+			return nil, fmt.Errorf("updating %s: %w", entry.Name, err)
+		}
+		state.AddOrUpdate(newEntry)
+		updated = append(updated, entry.Name+" "+entry.Version+" → "+latestVersion)
+	}
+
+	if err := registry.SaveState(state); err != nil {
+		return nil, fmt.Errorf("saving state: %w", err)
+	}
+
+	if len(updated) == 0 {
+		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. All packages are up to date.", BackupPath: backupPath}, nil
+	}
+
+	return &UpdateResult{
+		Success:      true,
+		Message:      "Updated: " + strings.Join(updated, ", "),
+		UpdatedFiles: updated,
+		BackupPath:   backupPath,
+	}, nil
 }
 
-// refreshGeneratedAdapters recreates cache-backed built-in `ddx` adapters and
-// refreshes the AGENTS.md DDx block. Safe to call on every `ddx update` because
-// syncBuiltinDDxSkillAdapters handles stale real-file directories and
-// generateAgentsMD's marker-based merge is idempotent.
-func refreshGeneratedAdapters(workingDir string) error {
+// performGlobalUpdate checks for newer versions of globally installed plugins
+// and reinstalls any that are outdated (or all if --force). It operates
+// exclusively on the global plugin tree (${XDG_DATA_HOME}/ddx/global/) and
+// never touches the project tree.
+func (f *CommandFactory) performGlobalUpdate(opts *UpdateOptions) (*UpdateResult, error) {
+	state, err := registry.LoadGlobalState()
+	if err != nil || len(state.Installed) == 0 {
+		return &UpdateResult{Success: true, Message: "No globally installed packages."}, nil
+	}
+
+	reg := registry.BuiltinRegistry()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("getting home dir: %w", err)
+	}
+
+	var updated []string
+	for _, entry := range state.Installed {
+		if opts.Resource != "" && entry.Name != opts.Resource {
+			continue
+		}
+		pkg, err := reg.Find(entry.Name)
+		if err != nil {
+			continue
+		}
+
+		latestVersion := pkg.Version
+		if release, err := f.updateFetchLatestReleaseForRepo(pkg.Source); err == nil {
+			latestVersion = strings.TrimPrefix(release.TagName, "v")
+		}
+
+		if !opts.Force && entry.Version == latestVersion {
+			continue
+		}
+
+		installPkg := *pkg
+		installPkg.Version = latestVersion
+		adjustedPkg := adjustInstallTargets(&installPkg, entry.Name,
+			filepath.Join(home, ".agents", "skills"),
+			filepath.Join(home, ".claude", "skills"))
+
+		newEntry, err := f.updateInstallPackage(adjustedPkg, ddxroot.GlobalDir())
+		if err != nil {
+			return nil, fmt.Errorf("updating global %s: %w", entry.Name, err)
+		}
+		state.AddOrUpdate(newEntry)
+		updated = append(updated, entry.Name+" "+entry.Version+" → "+latestVersion)
+	}
+
+	if err := registry.SaveGlobalState(state); err != nil {
+		return nil, fmt.Errorf("saving global state: %w", err)
+	}
+
+	if len(updated) == 0 {
+		return &UpdateResult{Success: true, Message: "Global packages are up to date."}, nil
+	}
+	return &UpdateResult{
+		Success:      true,
+		Message:      "Updated globally: " + strings.Join(updated, ", "),
+		UpdatedFiles: updated,
+	}, nil
+}
+
+// refreshShippedSkills re-copies the embedded `ddx` skill into the project's
+// skill directories and refreshes the AGENTS.md DDx block. Safe to call on
+// every `ddx update` because skills.Install with Force=true handles the
+// "existing files should be updated" case, and generateAgentsMD's
+// marker-based merge is idempotent. Stale pre-consolidation skill dirs
+// (ddx-bead, ddx-run, etc.) are swept by cleanupBootstrapSkills.
+func refreshShippedSkills(workingDir string) {
 	bootstrapSkillNames := []string{"ddx"}
 	for _, dir := range []string{
 		filepath.Join(workingDir, ".agents", "skills"),
@@ -237,11 +388,10 @@ func refreshGeneratedAdapters(workingDir string) error {
 		_ = os.MkdirAll(dir, 0755)
 		cleanupBootstrapSkills(dir, bootstrapSkillNames)
 	}
-	if _, err := syncBuiltinDDxSkillAdapters(workingDir, true); err != nil {
-		return fmt.Errorf("refresh generated DDx adapters: %w", err)
+	if err := skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: true}); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill install failed: %v\n", err)
 	}
 	generateAgentsMD(workingDir)
-	return nil
 }
 
 // Helper functions for working directory-based operations

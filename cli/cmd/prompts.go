@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +20,18 @@ func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error
 		workingDir = "."
 	}
 
-	libPath, err := resolveCommandLibraryPath(workingDir)
+	// Get library path using working directory
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config: %w", err)
 	}
-	promptsDir := filepath.Join(libPath, "prompts")
+
+	var libPath string
+	if cfg.Library != nil {
+		libPath = cfg.Library.Path
+	}
+
+	promptsDir := filepath.Join(workingDir, libPath, "prompts")
 
 	// Check if prompts directory exists
 	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {
@@ -89,17 +97,24 @@ func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error
 }
 
 // runPromptsShow implements the prompts show command
-func (f *CommandFactory) runPromptsShow(cmd *cobra.Command, args []string) error {
+func runPromptsShow(cmd *cobra.Command, args []string) error {
 	promptName := args[0]
 
-	workingDir := f.WorkingDir
-	if workingDir == "" {
-		workingDir = "."
+	// Get working directory from command factory context
+	workingDir := "."
+	if factory, ok := cmd.Context().Value("factory").(*CommandFactory); ok {
+		workingDir = factory.WorkingDir
 	}
 
-	libPath, err := resolveCommandLibraryPath(workingDir)
+	// Get library path using working directory
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	var libPath string
+	if cfg.Library != nil {
+		libPath = cfg.Library.Path
 	}
 
 	// Try different paths for the prompt

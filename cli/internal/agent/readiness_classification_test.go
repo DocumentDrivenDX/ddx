@@ -78,12 +78,6 @@ func TestReadinessClassification_DoesNotMisclassifyInfrastructureAsBeadDefect(t 
 			wantTriage: "recoverable",
 		},
 		{
-			name:       "git_ref_cas_race",
-			detail:     "pre-execute-bead checkpoint: advancing checkpoint ref: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 1111111 but expected 2222222",
-			wantSystem: ReadinessSystemReasonRepoConcurrency,
-			wantTriage: "recoverable",
-		},
-		{
 			name:           "readiness_runner_system_unready",
 			classification: ReadinessClassificationSystemUnready,
 			detail:         "readiness runner exited with empty output",
@@ -169,49 +163,6 @@ func TestReadinessClassification_NormalizesSafelyRefinableLegacyToNeedsRefine(t 
 	assert.Empty(t, blocking.SystemReason)
 }
 
-func TestNormalizeReadinessClassificationRefinableAlias(t *testing.T) {
-	warnOnly := ClassifyReadinessWithMode("refinable", nil, "tighten acceptance", config.BeadQualityModeWarnOnly)
-	assert.Equal(t, ReadinessClassificationNeedsRefine, warnOnly.Classification)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.IntakeOutcome)
-	assert.Empty(t, warnOnly.SystemReason)
-	assert.Empty(t, warnOnly.Diagnostic)
-
-	blocking := ClassifyReadinessWithMode("refinable", nil, "tighten acceptance", config.BeadQualityModeBlock)
-	assert.Equal(t, ReadinessClassificationNeedsRefine, blocking.Classification)
-	assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.IntakeOutcome)
-	assert.Empty(t, blocking.SystemReason)
-	assert.Empty(t, blocking.Diagnostic)
-}
-
-func TestReadinessUnknownClassificationDiagnosticNamesSchemaDrift(t *testing.T) {
-	got := ClassifyReadinessWithMode("totally_new", nil, "provider emitted a new readiness value", config.BeadQualityModeWarnOnly)
-
-	assert.Equal(t, ReadinessClassificationSystemUnready, got.Classification)
-	assert.Equal(t, ReadinessReasonSystemUnready, got.Reason)
-	assert.Equal(t, ReadinessSystemReasonSchemaDrift, got.SystemReason)
-	assert.Equal(t, "recoverable", got.TriageClassification)
-	assert.Equal(t, PreClaimIntakeError, got.IntakeOutcome)
-	assert.Contains(t, got.Diagnostic, `readiness classification "totally_new"`)
-	for _, want := range AcceptedReadinessClassifications {
-		assert.Contains(t, got.Diagnostic, want)
-	}
-	assert.NotContains(t, got.Diagnostic, ReadinessSystemReasonUnavailable)
-}
-
-func TestReadinessClassification_HistoricalSchemaDriftTextDoesNotOverrideReady(t *testing.T) {
-	detail := "The 'unknown classification executable' decoder rejection is fixed by ddx-7ad31d91. Scope is bounded."
-	classified := ClassifyReadinessWithMode("ready", nil, detail, config.BeadQualityModeWarnOnly)
-	assert.Equal(t, ReadinessClassificationReady, classified.Classification)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, classified.IntakeOutcome)
-	assert.Empty(t, classified.SystemReason)
-	assert.Empty(t, classified.Diagnostic)
-
-	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"ready","rationale":"The 'unknown classification executable' decoder rejection is fixed by ddx-7ad31d91. Scope is bounded.","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	assert.Empty(t, got.SystemReason)
-}
-
 func TestReadinessClassification_NormalizesSplitLegacyToNeedsSplit(t *testing.T) {
 	for _, qualityMode := range []string{config.BeadQualityModeWarnOnly, config.BeadQualityModeBlock} {
 		got := ClassifyReadinessWithMode("split", nil, "multiple independent slices", qualityMode)
@@ -286,18 +237,6 @@ func TestReadinessClassification_LegacyDecodesEstimatedDifficulty(t *testing.T) 
 	assert.Equal(t, "hard", got.EstimatedDifficulty)
 }
 
-func TestReadinessClassification_NormalizesExecutableAsReady(t *testing.T) {
-	classified := ClassifyReadiness("executable", nil, "")
-	assert.Equal(t, ReadinessClassificationReady, classified.Classification)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, classified.IntakeOutcome)
-	assert.Empty(t, classified.SystemReason)
-
-	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"executable","rationale":"single executable slice","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	assert.Empty(t, got.SystemReason)
-}
-
 func TestReadinessUsesBeadDifficultyPrecedence(t *testing.T) {
 	b := &bead.Bead{
 		Extra: map[string]any{
@@ -334,26 +273,6 @@ func TestPreClaimReadiness_DecodesSafelyRefinableClassificationAsNeedsRefine(t *
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Empty(t, got.SystemReason)
 	assert.Contains(t, got.Detail, "tighten acceptance")
-}
-
-func TestPreClaimIntakeRefinableAliasFollowsNeedsRefinePolicy(t *testing.T) {
-	for _, classification := range []string{"refine", "refinable"} {
-		t.Run(classification, func(t *testing.T) {
-			payload := `{"classification":"` + classification + `","rationale":"tighten acceptance","readiness_checks":[]}`
-
-			warnOnly, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
-			require.NoError(t, err)
-			assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.Outcome)
-			assert.Empty(t, warnOnly.SystemReason)
-			assert.Contains(t, warnOnly.Detail, "tighten acceptance")
-
-			blocking, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeBlock)
-			require.NoError(t, err)
-			assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.Outcome)
-			assert.Empty(t, blocking.SystemReason)
-			assert.Contains(t, blocking.Detail, "tighten acceptance")
-		})
-	}
 }
 
 func TestPreClaimReadiness_DecodesSplitClassificationAsNeedsSplit(t *testing.T) {

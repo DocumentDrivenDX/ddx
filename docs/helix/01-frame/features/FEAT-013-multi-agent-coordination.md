@@ -12,7 +12,7 @@ ddx:
 # Feature: Multi-Agent and Multi-Machine Coordination
 
 **ID:** FEAT-013
-**Status:** Frame
+**Status:** Framing
 **Priority:** P1
 **Owner:** DDx Team
 

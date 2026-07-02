@@ -176,7 +176,7 @@ func TestRunPersonaInjectsBodyIntoPrompt(t *testing.T) {
 
 	var capturedPrompt string
 	agent.SetServiceRunFactory(func(_ string) (agentlib.FizeauService, error) {
-		return &stubAgentService{
+		return stubAgentService{
 			execute: func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 				capturedPrompt = req.Prompt
 				ch := make(chan agentlib.ServiceEvent, 1)

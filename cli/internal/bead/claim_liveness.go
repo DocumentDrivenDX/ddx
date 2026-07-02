@@ -11,7 +11,6 @@ import (
 )
 
 const claimLivenessNamespace = "ddx-claim-heartbeats"
-const claimLivenessDirEnv = "DDX_CLAIM_HEARTBEAT_DIR"
 
 // claimLeaseSameMachineFallbackAge is the hard ceiling after which a same
 // machine + live PID lease stops blocking takeover and we fall back to age.
@@ -32,41 +31,7 @@ type ClaimLeaseRecord struct {
 func claimLivenessPath(ddxDir, id string) string {
 	root := canonicalClaimRoot(ddxDir)
 	sum := sha1.Sum([]byte(root))
-	return filepath.Join(claimLivenessBaseDir(), hex.EncodeToString(sum[:]), id+".json")
-}
-
-func claimLivenessBaseDir() string {
-	if dir := os.Getenv(claimLivenessDirEnv); dir != "" {
-		return filepath.Clean(dir)
-	}
-	if dir, err := os.UserCacheDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "ddx", claimLivenessNamespace)
-	}
-	return filepath.Join(os.TempDir(), "ddx", claimLivenessNamespace)
-}
-
-func legacyClaimLivenessPaths(ddxDir, id string) []string {
-	root := canonicalClaimRoot(ddxDir)
-	sum := sha1.Sum([]byte(root))
-	hash := hex.EncodeToString(sum[:])
-	seen := map[string]struct{}{claimLivenessPath(ddxDir, id): {}}
-	var paths []string
-	candidateDirs := []string{os.TempDir(), os.Getenv("TMPDIR"), "/tmp"}
-	if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
-		candidateDirs = append(candidateDirs, filepath.Join(cacheDir, "fleet-tmp"))
-	}
-	for _, dir := range candidateDirs {
-		if dir == "" {
-			continue
-		}
-		path := filepath.Join(filepath.Clean(dir), claimLivenessNamespace, hash, id+".json")
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
-		paths = append(paths, path)
-	}
-	return paths
+	return filepath.Join(os.TempDir(), claimLivenessNamespace, hex.EncodeToString(sum[:]), id+".json")
 }
 
 func canonicalClaimRoot(ddxDir string) string {
@@ -120,13 +85,7 @@ func (s *Store) writeClaimHeartbeat(rec ClaimLeaseRecord) error {
 		return fmt.Errorf("bead: marshal claim liveness: %w", err)
 	}
 	data = append(data, '\n')
-	if err := writeAtomicClaimFile(claimLivenessPath(s.Dir, rec.BeadID), data); err != nil {
-		return err
-	}
-	for _, path := range legacyClaimLivenessPaths(s.Dir, rec.BeadID) {
-		_ = os.Remove(path)
-	}
-	return nil
+	return writeAtomicClaimFile(claimLivenessPath(s.Dir, rec.BeadID), data)
 }
 
 func (s *Store) readClaimHeartbeat(id string) (ClaimLeaseRecord, bool, error) {
@@ -174,13 +133,7 @@ func (s *Store) upsertClaimHeartbeat(id string, mutate func(*ClaimLeaseRecord)) 
 		return fmt.Errorf("bead: marshal claim liveness: %w", err)
 	}
 	data = append(data, '\n')
-	if err := writeAtomicClaimFile(claimLivenessPath(s.Dir, id), data); err != nil {
-		return err
-	}
-	for _, path := range legacyClaimLivenessPaths(s.Dir, id) {
-		_ = os.Remove(path)
-	}
-	return nil
+	return writeAtomicClaimFile(claimLivenessPath(s.Dir, id), data)
 }
 
 func (s *Store) TouchClaimHeartbeat(id string) error {
@@ -190,9 +143,6 @@ func (s *Store) TouchClaimHeartbeat(id string) error {
 func (s *Store) RemoveClaimHeartbeat(id string) error {
 	err := os.Remove(claimLivenessPath(s.Dir, id))
 	if err == nil || os.IsNotExist(err) {
-		for _, path := range legacyClaimLivenessPaths(s.Dir, id) {
-			_ = os.Remove(path)
-		}
 		return nil
 	}
 	return fmt.Errorf("bead: remove claim liveness: %w", err)

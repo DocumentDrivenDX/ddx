@@ -20,6 +20,10 @@ import (
 // a readable file) or from opts.PromptFile as a fallback.
 func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 	start := time.Now()
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// Resolve directive file: opts.Model first, then opts.PromptFile.
 	directivePath := opts.Model
@@ -82,6 +86,10 @@ func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 	}
 
 	for i, d := range directives {
+		if err := ctx.Err(); err != nil {
+			execErr = err
+			goto done
+		}
 		verb := d[0]
 		args := d[1:]
 
@@ -111,7 +119,16 @@ func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 				execErr = fmt.Errorf("script harness: sleep-ms: invalid duration %q", args[0])
 				goto done
 			}
-			time.Sleep(time.Duration(n) * time.Millisecond)
+			timer := time.NewTimer(time.Duration(n) * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				execErr = ctx.Err()
+				goto done
+			}
 
 		case "fail-during":
 			if len(args) < 1 {
@@ -234,7 +251,7 @@ func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 				goto done
 			}
 			shell := expand(strings.Join(args, " "))
-			cmd := exec.Command("sh", "-c", shell)
+			cmd := exec.CommandContext(ctx, "sh", "-c", shell)
 			cmd.Dir = workDir
 			cmd.Env = envWithOverrides(scrubbedGitEnvScript(), opts.Env)
 			out, err := cmd.CombinedOutput()
@@ -355,9 +372,9 @@ func gitCommitAll(dir, msg string, extraEnv map[string]string) error {
 	return nil
 }
 
-// scrubbedGitEnvScript returns an environment safe for commands that may spawn ddx.
+// scrubbedGitEnvScript returns the environment with all GIT_* variables removed.
 func scrubbedGitEnvScript() []string {
-	return scrubbedExecutionProcessEnv()
+	return internalgit.CleanEnv()
 }
 
 // isReadableFile returns true if path points to a regular, readable file.

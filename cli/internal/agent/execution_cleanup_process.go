@@ -2,239 +2,436 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
-// ExecutionCleanupProcessInfo is one host process record used by the cleanup
-// manager's conservative stale-attempt process census.
-type ExecutionCleanupProcessInfo struct {
-	PID     int
-	PPID    int
-	PGID    int
-	Cwd     string
-	Command string
+var errExecutionCleanupAttemptProcessUnavailable = errors.New("execution cleanup attempt process census unavailable")
+
+type executionCleanupAttemptProcessScanner interface {
+	Scan(context.Context) ([]executionCleanupAttemptProcess, error)
 }
 
-// ExecutionCleanupProcessScanner scans host processes. Tests inject fakes; the
-// real implementation is platform-specific.
-type ExecutionCleanupProcessScanner interface {
-	ScanExecutionProcesses(context.Context) ([]ExecutionCleanupProcessInfo, error)
+type executionCleanupAttemptProcessKiller interface {
+	KillGroup(int) error
 }
 
-// ExecutionCleanupProcessKiller terminates one process group or pid. Tests
-// inject fakes so cleanup policy can be verified without killing processes.
-type ExecutionCleanupProcessKiller interface {
-	KillExecutionProcessGroup(context.Context, int) error
-}
+type executionCleanupAttemptProcessKillerFunc func(int) error
 
-type executionCleanupProcessScannerFunc func(context.Context) ([]ExecutionCleanupProcessInfo, error)
-
-func (f executionCleanupProcessScannerFunc) ScanExecutionProcesses(ctx context.Context) ([]ExecutionCleanupProcessInfo, error) {
-	return f(ctx)
-}
-
-type executionCleanupProcessKillerFunc func(context.Context, int) error
-
-func (f executionCleanupProcessKillerFunc) KillExecutionProcessGroup(ctx context.Context, pgid int) error {
-	return f(ctx, pgid)
-}
-
-type cleanupProcessWorktree struct {
-	path string
-	meta ExecutionCleanupMetadata
-}
-
-func (m *ExecutionCleanupManager) cleanupAttemptDescendantProcesses(ctx context.Context, summary *ExecutionCleanupSummary, runStates []RunState, registered map[string]struct{}, probe ExecutionCleanupLivenessProbe, now time.Time) error {
-	scanner := m.ProcessScanner
-	if scanner == nil {
-		scanner = defaultExecutionCleanupProcessScanner()
-	}
-	if scanner == nil {
-		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-			Path:    summary.TempRoot,
-			Class:   "process_cleanup_unavailable",
-			Message: "process cleanup is unavailable on this platform",
-		})
+func (f executionCleanupAttemptProcessKillerFunc) KillGroup(pgid int) error {
+	if f == nil {
 		return nil
 	}
-	killer := m.ProcessKiller
-	if killer == nil {
-		killer = defaultExecutionCleanupProcessKiller()
-	}
+	return f(pgid)
+}
 
-	worktrees, err := m.cleanupProcessWorktrees(summary.TempRoot)
+type executionCleanupAttemptProcess struct {
+	PID       int
+	PPID      int
+	PGID      int
+	Command   string
+	Cwd       string
+	Worktree  string
+	StartedAt time.Time
+}
+
+type executionCleanupAttemptProcessGroup struct {
+	GroupID int
+	Members []executionCleanupAttemptProcess
+}
+
+func newExecutionCleanupAttemptProcessScanner() executionCleanupAttemptProcessScanner {
+	return newExecutionCleanupAttemptProcessScannerImpl()
+}
+
+func newExecutionCleanupAttemptProcessKiller() executionCleanupAttemptProcessKiller {
+	return executionCleanupAttemptProcessKillerFunc(killProcessGroup)
+}
+
+// CleanupAttemptProcesses reaps stale attempt-descendant process groups using
+// the same conservative classifier as Cleanup(), but without scanning temp
+// dirs, evidence dirs, or scratch roots.
+func (m *ExecutionCleanupManager) CleanupAttemptProcesses(
+	ctx context.Context,
+	summary *ExecutionCleanupSummary,
+	runStates []RunState,
+	registered map[string]struct{},
+	probe ExecutionCleanupLivenessProbe,
+	now time.Time,
+) error {
+	if m == nil || summary == nil {
+		return nil
+	}
+	if probe == nil {
+		probe = defaultExecutionCleanupLivenessProbe{}
+	}
+	if summary.ProjectRoot == "" {
+		summary.ProjectRoot = m.ProjectRoot
+	}
+	if summary.TempRoot == "" {
+		summary.TempRoot = m.tempRoot()
+	}
+	return m.cleanupStaleAttemptProcessGroups(ctx, summary, runStates, registered, probe, now)
+}
+
+func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
+	ctx context.Context,
+	summary *ExecutionCleanupSummary,
+	runStates []RunState,
+	registered map[string]struct{},
+	probe ExecutionCleanupLivenessProbe,
+	now time.Time,
+) error {
+	if m == nil || summary == nil {
+		return nil
+	}
+	if probe == nil {
+		probe = defaultExecutionCleanupLivenessProbe{}
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	scanner := m.attemptProcessScanner
+	if scanner == nil {
+		scanner = newExecutionCleanupAttemptProcessScanner()
+	}
+	if scanner == nil {
+		return nil
+	}
+	processes, err := scanner.Scan(ctx)
 	if err != nil {
+		if errors.Is(err, errExecutionCleanupAttemptProcessUnavailable) {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    m.ProjectRoot,
+				Class:   "attempt_process_cleanup_unavailable",
+				Message: err.Error(),
+			})
+			summary.ProcessFindings = append(summary.ProcessFindings, ExecutionCleanupProcessFinding{
+				StaleReason: err.Error(),
+			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    m.ProjectRoot,
+				Class:   "attempt_process_cleanup_unavailable",
+				Message: err.Error(),
+			})
+			return nil
+		}
 		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-			Path:    summary.TempRoot,
-			Class:   "process_worktree_scan",
+			Path:    m.ProjectRoot,
+			Class:   "attempt_process_census",
+			Message: err.Error(),
+		})
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    m.ProjectRoot,
+			Class:   "attempt_process_census",
 			Message: err.Error(),
 		})
 		return nil
 	}
-	if len(worktrees) == 0 {
-		return nil
-	}
 
-	processes, err := scanner.ScanExecutionProcesses(ctx)
-	if err != nil {
-		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-			Path:    summary.TempRoot,
-			Class:   "process_scan",
-			Message: err.Error(),
-		})
-		return nil
-	}
-	summary.ScannedProcesses = len(processes)
-
-	groupSeen := map[int]struct{}{}
-	for _, proc := range processes {
-		if proc.PID <= 0 {
-			continue
-		}
-		wt, ok := matchingCleanupProcessWorktree(proc, worktrees)
-		if !ok {
-			continue
-		}
-		matchedRunState := matchingRunStateForMeta(runStates, wt.meta)
-		live, reason := probe.IsLive(wt.meta, matchedRunState, now)
-		finding := ExecutionCleanupProcessFinding{
-			PID:          proc.PID,
-			PPID:         proc.PPID,
-			PGID:         proc.PGID,
-			Command:      truncateCleanupCommand(proc.Command),
-			Cwd:          proc.Cwd,
-			WorktreePath: wt.path,
-			BeadID:       firstNonEmptyString(wt.meta.BeadID, runStateBeadID(matchedRunState)),
-			AttemptID:    firstNonEmptyString(wt.meta.AttemptID, runStateAttemptID(matchedRunState)),
-			Reason:       reason,
-		}
-		if live {
-			finding.Preserved = true
-			summary.PreservedAttemptProcesses++
-			summary.Processes = append(summary.Processes, finding)
-			continue
-		}
-		if _, ok := registered[filepath.Clean(wt.path)]; ok {
-			finding.Preserved = true
-			finding.Reason = "registered worktree"
-			summary.PreservedAttemptProcesses++
-			summary.Processes = append(summary.Processes, finding)
-			continue
-		}
-		groupID := cleanupProcessGroupID(proc)
-		if _, seen := groupSeen[groupID]; seen {
-			continue
-		}
-		groupSeen[groupID] = struct{}{}
-		finding.WouldKill = true
-		finding.Reason = firstNonEmptyString(finding.Reason, "stale attempt descendant")
-		summary.StaleAttemptProcesses++
-		if !m.DryRun {
-			if killer == nil {
-				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-					Path:    wt.path,
-					Class:   "process_kill_unavailable",
-					Message: fmt.Sprintf("no process killer for pid=%d pgid=%d", proc.PID, proc.PGID),
-				})
-			} else if err := killer.KillExecutionProcessGroup(ctx, groupID); err != nil {
-				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-					Path:    wt.path,
-					Class:   "process_kill",
-					Message: err.Error(),
-				})
-			} else {
-				finding.Killed = true
-				summary.ReapedProcessGroups++
+	for _, group := range groupExecutionCleanupAttemptProcesses(processes) {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
 			}
 		}
-		summary.Processes = append(summary.Processes, finding)
-	}
-	if len(summary.Processes) > 0 {
-		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
-			Path:    summary.TempRoot,
-			Class:   "attempt_process_census",
-			Message: fmt.Sprintf("stale=%d preserved=%d reaped_groups=%d", summary.StaleAttemptProcesses, summary.PreservedAttemptProcesses, summary.ReapedProcessGroups),
-		})
+		finding, stale, err := m.classifyExecutionCleanupAttemptProcessGroup(group.Members, runStates, registered, probe, now, summary)
+		if err != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    m.ProjectRoot,
+				Class:   "attempt_process_classify",
+				Message: err.Error(),
+			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    m.ProjectRoot,
+				Class:   "preserved_uncertain_attempt_process",
+				Message: err.Error(),
+			})
+			continue
+		}
+		if !stale {
+			continue
+		}
+		finding.WouldKill = true
+		observation := ExecutionCleanupObservation{
+			Path:    finding.Worktree,
+			Message: finding.StaleReason,
+		}
+		if m.DryRun {
+			observation.Class = "would_reap_stale_attempt_process"
+		} else {
+			observation.Class = "reaped_stale_attempt_process"
+		}
+		if !m.DryRun {
+			killer := m.attemptProcessKiller
+			if killer == nil {
+				killer = newExecutionCleanupAttemptProcessKiller()
+			}
+			if killer != nil {
+				if killErr := killer.KillGroup(finding.PGID); killErr != nil {
+					summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+						Path:    finding.Worktree,
+						Class:   "attempt_process_kill",
+						Message: killErr.Error(),
+					})
+					observation.Class = "cannot_reap_stale_attempt_process"
+					observation.Message = killErr.Error()
+					summary.ProcessFindings = append(summary.ProcessFindings, finding)
+					summary.Observations = append(summary.Observations, observation)
+					continue
+				}
+			}
+			finding.Terminated = true
+		}
+		summary.ProcessFindings = append(summary.ProcessFindings, finding)
+		summary.Observations = append(summary.Observations, observation)
 	}
 	return nil
 }
 
-func (m *ExecutionCleanupManager) cleanupProcessWorktrees(tempRoot string) ([]cleanupProcessWorktree, error) {
-	entries, err := os.ReadDir(tempRoot)
-	if err != nil {
-		return nil, err
+func (m *ExecutionCleanupManager) classifyExecutionCleanupAttemptProcessGroup(
+	group []executionCleanupAttemptProcess,
+	runStates []RunState,
+	registered map[string]struct{},
+	probe ExecutionCleanupLivenessProbe,
+	now time.Time,
+	summary *ExecutionCleanupSummary,
+) (ExecutionCleanupProcessFinding, bool, error) {
+	if len(group) == 0 {
+		return ExecutionCleanupProcessFinding{}, false, nil
 	}
-	worktrees := make([]cleanupProcessWorktree, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() || !hasAnyPrefix(entry.Name(), executionAttemptDirPrefixes()) {
+	var staleProc *executionCleanupAttemptProcess
+	var staleMeta ExecutionCleanupMetadata
+	var staleReason string
+
+	for i := range group {
+		proc := group[i]
+		if proc.PID <= 0 || proc.Worktree == "" {
 			continue
 		}
-		path := filepath.Join(tempRoot, entry.Name())
-		meta, err := ReadExecutionCleanupMetadata(path)
-		if err != nil {
-			meta = ExecutionCleanupMetadata{ProjectRoot: m.ProjectRoot, WorktreePath: path}
-		}
-		if meta.ProjectRoot != "" && !sameCleanPath(meta.ProjectRoot, m.ProjectRoot) {
+		if !isPathWithin(proc.Worktree, m.tempRoot()) {
 			continue
 		}
-		meta.ProjectRoot = firstNonEmptyString(meta.ProjectRoot, m.ProjectRoot)
-		meta.WorktreePath = firstNonEmptyString(meta.WorktreePath, path)
-		worktrees = append(worktrees, cleanupProcessWorktree{path: path, meta: meta})
+
+		meta, err := ReadExecutionCleanupMetadata(proc.Worktree)
+		candidateRunStates := runStates
+		var matchedRunState *RunState
+
+		switch {
+		case err == nil:
+			if _, ok := registered[filepath.Clean(proc.Worktree)]; ok {
+				// Registered worktrees are active project state and are preserved
+				// even when the run-state file has already gone stale.
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    proc.Worktree,
+					Class:   "preserved_registered_worktree_process",
+					Message: "registered worktree is still active",
+				})
+				continue
+			}
+			if meta.ProjectRoot != "" && !sameCleanPath(meta.ProjectRoot, m.ProjectRoot) {
+				if !m.canReclaimForeignTestOwnedPath(meta.ProjectRoot, proc.Worktree) {
+					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+						Path:    proc.Worktree,
+						Class:   "preserved_foreign_project_process",
+						Message: fmt.Sprintf("foreign project_root=%s does not match manager project_root=%s", meta.ProjectRoot, m.ProjectRoot),
+					})
+					continue
+				}
+				candidateRunStates = m.runStatesForMetadata(meta, runStates, summary)
+			}
+			matchedRunState = matchingRunStateForMeta(candidateRunStates, meta)
+		case errors.Is(err, os.ErrNotExist):
+			if _, ok := registered[filepath.Clean(proc.Worktree)]; ok {
+				// Registered worktree without metadata stays conservative and
+				// does not get reaped from the process census alone.
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    proc.Worktree,
+					Class:   "preserved_registered_missing_metadata_process",
+					Message: "registered worktree without cleanup metadata",
+				})
+				continue
+			}
+			matchedRunState = matchingRunStateForMeta(runStates, ExecutionCleanupMetadata{WorktreePath: proc.Worktree})
+			if matchedRunState == nil {
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    proc.Worktree,
+					Class:   "preserved_uncertain_attempt_process",
+					Message: "no live run-state or cleanup metadata matched",
+				})
+				continue
+			}
+			meta = candidateCycleMetadataFromRunState(*matchedRunState)
+			meta.ProjectRoot = m.ProjectRoot
+		default:
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    proc.Worktree,
+				Class:   "attempt_process_metadata_read",
+				Message: err.Error(),
+			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    proc.Worktree,
+				Class:   "preserved_uncertain_attempt_process",
+				Message: err.Error(),
+			})
+			continue
+		}
+
+		live, reason := probe.IsLive(meta, matchedRunState, now)
+		if live {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    proc.Worktree,
+				Class:   "preserved_live_attempt_process",
+				Message: reason,
+			})
+			return ExecutionCleanupProcessFinding{}, false, nil
+		}
+
+		if staleProc == nil {
+			staleCopy := proc
+			staleProc = &staleCopy
+			staleMeta = meta
+			staleReason = reason
+		}
 	}
-	sort.Slice(worktrees, func(i, j int) bool {
-		return len(worktrees[i].path) > len(worktrees[j].path)
+
+	if staleProc == nil {
+		return ExecutionCleanupProcessFinding{}, false, nil
+	}
+
+	finding := ExecutionCleanupProcessFinding{
+		PID:         staleProc.PID,
+		PPID:        staleProc.PPID,
+		PGID:        staleProc.PGID,
+		BeadID:      staleMeta.BeadID,
+		AttemptID:   staleMeta.AttemptID,
+		Command:     staleProc.Command,
+		Cwd:         staleProc.Cwd,
+		Worktree:    staleProc.Worktree,
+		StartedAt:   staleProc.StartedAt,
+		StaleReason: staleReason,
+		WouldKill:   true,
+		Members:     make([]ExecutionCleanupProcessFact, 0, len(group)),
+	}
+	if finding.PGID <= 0 {
+		finding.PGID = finding.PID
+	}
+	for _, proc := range group {
+		finding.Members = append(finding.Members, ExecutionCleanupProcessFact(proc))
+	}
+	return finding, true, nil
+}
+
+func groupExecutionCleanupAttemptProcesses(processes []executionCleanupAttemptProcess) []executionCleanupAttemptProcessGroup {
+	if len(processes) == 0 {
+		return nil
+	}
+	buckets := make(map[int][]executionCleanupAttemptProcess, len(processes))
+	for _, proc := range processes {
+		if proc.PID <= 0 || proc.PID == os.Getpid() {
+			continue
+		}
+		groupID := proc.PGID
+		if groupID <= 0 {
+			groupID = proc.PID
+		}
+		buckets[groupID] = append(buckets[groupID], proc)
+	}
+	if len(buckets) == 0 {
+		return nil
+	}
+
+	groups := make([]executionCleanupAttemptProcessGroup, 0, len(buckets))
+	for groupID, members := range buckets {
+		sort.Slice(members, func(i, j int) bool {
+			if members[i].PID == members[j].PID {
+				return members[i].Command < members[j].Command
+			}
+			return members[i].PID < members[j].PID
+		})
+		groups = append(groups, executionCleanupAttemptProcessGroup{
+			GroupID: groupID,
+			Members: members,
+		})
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].GroupID == groups[j].GroupID {
+			return pickExecutionCleanupAttemptRepresentative(groups[i].Members).PID < pickExecutionCleanupAttemptRepresentative(groups[j].Members).PID
+		}
+		return groups[i].GroupID < groups[j].GroupID
 	})
-	return worktrees, nil
+	return groups
 }
 
-func matchingCleanupProcessWorktree(proc ExecutionCleanupProcessInfo, worktrees []cleanupProcessWorktree) (cleanupProcessWorktree, bool) {
-	for _, wt := range worktrees {
-		if processCwdWithin(proc.Cwd, wt.path) || processCommandMentionsAttempt(proc.Command, wt.path) {
-			return wt, true
+func pickExecutionCleanupAttemptRepresentative(processes []executionCleanupAttemptProcess) executionCleanupAttemptProcess {
+	if len(processes) == 0 {
+		return executionCleanupAttemptProcess{}
+	}
+	for _, proc := range processes {
+		if proc.PID == proc.PGID && proc.PID > 0 {
+			return proc
 		}
 	}
-	return cleanupProcessWorktree{}, false
+	return processes[0]
 }
 
-func cleanupProcessGroupID(proc ExecutionCleanupProcessInfo) int {
-	if proc.PGID > 0 {
-		return proc.PGID
+func executionCleanupAttemptWorktreeRoot(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
 	}
-	return proc.PID
-}
-
-func truncateCleanupCommand(command string) string {
-	command = strings.TrimSpace(command)
-	if len(command) <= 200 {
-		return command
+	path = strings.TrimSuffix(path, " (deleted)")
+	if !strings.Contains(path, ExecuteBeadWtPrefix) {
+		return ""
 	}
-	return command[:200]
+	start := strings.Index(path, ExecuteBeadWtPrefix)
+	if start < 0 {
+		return ""
+	}
+	end := start + len(ExecuteBeadWtPrefix)
+	for end < len(path) {
+		switch path[end] {
+		case '/', '\\', ' ', '\t', '\x00':
+			return filepath.Clean(path[:end])
+		}
+		end++
+	}
+	return filepath.Clean(path)
 }
 
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
+func executionCleanupAttemptFactFromRaw(proc executionCleanupAttemptProcess) ExecutionCleanupProcessFact {
+	return ExecutionCleanupProcessFact(proc)
+}
+
+func executionCleanupAttemptProcessFromWorkerStatus(cmdline, cwd string, pid, ppid, pgid int, startedAt time.Time, tempRoot string) executionCleanupAttemptProcess {
+	_, worktree := workerstatus.InferBead(cmdline, cwd)
+	worktree = executionCleanupAttemptWorktreeRoot(worktree)
+	// Fallback: classify reparented DDx descendants whose cwd lives under the
+	// configured execution worktree root, even when the cwd no longer carries
+	// the `.execute-bead-wt-*` segment (e.g. provider subprocess that inherited
+	// the parent cwd, then its parent died and it was reparented to init).
+	if worktree == "" && tempRoot != "" && cwd != "" {
+		trimmedCwd := strings.TrimSuffix(strings.TrimSpace(cwd), " (deleted)")
+		if trimmedCwd != "" && isPathWithin(trimmedCwd, tempRoot) {
+			worktree = filepath.Clean(trimmedCwd)
 		}
 	}
-	return ""
-}
-
-func runStateBeadID(state *RunState) string {
-	if state == nil {
-		return ""
+	return executionCleanupAttemptProcess{
+		PID:       pid,
+		PPID:      ppid,
+		PGID:      pgid,
+		Command:   cmdline,
+		Cwd:       cwd,
+		Worktree:  worktree,
+		StartedAt: startedAt,
 	}
-	return state.BeadID
-}
-
-func runStateAttemptID(state *RunState) string {
-	if state == nil {
-		return ""
-	}
-	return state.AttemptID
 }

@@ -35,7 +35,7 @@ The bounded mutation windows are:
 1. pre-dispatch tracker commit, dirty-checkpoint, base resolution, and attempt
    workspace registration; slow clone/docker setup must not monopolize the
    main-git lock;
-2. durable audit and evidence publication writes;
+2. durable audit and evidence publication writes, including collision-safe status/add/commit retries and resumable commit publication;
 3. landing, preserve-ref creation, target ref update, and main-worktree index
    sync; post-land hooks and other arbitrary commands must not execute while the
    main-git lock is held;
@@ -46,14 +46,7 @@ not best-effort diagnostics. The default caps remain 10 s for `index.lock` and
 30 s for `.ddx/.git-tracker.lock`; fast tests should assert much smaller local
 budgets where the fixture is deterministic.
 
-Durable-audit commit collision-safety contract: a lock-acquire timeout and a
-git subprocess SIGKILL or context-deadline during any status, add, or commit
-step are transient contention, not operator-attention. The durable-audit commit
-must be idempotent and resumable so a rerun completes without manual `git
-reset`, and concurrent workers must back off with a bounded wait while
-serializing the critical section, returning a transient error rather than
-killing the git child. Genuine non-transient failures such as permissions,
-ENOSPC, or repository corruption still surface operator attention.
+Durable-audit commit collision-safety contract: lock-acquire timeout and git-subprocess SIGKILL/context-deadline failures (`signal: killed`) during any status, add, or commit step MUST be classified as transient and retried, never `operator_attention`; the durable-audit commit MUST be idempotent and resumable so a re-run completes without any manual `git reset`; concurrent workers colliding in this critical section MUST back off within a bounded wait and return a transient error instead of killing the git child; genuine non-transient git failures such as permissions, ENOSPC, or corruption still surface operator attention.
 
 ## Existing Coverage
 
@@ -85,10 +78,8 @@ ENOSPC, or repository corruption still surface operator attention.
   `ddx bead create/update/close` commands run. Assert no tracker-lock timeout,
   no missing `prompt.md`/`manifest.json`/`result.json`, and no `index.lock`
   failures in worker output.
-- `TestIsTransientGitContention_SignalKilledAndDeadline`: prove the durable-
-  audit commit classifier treats `signal: killed`, context-deadline, and
-  tracker-lock-timeout strings as transient contention rather than operator
-  attention.
+- `TestCommitDurableAuditOutputs_ResumesAfterPartialKill`: assert a killed
+  durable-audit commit is retried and can be rerun without manual repair.
 - `TestChaos_StartupCleanupSkipsWhenAnotherWorkerOwnsCleanupLock`: start N
   `ddx work --once` processes against a fixture with stale worktree metadata.
   Assert exactly one cleanup pass mutates the stale worktree and the others emit

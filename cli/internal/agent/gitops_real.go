@@ -78,12 +78,12 @@ func (r *RealGitOps) DeleteRef(dir, ref string) error {
 
 // IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).
 func (r *RealGitOps) IsDirty(dir string) (bool, error) {
-	out, _ := internalgit.CommandNoOptionalLocks(context.Background(), dir, "status", "--porcelain", "--", ".", ":(exclude)"+ExecutionCleanupMetadataFileName).Output()
+	out, _ := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--", ".", ":(exclude)"+ExecutionCleanupMetadataFileName).Output()
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
 func dirtyWorktreePaths(dir string) []string {
-	out, err := internalgit.CommandNoOptionalLocks(context.Background(), dir, "status", "--porcelain", "--untracked-files=all").Output()
+	out, err := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--untracked-files=all").Output()
 	if err != nil {
 		return nil
 	}
@@ -172,7 +172,7 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	if msg == "" {
 		msg = "chore: execute-bead synthesized result commit"
 	}
-	out, err := internalgit.Command(context.Background(), dir, "commit", "--no-verify", "-m", msg).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "commit", "-m", msg).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}

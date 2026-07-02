@@ -50,16 +50,10 @@ func init() {
 	SetServiceRunFactory(nil)
 }
 
-// ResolveServiceFromWorkDirCtx returns a context-scoped service instance for
-// the workdir, honoring any test override installed via SetServiceRunFactory.
-// Production callers with request/attempt lifetimes should prefer this helper
-// so Fizeau background probes are cancelled when ctx is cancelled.
-func ResolveServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.FizeauService, error) {
-	factory := serviceRunFactory
-	if factory != nil {
-		return factory(workDir)
-	}
-	return NewServiceFromWorkDirCtx(ctx, workDir)
+// ResolveServiceFromWorkDir returns a service instance for the workdir,
+// honoring any test override installed via SetServiceRunFactory.
+func ResolveServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
+	return resolveService(workDir)
 }
 
 // ResolvePreflightServiceFromWorkDir returns a short-lived service instance for
@@ -71,25 +65,6 @@ func ResolvePreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService,
 		return serviceRunFactory(workDir)
 	}
 	return NewPreflightServiceFromWorkDir(workDir)
-}
-
-func cleanupCurrentProcessProviderProbes(ctx context.Context, workDir string) {
-	if serviceRunFactory != nil {
-		return
-	}
-	var scopes []string
-	if cwd, err := os.Getwd(); err == nil && cwd != "" {
-		scopes = append(scopes, cwd)
-	}
-	if workDir = strings.TrimSpace(workDir); workDir != "" {
-		scopes = append(scopes, workDir)
-	}
-	if len(scopes) == 0 {
-		return
-	}
-	cctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	_ = ReapRootProviderChildrenInScopes(cctx, os.Getpid(), scopes...)
 }
 
 // resolveService returns a FizeauService for workDir, using the test-injected
@@ -170,18 +145,27 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 			WorkDir:       runtime.WorkDir,
 			Permissions:   rcfg.Permissions(),
 			SessionLogDir: sessionLogDir,
-			Env:           scrubbedExecutionEnvOverrides(runtime.Env),
+			Env:           runtime.Env,
 		})
 	}
 
-	restoreProcessEnv := scrubCurrentProcessEnv("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
-	defer restoreProcessEnv()
+	// Install the provider-launch PATH shim before constructing the Fizeau
+	// service so that when fizeau LookPaths codex/claude/etc it finds our
+	// wrapper, which sets PR_SET_PDEATHSIG=SIGKILL before execve'ing the real
+	// binary. Without this, provider children survive worker SIGKILL/OOM as
+	// ppid=1 orphans (bead ddx-f2b413ea). The pattern mirrors the legacy
+	// runAgentViaService path so both entry points install the shim; the
+	// helper is idempotent (sync.Mutex + early-return once installed).
+	if ddxBinary, execErr := os.Executable(); execErr == nil {
+		if _, _, shimErr := EnsureProviderShimOnPATH(ddxBinary); shimErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
+		}
+	}
 
 	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
-	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	return executeOnService(ctx, svc, workDir, rcfg, runtime)
 }
 
@@ -264,18 +248,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		permissions = rcfg.Permissions()
 	}
 
-	requestTimeoutOverride := rcfg.ProviderRequestTimeout()
-	if runtime.RequestTimeoutOverride > 0 {
-		requestTimeoutOverride = runtime.RequestTimeoutOverride
-	}
-	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, requestTimeoutOverride)
-	// requestTimeoutCap is the DDx-side absolute provider-session wall-clock cap
-	// (the operator's --request-timeout). It is distinct from providerTimeout
-	// (the per-Chat-call timeout forwarded to fizeau) and from the idle/tool
-	// timers: when set it cancels and reaps a session that keeps emitting tool
-	// events past the window (ddx-9febbad2). Unset → 0 → no absolute cap.
-	requestTimeoutCap := ResolveRequestTimeoutCap(workDir, provider, requestTimeoutOverride)
-	evidenceAttemptID := runtimeEvidenceAttemptID(runtime.Correlation)
+	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, rcfg.ProviderRequestTimeout())
 
 	minPower := rcfg.MinPower()
 	if runtime.MinPowerOverride > 0 {
@@ -305,7 +278,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		IdleTimeout:           idle,
 		ProviderTimeout:       providerTimeout,
 		SessionLogDir:         sessionLogDir,
-		Metadata:              metadataWithEnv(runtime.Correlation, scrubbedExecutionEnvOverrides(runtime.Env)),
+		Metadata:              metadataWithEnv(runtime.Correlation, runtime.Env),
 		Role:                  runtime.Role,
 		CorrelationID:         runtime.CorrelationID,
 		MinPower:              minPower,
@@ -324,8 +297,6 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	// fizeau returns ErrHarnessModelIncompatible (typed, non-nil) on pre-dispatch
 	// errors and a failed final event for post-dispatch errors.
 	start := time.Now().UTC()
-	restoreProcessEnv := scrubCurrentProcessEnv("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
-	defer restoreProcessEnv()
 	events, err := svc.Execute(cancelCtx, req)
 	if err != nil {
 		// A pre-dispatch Execute error means routing never produced a viable
@@ -348,26 +319,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		WorkPhase:     workPhase,
 	})
 	watchdog := &drainWatchdog{
-		done:            cancelCtx.Done(),
 		cancel:          cancel,
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
-		requestTimeout:  requestTimeoutCap,
-	}
-	if requestTimeoutCap > 0 {
-		watchdog.onRequestTimeout = func(elapsed time.Duration) {
-			reapRequestTimeoutAttempt(
-				workDir,
-				evidenceAttemptID,
-				runtime.Correlation["bead_id"],
-				workPhase,
-				wd,
-				os.Getpid(),
-				requestTimeoutCap,
-				elapsed,
-				time.Now().UTC(),
-			)
-		}
 	}
 	onRouteResolved := func(harness, provider, model string) {
 		harness = firstNonEmpty(harness, fizeauHarness(strings.TrimSpace(runtime.HarnessOverride)), fizeauHarness(strings.TrimSpace(pt.Harness)))
@@ -375,10 +329,10 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		model = firstNonEmpty(model, strings.TrimSpace(runtime.ModelOverride), strings.TrimSpace(pt.Model))
 		route := providerRouteLabel(provider, model)
 		now := time.Now().UTC()
-		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), wd, route, harness, now)
+		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, now)
 		if len(reaped) > 0 {
-			writeProviderChildCleanupArtifact(workDir, evidenceAttemptID, &providerChildCleanupReport{
-				AttemptID:   evidenceAttemptID,
+			writeProviderChildCleanupArtifact(workDir, runtime.Correlation["attempt_id"], &providerChildCleanupReport{
+				AttemptID:   runtime.Correlation["attempt_id"],
 				BeadID:      runtime.Correlation["bead_id"],
 				Trigger:     reasonSupersededProviderChild,
 				ActiveRoute: firstNonEmpty(route, harness),
@@ -489,16 +443,6 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	return result, nil
 }
 
-func runtimeEvidenceAttemptID(correlation map[string]string) string {
-	if len(correlation) == 0 {
-		return ""
-	}
-	if reviewAttemptID := strings.TrimSpace(correlation["review_attempt_id"]); reviewAttemptID != "" {
-		return reviewAttemptID
-	}
-	return strings.TrimSpace(correlation["attempt_id"])
-}
-
 func estimatePromptTokens(prompt string) int {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
@@ -522,12 +466,9 @@ func firstPositiveInt(values ...int) int {
 // subscription harness binary is present: a transient connectivity blip must
 // never hard-exclude one of these harnesses during a local-fleet outage.
 var knownSubscriptionHarnesses = map[string]struct{}{
-	"claude":      {},
-	"claude-code": {},
-	"claude-tui":  {},
-	"codex":       {},
-	"gemini":      {},
-	"gemini-cli":  {},
+	"claude": {},
+	"codex":  {},
+	"gemini": {},
 }
 
 // shieldedSubscriptionHarnesses returns the set of harness names whose recorded
@@ -755,7 +696,6 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
-	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("agent: list harnesses: %w", err)
@@ -818,7 +758,6 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	if err != nil {
 		return fmt.Errorf("agent: build service: %w", err)
 	}
-	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return fmt.Errorf("agent: list harnesses: %w", err)
@@ -866,7 +805,6 @@ func ValidateHarnessOnlyRouteViaService(ctx context.Context, workDir, harnessNam
 	if err != nil {
 		return fmt.Errorf("agent: build service: %w", err)
 	}
-	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return fmt.Errorf("agent: list harnesses: %w", err)

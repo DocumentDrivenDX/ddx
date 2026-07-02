@@ -46,7 +46,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -59,8 +58,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
-	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
-	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 )
 
@@ -531,12 +528,13 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 			return nil
 		}
 		// There are staged changes (or a corrupt index). DDx-managed tracker
-		// files and execution evidence are metadata that concurrent workers
-		// rewrite continuously; a short wait for them to settle reliably fails
-		// on a busy multi-worker host and wedges the queue (ddx-df77e668).
-		// They are not code/doc/test work, so they must never block a claim.
-		// When the only staged paths are DDx-owned metadata, the landing
-		// worktree is clean for claim purposes.
+		// files (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, …) are
+		// append-mostly metadata that concurrent workers rewrite continuously;
+		// a short wait for them to settle reliably fails on a busy multi-worker
+		// host and wedges the queue (ddx-df77e668). They are not code, and the
+		// next claim rewrites them anyway, so they must never block a claim.
+		// When the only staged paths are tracker files, the landing worktree is
+		// clean for claim purposes.
 		if blocking, ok := blockingStagedPaths(dir); ok && len(blocking) == 0 {
 			return nil
 		}
@@ -587,10 +585,10 @@ func isRecoverableLandingIndexCorruption(output string) bool {
 }
 
 // blockingStagedPaths returns the staged paths that would genuinely block a
-// claim — i.e. every staged path that is NOT DDx-owned metadata. ok is false
-// when the staged list cannot be read (e.g. a corrupt index), so callers can
-// fall through to their corruption-recovery path instead of mistaking the read
-// failure for "no blocking changes".
+// claim — i.e. every staged path that is NOT a DDx-managed tracker/metadata
+// file. ok is false when the staged list cannot be read (e.g. a corrupt
+// index), so callers can fall through to their corruption-recovery path
+// instead of mistaking the read failure for "no blocking changes".
 func blockingStagedPaths(dir string) (blocking []string, ok bool) {
 	out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").CombinedOutput()
 	if err != nil {
@@ -598,7 +596,7 @@ func blockingStagedPaths(dir string) (blocking []string, ok bool) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		p := strings.TrimSpace(line)
-		if p == "" || trackerpaths.IsNonBlockingPreClaimPath(p) {
+		if p == "" || trackerpaths.IsManagedTrackerPath(p) {
 			continue
 		}
 		blocking = append(blocking, p)
@@ -776,11 +774,11 @@ func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
 	if len(strings.TrimSpace(string(out))) == 0 {
 		return "", nil
 	}
-	commitOut, err := commitStagedWithIndexLockRecovery(dir,
+	commitOut, err := internalgit.Command(context.Background(), dir,
 		"-c", "user.name=ddx-land-coordinator",
 		"-c", "user.email=coordinator@ddx.local",
 		"commit", "-m", msg,
-	)
+	).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
@@ -789,132 +787,6 @@ func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
 		return "", fmt.Errorf("rev-parse HEAD after evidence commit: %w", err)
 	}
 	return strings.TrimSpace(string(shaOut)), nil
-}
-
-var (
-	// landCommitGitRunner runs the trailing evidence commit's git subprocess. It
-	// is a package var so tests can simulate a slow / cap-violating commit that
-	// leaves a stale .git/index.lock behind (ddx-9b012b6c).
-	landCommitGitRunner = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
-		return internalgit.Command(ctx, dir, args...).CombinedOutput()
-	}
-
-	// indexLockOwnerLookup resolves the live owner of an index.lock path. It is
-	// a package var so the verified-stale vs live-owner distinction in
-	// recoverStaleIndexLockAfterCommitCancel can be tested without depending on
-	// lsof availability in CI.
-	indexLockOwnerLookup = gitlock.IndexLockOwner
-)
-
-// landIndexCommitTimeout bounds a single evidence-commit git subprocess. It is
-// the index.lock cap when cap enforcement is active so a slow commit cannot hold
-// .git/index.lock past the cap watchdog: the subprocess is cancelled at the cap
-// and the stale lock it leaves is recovered, rather than the watchdog
-// force-releasing the lock out from under a still-running git process
-// (ddx-9b012b6c). Zero (no cap) leaves the commit unbounded.
-func landIndexCommitTimeout() time.Duration {
-	if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.Cap > 0 {
-		return cfg.Cap
-	}
-	return 0
-}
-
-// commitStagedWithIndexLockRecovery runs the staged-commit git command under the
-// index.lock metric+cap wrapper with stale-lock recovery, mirroring the
-// durable-audit commit path (cli/internal/agent/durable_audit.go). The cap
-// watchdog records the over-long hold as a durable violation; the cap-bounded
-// timeout cancels the subprocess; and on cancellation the worktree's stale
-// index.lock is recovered so the next tracker-only or evidence commit proceeds
-// without manual lsof+rm cleanup. Only a verified-stale lock is removed — a lock
-// held by a live process is left in place (AC3).
-func commitStagedWithIndexLockRecovery(dir string, args ...string) ([]byte, error) {
-	timeout := landIndexCommitTimeout()
-	var out []byte
-	err := lockmetrics.Instrument("index.lock", "index.commit", func() error {
-		var lastErr error
-		var lastDiag string
-		for attempt := 0; attempt < gitlock.RecoveryAttempts; attempt++ {
-			out, lastErr = runLandCommitWithTimeout(dir, timeout, args...)
-			if lastErr == nil {
-				return nil
-			}
-			if errors.Is(lastErr, context.DeadlineExceeded) || errors.Is(lastErr, context.Canceled) {
-				return lastErr
-			}
-			if !gitlock.IsTransientGitContention(string(out), lastErr) {
-				return lastErr
-			}
-			result, recErr := gitlock.RecoverGitIndexLock(dir)
-			if recErr != nil {
-				return fmt.Errorf("%s; index-lock recovery failed: %w", strings.TrimSpace(string(out)), recErr)
-			}
-			lastDiag = result.Reason
-			if !result.Removed {
-				time.Sleep(gitlock.LiveOwnerWait)
-			}
-		}
-		return fmt.Errorf("%s; index-lock recovery exhausted after %d attempts: %s",
-			strings.TrimSpace(string(out)), gitlock.RecoveryAttempts, lastDiag)
-	})
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		recoverStaleIndexLockAfterCommitCancel(dir)
-	}
-	return out, err
-}
-
-// runLandCommitWithTimeout runs the evidence-commit git subprocess bounded by
-// timeout. A zero timeout leaves the subprocess unbounded. When the context
-// trips, the context error is returned so the caller can distinguish a
-// cap-cancelled commit from a real git failure.
-func runLandCommitWithTimeout(dir string, timeout time.Duration, args ...string) ([]byte, error) {
-	if timeout <= 0 {
-		return landCommitGitRunner(context.Background(), dir, args...)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	out, err := landCommitGitRunner(ctx, dir, args...)
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return out, ctxErr
-		}
-	}
-	return out, err
-}
-
-// recoverStaleIndexLockAfterCommitCancel removes the worktree's index.lock after
-// a capped/cancelled evidence commit, but only when the lock has no live owner.
-// A killed git subprocess leaves a fresh (age < gitlock.StaleAge) unowned lock
-// that RecoverGitIndexLock would refuse to remove, yet that lock would still
-// block the next commit; this targeted cleanup clears it. A lock held by a live
-// concurrent git process is left untouched.
-func recoverStaleIndexLockAfterCommitCancel(dir string) {
-	lockPath := worktreeIndexLockPath(dir)
-	if _, statErr := os.Lstat(lockPath); statErr != nil {
-		return
-	}
-	if pid, _ := indexLockOwnerLookup(lockPath); pid > 0 && processAlive(pid) {
-		return
-	}
-	_ = os.Remove(lockPath)
-}
-
-// worktreeIndexLockPath resolves the index.lock path for the git worktree at
-// dir, accounting for linked worktrees whose index lives under
-// .git/worktrees/<name>/. Falls back to <dir>/.git/index.lock when git cannot
-// resolve the path.
-func worktreeIndexLockPath(dir string) string {
-	out, err := internalgit.Command(context.Background(), dir, "rev-parse", "--git-path", "index.lock").Output()
-	if err != nil {
-		return gitlock.IndexLockPath(dir)
-	}
-	p := strings.TrimSpace(string(out))
-	if p == "" {
-		return gitlock.IndexLockPath(dir)
-	}
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(dir, p)
-	}
-	return p
 }
 
 // DiffNumstat implements LandingGitOps.DiffNumstat.

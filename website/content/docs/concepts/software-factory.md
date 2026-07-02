@@ -98,11 +98,10 @@ On top of that lineage, DDx provides a concrete operating model:
   record of how the commit was produced. This is what makes the
   [Audit Trail Required](../../principles/audit-trail-required/)
   principle enforceable rather than aspirational.
-- **Project plugin install.** `ddx init` writes project metadata and generated
-  DDx adapters; `ddx plugin install <plugin>` records plugin intent and
-  resolves payloads from the shared cache. The factory's durable machinery
-  lives next to the work it produces, while reusable workflow assets do not
-  have to be vendored into every repository.
+- **Project-local install.** `ddx init` and `ddx install <plugin>`
+  only touch `<projectRoot>`. The factory's machinery lives next to
+  the work it produces, not in a developer's home directory or a
+  vendor's cloud. The only global artifact is `ddx-server`.
 - **Bead DAG as the work primitive.** Work flows through a dependency
   graph with ready/blocked queues, JSONL interchange, and explicit
   acceptance criteria — the factory's conveyor belt.

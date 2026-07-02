@@ -227,16 +227,14 @@ a 500-sidecar fixture with a realistic mix:
 Go 1.22+, warm filesystem cache). The benchmark prints observed p50,
 p95, and p99 microseconds per op so regressions are visible in CI.
 
-The budget is dominated by `collectArtifacts`, which re-walks the
-project artifact roots and re-parses every `.ddx.yaml` on each call.
-Marketplace plugin payloads are not project artifact roots: they are
-resolved from `.ddx/plugins.lock.yaml` into the shared XDG cache and
-exposed through generated adapters. The substring scan itself is
-sub-millisecond at 500 entries. The headroom above pure search is
-intentional — it preserves the linear-scan design through B4b (which
-adds body search, also bounded by the 256 KiB / binary-skip rules).
-When B4b lands, the budget is re-verified against the same fixture and
-tightened if the body scan fits underneath.
+The budget is dominated by `collectArtifacts`, which today re-walks
+`.ddx/plugins/` and re-parses every `.ddx.yaml` on each call. The
+substring scan itself is sub-millisecond at 500 entries. The headroom
+above pure search is intentional — it preserves the linear-scan
+design through B4b (which adds body search, also bounded by the
+256 KiB / binary-skip rules). When B4b lands, the budget is
+re-verified against the same fixture and tightened if the body scan
+fits underneath.
 
 Measured baseline at the time of writing
 (`go test -bench=BenchmarkArtifactsSearch_500Fixture -run=^$ -benchtime=3x`,

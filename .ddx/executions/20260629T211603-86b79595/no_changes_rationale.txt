@@ -1,0 +1,2 @@
+status: blocked
+reason: `go test ./cmd/... ./internal/agent/... ./internal/workerstatus/... -count=1` is not green in this workspace because `TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers` fails on an unrelated durable-audit fixture issue: `CommitDurableAuditOutputs` leaves `.ddx/lifecycle-schema.json` untracked in the test repo, causing `git commit` to abort, and the `internal/agent` package also exceeds the default 10m test timeout.

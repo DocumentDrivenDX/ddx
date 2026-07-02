@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260629T095053-c18b8b18",
+  "bead_id": "ddx-aef568e7",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18",
+  "trigger": "",
+  "started_at": "2026-06-29T10:34:12.462316802Z",
+  "finished_at": "2026-06-29T10:34:12.860559734Z",
+  "scanned": 1145,
+  "candidates": [
+    {
+      "pid": 1475635,
+      "ppid": 1470813,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2279867126/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2279867126/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 1470813,
+      "ppid": 1470660,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 1470660,
+      "ppid": 1470650,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/server/workers.go ./internal/server/workers_cleanup.go ./internal/server/workers_managed_stop_test.go ./internal/server/workers_reap_unix.go ./internal/server/workers_reap_windows.go ./internal/server/workers_stop_test.go ./internal/server/workers_watchdog_test.go"
+    },
+    {
+      "pid": 1470650,
+      "ppid": 1,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/server/workers.go ./internal/server/workers_cleanup.go ./internal/server/workers_managed_stop_test.go ./internal/server/workers_reap_unix.go ./internal/server/workers_reap_windows.go ./internal/server/workers_stop_test.go ./internal/server/workers_watchdog_test.go"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1475635,
+      "ppid": 1470813,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2279867126/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2279867126/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 1470813,
+      "ppid": 1470660,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 1470660,
+      "ppid": 1470650,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/server/workers.go ./internal/server/workers_cleanup.go ./internal/server/workers_managed_stop_test.go ./internal/server/workers_reap_unix.go ./internal/server/workers_reap_windows.go ./internal/server/workers_stop_test.go ./internal/server/workers_watchdog_test.go"
+    },
+    {
+      "pid": 1470650,
+      "ppid": 1,
+      "pgid": 1470650,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/server/workers.go ./internal/server/workers_cleanup.go ./internal/server/workers_managed_stop_test.go ./internal/server/workers_reap_unix.go ./internal/server/workers_reap_windows.go ./internal/server/workers_stop_test.go ./internal/server/workers_watchdog_test.go"
+    }
+  ]
+}

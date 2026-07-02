@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260627T230343-09464730",
+  "bead_id": "ddx-94e3921b",
+  "base_rev": "f08b5c6cc19ce1419bb56a6e392db0be0a984c7b",
+  "created_at": "2026-06-27T23:03:56.056933143Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-94e3921b",
+    "title": "agent: ignore dirty-root guard state as DDx runtime scratch",
+    "description": "PROBLEM\n  During the 2026-06-11 dogfood drill, running `ddx work --once` against a dirty project root wrote `.ddx/dirty-root-guard.json`. `git status --short` then showed the guard file as untracked. A worker preflight that exits before claiming work should not leave new, unignored repository noise for the operator to triage.\n\nROOT CAUSE\n  `cli/internal/agent/execute_bead_loop.go:958` defines the guard state filename as `dirty-root-guard.json`. `cli/internal/agent/execute_bead_loop.go:1256-1266` writes that state under the project's `.ddx` directory, and `cli/internal/agent/execute_bead_loop.go:1329-1390` updates it during dirty-root preflight. `.gitignore:420-435` ignores other DDx runtime scratch paths such as `.ddx/run-state.json`, `.ddx/run-state/`, `.ddx/workers/`, and `.ddx/*.tmp`, but does not ignore `.ddx/dirty-root-guard.json`.\n\nPROPOSED FIX\n  - Treat dirty-root guard state as DDx runtime scratch, not tracked project state.\n  - Add `.ddx/dirty-root-guard.json` to the repository `.gitignore` and to the DDx init/default ignore entries in `cli/cmd/init.go` so new projects do not see the file as untracked.\n  - Add or update tests in `cli/cmd/init_test.go` to prove generated gitignore content ignores `.ddx/dirty-root-guard.json` while still preserving intentionally tracked execution evidence exceptions.\n  - Keep the existing dirty-root escalation behavior and state file format unchanged unless a smaller existing runtime-state helper makes the ignore behavior cleaner.\n\nNON-SCOPE\n  - Do not remove the dirty-root cooldown/escalation state machine.\n  - Do not make `ddx work` proceed on a dirty project root.\n  - Do not broaden ignores to all of `.ddx/`, because beads, attachments, metrics, and selected execution evidence remain intentionally tracked.\n\nPARENT + DEPS\n  No parent. No deps.",
+    "acceptance": "1. `TestInitGitignoreIgnoresDirtyRootGuard` or an updated existing init gitignore test proves generated DDx gitignore content contains `.ddx/dirty-root-guard.json`.\n2. A test or scripted assertion proves `git check-ignore -q .ddx/dirty-root-guard.json` succeeds in a freshly initialized fixture project.\n3. Existing init gitignore evidence-preservation assertions still prove `.ddx/executions/*/{manifest,result,checks,usage}.json` are not ignored.\n4. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestInit.*Gitignore|TestInit.*RunState'` passes.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestDirtyRootPreventsClaimLoop|TestExecuteBeadLoop_RepeatedDirtyRootEscalatesWithCooldown'` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:git",
+      "kind:bug",
+      "dogfood",
+      "preclaim"
+    ],
+    "metadata": {
+      "queue-rank": 150
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260627T230343-09464730",
+    "prompt": ".ddx/executions/20260627T230343-09464730/prompt.md",
+    "manifest": ".ddx/executions/20260627T230343-09464730/manifest.json",
+    "result": ".ddx/executions/20260627T230343-09464730/result.json",
+    "checks": ".ddx/executions/20260627T230343-09464730/checks.json",
+    "usage": ".ddx/executions/20260627T230343-09464730/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-94e3921b-20260627T230343-09464730"
+  },
+  "prompt_sha": "e51c20bb841e7abc74db9f6317fd25753447e902902184006bb17a022009d188"
+}

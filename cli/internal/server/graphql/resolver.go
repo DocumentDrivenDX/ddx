@@ -54,10 +54,8 @@ func (r *Resolver) workingDir(ctx context.Context) string {
 }
 
 // BeadLifecycleSubscriber can subscribe to live lifecycle events from a bead store.
-// bead.WatcherHub satisfies this interface.
-type BeadLifecycleSubscriber interface {
-	SubscribeLifecycle(ctx context.Context, projectID string) (<-chan bead.LifecycleEvent, func(), error)
-}
+// It matches bead.LifecycleSubscriber exactly.
+type BeadLifecycleSubscriber = bead.LifecycleSubscriber
 
 // ExecuteLoopWaker signals running work workers bound to a project
 // to skip their idle-poll sleep and re-scan the ready queue. The
@@ -79,23 +77,12 @@ type ActionDispatcher interface {
 	StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error)
 }
 
-// WorkerStateManager provides desired-state control and explicit restart for
-// server-managed workers. Separate from ActionDispatcher so existing tests
-// that implement ActionDispatcher are not broken.
-type WorkerStateManager interface {
-	SetWorkerDesiredState(projectRoot string, desiredCount int, restartEnabled bool) (*WorkerLifecycleResult, error)
-	RestartWorker(id string) (*WorkerLifecycleResult, error)
-	ReconcileWorkers(projectRoot string) (*WorkerLifecycleResult, error)
-}
-
 type Resolver struct {
 	State      StateProvider
 	WorkingDir string
 	Workers    ProgressSubscriber
 	BeadBus    BeadLifecycleSubscriber
 	Actions    ActionDispatcher
-	// WorkerState provides desired-state supervision control for managed workers.
-	WorkerState WorkerStateManager
 	// ExecLogs provides execution run log retrieval for the executionEvidence
 	// subscription. If nil, that subscription returns an error.
 	ExecLogs ExecLogProvider

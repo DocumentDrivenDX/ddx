@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260630T080154-255d9ae0",
+  "bead_id": "ddx-a0a13392",
+  "base_rev": "e58f565683d241db664c7d0f841158be4f58d3d1",
+  "created_at": "2026-06-30T08:02:04.926122531Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a0a13392",
+    "title": "server: stop managed worker trees with shared cleanup helper",
+    "description": "PROBLEM\nStop currently performs ad hoc cleanup inside WorkerManager.Stop, releasing the claimed bead and then killing only the recorded pid when pid \u003e 0. That path does not prove that a managed worker tree with fake claude/codex descendants is fully terminated, and the cleanup logic is not centralized for reuse by other lifecycle paths.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:1214-1312 contains Stop, including the current pid-gated terminateProcessGroup call.\ncli/internal/server/workers.go:1234-1286 computes pid and only escalates when pid \u003e 0, so cleanup is limited to the recorded leader process.\ncli/internal/server/workers.go:1298-1312 finalizes the worker after the ad hoc kill path, which makes idempotence depend on repeated copies of the same logic rather than a shared helper.\n\nPROPOSED FIX\n- Introduce a shared managed-worker tree cleanup helper that sends SIGTERM to the managed process group, waits WatchdogKillGrace, then SIGKILLs any remaining descendants.\n- Make Stop call that helper for server-managed workers before terminalizing the record.\n- Preserve the bead.stopped event, claim release, and terminal status writes so repeated Stop calls remain idempotent.\n- Add fake claude and codex binaries on PATH that spawn sleeping children so the test can prove the full descendant tree is gone after Stop.\n- Add a second Stop call assertion so the test proves no duplicate bead transition and no unrelated process kill.\n\nNON-SCOPE\n- Do not change watchdog reaping in this bead.\n- Do not implement server shutdown cleanup in this bead.\n- Do not change external reported workers or interactive sessions.\n\nACCEPTANCE\n1. TestManagedWorkerStopKillsClaudeCodexDescendants uses fake claude and codex binaries on PATH that spawn sleeping children, then proves Stop leaves none of those descendants running.\n2. TestManagedWorkerStopIsIdempotent calls Stop twice and proves no duplicate bead transition and no unrelated process kill.\n3. cd cli \u0026\u0026 go test ./internal/server/... -run \"TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerStopIsIdempotent\" passes.\n4. make install is run after the code change lands.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-30T07:53:22.95957228Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260630T074643-d4f75f6d\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":1356533,\"output_tokens\":18838,\"total_tokens\":1375371,\"cost_usd\":0,\"duration_ms\":388894,\"exit_code\":0}",
+          "created_at": "2026-06-30T07:53:23.074524077Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=1375371 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260630T074643-d4f75f6d\",\"bead_id\":\"ddx-a0a13392\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-30T07:53:25.710933861Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"0bd46c5406d6e395e411dc1b350961b3424b86f0\",\"classification\":\"recoverable\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt produced an implementation revision but DDx marked it failed because the result report was internally inconsistent: it mixed committed changes with a no_changes_rationale that only names a verification command. There is no evidence of red tests, merge conflict, quota, or an external blocker, so this is best treated as a recoverable lifecycle/reporting failure and retried.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"86c314849bac6ee7ee06042c2271af93289cf3f4\",\"session_id\":\"eb-f66420dc\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-30T07:54:16.910703634Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\npowerClass=standard\nrationale: verification_command: cd cli \u0026\u0026 go test ./internal/server/... -run \"TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerStopIsIdempotent\"\ndecision_audit={\"failure_class\":\"recoverable\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=86c314849bac6ee7ee06042c2271af93289cf3f4\nbase_rev=0bd46c5406d6e395e411dc1b350961b3424b86f0\noutcome_reason=recoverable",
+          "created_at": "2026-06-30T07:54:17.000195321Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260630T080154-255d9ae0",
+    "prompt": ".ddx/executions/20260630T080154-255d9ae0/prompt.md",
+    "manifest": ".ddx/executions/20260630T080154-255d9ae0/manifest.json",
+    "result": ".ddx/executions/20260630T080154-255d9ae0/result.json",
+    "checks": ".ddx/executions/20260630T080154-255d9ae0/checks.json",
+    "usage": ".ddx/executions/20260630T080154-255d9ae0/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a0a13392-20260630T080154-255d9ae0"
+  },
+  "prompt_sha": "6b33929e480996c7872ade911cd6d65e2dc98792ba3471ffef7008fac4ba791a"
+}

@@ -1,9 +1,9 @@
 // Package defaultplugin holds the embedded default `ddx` plugin package.
 //
-// The embedded `library/` tree is a minimal package consumed by the registry
-// installer: package.yaml plus skills/ddx. It keeps `ddx init` and worker skill
-// discovery offline-safe without baking optional library assets into the
-// binary. See docs/helix/02-design/adr/ADR-027-skill-install-topology.md.
+// The embedded `library/` tree is rooted at the package layout consumed by
+// the registry installer. It lets `ddx init` install the default plugin
+// offline through the same code path as a remote install. See
+// docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md.
 package defaultplugin
 
 import (

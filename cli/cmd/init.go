@@ -11,6 +11,8 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 	"github.com/spf13/cobra"
 )
 
@@ -30,9 +32,6 @@ var initGitignoreRules = []string{
 	".ddx/run-state.json",
 	".ddx/run-state/",
 	".ddx/dirty-root-guard.json",
-	// Registry plugin payloads and local overlays are materialized per machine.
-	".ddx/plugins/*",
-	".ddx/plugins/*/",
 	// DDx tracked evidence — explicitly un-ignored under executions/
 	"!.ddx/executions/",
 	"!.ddx/executions/*/",
@@ -42,9 +41,7 @@ var initGitignoreRules = []string{
 	"!.ddx/executions/*/checks.json",
 	"!.ddx/executions/*/usage.json",
 	// Skills target links — rewritten per-machine, not tracked
-	".claude/skills/*",
 	".claude/skills/*/",
-	".agents/skills/*",
 	".agents/skills/*/",
 	// Other agent scratch
 	".codex/",
@@ -75,9 +72,16 @@ type InitResult struct {
 
 // runInit implements the CLI interface layer for the init command
 func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
+	// --global mode: one-time machine setup, bypasses project checks.
 	if globalMode, _ := cmd.Flags().GetBool("global"); globalMode {
-		cmd.SilenceUsage = true
-		return fmt.Errorf("ddx init --global is retired; use 'ddx init [path]' for project setup and 'ddx plugin install <name>' to record project plugin intent")
+		if err := initGlobal(); err != nil {
+			cmd.SilenceUsage = true
+			return err
+		}
+		if silent, _ := cmd.Flags().GetBool("silent"); !silent {
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), "✅ DDx global machine setup complete.\n")
+		}
+		return nil
 	}
 
 	// Extract flags from cobra.Command
@@ -87,16 +91,6 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 	initSkipClaude, _ := cmd.Flags().GetBool("skip-claude-injection")
 	initRepository, _ := cmd.Flags().GetString("repository")
 	initBranch, _ := cmd.Flags().GetString("branch")
-
-	targetDir, err := resolveInitTargetDir(f.WorkingDir, args)
-	if err != nil {
-		cmd.SilenceUsage = true
-		return err
-	}
-	if err := ensureInitTargetDir(targetDir); err != nil {
-		cmd.SilenceUsage = true
-		return err
-	}
 
 	// Create options struct for business logic
 	opts := InitOptions{
@@ -111,12 +105,12 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 
 	// Handle user output
 	if !opts.Silent {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "🚀 Initializing DDx in %s...\n", targetDir)
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "🚀 Initializing DDx in current project...\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
 	// Call pure business logic function
-	_, err = initProject(targetDir, opts)
+	_, err := initProject(f.WorkingDir, opts)
 	if err != nil {
 		cmd.SilenceUsage = true
 		return err
@@ -127,51 +121,11 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "✅ DDx initialized successfully!\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Next steps:\n")
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx plugin install helix   - Pin HELIX and generate local adapters (optional)\n")
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx doctor                 - Check installation health\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx install helix   - Install HELIX workflow (optional)\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx doctor          - Check installation health\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
-	return nil
-}
-
-func resolveInitTargetDir(workingDir string, args []string) (string, error) {
-	target := workingDir
-	if len(args) > 0 {
-		target = strings.TrimSpace(args[0])
-		if target == "" {
-			return "", fmt.Errorf("init path cannot be empty")
-		}
-	}
-	if target == "" {
-		target = "."
-	}
-	if !filepath.IsAbs(target) {
-		if workingDir != "" {
-			target = filepath.Join(workingDir, target)
-		}
-	}
-	abs, err := filepath.Abs(target)
-	if err != nil {
-		return "", fmt.Errorf("resolve init path: %w", err)
-	}
-	return filepath.Clean(abs), nil
-}
-
-func ensureInitTargetDir(targetDir string) error {
-	info, err := os.Stat(targetDir)
-	if err == nil {
-		if !info.IsDir() {
-			return fmt.Errorf("init path %s exists and is not a directory", targetDir)
-		}
-		return nil
-	}
-	if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect init path %s: %w", targetDir, err)
-	}
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("create init path %s: %w", targetDir, err)
-	}
 	return nil
 }
 
@@ -300,9 +254,6 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	if err := ensureProjectGitignoreRules(workingDir, initGitignoreRules); err != nil {
 		return nil, NewExitError(1, fmt.Sprintf("Failed to update .gitignore: %v", err))
 	}
-	if _, err := syncBuiltinDDxSkillAdapters(workingDir, opts.Force); err != nil {
-		return nil, NewExitError(1, fmt.Sprintf("Failed to create generated DDx skill adapters: %v", err))
-	}
 	if !opts.NoGit {
 		if err := untrackLegacyRunStateFiles(context.Background(), workingDir); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to migrate legacy run-state tracking: %v", err))
@@ -358,6 +309,63 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	// Configuration already saved above
 
 	return result, nil
+}
+
+// initGlobal performs one-time per-machine DDx setup:
+//  1. Installs the bundled default ddx plugin into ${XDG_DATA_HOME}/ddx/global/plugins/ddx.
+//  2. Creates symlinks ~/.claude/skills/ddx and ~/.agents/skills/ddx pointing into the
+//     global plugin directory so every harness on this machine discovers the skill.
+//  3. Writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults.
+func initGlobal() error {
+	globalDir := ddxroot.GlobalDir()
+	pluginDir := filepath.Join(globalDir, "plugins", "ddx")
+
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		return fmt.Errorf("creating global plugin dir: %w", err)
+	}
+
+	src := defaultplugin.FS()
+	if err := registry.MaterializeFS(src, pluginDir); err != nil {
+		return fmt.Errorf("installing global plugin: %w", err)
+	}
+
+	skillSrc := filepath.Join(pluginDir, "skills", "ddx")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolving home directory: %w", err)
+	}
+	for _, surface := range []string{".claude/skills", ".agents/skills"} {
+		dst := filepath.Join(home, surface, "ddx")
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return fmt.Errorf("creating skill surface dir %s: %w", filepath.Dir(dst), err)
+		}
+		if _, err := os.Lstat(dst); err == nil {
+			if err := os.RemoveAll(dst); err != nil {
+				return fmt.Errorf("removing existing %s: %w", dst, err)
+			}
+		}
+		if err := os.Symlink(skillSrc, dst); err != nil {
+			return fmt.Errorf("creating skill link %s -> %s: %w", dst, skillSrc, err)
+		}
+	}
+
+	configPath := filepath.Join(globalDir, "config.yaml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := writeGlobalConfig(configPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// writeGlobalConfig writes the global DDx config file with convention defaults.
+func writeGlobalConfig(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating global config dir: %w", err)
+	}
+	content := "# DDx global machine configuration — written by ddx init --global\nversion: \"1.0\"\n"
+	return os.WriteFile(path, []byte(content), 0644)
 }
 
 // writeProjectVersions writes .ddx/versions.yaml with the current binary version.
@@ -621,8 +629,8 @@ func ddxAgentsBlock() string {
 This project uses [DDx](https://github.com/DocumentDrivenDX/ddx) for
 document-driven development. Use the ` + "`" + `ddx` + "`" + ` skill for beads, work,
 review, agents, and status — every skills-compatible harness (Claude
-Code, OpenAI Codex, Gemini CLI, etc.) discovers it through generated
-adapters under ` + "`" + `.claude/skills/ddx/` + "`" + ` and ` + "`" + `.agents/skills/ddx/` + "`" + `.
+Code, OpenAI Codex, Gemini CLI, etc.) discovers it from
+` + "`" + `.claude/skills/ddx/` + "`" + ` and ` + "`" + `.agents/skills/ddx/` + "`" + `.
 
 ## Default Interactive Mode
 
@@ -654,12 +662,9 @@ After modifying any of these paths, stage and commit them:
 
 - ` + "`" + `.ddx/beads.jsonl` + "`" + ` — work item tracker
 - ` + "`" + `.ddx/config.yaml` + "`" + ` — project configuration
+- ` + "`" + `.agents/skills/ddx/` + "`" + ` — the ddx skill (shipped by ddx init)
+- ` + "`" + `.claude/skills/ddx/` + "`" + ` — same skill, Claude Code location
 - ` + "`" + `docs/` + "`" + ` — project documentation and artifacts
-
-Do not commit generated plugin payloads or agent adapters under
-` + "`" + `.ddx/plugins/` + "`" + `, ` + "`" + `.agents/skills/` + "`" + `, or ` + "`" + `.claude/skills/` + "`" + `.
-` + "`" + `ddx plugin sync` + "`" + ` recreates those local files from the project lock,
-the XDG plugin cache, or the baked-in default ` + "`" + `ddx` + "`" + ` package.
 
 ## Conventions
 

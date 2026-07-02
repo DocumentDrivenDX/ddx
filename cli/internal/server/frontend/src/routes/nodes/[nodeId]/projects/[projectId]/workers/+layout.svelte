@@ -5,7 +5,6 @@
 	import { page } from '$app/stores';
 	import { createClient } from '$lib/gql/client';
 	import { subscribeWorkerProgress } from '$lib/gql/subscriptions';
-	import { extractGraphQLErrorMessage } from '$lib/gql/error';
 	import { gql } from 'graphql-request';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -30,26 +29,6 @@
 		}
 	`;
 
-	const RESTART_WORKER_MUTATION = gql`
-		mutation RestartWorker($id: ID!) {
-			restartWorker(id: $id) {
-				id
-				state
-				kind
-			}
-		}
-	`;
-
-	const SET_DESIRED_STATE_MUTATION = gql`
-		mutation SetWorkerDesiredState($input: WorkerDesiredStateInput!) {
-			setWorkerDesiredState(input: $input) {
-				projectId
-				desiredCount
-				actualCount
-			}
-		}
-	`;
-
 	// + Add worker dispatches a default-spec drain worker (ddx-b6cf025c). The
 	// server honours .ddx/config.yaml workers.default_spec + workers.max_count.
 	const ADD_WORKER_MUTATION = gql`
@@ -69,16 +48,11 @@
 	let stoppingId = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
 	let harness = $state('');
-	let provider = $state('');
-	let model = $state('');
 	let profile = $state('smart');
 	let effort = $state('medium');
 	let labelFilter = $state('');
-	let requestTimeout = $state('20m');
 	let adding = $state(false);
 	let removing = $state(false);
-	let settingDesired = $state(false);
-	let restartingId = $state<string | null>(null);
 
 	// Drain workers: count of running work workers.
 	const runningDrainCount = $derived(
@@ -95,21 +69,6 @@
 	const addDisabled = $derived(adding || atMaxCount);
 	const addTooltip = $derived(
 		atMaxCount ? 'at workers.max_count limit' : 'Add a general-purpose drain worker'
-	);
-
-	// Managed workers: server-supervised workers (managed === true).
-	const managedWorkers = $derived(
-		data.workers.edges.filter((e) => e.node.managed === true).map((e) => e.node)
-	);
-	const externalWorkers = $derived(
-		data.workers.edges.filter((e) => e.node.managed !== true).map((e) => e.node)
-	);
-	const managedRunningCount = $derived(
-		managedWorkers.filter((w) => w.state === 'running' || w.state === 'idle').length
-	);
-	// Desired count: take from the first managed worker that has it, or default to 0.
-	const desiredCount = $derived(
-		managedWorkers.find((w) => w.desiredCount != null)?.desiredCount ?? 0
 	);
 
 	// Subscribe to progress events for all running workers
@@ -150,7 +109,7 @@
 	}
 
 	function errorText(err: unknown): string {
-		return extractGraphQLErrorMessage(err, 'Worker action failed.');
+		return err instanceof Error ? err.message : 'Worker action failed.';
 	}
 
 	async function startWorker() {
@@ -166,20 +125,14 @@
 				input: {
 					projectId: data.projectId,
 					harness: harness.trim() || null,
-					provider: provider.trim() || null,
-					model: model.trim() || null,
 					profile: profile.trim(),
 					effort: effort.trim(),
-					labelFilter: labelFilter.trim() || null,
-					requestTimeout: requestTimeout.trim() || null
+					labelFilter: labelFilter.trim() || null
 				}
 			});
 			showStartForm = false;
 			harness = '';
-			provider = '';
-			model = '';
 			labelFilter = '';
-			requestTimeout = '20m';
 			await invalidateAll();
 		} catch (err) {
 			actionError = errorText(err);
@@ -241,39 +194,6 @@
 		}
 	}
 
-	async function restartWorker(event: MouseEvent, workerId: string) {
-		event.stopPropagation();
-		actionError = null;
-		if (!window.confirm(`Restart worker ${workerId}?`)) return;
-		restartingId = workerId;
-		try {
-			const client = createClient(fetch);
-			await client.request(RESTART_WORKER_MUTATION, { id: workerId });
-			await invalidateAll();
-		} catch (err) {
-			actionError = errorText(err);
-		} finally {
-			restartingId = null;
-		}
-	}
-
-	async function setDesiredCount(delta: number) {
-		actionError = null;
-		const next = Math.max(0, desiredCount + delta);
-		settingDesired = true;
-		try {
-			const client = createClient(fetch);
-			await client.request(SET_DESIRED_STATE_MUTATION, {
-				input: { projectId: data.projectId, desiredCount: next }
-			});
-			await invalidateAll();
-		} catch (err) {
-			actionError = errorText(err);
-		} finally {
-			settingDesired = false;
-		}
-	}
-
 	function stateClass(state: string): string {
 		switch (state) {
 			case 'running':
@@ -313,32 +233,6 @@
 		}
 	}
 
-	function workerStatusBadge(w: {
-		state: string;
-		backoffUntil: string | null;
-		cleanupNeeded: boolean | null;
-	}): { label: string; cls: string } | null {
-		if (w.cleanupNeeded) {
-			return {
-				label: 'cleanup needed',
-				cls: 'border-status-failed bg-status-failed/10 text-status-failed'
-			};
-		}
-		if (w.backoffUntil && new Date(w.backoffUntil) > new Date()) {
-			return {
-				label: 'backoff',
-				cls: 'border-status-open bg-status-open/10 text-status-open'
-			};
-		}
-		if (w.state === 'stale') {
-			return {
-				label: 'stale',
-				cls: 'border-status-open bg-status-open/10 text-status-open'
-			};
-		}
-		return null;
-	}
-
 	// Group reported workers by project root so duplicates (same project, two
 	// worker_ids) render distinctly per ADR-022 §worker-server-interface
 	// (multiple workers per project root is expected and visible).
@@ -355,60 +249,6 @@
 </script>
 
 <div class="space-y-4">
-	<!-- Supervised worker desired-count panel. Controls the durable supervision
-	     goal: how many managed workers the server should keep running. -->
-	<div
-		data-testid="supervised-count-panel"
-		class="flex flex-col gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:flex-row sm:items-center sm:justify-between"
-	>
-		<div class="min-w-0">
-			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
-				Supervised workers
-			</div>
-			<div class="mt-1 flex items-baseline gap-3">
-				<span
-					data-testid="managed-actual-count"
-					class="text-headline-lg font-headline-lg text-fg-ink dark:text-dark-fg-ink"
-					title="Actual managed workers running"
-				>
-					{managedRunningCount}
-				</span>
-				<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
-					/ desired
-					<span data-testid="managed-desired-count" class="font-medium text-fg-ink dark:text-dark-fg-ink">{desiredCount}</span>
-				</span>
-			</div>
-			<p class="mt-1 text-body-sm text-fg-muted dark:text-dark-fg-muted">
-				Server-managed workers. Adjust desired count; the supervisor reconciles automatically.
-			</p>
-		</div>
-		<div class="flex items-center gap-1" data-testid="desired-count-stepper">
-			<button
-				type="button"
-				data-testid="desired-count-decrease"
-				onclick={() => void setDesiredCount(-1)}
-				disabled={settingDesired || desiredCount <= 0}
-				class="flex h-8 w-8 items-center justify-center border border-border-line text-fg-ink hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-				aria-label="Decrease desired worker count"
-			>
-				−
-			</button>
-			<span class="w-8 text-center text-body-sm font-medium text-fg-ink dark:text-dark-fg-ink" data-testid="desired-count-value">
-				{settingDesired ? '…' : desiredCount}
-			</span>
-			<button
-				type="button"
-				data-testid="desired-count-increase"
-				onclick={() => void setDesiredCount(1)}
-				disabled={settingDesired}
-				class="flex h-8 w-8 items-center justify-center border border-border-line text-fg-ink hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-				aria-label="Increase desired worker count"
-			>
-				+
-			</button>
-		</div>
-	</div>
-
 	<!-- Drain-worker count control (ddx-b6cf025c). Dispatches a default-spec
 	     worker; server enforces workers.default_spec + workers.max_count. -->
 	<div
@@ -484,7 +324,7 @@
 
 	{#if showStartForm}
 		<form
-			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-2 lg:grid-cols-7"
+			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-4"
 			onsubmit={(event) => {
 				event.preventDefault();
 				void startWorker();
@@ -494,22 +334,6 @@
 				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</span>
 				<input
 					bind:value={harness}
-					placeholder="auto"
-					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
-				/>
-			</label>
-			<label class="space-y-1">
-				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Provider</span>
-				<input
-					bind:value={provider}
-					placeholder="auto"
-					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
-				/>
-			</label>
-			<label class="space-y-1">
-				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Model</span>
-				<input
-					bind:value={model}
 					placeholder="auto"
 					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
@@ -546,15 +370,7 @@
 					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
 			</label>
-			<label class="space-y-1">
-				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Timeout</span>
-				<input
-					bind:value={requestTimeout}
-					placeholder="20m"
-					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
-				/>
-			</label>
-			<div class="flex items-end gap-2 sm:col-span-2 lg:col-span-7">
+			<div class="flex items-end gap-2 sm:col-span-4">
 				<button
 					type="submit"
 					disabled={starting || !profile.trim() || !effort.trim()}
@@ -574,209 +390,105 @@
 	{/if}
 
 	{#if actionError}
-		<div data-testid="worker-action-error" role="alert" class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-status-failed dark:border-dark-border-line dark:bg-dark-bg-surface">
+		<div class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-status-failed dark:border-dark-border-line dark:bg-dark-bg-surface">
 			{actionError}
 		</div>
 	{/if}
 
 	{#if !activeWorker}
-	<!-- Managed workers table -->
-	<section data-testid="managed-workers-section">
-		<h2 class="mb-2 text-headline-sm font-headline-sm text-fg-ink dark:text-dark-fg-ink">
-			Managed workers
-		</h2>
-		<div class="overflow-x-auto overflow-hidden border border-border-line dark:border-dark-border-line">
-			<table class="w-full text-body-sm">
-				<thead>
-					<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">ID</th>
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Kind</th>
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">State / Status</th>
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Current Bead</th>
-						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Restarts</th>
-						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each managedWorkers as w (w.id)}
-						{@const badge = workerStatusBadge({ state: w.state, backoffUntil: w.backoffUntil ?? null, cleanupNeeded: w.cleanupNeeded ?? null })}
-						<tr
-							onclick={() => openWorker(w.id)}
-							data-testid="managed-worker-row"
-							data-worker-id={w.id}
-							class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {activeWorker === w.id ? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10' : ''}"
-						>
-							<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
-								{w.id.slice(0, 8)}
-							</td>
-							<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
-								<div class="space-y-1">
-									<div>{w.kind}</div>
-									{#if w.harness}
-										<a
-											href={providerHref(w.harness)}
-											onclick={(event) => event.stopPropagation()}
-											class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
-											data-testid="worker-provider-link-{w.id}"
-										>
-											{w.harness}
-										</a>
-									{/if}
-								</div>
-							</td>
-							<td class="px-4 py-3">
-								<div class="flex flex-wrap items-center gap-1.5">
-									<span class="font-medium {stateClass(livePhaseOverrides.get(w.id) ?? w.state)}">
-										{livePhaseOverrides.get(w.id) ?? w.state}
-									</span>
-									{#if badge}
-										<span
-											data-testid="worker-status-badge-{w.id}"
-											class="inline-flex items-center border px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide {badge.cls}"
-										>
-											{badge.label}
-										</span>
-									{/if}
-								</div>
-							</td>
-							<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
-								{w.currentBead ?? '—'}
-							</td>
-							<td class="px-4 py-3 text-right text-fg-muted dark:text-dark-fg-muted">
-								{w.restartCount ?? 0}
-							</td>
-							<td class="px-4 py-3 text-right">
-								<div class="flex justify-end gap-1.5">
-									{#if w.state === 'running' && !activeWorker}
-										<button
-											type="button"
-											onclick={(event) => stopWorker(event, w.id)}
-											disabled={stoppingId === w.id}
-											class="border border-border-line px-2 py-1 text-xs font-medium text-status-failed hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
-										>
-											{stoppingId === w.id ? 'Stopping…' : 'Stop'}
-										</button>
-										<button
-											type="button"
-											data-testid="restart-worker-{w.id}"
-											onclick={(event) => restartWorker(event, w.id)}
-											disabled={restartingId === w.id}
-											class="border border-border-line px-2 py-1 text-xs font-medium text-fg-ink hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-										>
-											{restartingId === w.id ? 'Restarting…' : 'Restart'}
-										</button>
-									{:else}
-										<span class="text-mono-code text-fg-muted dark:text-dark-fg-muted">—</span>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/each}
-					{#if managedWorkers.length === 0}
-						<tr>
-							<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
-								No managed workers. Set desired count above or start a worker.
-							</td>
-						</tr>
-					{/if}
-				</tbody>
-			</table>
-		</div>
-	</section>
-
-	<!-- External (non-managed) workers table — reported-only, no stop/restart -->
-	{#if externalWorkers.length > 0}
-	<section data-testid="external-workers-section" class="space-y-2">
-		<div class="flex items-center gap-2">
-			<h2 class="text-headline-sm font-headline-sm text-fg-ink dark:text-dark-fg-ink">
-				External workers
-			</h2>
-			<span
-				data-testid="external-workers-label"
-				class="border border-border-line px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
-				title="Started outside the server — stop and restart are unavailable"
-			>
-				reported only
-			</span>
-		</div>
-		<div class="overflow-x-auto overflow-hidden border border-border-line dark:border-dark-border-line">
-			<table class="w-full text-body-sm">
-				<thead>
-					<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">ID</th>
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Kind</th>
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">State / Status</th>
-						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Current Bead</th>
-						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Attempts</th>
-						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each externalWorkers as w (w.id)}
-						{@const badge = workerStatusBadge({ state: w.state, backoffUntil: w.backoffUntil ?? null, cleanupNeeded: w.cleanupNeeded ?? null })}
-						<tr
-							onclick={() => openWorker(w.id)}
-							data-testid="external-worker-row"
-							data-worker-id={w.id}
-							class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {activeWorker === w.id ? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10' : ''}"
-						>
-							<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
-								{w.id.slice(0, 8)}
-							</td>
-							<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
-								<div class="space-y-1">
-									<div>{w.kind}</div>
-									{#if w.harness}
-										<a
-											href={providerHref(w.harness)}
-											onclick={(event) => event.stopPropagation()}
-											class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
-											data-testid="worker-provider-link-{w.id}"
-										>
-											{w.harness}
-										</a>
-									{/if}
-								</div>
-							</td>
-							<td class="px-4 py-3">
-								<div class="flex flex-wrap items-center gap-1.5">
-									<span class="font-medium {stateClass(livePhaseOverrides.get(w.id) ?? w.state)}">
-										{livePhaseOverrides.get(w.id) ?? w.state}
-									</span>
-									{#if badge}
-										<span
-											data-testid="worker-status-badge-{w.id}"
-											class="inline-flex items-center border px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide {badge.cls}"
-										>
-											{badge.label}
-										</span>
-									{/if}
-								</div>
-							</td>
-							<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
-								{w.currentBead ?? '—'}
-							</td>
-							<td class="px-4 py-3 text-right text-fg-muted dark:text-dark-fg-muted">
-								{#if w.attempts != null}
-									<span title="{w.successes ?? 0}✓ / {w.failures ?? 0}✗">
-										{w.attempts}
-									</span>
-								{:else}
-									—
+	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+		<table class="w-full text-body-sm">
+			<thead>
+				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">ID</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Kind</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
+						>State / Phase</th
+					>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
+						>Current Bead</th
+					>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
+						>Attempts</th
+					>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each data.workers.edges as edge (edge.cursor)}
+					<tr
+						onclick={() => openWorker(edge.node.id)}
+						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {activeWorker ===
+						edge.node.id
+							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
+							: ''}"
+					>
+						<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
+							{edge.node.id.slice(0, 8)}
+						</td>
+						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
+							<div class="space-y-1">
+								<div>{edge.node.kind}</div>
+								{#if edge.node.harness}
+									<a
+										href={providerHref(edge.node.harness)}
+										onclick={(event) => event.stopPropagation()}
+										class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
+										data-testid="worker-provider-link-{edge.node.id}"
+									>
+										{edge.node.harness}
+									</a>
 								{/if}
-							</td>
-							<td class="px-4 py-3 text-right">
-								<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted" data-testid="external-worker-no-actions-{w.id}">
-									reported only
+							</div>
+						</td>
+						<td class="px-4 py-3">
+							<span
+								class="font-medium {stateClass(
+									livePhaseOverrides.get(edge.node.id) ?? edge.node.state
+								)}"
+							>
+								{livePhaseOverrides.get(edge.node.id) ?? edge.node.state}
+							</span>
+						</td>
+						<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
+							{edge.node.currentBead ?? '—'}
+						</td>
+						<td class="px-4 py-3 text-right text-fg-muted dark:text-dark-fg-muted">
+							{#if edge.node.attempts != null}
+								<span title="{edge.node.successes ?? 0}✓ / {edge.node.failures ?? 0}✗">
+									{edge.node.attempts}
 								</span>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	</section>
-	{/if}
+							{:else}
+								—
+							{/if}
+						</td>
+						<td class="px-4 py-3 text-right">
+							{#if edge.node.state === 'running' && !activeWorker}
+								<button
+									type="button"
+									onclick={(event) => stopWorker(event, edge.node.id)}
+									disabled={stoppingId === edge.node.id}
+									class="border border-border-line px-2 py-1 text-xs font-medium text-status-failed hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+								>
+									{stoppingId === edge.node.id ? 'Stopping…' : 'Stop'}
+								</button>
+							{:else}
+								<span class="text-mono-code text-fg-muted dark:text-dark-fg-muted">—</span>
+							{/if}
+						</td>
+					</tr>
+				{/each}
+				{#if data.workers.edges.length === 0}
+					<tr>
+						<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
+							No workers found. Nothing is draining this queue right now; start a worker here
+							or run ddx work from a terminal.
+						</td>
+					</tr>
+				{/if}
+			</tbody>
+		</table>
+	</div>
 	{/if}
 
 	<!--

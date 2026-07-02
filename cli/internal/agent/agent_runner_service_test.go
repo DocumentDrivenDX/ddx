@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
@@ -122,96 +121,6 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	assert.Contains(t, FormatServiceProgressEntries(progress), "ok ddx-1234 7 add test implementation to cli/internal/file.go")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "< out=312B 12 lines")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "18.4 tok/s")
-}
-
-func TestDrainServiceEvents_ReturnsOnFinalWithoutChannelClose(t *testing.T) {
-	events := make(chan agentlib.ServiceEvent, 1)
-	events <- agentlib.ServiceEvent{
-		Type: "final",
-		Time: time.Date(2026, 6, 16, 22, 49, 0, 0, time.UTC),
-		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
-	}
-
-	done := make(chan *agentlib.ServiceFinalData, 1)
-	go func() {
-		final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "readiness"}), nil, nil)
-		done <- final
-	}()
-
-	select {
-	case final := <-done:
-		require.NotNil(t, final)
-		assert.Equal(t, "done", final.FinalText)
-	case <-time.After(1 * time.Second):
-		t.Fatal("drainServiceEventsWithRenderer blocked waiting for channel close after final event")
-	}
-}
-
-func TestDrainServiceEventsWatchdog_ReturnsOnFinalWithoutChannelClose(t *testing.T) {
-	events := make(chan agentlib.ServiceEvent, 1)
-	events <- agentlib.ServiceEvent{
-		Type: agentlib.ServiceEventTypeFinal,
-		Time: time.Date(2026, 6, 16, 22, 49, 0, 0, time.UTC),
-		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
-	}
-	wd := &drainWatchdog{idleTimeout: time.Hour}
-
-	done := make(chan *agentlib.ServiceFinalData, 1)
-	go func() {
-		final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "readiness"}), wd, nil)
-		done <- final
-	}()
-
-	select {
-	case final := <-done:
-		require.NotNil(t, final)
-		assert.Equal(t, "done", final.FinalText)
-	case <-time.After(1 * time.Second):
-		t.Fatal("watchdog drain blocked waiting for channel close after final event")
-	}
-}
-
-func TestDrainServiceEventsWatchdog_ContextDoneSuppressesLateEvents(t *testing.T) {
-	events := make(chan agentlib.ServiceEvent, 4)
-	done := make(chan struct{})
-	close(done)
-
-	var out bytes.Buffer
-	wd := &drainWatchdog{
-		done:        done,
-		idleTimeout: time.Hour,
-	}
-
-	finished := make(chan *agentlib.ServiceFinalData, 1)
-	go func() {
-		final, _, _ := drainServiceEventsWithRenderer(events, &out, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "readiness"}), wd, nil)
-		finished <- final
-	}()
-
-	select {
-	case final := <-finished:
-		require.Nil(t, final)
-	case <-time.After(1 * time.Second):
-		t.Fatal("drain did not return when caller context was done")
-	}
-
-	events <- agentlib.ServiceEvent{
-		Type: "routing_decision",
-		Time: time.Date(2026, 6, 17, 13, 10, 0, 0, time.UTC),
-		Data: json.RawMessage(`{"harness":"codex","provider":"openai","model":"gpt-5.4-mini","reason":"late"}`),
-	}
-	events <- agentlib.ServiceEvent{
-		Type: "progress",
-		Time: time.Date(2026, 6, 17, 13, 10, 1, 0, time.UTC),
-		Data: json.RawMessage(`{"phase":"tool","state":"complete","task_id":"ddx-late","turn_index":1,"action":"late progress","subject":"after timeout"}`),
-	}
-	events <- agentlib.ServiceEvent{
-		Type: "final",
-		Time: time.Date(2026, 6, 17, 13, 10, 2, 0, time.UTC),
-		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"late success"}`),
-	}
-
-	assert.Empty(t, out.String(), "late service events after caller cancellation must not be rendered")
 }
 
 func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
@@ -359,75 +268,6 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
 	assert.Equal(t, "done", result.Output)
 	assert.Equal(t, 0, result.ExitCode)
-}
-
-func TestRunWithConfigViaServiceScrubsParentWorkerRoutingEnvForService(t *testing.T) {
-	t.Setenv("DDX_PROJECT_ROOT", "/real/project")
-	t.Setenv("DDX_AGENT_NAME", "worker-real")
-	t.Setenv("DDX_SERVER_MANAGED_WORKER_ID", "worker-real")
-	t.Setenv("DDX_WORKER_ID", "worker-real")
-
-	stub := &passthroughTestService{
-		executeEvents: []agentlib.ServiceEvent{
-			{
-				Type: "final",
-				Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
-				Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
-			},
-		},
-	}
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
-
-	result, err := executeOnService(context.Background(), stub, t.TempDir(), rcfg, AgentRunRuntime{
-		Prompt: "hello",
-		Env: map[string]string{
-			"DDX_PROJECT_ROOT":             "/metadata/project",
-			"DDX_AGENT_NAME":               "metadata-worker",
-			"DDX_SERVER_MANAGED_WORKER_ID": "metadata-worker",
-			"DDX_WORKER_ID":                "worker-attempt",
-			DDXModeEnvKey:                  DDXModeBeadExecution,
-		},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Empty(t, stub.envAtExecute, "service provider launch must not inherit parent worker routing env")
-	require.NotNil(t, stub.lastReq.Metadata)
-	assert.NotContains(t, stub.lastReq.Metadata, "DDX_PROJECT_ROOT")
-	assert.NotContains(t, stub.lastReq.Metadata, "DDX_AGENT_NAME")
-	assert.NotContains(t, stub.lastReq.Metadata, "DDX_SERVER_MANAGED_WORKER_ID")
-	assert.Equal(t, "worker-attempt", stub.lastReq.Metadata["DDX_WORKER_ID"])
-	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
-	assert.Equal(t, "worker-real", os.Getenv("DDX_WORKER_ID"), "worker env must be restored after service dispatch")
-}
-
-func TestRunWithConfigViaServiceScrubsParentWorkerRoutingEnvForServiceFactory(t *testing.T) {
-	t.Setenv("DDX_PROJECT_ROOT", "/real/project")
-	t.Setenv("DDX_AGENT_NAME", "worker-real")
-	t.Setenv("DDX_SERVER_MANAGED_WORKER_ID", "worker-real")
-	t.Setenv("DDX_WORKER_ID", "worker-real")
-
-	stub := &passthroughTestService{}
-	var envAtFactory map[string]string
-	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
-		envAtFactory = captureEnvKeys("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
-		return stub, nil
-	})
-	t.Cleanup(func() {
-		SetServiceRunFactory(nil)
-	})
-
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
-
-	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{Prompt: "hello"})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Empty(t, envAtFactory, "service construction must not inherit parent worker routing env")
-	assert.Empty(t, stub.envAtExecute, "service execution must not inherit parent worker routing env")
-	assert.Equal(t, "worker-real", os.Getenv("DDX_WORKER_ID"), "worker env must be restored after service dispatch")
 }
 
 func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {

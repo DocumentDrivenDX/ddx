@@ -57,11 +57,9 @@ require Vale or any other external binary.
 
 ### Install behavior
 
-The DDx bootstrap plugin source stays limited to `library/package.yaml` and
-`library/skills/ddx/`. The prose checker assets are CLI runtime assets under
-`cli/internal/docprose/assets/prose-quality/` and are embedded into the binary.
-They are not plugin payload, are not copied into initialized projects, and do
-not require installing HELIX or any other marketplace plugin.
+The default DDx plugin should ship the embedded checker assets and their
+rules/vocabulary/fixture tree. It should not require the user to install Vale
+for the first supported surface to run.
 
 ### Optional runner path
 
@@ -91,29 +89,24 @@ default even when the runner is optional: the user still gets findings,
 and missing-tool state is surfaced separately as an execution diagnostic
 instead of suppressing the scan.
 
-## Prose Asset Layout
+## Default Plugin Asset Layout
 
-The prose-quality assets are runtime assets owned by the CLI, not marketplace
-plugin payload and not project-specific check scaffolding.
+The prose-quality assets belong in the default DDx plugin, not in a
+project-specific check scaffold.
 
-Source layout:
+Proposed source layout:
 
-- `cli/internal/docprose/assets/prose-quality/check.yaml`
-- `cli/internal/docprose/assets/prose-quality/rules/`
-- `cli/internal/docprose/assets/prose-quality/styles/DDx/`
-- `cli/internal/docprose/assets/prose-quality/vocabulary/`
+- `library/checks/prose-quality/check.yaml`
+- `library/checks/prose-quality/rules/`
+- `library/checks/prose-quality/vocabulary/`
+- `library/checks/prose-quality/fixtures/`
 
-At runtime, `docprose.DefaultSettings()` reads the embedded asset filesystem.
-The optional Vale runner materializes the packaged DDx style directory into a
-temporary execution directory for that invocation, then removes it with the rest
-of the scratch config. No cache package or project checkout receives a copy.
+Installed layout:
 
-`.ddx/plugins/ddx` is reserved for explicit local development overlays and
-legacy compatibility. Normal `ddx init` / `ddx plugin sync` bootstrap must not
-copy the default plugin payload into the project repository. The DDx bootstrap
-plugin remains package metadata plus `skills/ddx/`; workflow assets such as
-HELIX prompts, personas, templates, checks, MCP definitions, and environments
-resolve from separate marketplace/cache plugins.
+- `.ddx/plugins/ddx/checks/prose-quality/check.yaml`
+- `.ddx/plugins/ddx/checks/prose-quality/rules/`
+- `.ddx/plugins/ddx/checks/prose-quality/vocabulary/`
+- `.ddx/plugins/ddx/checks/prose-quality/fixtures/`
 
 Layout rules:
 

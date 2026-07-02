@@ -19,115 +19,21 @@ func makeInTreeRoot(t *testing.T) string {
 	return projectRoot
 }
 
-func TestPluginLookup_RealProjectDirectoryDoesNotResolve(t *testing.T) {
+func TestPluginLookup_PrefersProjectOverGlobal(t *testing.T) {
 	projectRoot := makeInTreeRoot(t)
 	pluginName := "myplugin"
 
-	// A real directory under .ddx/plugins is a stale legacy payload, not an
-	// explicit local overlay. Only symlink overlays are project-authoritative.
+	// Create plugin in both project and global layers.
 	projectPlugin := filepath.Join(projectRoot, ddxroot.DirName, "plugins", pluginName)
 	if err := os.MkdirAll(projectPlugin, 0o755); err != nil {
 		t.Fatalf("mkdir project plugin: %v", err)
 	}
 
-	_, _, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
-	if err == nil {
-		t.Fatalf("ResolvePlugin unexpectedly resolved stale real project plugin dir %q", projectPlugin)
-	}
-}
-
-func TestPluginLookup_IgnoresLegacyGlobal(t *testing.T) {
-	projectRoot := makeInTreeRoot(t)
-	pluginName := "myplugin"
-
-	// No project-layer copy.
 	xdg := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdg)
 	globalPlugin := filepath.Join(xdg, "ddx", "global", "plugins", pluginName)
 	if err := os.MkdirAll(globalPlugin, 0o755); err != nil {
 		t.Fatalf("mkdir global plugin: %v", err)
-	}
-
-	_, _, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
-	if err == nil {
-		t.Fatalf("ResolvePlugin unexpectedly resolved legacy global plugin %q", globalPlugin)
-	}
-
-	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, "ddx")
-	if err != nil {
-		t.Fatalf("ResolvePlugin(ddx baked-in): unexpected error: %v", err)
-	}
-	if gotLayer != "baked-in" {
-		t.Errorf("layer = %q, want %q", gotLayer, "baked-in")
-	}
-	if gotPath != "" {
-		t.Errorf("path = %q, want empty string for baked-in", gotPath)
-	}
-}
-
-func TestPluginLookup_ResolvesProjectLockCache(t *testing.T) {
-	projectRoot := makeInTreeRoot(t)
-	pluginName := "myplugin"
-	xdg := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg)
-
-	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
-	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
-		t.Fatalf("mkdir cache plugin: %v", err)
-	}
-	lock := &PluginLock{Plugins: []PluginLockEntry{{
-		Name:      pluginName,
-		Version:   "1.2.3",
-		Type:      PackageTypePlugin,
-		Source:    "https://example.com/myplugin",
-		CachePath: cachePlugin,
-	}}}
-	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
-		t.Fatalf("save plugin lock: %v", err)
-	}
-
-	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
-	if err != nil {
-		t.Fatalf("ResolvePlugin: unexpected error: %v", err)
-	}
-	if gotLayer != "cache" {
-		t.Errorf("layer = %q, want %q", gotLayer, "cache")
-	}
-	if gotPath != cachePlugin {
-		t.Errorf("path = %q, want %q", gotPath, cachePlugin)
-	}
-}
-
-func TestPluginLookup_PrefersLocalOverlayOverProjectLockCache(t *testing.T) {
-	projectRoot := makeInTreeRoot(t)
-	pluginName := "myplugin"
-	xdg := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg)
-
-	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
-	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
-		t.Fatalf("mkdir cache plugin: %v", err)
-	}
-	overlayTarget := filepath.Join(t.TempDir(), "myplugin")
-	if err := os.MkdirAll(overlayTarget, 0o755); err != nil {
-		t.Fatalf("mkdir overlay target: %v", err)
-	}
-	projectPlugin := filepath.Join(projectRoot, ddxroot.DirName, "plugins", pluginName)
-	if err := os.MkdirAll(filepath.Dir(projectPlugin), 0o755); err != nil {
-		t.Fatalf("mkdir project plugin parent: %v", err)
-	}
-	if err := os.Symlink(overlayTarget, projectPlugin); err != nil {
-		t.Fatalf("symlink project plugin overlay: %v", err)
-	}
-	lock := &PluginLock{Plugins: []PluginLockEntry{{
-		Name:      pluginName,
-		Version:   "1.2.3",
-		Type:      PackageTypePlugin,
-		Source:    "https://example.com/myplugin",
-		CachePath: cachePlugin,
-	}}}
-	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
-		t.Fatalf("save plugin lock: %v", err)
 	}
 
 	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
@@ -142,45 +48,96 @@ func TestPluginLookup_PrefersLocalOverlayOverProjectLockCache(t *testing.T) {
 	}
 }
 
-func TestPluginLookup_RealProjectDirectoryDoesNotShadowCache(t *testing.T) {
+func TestPluginLookup_FallsBackToGlobal(t *testing.T) {
 	projectRoot := makeInTreeRoot(t)
 	pluginName := "myplugin"
+
+	// No project-layer copy.
 	xdg := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdg)
-
-	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
-	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
-		t.Fatalf("mkdir cache plugin: %v", err)
-	}
-	staleProjectPlugin := filepath.Join(projectRoot, ddxroot.DirName, "plugins", pluginName)
-	if err := os.MkdirAll(staleProjectPlugin, 0o755); err != nil {
-		t.Fatalf("mkdir stale project plugin: %v", err)
-	}
-	lock := &PluginLock{Plugins: []PluginLockEntry{{
-		Name:      pluginName,
-		Version:   "1.2.3",
-		Type:      PackageTypePlugin,
-		Source:    "https://example.com/myplugin",
-		CachePath: cachePlugin,
-	}}}
-	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
-		t.Fatalf("save plugin lock: %v", err)
+	globalPlugin := filepath.Join(xdg, "ddx", "global", "plugins", pluginName)
+	if err := os.MkdirAll(globalPlugin, 0o755); err != nil {
+		t.Fatalf("mkdir global plugin: %v", err)
 	}
 
 	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
 	if err != nil {
 		t.Fatalf("ResolvePlugin: unexpected error: %v", err)
 	}
-	if gotLayer != "cache" {
-		t.Errorf("layer = %q, want %q", gotLayer, "cache")
+	if gotLayer != "global" {
+		t.Errorf("layer = %q, want %q", gotLayer, "global")
 	}
-	if gotPath != cachePlugin {
-		t.Errorf("path = %q, want %q", gotPath, cachePlugin)
+	if gotPath != globalPlugin {
+		t.Errorf("path = %q, want %q", gotPath, globalPlugin)
+	}
+
+	// With neither project nor global copy present, "ddx" falls back to baked-in.
+	projectRoot2 := makeInTreeRoot(t)
+	xdg2 := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg2)
+	gotPath2, gotLayer2, err2 := ResolvePlugin(context.Background(), projectRoot2, "ddx")
+	if err2 != nil {
+		t.Fatalf("ResolvePlugin(ddx baked-in): unexpected error: %v", err2)
+	}
+	if gotLayer2 != "baked-in" {
+		t.Errorf("layer = %q, want %q", gotLayer2, "baked-in")
+	}
+	if gotPath2 != "" {
+		t.Errorf("path = %q, want empty string for baked-in", gotPath2)
+	}
+}
+
+func TestGlobalPluginsDir_HonorsXDGDataHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	got := GlobalPluginsDir()
+	want := filepath.Join(xdg, "ddx", "global", "plugins")
+	if got != want {
+		t.Errorf("GlobalPluginsDir() = %q, want %q", got, want)
+	}
+
+	// Fallback: without XDG_DATA_HOME, uses ~/.local/share.
+	t.Setenv("XDG_DATA_HOME", "")
+	home, err := os.UserHomeDir()
+	if err == nil {
+		got2 := GlobalPluginsDir()
+		want2 := filepath.Join(home, ".local", "share", "ddx", "global", "plugins")
+		if got2 != want2 {
+			t.Errorf("GlobalPluginsDir() without XDG = %q, want %q", got2, want2)
+		}
+	}
+}
+
+func TestGlobalPluginDir_HonorsXDGDataHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	pluginName := "testplugin"
+	got := GlobalPluginDir(pluginName)
+	want := filepath.Join(xdg, "ddx", "global", "plugins", pluginName)
+	if got != want {
+		t.Errorf("GlobalPluginDir(%q) = %q, want %q", pluginName, got, want)
+	}
+
+	// Changing XDG_DATA_HOME changes the result.
+	xdg2 := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg2)
+	got2 := GlobalPluginDir(pluginName)
+	want2 := filepath.Join(xdg2, "ddx", "global", "plugins", pluginName)
+	if got2 != want2 {
+		t.Errorf("GlobalPluginDir(%q) with changed XDG = %q, want %q", pluginName, got2, want2)
+	}
+	if got2 == got {
+		t.Errorf("GlobalPluginDir result did not change when XDG_DATA_HOME changed")
 	}
 }
 
 func TestPluginLookup_BakedInDefaultOnly(t *testing.T) {
 	projectRoot := makeInTreeRoot(t)
+
+	// Empty XDG so no global copies exist.
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	// "ddx" resolves to baked-in.
 	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, "ddx")
@@ -198,94 +155,5 @@ func TestPluginLookup_BakedInDefaultOnly(t *testing.T) {
 	_, _, err = ResolvePlugin(context.Background(), projectRoot, "unknown-plugin")
 	if err == nil {
 		t.Error("expected error for unknown plugin name, got nil")
-	}
-}
-
-func TestBuiltinDDxPackageResolvesFromDefaultPluginFallback(t *testing.T) {
-	projectRoot := makeInTreeRoot(t)
-
-	cachePath, err := BuiltinDDxCachePath()
-	if err != nil {
-		t.Fatalf("BuiltinDDxCachePath: %v", err)
-	}
-	if err := os.RemoveAll(cachePath); err != nil {
-		t.Fatalf("remove stale cache: %v", err)
-	}
-	if err := EnsureBuiltinDDxCache(cachePath, true); err != nil {
-		t.Fatalf("EnsureBuiltinDDxCache: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(cachePath, "skills", "ddx", "SKILL.md")); err != nil {
-		t.Fatalf("embedded default-plugin cache missing DDx skill: %v", err)
-	}
-
-	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, "ddx")
-	if err != nil {
-		t.Fatalf("ResolvePlugin(ddx): unexpected error: %v", err)
-	}
-	if gotLayer != "baked-in" {
-		t.Errorf("layer = %q, want %q", gotLayer, "baked-in")
-	}
-	if gotPath != "" {
-		t.Errorf("path = %q, want empty string for baked-in", gotPath)
-	}
-}
-
-func TestRegistryDistinguishesLocalOverlayFromMarketplacePackage(t *testing.T) {
-	projectRoot := makeInTreeRoot(t)
-	pluginName := "sample-plugin"
-	xdg := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg)
-
-	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
-	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
-		t.Fatalf("mkdir cache plugin: %v", err)
-	}
-	lock := &PluginLock{Plugins: []PluginLockEntry{{
-		Name:      pluginName,
-		Version:   "1.2.3",
-		Type:      PackageTypePlugin,
-		Source:    "https://example.com/myplugin",
-		CachePath: cachePlugin,
-	}}}
-	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
-		t.Fatalf("save plugin lock: %v", err)
-	}
-
-	overlayTarget := filepath.Join(t.TempDir(), "sample-plugin")
-	if err := os.MkdirAll(overlayTarget, 0o755); err != nil {
-		t.Fatalf("mkdir overlay target: %v", err)
-	}
-	overlayPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", pluginName)
-	if err := os.MkdirAll(filepath.Dir(overlayPath), 0o755); err != nil {
-		t.Fatalf("mkdir overlay parent: %v", err)
-	}
-	if err := os.Symlink(overlayTarget, overlayPath); err != nil {
-		t.Fatalf("symlink project overlay: %v", err)
-	}
-
-	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
-	if err != nil {
-		t.Fatalf("ResolvePlugin project overlay: unexpected error: %v", err)
-	}
-	if gotLayer != "project" {
-		t.Fatalf("layer = %q, want %q", gotLayer, "project")
-	}
-	if gotPath != overlayPath {
-		t.Fatalf("path = %q, want %q", gotPath, overlayPath)
-	}
-
-	if err := os.Remove(overlayPath); err != nil {
-		t.Fatalf("remove overlay symlink: %v", err)
-	}
-
-	gotPath, gotLayer, err = ResolvePlugin(context.Background(), projectRoot, pluginName)
-	if err != nil {
-		t.Fatalf("ResolvePlugin cache-backed package: unexpected error: %v", err)
-	}
-	if gotLayer != "cache" {
-		t.Fatalf("layer = %q, want %q", gotLayer, "cache")
-	}
-	if gotPath != cachePlugin {
-		t.Fatalf("path = %q, want %q", gotPath, cachePlugin)
 	}
 }

@@ -20,17 +20,14 @@ Use **commit SHA pinning + content tree hashing** in a version-controlled lockfi
 
 1. User runs `ddx plugin install helix`
 2. DDx resolves the package to a specific git commit SHA from the registry
-3. DDx fetches the package payload for that exact version into the shared XDG
-   plugin cache
+3. DDx clones/fetches at that exact commit (shallow, specific ref)
 4. DDx computes a SHA-256 hash of the content tree (all files in sorted order)
-5. DDx records `(repo, commit, tree_hash)` and generated adapter paths in
-   `.ddx/plugins.lock.yaml`
-6. DDx materializes generated adapters under `.agents/skills/` and
-   `.claude/skills/`; full marketplace payloads remain in the cache
+5. DDx records `(repo, commit, tree_hash)` in `.ddx/lock.yaml`
+6. DDx copies files to their install locations
 
 #### On Subsequent Use
 
-1. DDx reads `.ddx/plugins.lock.yaml`
+1. DDx reads `.ddx/lock.yaml`
 2. On `ddx plugin upgrade`, DDx fetches the latest commit, computes the new tree hash, and shows the diff in the lockfile
 3. The developer reviews and commits the lockfile change (like reviewing `go.sum` changes)
 
@@ -38,13 +35,13 @@ Use **commit SHA pinning + content tree hashing** in a version-controlled lockfi
 
 1. `ddx doctor --plugins` audits installed plugin integrity
 2. Re-computes tree hashes
-3. Compares against `.ddx/plugins.lock.yaml`
+3. Compares against `.ddx/lock.yaml`
 4. Any mismatch = hard failure with clear error
 
 ### Lockfile Format
 
 ```yaml
-# .ddx/plugins.lock.yaml — commit to version control, review changes in PRs
+# .ddx/lock.yaml — commit to version control, review changes in PRs
 version: 1
 packages:
   helix:
@@ -52,10 +49,13 @@ packages:
     commit: abc123def456789012345678901234567890abcd
     tree_hash: sha256:7c6f43f4a3b2e1d0...
     installed_at: 2026-04-04T12:00:00Z
-    cache_path: ${XDG_DATA_HOME}/ddx/cache/plugins/helix/1.0.0
-    generated_files:
-      - .agents/skills/helix
-      - .claude/skills/helix
+    files:
+      - path: .agents/skills/helix-run   # project-local (FEAT-015: home paths retired)
+        hash: sha256:...
+      - path: .agents/skills/helix-build
+        hash: sha256:...
+      - path: ~/.local/bin/helix
+        hash: sha256:...
   persona/strict-code-reviewer:
     repo: https://github.com/DocumentDrivenDX/ddx-library
     commit: def456789012345678901234567890abcdef0123
@@ -78,16 +78,13 @@ For each file in sorted path order:
 
 Using SHA-256. Same content always produces the same hash. File ordering is lexicographic by path. Symlinks are resolved. Binary files are included. `.git/` is excluded.
 
-### Cached Payload and Adapter Checks
+### Per-File Hashes
 
-In addition to the tree hash (which covers the source), the lock records the
-cache path and generated adapter paths. This enables:
+In addition to the tree hash (which covers the source), each installed file gets its own SHA-256 hash recorded in the lockfile. This enables:
 
-- `ddx doctor --plugins` to distinguish missing cache payloads from missing
-  generated adapters
-- Detection of stale or missing generated skill shims
-- Fast verification without re-fetching from git when the cache is already
-  populated
+- `ddx doctor --plugins` to check installed files haven't been tampered with post-install
+- Detection of local modifications to installed skills/plugins
+- Fast verification (check file hashes) without re-fetching from git
 
 ### Registry-Level Checksums
 
@@ -112,7 +109,7 @@ When DDx fetches the registry, it verifies that the commit and tree_hash for a p
 | Registry repo compromised (modified registry.yaml) | Lockfile pins override registry. Developer reviews lockfile changes in PRs. |
 | Source repo compromised (force-push, tag mutation) | Commit SHA is immutable. Tree hash catches any content change at that commit. |
 | Man-in-the-middle during download | Tree hash computed after download must match lockfile. Any tampering detected. |
-| Cached payload or generated adapters missing | `.ddx/plugins.lock.yaml` records the expected cache path and generated adapter paths. `ddx doctor --plugins` reports cache-missing or shims-missing. |
+| Installed files modified post-install | Per-file hashes in lockfile. `ddx doctor --plugins` detects modifications. |
 | Lockfile tampered with in a PR | Standard code review catches lockfile changes. Lockfile changes should be reviewed like dependency updates. |
 | Registry serves different content to different users | Tree hash is deterministic. Two users fetching the same commit get the same hash or detect a discrepancy. |
 
@@ -156,8 +153,8 @@ For the strongest guarantee that content was published by a specific identity. D
 ## Consequences
 
 - Every installed package is pinned by commit SHA and tree hash
-- `.ddx/plugins.lock.yaml` must be committed to version control and reviewed in PRs
-- `ddx doctor --plugins` can check lock, cache, and generated adapter state at any time without network access
+- `.ddx/lock.yaml` must be committed to version control and reviewed in PRs
+- `ddx doctor --plugins` can check integrity at any time without network access (for installed file hashes)
 - No external signing infrastructure required
 - ~100 lines of Go for tree hashing + lockfile management
 - Developers must review lockfile changes like they review `go.sum` changes

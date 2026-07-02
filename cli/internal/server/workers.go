@@ -24,8 +24,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
-	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
-	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -128,10 +126,9 @@ type WorkerRecord struct {
 	// autonomous watchdog can send SIGTERM/SIGKILL to the process group when
 	// cancelling the context is not enough.
 	PID int `json:"pid,omitempty"`
-	// PGID is the process group id for PID when the worker was launched as an
-	// external process. On Unix server-managed workers are spawned in a new
-	// group, so PID == PGID. Persisting both makes the process boundary visible
-	// to operators and tests.
+	// PGID is the OS process-group id of an external worker subprocess, if any.
+	// For server-managed workers on Unix this matches PID because the child
+	// starts in its own process group. Zero for purely in-process workers.
 	PGID int `json:"pgid,omitempty"`
 	// ReapReason is populated when the watchdog forcibly terminates a worker;
 	// set to "watchdog" today.
@@ -140,12 +137,6 @@ type WorkerRecord struct {
 	// to disk. True when PID > 0 and the process is alive, false when PID > 0
 	// but the process has exited. Omitted (nil) when PID == 0 (goroutine-only).
 	PIDAlive *bool `json:"pid_alive,omitempty"`
-	// Managed marks a worker started by the WorkerSupervisor rather than
-	// an external caller or the operator directly.
-	Managed bool `json:"managed,omitempty"`
-	// RestartCount is the number of times this worker was restarted by
-	// the supervisor's restart policy.
-	RestartCount int `json:"restart_count,omitempty"`
 }
 
 type WorkerExecutionResult struct {
@@ -195,10 +186,14 @@ type workerHandle struct {
 	// no-op and runWorker can preserve the "stopped" state across its final
 	// record write.
 	stopped bool
-	// suppressDesiredRefill is set by explicit restart before Stop so the old
-	// worker finalizer cannot race the replacement and start another desired
-	// worker for the same project.
-	suppressDesiredRefill bool
+	// managed marks a subprocess-backed worker launched via the server-managed
+	// path. The parent manager does not watchdog these workers because the
+	// worker loop lives in a separate OS process.
+	managed bool
+	// cleanupPGIDs stores additional child process groups registered for this
+	// worker when the worker itself does not own the full process tree. The
+	// slice is protected by m.mu and consumed by the stop/reap cleanup helper.
+	cleanupPGIDs []int
 	// wakeCh, when non-nil, signals an work worker's idle-poll
 	// sleep to return early so the loop re-scans the ready queue. The
 	// channel is buffered (cap 1) so a non-blocking send coalesces multiple
@@ -211,20 +206,10 @@ type workerHandle struct {
 type WorkerManager struct {
 	projectRoot string
 	rootDir     string
-	// desiredReconcileMu serializes desired-state reconciliation across
-	// operator-triggered reconcile/cleanup calls and managed-worker finalizers.
-	// Without this, concurrent exits can each see a partial worker set and
-	// over-provision beyond desired_count.
-	desiredReconcileMu sync.Mutex
-	desiredSupervisor  *WorkerSupervisor
 	// BeadWorkerFactory, when non-nil, is called by runWorker to create the
 	// ExecuteBeadWorker instead of building one from the real agent runner.
 	// Override in tests to inject a fake executor.
 	BeadWorkerFactory func(store agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker
-	// workerBinaryPath overrides the executable used for server-managed
-	// external workers. Tests set this to a fake binary that spawns provider
-	// descendants; production uses the current ddx executable.
-	workerBinaryPath string
 
 	// LandCoordinators is the per-project registry of land coordinators.
 	// Exported so tests and server integration tests can stop coordinators
@@ -248,6 +233,11 @@ type WorkerManager struct {
 
 	watchdogOnce sync.Once
 	watchdogStop chan struct{}
+
+	// managedLaunch switches StartExecuteLoop onto the subprocess-backed
+	// server-managed launch path. Tests keep the default in-process behavior;
+	// the CLI server enables this when it wants real process-group ownership.
+	managedLaunch bool
 }
 
 const (
@@ -288,53 +278,7 @@ func (m *WorkerManager) WakeProject(projectRoot string) int {
 	return signalled
 }
 
-// HasLiveWorker reports whether the manager currently has live execution for
-// id, either as an in-memory handle or as an external worker process recorded
-// on disk. Used by WorkerSupervisor to distinguish a live managed worker from
-// a stale disk record left behind by a previous server run.
-func (m *WorkerManager) HasLiveWorker(id string) bool {
-	m.mu.Lock()
-	_, ok := m.workers[id]
-	m.mu.Unlock()
-	if ok {
-		return true
-	}
-
-	rec, err := m.readRecord(filepath.Join(m.rootDir, id))
-	if err != nil {
-		return false
-	}
-	if isTerminalWorkerState(rec.State) {
-		return false
-	}
-	return rec.PID > 0 && isPIDAlive(rec.PID)
-}
-
-// MarkManaged persists that id is controlled by desired-state supervision.
-func (m *WorkerManager) MarkManaged(id string) error {
-	dir := filepath.Join(m.rootDir, id)
-
-	m.mu.Lock()
-	if handle, ok := m.workers[id]; ok && handle != nil {
-		handle.record.Managed = true
-		snapshot := handle.record
-		m.mu.Unlock()
-		return m.writeRecord(dir, snapshot)
-	}
-	m.mu.Unlock()
-
-	rec, err := m.readRecord(dir)
-	if err != nil {
-		return err
-	}
-	rec.Managed = true
-	return m.writeRecord(dir, rec)
-}
-
 func NewWorkerManager(projectRoot string) *WorkerManager {
-	if canonical := canonicalizePath(projectRoot); canonical != "" {
-		projectRoot = canonical
-	}
 	m := &WorkerManager{
 		projectRoot:      projectRoot,
 		rootDir:          ddxroot.JoinProject(projectRoot, "workers"),
@@ -344,6 +288,38 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 	}
 	m.applyServerWatchdogConfig(projectRoot)
 	return m
+}
+
+func (m *WorkerManager) enableManagedLaunch() {
+	if m == nil {
+		return
+	}
+	m.managedLaunch = true
+}
+
+func appendUniqueInt(dst []int, value int) []int {
+	if value <= 0 {
+		return dst
+	}
+	for _, existing := range dst {
+		if existing == value {
+			return dst
+		}
+	}
+	return append(dst, value)
+}
+
+func (m *WorkerManager) registerManagedWorkerProcessGroup(id string, pgid int) {
+	if pgid <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	handle := m.workers[id]
+	if handle == nil {
+		return
+	}
+	handle.cleanupPGIDs = appendUniqueInt(handle.cleanupPGIDs, pgid)
 }
 
 func lifecycleStartDetail(spec ExecuteLoopWorkerSpec) string {
@@ -386,16 +362,106 @@ func prepareExecuteLoopWorkerSpec(projectRoot string, spec executeloop.ExecuteLo
 	if spec.Mode == "" && defaultMode != "" {
 		spec.Mode = defaultMode
 	}
-	// Server-managed work workers mirror `ddx work`: route selection belongs to
-	// the agent service, not a DDx-side preflight. This keeps REST and GraphQL
-	// dispatch on the same path as the CLI and prevents stale local routing
-	// checks from rejecting viable providers.
-	spec.OpaquePassthrough = true
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
 		return ExecuteLoopWorkerSpec{}, err
 	}
 	return ExecuteLoopWorkerSpec(spec), nil
+}
+
+func resolveManagedWorkerBinaryPath() (string, error) {
+	if env := strings.TrimSpace(os.Getenv("DDX_BIN")); env != "" {
+		if _, err := os.Stat(env); err == nil {
+			return env, nil
+		}
+		return "", fmt.Errorf("managed worker launch: DDX_BIN %q does not exist", env)
+	}
+
+	if exe, err := os.Executable(); err == nil && looksLikeDDXBinary(exe) {
+		return exe, nil
+	}
+	if len(os.Args) > 0 && looksLikeDDXBinary(os.Args[0]) {
+		return os.Args[0], nil
+	}
+	if path, err := exec.LookPath("ddx"); err == nil {
+		return path, nil
+	}
+	return "", fmt.Errorf("managed worker launch requires a ddx binary; run make install or set DDX_BIN")
+}
+
+func looksLikeDDXBinary(path string) bool {
+	if path == "" {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(path))
+	return base == "ddx" || base == "ddx.exe"
+}
+
+func managedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
+	args := []string{"work", "--server-managed", workerID}
+	if spec.ProjectRoot != "" {
+		args = append(args, "--project", spec.ProjectRoot)
+	}
+	if spec.FromRev != "" {
+		args = append(args, "--from", spec.FromRev)
+	}
+	if spec.Harness != "" {
+		args = append(args, "--harness", spec.Harness)
+	}
+	if spec.Model != "" {
+		args = append(args, "--model", spec.Model)
+	}
+	if spec.Profile != "" {
+		args = append(args, "--profile", spec.Profile)
+	}
+	if spec.Provider != "" {
+		args = append(args, "--provider", spec.Provider)
+	}
+	if spec.LabelFilter != "" {
+		args = append(args, "--label-filter", spec.LabelFilter)
+	}
+	if spec.Effort != "" {
+		args = append(args, "--effort", spec.Effort)
+	}
+	if spec.AttemptBackend != "" {
+		args = append(args, "--attempt-backend", spec.AttemptBackend)
+	}
+	if spec.IgnoreCooldown {
+		args = append(args, "--ignore-cooldown")
+		if spec.CooldownOverrideReason != "" {
+			args = append(args, "--reason", spec.CooldownOverrideReason)
+		}
+	}
+	switch spec.Mode {
+	case executeloop.ModeOnce:
+		args = append(args, "--once")
+	case executeloop.ModeWatch:
+		args = append(args, "--watch")
+		if spec.IdleInterval.Duration > 0 {
+			args = append(args, "--idle-interval", spec.IdleInterval.String())
+		}
+	}
+	if spec.NoReview {
+		args = append(args, "--no-review", "--no-review-i-know-what-im-doing")
+	}
+	if spec.ReviewHarness != "" {
+		args = append(args, "--review-harness", spec.ReviewHarness)
+	}
+	if spec.ReviewModel != "" {
+		args = append(args, "--review-model", spec.ReviewModel)
+	}
+	args = append(args,
+		"--max-cost", fmt.Sprintf("%g", spec.MaxCostUSD),
+		"--max-bead-cost", fmt.Sprintf("%g", spec.MaxBeadCostUSD),
+		"--max-recovery-cost", fmt.Sprintf("%g", spec.MaxRecoveryCostUSD),
+		"--preclaim-timeout", spec.PreClaimTimeout.String(),
+		"--route-resolution-timeout", spec.RouteResolutionTimeout.String(),
+		"--request-timeout", spec.RequestTimeout.String(),
+		"--rate-limit-max-wait", spec.RateLimitMaxWait.String(),
+		"--min-power", fmt.Sprintf("%d", spec.MinPower),
+		"--max-power", fmt.Sprintf("%d", spec.MaxPower),
+	)
+	return args
 }
 
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
@@ -444,9 +510,6 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	if effectiveRoot == "" {
 		effectiveRoot = m.projectRoot
 	}
-	if canonical := canonicalizePath(effectiveRoot); canonical != "" {
-		effectiveRoot = canonical
-	}
 	spec.ProjectRoot = effectiveRoot
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
@@ -458,7 +521,6 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	// Skipped when OpaquePassthrough=true (ddx work path): routing belongs to
 	// the agent service; DDx must not pre-resolve or validate the route.
 	if !spec.OpaquePassthrough {
-		defer cleanupCurrentProcessProviderProbes(effectiveRoot)
 		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider); err != nil {
 			return WorkerRecord{}, fmt.Errorf("work: %w", err)
 		}
@@ -522,8 +584,11 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	logBuf := &bytes.Buffer{}
 	multiLog := io.MultiWriter(logBuf, logFile)
 
-	progressCh := make(chan agent.ProgressEvent, 512)
+	progressCh := make(chan agent.ProgressEvent, 64)
 	wakeCh := make(chan struct{}, 1)
+	if m.managedLaunch {
+		wakeCh = nil
+	}
 	handle := &workerHandle{
 		record:       record,
 		cancel:       cancel,
@@ -533,6 +598,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		progressDone: make(chan struct{}),
 		lastPhaseTS:  time.Now().UTC(),
 		wakeCh:       wakeCh,
+		managed:      m.managedLaunch,
 	}
 
 	m.mu.Lock()
@@ -541,12 +607,9 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	m.ensureWatchdog()
 
-	go m.drainProgress(id, handle, progressCh)
-	if m.shouldRunExternalWorker() {
-		if err := m.startExternalWorker(ctx, id, dir, spec, effectiveRoot, handle, logFile, eventsFile, progressCh); err != nil {
-			cancel()
-			close(progressCh)
-			<-handle.progressDone
+	if m.managedLaunch {
+		managedRecord, err := m.launchManagedExecuteLoop(id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
+		if err != nil {
 			m.mu.Lock()
 			delete(m.workers, id)
 			m.mu.Unlock()
@@ -554,242 +617,70 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 			if eventsFile != nil {
 				_ = eventsFile.Close()
 			}
-			record.State = "failed"
-			record.Status = "failed"
-			record.Error = err.Error()
-			record.LastError = err.Error()
-			record.FinishedAt = time.Now().UTC()
-			_ = m.writeRecord(dir, record)
+			_ = os.RemoveAll(dir)
 			return WorkerRecord{}, err
 		}
-		m.mu.Lock()
-		startedRecord := handle.record
-		m.mu.Unlock()
-		return startedRecord, nil
+		return managedRecord, nil
 	}
+
+	go m.drainProgress(id, handle, progressCh)
 	go m.runWorker(ctx, id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
 
 	return record, nil
 }
 
-func (m *WorkerManager) shouldRunExternalWorker() bool {
-	if m.BeadWorkerFactory != nil {
-		return false
-	}
-	if m.workerBinaryPath != "" {
-		return true
-	}
-	return !strings.HasSuffix(os.Args[0], ".test")
-}
-
-func (m *WorkerManager) workerExecutable() (string, error) {
-	if strings.TrimSpace(m.workerBinaryPath) != "" {
-		return m.workerBinaryPath, nil
-	}
-	exe, err := os.Executable()
+func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) (WorkerRecord, error) {
+	binary, err := resolveManagedWorkerBinaryPath()
 	if err != nil {
-		return "", err
+		return WorkerRecord{}, err
 	}
-	return exe, nil
-}
 
-func (m *WorkerManager) startExternalWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, logFile *os.File, eventsFile *os.File, progressCh chan agent.ProgressEvent) error {
-	exe, err := m.workerExecutable()
-	if err != nil {
-		return err
-	}
-	args := externalWorkerArgs(id, projectRoot, spec)
-	cmd := exec.Command(exe, args...)
+	cmd := exec.Command(binary, managedWorkerCommandArgs(spec, id)...)
 	cmd.Dir = projectRoot
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	cmd.Env = append(serverManagedWorkerEnv(exe),
-		"DDX_AGENT_NAME="+id,
-		"DDX_SERVER_MANAGED_WORKER_ID="+id,
-	)
-	configureWorkerProcessGroup(cmd)
+	cmd.Stdout = log
+	cmd.Stderr = log
+	cmd.SysProcAttr = newManagedWorkerSysProcAttr()
+
 	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	pid := cmd.Process.Pid
-	pgid := processGroupID(pid)
-	now := time.Now().UTC()
-	m.mu.Lock()
-	handle.record.PID = pid
-	handle.record.PGID = pgid
-	handle.record.Lifecycle = append(handle.record.Lifecycle, WorkerLifecycleEvent{
-		Action:    "process-start",
-		Actor:     "ddx-server",
-		Timestamp: now,
-		Detail:    fmt.Sprintf("pid=%d pgid=%d", pid, pgid),
-	})
-	snapshot := handle.record
-	m.mu.Unlock()
-	_ = m.writeRecord(dir, snapshot)
-
-	go m.runExternalWorker(ctx, id, dir, handle, cmd, eventsFile, progressCh)
-	return nil
-}
-
-func serverManagedWorkerEnv(exe string) []string {
-	return setEnvValue(os.Environ(), "PATH", serverManagedWorkerPath(exe))
-}
-
-func serverManagedWorkerPath(exe string) string {
-	parts := make([]string, 0, 16)
-	seen := map[string]struct{}{}
-	add := func(path string) {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			return
-		}
-		if _, ok := seen[path]; ok {
-			return
-		}
-		seen[path] = struct{}{}
-		parts = append(parts, path)
-	}
-
-	if dir := filepath.Dir(exe); dir != "." && dir != "" {
-		add(dir)
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		add(filepath.Join(home, ".local", "bin"))
-		add(filepath.Join(home, ".local", "share", "mise", "shims"))
-		add(filepath.Join(home, "bin"))
-	}
-	add("/home/linuxbrew/.linuxbrew/bin")
-	add("/home/linuxbrew/.linuxbrew/sbin")
-	for _, part := range filepath.SplitList(os.Getenv("PATH")) {
-		add(part)
-	}
-	if len(parts) == 0 {
-		add("/usr/local/bin")
-		add("/usr/bin")
-		add("/bin")
-	}
-	return strings.Join(parts, string(os.PathListSeparator))
-}
-
-func setEnvValue(env []string, key, value string) []string {
-	prefix := key + "="
-	out := make([]string, 0, len(env)+1)
-	replaced := false
-	for _, kv := range env {
-		if strings.HasPrefix(kv, prefix) {
-			if !replaced {
-				out = append(out, prefix+value)
-				replaced = true
-			}
-			continue
-		}
-		out = append(out, kv)
-	}
-	if !replaced {
-		out = append(out, prefix+value)
-	}
-	return out
-}
-
-func externalWorkerArgs(id, projectRoot string, spec ExecuteLoopWorkerSpec) []string {
-	args := []string{"work", "--project", projectRoot, "--server-managed-worker-id", id}
-	switch spec.Mode {
-	case executeloop.ModeOnce:
-		args = append(args, "--once")
-	case executeloop.ModeWatch:
-		args = append(args, "--watch")
-		if spec.IdleInterval.Duration > 0 {
-			args = append(args, "--idle-interval", spec.IdleInterval.String())
-		}
-	}
-	if spec.FromRev != "" {
-		args = append(args, "--from", spec.FromRev)
-	}
-	if spec.Harness != "" {
-		args = append(args, "--harness", spec.Harness)
-	}
-	if spec.Model != "" {
-		args = append(args, "--model", spec.Model)
-	}
-	if spec.Profile != "" {
-		args = append(args, "--profile", spec.Profile)
-	}
-	if spec.Provider != "" {
-		args = append(args, "--provider", spec.Provider)
-	}
-	if spec.Effort != "" {
-		args = append(args, "--effort", spec.Effort)
-	}
-	if spec.AttemptBackend != "" {
-		args = append(args, "--attempt-backend", spec.AttemptBackend)
-	}
-	if spec.IgnoreCooldown {
-		args = append(args, "--ignore-cooldown")
-		if spec.CooldownOverrideReason != "" {
-			args = append(args, "--reason", spec.CooldownOverrideReason)
-		}
-	}
-	if spec.NoReview {
-		args = append(args, "--no-review", "--no-review-i-know-what-im-doing")
-	}
-	if spec.ReviewHarness != "" {
-		args = append(args, "--review-harness", spec.ReviewHarness)
-	}
-	if spec.ReviewModel != "" {
-		args = append(args, "--review-model", spec.ReviewModel)
-	}
-	if spec.MaxCostUSD > 0 {
-		args = append(args, "--max-cost", fmt.Sprintf("%g", spec.MaxCostUSD))
-	}
-	if spec.MaxBeadCostUSD > 0 {
-		args = append(args, "--max-bead-cost", fmt.Sprintf("%g", spec.MaxBeadCostUSD))
-	}
-	if spec.MaxRecoveryCostUSD > 0 {
-		args = append(args, "--max-recovery-cost", fmt.Sprintf("%g", spec.MaxRecoveryCostUSD))
-	}
-	if spec.PreClaimTimeout.Duration > 0 {
-		args = append(args, "--preclaim-timeout", spec.PreClaimTimeout.String())
-	}
-	if spec.RouteResolutionTimeout.Duration > 0 {
-		args = append(args, "--route-resolution-timeout", spec.RouteResolutionTimeout.String())
-	}
-	if spec.RequestTimeout.Duration > 0 {
-		args = append(args, "--request-timeout", spec.RequestTimeout.String())
-	}
-	if spec.RateLimitMaxWait.Duration != 0 {
-		args = append(args, "--rate-limit-max-wait", spec.RateLimitMaxWait.String())
-	}
-	if spec.MinPower > 0 {
-		args = append(args, "--min-power", fmt.Sprintf("%d", spec.MinPower))
-	}
-	if spec.MaxPower > 0 {
-		args = append(args, "--max-power", fmt.Sprintf("%d", spec.MaxPower))
-	}
-	return args
-}
-
-func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, handle *workerHandle, cmd *exec.Cmd, eventsFile *os.File, progressCh chan agent.ProgressEvent) {
-	waitErr := cmd.Wait()
-	_ = ctx.Err()
-	close(progressCh)
-	<-handle.progressDone
-	if eventsFile != nil {
-		_ = eventsFile.Close()
+		return WorkerRecord{}, err
 	}
 
 	m.mu.Lock()
 	record := handle.record
-	preservedState := ""
-	switch record.State {
-	case workerStateStopped, "reaped":
-		preservedState = record.State
-	case workerStateStopping:
-		preservedState = workerStateStopped
+	record.PID = cmd.Process.Pid
+	record.PGID = cmd.Process.Pid
+	handle.managed = true
+	handle.record = record
+	m.mu.Unlock()
+	if err := m.writeRecord(dir, record); err != nil {
+		_ = cleanupManagedWorkerProcessTree(cmd.Process.Pid, nil, 0)
+		_ = cmd.Wait()
+		return WorkerRecord{}, err
 	}
-	finishedAt := time.Now().UTC()
-	record.FinishedAt = finishedAt
+
+	go m.drainProgress(id, handle, progressCh)
+	go m.waitManagedWorkerExit(cmd, id, dir, handle, eventSink, progressCh)
+
+	return record, nil
+}
+
+func (m *WorkerManager) waitManagedWorkerExit(cmd *exec.Cmd, id, dir string, handle *workerHandle, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
+	waitErr := cmd.Wait()
+	close(progressCh)
+	<-handle.progressDone
+
+	now := time.Now().UTC()
+	m.mu.Lock()
+	record := handle.record
+	preservedState := ""
+	if record.State == "stopped" || record.State == "reaped" {
+		preservedState = record.State
+	}
+	record.FinishedAt = now
 	record.Substate = ""
+	if eventSink != nil {
+		_ = eventSink.Close()
+	}
 	_ = handle.logFile.Close()
 	if waitErr != nil {
 		record.State = "failed"
@@ -798,106 +689,16 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 		record.LastError = waitErr.Error()
 	} else {
 		record.State = "exited"
-		record.Status = "exited"
+		record.Status = "success"
 	}
 	if preservedState != "" {
 		record.State = preservedState
 		record.Status = preservedState
-		record.Error = ""
 	}
-	if preservedState == "" && record.Managed && isTerminalWorkerState(record.State) {
-		projectRoot := record.ProjectRoot
-		if projectRoot == "" {
-			projectRoot = m.projectRoot
-		}
-		beadID := record.CurrentBead
-		if record.CurrentAttempt != nil && record.CurrentAttempt.BeadID != "" {
-			beadID = record.CurrentAttempt.BeadID
-		}
-		body := fmt.Sprintf("worker=%s state=%s reason=worker-exit error=%s", record.ID, record.State, record.LastError)
-		released := releaseWorkerClaims(projectRoot, record.ID, beadID, finishedAt, bead.BeadEvent{
-			Kind:      "bead.reaped",
-			Summary:   "worker-exit",
-			Body:      body,
-			Actor:     "ddx-server",
-			Source:    "server-workers",
-			CreatedAt: finishedAt,
-		})
-		if beadID == "" && len(released) > 0 {
-			record.CurrentBead = released[0]
-		}
-	}
-	m.mu.Unlock()
-
-	if record.Managed && record.PID > 0 && isTerminalWorkerState(record.State) {
-		_, _ = lockmetrics.CloseAbandonedForPID(record.ProjectRoot, record.PID, finishedAt,
-			"managed worker exited before emitting lock release")
-		if cleanupEvent, ok := recoverManagedWorkerIndexLockAfterExit(record.ProjectRoot, record.ID, record.PID); ok {
-			record.Lifecycle = append(record.Lifecycle, cleanupEvent)
-		}
-	}
-
-	m.mu.Lock()
-	_ = m.writeRecord(dir, record)
 	handle.record = record
-	shouldRefillDesired := record.Managed && !handle.suppressDesiredRefill && preservedState == "" && isTerminalWorkerState(record.State)
 	m.mu.Unlock()
-	if shouldRefillDesired {
-		go m.refillDesiredWorkersAfterManagedExit(record.ID)
-	}
-}
 
-var managedWorkerIndexLockOwnerLookup = gitlock.IndexLockOwner
-
-// recoverManagedWorkerIndexLockAfterExit removes a fresh or stale .git/index.lock
-// left behind by a managed worker that has already exited, but only when no live
-// process still owns the lock. The cleanup is intentionally fresh-lock tolerant:
-// once the worker has exited, an unowned lock is safe to remove even if it is
-// younger than gitlock.StaleAge.
-func recoverManagedWorkerIndexLockAfterExit(projectRoot, workerID string, workerPID int) (WorkerLifecycleEvent, bool) {
-	if strings.TrimSpace(projectRoot) == "" {
-		return WorkerLifecycleEvent{}, false
-	}
-	lockPath := gitlock.IndexLockPath(projectRoot)
-	if _, err := os.Lstat(lockPath); err != nil {
-		return WorkerLifecycleEvent{}, false
-	}
-
-	ownerPID, _ := managedWorkerIndexLockOwnerLookup(lockPath)
-	outcome := "removed"
-	reason := "managed worker exited; no live owner"
-
-	if workerPID > 0 && processAlive(workerPID) {
-		outcome = "kept-live-worker"
-		reason = fmt.Sprintf("worker pid %d still alive", workerPID)
-	} else if ownerPID > 0 && processAlive(ownerPID) {
-		outcome = "kept-live-owner"
-		reason = fmt.Sprintf("live lock owner pid %d", ownerPID)
-	} else if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
-		outcome = "remove-error"
-		reason = err.Error()
-	}
-
-	return WorkerLifecycleEvent{
-		Action:    "index-lock-violation",
-		Actor:     "ddx-server",
-		Timestamp: time.Now().UTC(),
-		Detail: fmt.Sprintf(
-			"worker=%s worker_pid=%d holder_pid=%d lock_path=%s operation=index.commit outcome=%s reason=%s",
-			workerID, workerPID, ownerPID, lockPath, outcome, reason,
-		),
-	}, true
-}
-
-func (m *WorkerManager) refillDesiredWorkersAfterManagedExit(id string) {
-	result, err := m.reconcileDesiredWorkersOnly()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "ddx-server: worker %s desired refill failed: %v\n", id, err)
-		return
-	}
-	if len(result.Errors) > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "ddx-server: worker %s desired refill errors: %s\n", id, strings.Join(result.Errors, "; "))
-	}
+	_ = m.writeRecord(dir, record)
 }
 
 func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run PluginActionExecutor) (WorkerRecord, error) {
@@ -908,9 +709,6 @@ func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run Plugi
 	effectiveRoot := spec.ProjectRoot
 	if effectiveRoot == "" {
 		effectiveRoot = m.projectRoot
-	}
-	if canonical := canonicalizePath(effectiveRoot); canonical != "" {
-		effectiveRoot = canonical
 	}
 
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
@@ -1070,97 +868,6 @@ func sendProgress(ch chan<- agent.ProgressEvent, evt agent.ProgressEvent) {
 	}
 }
 
-func refreshWorkerCurrentAttemptFromRunState(rec WorkerRecord) WorkerRecord {
-	if rec.State != "running" && rec.State != "stopping" {
-		return rec
-	}
-	projectRoot := rec.ProjectRoot
-	if projectRoot == "" {
-		return rec
-	}
-	states, err := agent.ReadRunStates(projectRoot)
-	if err != nil {
-		return rec
-	}
-	state, ok := matchingWorkerRunState(rec, states, time.Now().UTC())
-	if !ok {
-		return rec
-	}
-	beadID := strings.TrimSpace(state.BeadID)
-	if beadID == "" {
-		return rec
-	}
-	if rec.CurrentAttempt != nil && rec.CurrentAttempt.BeadID != "" && rec.CurrentAttempt.BeadID != beadID {
-		return rec
-	}
-	if rec.CurrentAttempt != nil &&
-		rec.CurrentAttempt.BeadID == beadID &&
-		!rec.CurrentAttempt.StartedAt.IsZero() &&
-		!state.StartedAt.IsZero() &&
-		state.StartedAt.Before(rec.CurrentAttempt.StartedAt) {
-		return rec
-	}
-	phase := "running"
-	phaseSeq := 0
-	elapsedMS := int64(0)
-	if rec.CurrentAttempt != nil {
-		phase = rec.CurrentAttempt.Phase
-		phaseSeq = rec.CurrentAttempt.PhaseSeq
-		elapsedMS = rec.CurrentAttempt.ElapsedMS
-	}
-	if elapsedMS == 0 && !state.StartedAt.IsZero() {
-		elapsedMS = time.Since(state.StartedAt).Milliseconds()
-	}
-	rec.CurrentAttempt = &CurrentAttemptInfo{
-		AttemptID: state.AttemptID,
-		BeadID:    beadID,
-		Harness:   state.Harness,
-		Model:     state.Model,
-		Profile:   rec.Profile,
-		Phase:     phase,
-		PhaseSeq:  phaseSeq,
-		StartedAt: state.StartedAt,
-		ElapsedMS: elapsedMS,
-	}
-	if rec.Harness == "" {
-		rec.Harness = state.Harness
-	}
-	if rec.Model == "" {
-		rec.Model = state.Model
-	}
-	return rec
-}
-
-func matchingWorkerRunState(rec WorkerRecord, states []agent.RunState, now time.Time) (agent.RunState, bool) {
-	var best agent.RunState
-	found := false
-	for _, state := range states {
-		if strings.TrimSpace(state.AttemptID) == "" || strings.TrimSpace(state.BeadID) == "" {
-			continue
-		}
-		if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
-			continue
-		}
-		if rec.PID > 0 {
-			if state.PID != rec.PID {
-				continue
-			}
-		} else if state.PID > 0 && !isPIDAlive(state.PID) {
-			continue
-		}
-		if state.PID > 0 && !isPIDAlive(state.PID) {
-			continue
-		}
-		if !found ||
-			state.StartedAt.After(best.StartedAt) ||
-			(state.StartedAt.Equal(best.StartedAt) && state.RefreshedAt.After(best.RefreshedAt)) {
-			best = state
-			found = true
-		}
-	}
-	return best, found
-}
-
 func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
@@ -1245,77 +952,10 @@ func appendPowerAttemptEvent(store agent.BeadEventAppender, beadID string, repor
 	})
 }
 
-func wrapPreClaimIntakeProviderCleanup(projectRoot string, spec ExecuteLoopWorkerSpec, next agent.PreClaimIntakeHook) agent.PreClaimIntakeHook {
-	if next == nil {
-		return nil
-	}
-	harness := strings.TrimSpace(spec.Harness)
-	provider := strings.TrimSpace(spec.Provider)
-	model := strings.TrimSpace(spec.Model)
-	if harness == "" && provider == "" {
-		return next
-	}
-	return func(ctx context.Context, beadID string) (agent.PreClaimIntakeResult, error) {
-		cleanup := func() {
-			cleanupCurrentProcessNonRouteProviderProbes(harness, provider, model, projectRoot)
-		}
-		cleanup()
-
-		baseCtx := ctx
-		if baseCtx == nil {
-			baseCtx = context.Background()
-		}
-		guardCtx, cancel := context.WithCancel(baseCtx)
-		done := make(chan struct{})
-		interval := currentPreClaimProviderProbeCleanupInterval()
-		if interval > 0 {
-			go func() {
-				defer close(done)
-				ticker := time.NewTicker(interval)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-guardCtx.Done():
-						return
-					case <-ticker.C:
-						cleanup()
-					}
-				}
-			}()
-		} else {
-			close(done)
-		}
-
-		result, err := next(ctx, beadID)
-		cancel()
-		<-done
-		cleanup()
-		return result, err
-	}
-}
-
-// applyRequestTimeoutOverride forwards a server-managed worker's request
-// timeout into CLI overrides so it becomes the absolute provider-session
-// wall-clock cap the agent enforces during the attempt drain (ddx-9febbad2).
-// A zero or negative duration leaves the override unset, so the attempt keeps
-// the default per-call provider timeout without an absolute drain cap.
-func applyRequestTimeoutOverride(overrides *config.CLIOverrides, requestTimeout time.Duration) {
-	if overrides == nil || requestTimeout <= 0 {
-		return
-	}
-	overrides.ProviderRequestTimeout = &requestTimeout
-}
-
 func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
-	defer func() {
-		cleanupCurrentProcessProviderProbesSettled(projectRoot)
-		if !m.hasOtherLiveWorker(id) {
-			cleanupCurrentProcessProviderProbesUnscopedSettled()
-		}
-	}()
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	overrides := config.CLIOverrides{
 		Assignee:          "ddx",
@@ -1324,13 +964,14 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Provider:          spec.Provider,
 		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:            spec.Effort,
-		AttemptBackend:    spec.AttemptBackend,
 		MinPower:          spec.MinPower,
 		MaxPower:          spec.MaxPower,
 		OpaquePassthrough: spec.OpaquePassthrough,
 	}
 	requestTimeout := spec.RequestTimeout.Duration
-	applyRequestTimeoutOverride(&overrides, requestTimeout)
+	if requestTimeout > 0 {
+		overrides.ProviderRequestTimeout = &requestTimeout
+	}
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	var lintHook func(ctx context.Context, beadID string) (agent.LintResult, error)
@@ -1341,7 +982,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		lintHook = agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
 		intakeHook = agent.NewPreClaimIntakeHookWithLog(projectRoot, store, rcfg, nil, qualityRunner, log)
 		intakeHook = agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), intakeHook)
-		intakeHook = wrapPreClaimIntakeProviderCleanup(projectRoot, spec, intakeHook)
 		triageHook = agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 	}
 
@@ -1375,24 +1015,19 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Provider:          attemptProvider,
 				Profile:           rcfg.Profile(),
 				Effort:            spec.Effort,
-				AttemptBackend:    spec.AttemptBackend,
 				MinPower:          requestedMinPower,
 				MaxPower:          spec.MaxPower,
 				OpaquePassthrough: spec.OpaquePassthrough,
 			}
-			applyRequestTimeoutOverride(&loopOverrides, requestTimeout)
+			if requestTimeout > 0 {
+				loopOverrides.ProviderRequestTimeout = &requestTimeout
+			}
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 			beadStore := bead.NewStore(ddxroot.JoinProject(projectRoot))
-			attemptSvc, svcErr := agent.ResolveServiceFromWorkDirCtx(ctx, projectRoot)
-			if svcErr != nil {
-				return agent.ExecuteBeadReport{}, fmt.Errorf("agent: build service: %w", svcErr)
-			}
-			defer cleanupCurrentProcessProviderProbes(projectRoot)
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				FromRev:          spec.FromRev,
 				BeadEvents:       beadStore,
 				BeadCancel:       beadStore,
-				Service:          attemptSvc,
 				RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
 			}, gitOps)
 			if err != nil && res == nil {
@@ -1456,8 +1091,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				defer cancel()
 				// Tie the fizeau service to modelCtx so its background probe
 				// goroutines terminate when this short-lived lookup ends.
-				if svc, svcErr := agent.ResolveServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
-					defer cleanupCurrentProcessProviderProbes(projectRoot)
+				if svc, svcErr := agent.NewServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
 					modelFilter := agentlib.ModelFilter{}
 					if harness := rcfg.Harness(); harness != "" {
 						modelFilter.Harness = harness
@@ -1474,11 +1108,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			// outlive this cost-cap check.
 			cbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			svc, svcErr := agent.ResolveServiceFromWorkDirCtx(cbCtx, projectRoot)
+			svc, svcErr := agent.NewServiceFromWorkDirCtx(cbCtx, projectRoot)
 			if svcErr != nil {
 				return true
 			}
-			defer cleanupCurrentProcessProviderProbes(projectRoot)
 			infos, err := svc.ListHarnesses(cbCtx)
 			if err != nil {
 				return true
@@ -1570,25 +1203,23 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	landingOps := agent.RealLandingGitOps{}
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                   spec.Mode,
-		IdleInterval:           executeLoopPollInterval(spec),
-		Log:                    log,
-		CleanupLog:             log,
-		EventSink:              eventSink,
-		WorkerID:               id,
-		ProjectRoot:            projectRoot,
-		CleanupRunner:          agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
-		LabelFilter:            spec.LabelFilter,
-		ProgressCh:             progressCh,
-		PreClaimHook:           buildPreClaimHook(projectRoot, landingOps),
-		PreClaimIntakeHook:     intakeHook,
-		PreClaimTimeout:        spec.PreClaimTimeout.Duration,
-		RouteResolutionTimeout: spec.RouteResolutionTimeout.Duration,
-		PreDispatchLintHook:    lintHook,
-		PostAttemptTriageHook:  triageHook,
-		NoReview:               spec.NoReview,
-		ReviewCostCap:          costCap,
-		WakeCh:                 handle.wakeCh,
+		Mode:                  spec.Mode,
+		IdleInterval:          executeLoopPollInterval(spec),
+		Log:                   log,
+		CleanupLog:            log,
+		EventSink:             eventSink,
+		WorkerID:              id,
+		ProjectRoot:           projectRoot,
+		CleanupRunner:         agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		LabelFilter:           spec.LabelFilter,
+		ProgressCh:            progressCh,
+		PreClaimHook:          buildPreClaimHook(projectRoot, landingOps),
+		PreClaimIntakeHook:    intakeHook,
+		PreDispatchLintHook:   lintHook,
+		PostAttemptTriageHook: triageHook,
+		NoReview:              spec.NoReview,
+		ReviewCostCap:         costCap,
+		WakeCh:                handle.wakeCh,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
@@ -1657,9 +1288,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			record.CurrentBead = last.BeadID
 			record.LastResult = &r
-			if last.Status == agent.ExecuteBeadStatusSuccess || last.Status == agent.ExecuteBeadStatusAlreadySatisfied {
-				record.LastError = ""
-			} else if last.Detail != "" {
+			if last.Detail != "" {
 				record.LastError = last.Detail
 			}
 			if last.Harness != "" && record.Harness == "" {
@@ -1682,24 +1311,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	_ = m.writeRecord(dir, record)
 	handle.record = record
 	m.mu.Unlock()
-}
-
-func (m *WorkerManager) hasOtherLiveWorker(id string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for workerID, handle := range m.workers {
-		if workerID == id || handle == nil {
-			continue
-		}
-		state := handle.record.State
-		if state == "" || state == workerStateRunning || state == workerStateStopping {
-			return true
-		}
-		if !isTerminalWorkerState(state) {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {
@@ -1733,9 +1344,6 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 		}
 	}
 	m.mu.Unlock()
-	for i := range out {
-		out[i] = refreshWorkerCurrentAttemptFromRunState(out[i])
-	}
 
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].StartedAt.After(out[j].StartedAt)
@@ -1763,36 +1371,19 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 	if handle, ok := m.workers[id]; ok {
 		rec := handle.record
 		m.mu.Unlock()
-		return refreshWorkerCurrentAttemptFromRunState(rec), nil
+		return rec, nil
 	}
 	m.mu.Unlock()
-	rec, err := m.readRecord(filepath.Join(m.rootDir, id))
-	if err != nil {
-		return WorkerRecord{}, err
-	}
-	return refreshWorkerCurrentAttemptFromRunState(rec), nil
-}
-
-// RequestStop validates a worker id and schedules Stop without making API
-// callers wait through process-group termination grace.
-func (m *WorkerManager) RequestStop(id string) error {
-	if _, err := m.Show(id); err != nil {
-		return err
-	}
-	go func() {
-		if err := m.Stop(id); err != nil {
-			fmt.Fprintf(os.Stderr, "ddx: async worker stop %s failed: %v\n", id, err)
-		}
-	}()
-	return nil
+	return m.readRecord(filepath.Join(m.rootDir, id))
 }
 
 // Stop performs a graceful termination of the worker:
 //  1. Mark state=stopping and persist so observers see the transition.
 //  2. Emit bead.stopped event + release the bead claim (if one is held).
-//  3. Send SIGTERM to the worker's process group; escalate to SIGKILL
-//     after WatchdogKillGrace if the leader is still alive. Pure-goroutine
-//     workers have no PID — ctx cancellation below is the only lever.
+//  3. Send SIGTERM to the worker's process group and any registered child
+//     process groups; escalate to SIGKILL after WatchdogKillGrace if
+//     anything remains alive. Pure-goroutine workers have no PID — ctx
+//     cancellation below is the only lever.
 //  4. Cancel the worker's context so the loop and in-flight executor exit.
 //  5. Mark state=stopped and persist. runWorker preserves this terminal
 //     state when it writes its final record.
@@ -1827,11 +1418,12 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	}
 
 	if beadID != "" {
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		body := fmt.Sprintf(
 			"worker=%s pid=%d reason=stop-stale",
 			id, rec.PID,
 		)
-		released := releaseWorkerClaims(projectRoot, id, beadID, now, bead.BeadEvent{
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      "bead.stopped",
 			Summary:   "stop (stale)",
 			Body:      body,
@@ -1839,30 +1431,7 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 			Source:    "server-workers",
 			CreatedAt: now,
 		})
-		if len(released) > 0 {
-			beadID = released[0]
-		}
-	} else {
-		body := fmt.Sprintf(
-			"worker=%s pid=%d reason=stop-stale",
-			id, rec.PID,
-		)
-		released := releaseWorkerClaims(projectRoot, id, "", now, bead.BeadEvent{
-			Kind:      "bead.stopped",
-			Summary:   "stop (stale)",
-			Body:      body,
-			Actor:     "ddx",
-			Source:    "server-workers",
-			CreatedAt: now,
-		})
-		if len(released) > 0 {
-			beadID = released[0]
-		}
-	}
-
-	_, _, _, grace := m.watchdogDeadlines()
-	if rec.PID > 0 {
-		terminateProcessGroup(rec.PID, grace)
+		_ = store.Unclaim(beadID)
 	}
 
 	rec.State = "stopped"
@@ -1880,193 +1449,6 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	return m.writeRecord(dir, rec)
 }
 
-func (m *WorkerManager) StopAll() {
-	m.mu.Lock()
-	ids := make([]string, 0, len(m.workers))
-	for id, handle := range m.workers {
-		if handle == nil {
-			continue
-		}
-		state := handle.record.State
-		if state == "" || state == "running" || state == "stopping" || !isTerminalWorkerState(state) {
-			ids = append(ids, id)
-		}
-	}
-	m.mu.Unlock()
-	for _, id := range ids {
-		_ = m.Stop(id)
-	}
-	m.StopWatchdog()
-}
-
-func resolveWorkerAttemptID(projectRoot, beadID, fallback string) string {
-	fallback = strings.TrimSpace(fallback)
-	projectRoot = strings.TrimSpace(projectRoot)
-	beadID = strings.TrimSpace(beadID)
-	if projectRoot == "" {
-		return fallback
-	}
-	if state, err := agent.ReadRunState(projectRoot); err == nil && state != nil {
-		stateAttemptID := strings.TrimSpace(state.AttemptID)
-		stateBeadID := strings.TrimSpace(state.BeadID)
-		if stateAttemptID != "" && (beadID == "" || stateBeadID == "" || stateBeadID == beadID) {
-			return stateAttemptID
-		}
-	}
-	if states, err := agent.ReadRunStates(projectRoot); err == nil {
-		for _, state := range states {
-			stateAttemptID := strings.TrimSpace(state.AttemptID)
-			stateBeadID := strings.TrimSpace(state.BeadID)
-			if stateAttemptID != "" && (beadID == "" || stateBeadID == "" || stateBeadID == beadID) {
-				return stateAttemptID
-			}
-		}
-	}
-	return fallback
-}
-
-func releaseWorkerClaims(projectRoot, workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
-	projectRoot = strings.TrimSpace(projectRoot)
-	workerID = strings.TrimSpace(workerID)
-	primaryBeadID = strings.TrimSpace(primaryBeadID)
-	if projectRoot == "" || workerID == "" {
-		return nil
-	}
-
-	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	return releaseWorkerClaimsWithStore(store, workerID, primaryBeadID, now, event)
-}
-
-func releaseWorkerClaimsWithStore(store *bead.Store, workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
-	return newWorkerClaimReleaser(store).release(workerID, primaryBeadID, now, event)
-}
-
-type workerClaimReleaser struct {
-	store       *bead.Store
-	beads       []bead.Bead
-	leases      map[string]bead.ClaimLeaseRecord
-	leaseFound  map[string]bool
-	loadAttempt bool
-	loadOK      bool
-}
-
-func newWorkerClaimReleaser(store *bead.Store) *workerClaimReleaser {
-	return &workerClaimReleaser{store: store}
-}
-
-func (r *workerClaimReleaser) load() bool {
-	if r == nil || r.store == nil {
-		return false
-	}
-	if r.loadAttempt {
-		return r.loadOK
-	}
-	r.loadAttempt = true
-	beads, err := r.store.ReadAll(context.Background())
-	if err != nil {
-		return false
-	}
-	r.beads = beads
-	r.leases = make(map[string]bead.ClaimLeaseRecord)
-	r.leaseFound = make(map[string]bool)
-	for i := range r.beads {
-		b := &r.beads[i]
-		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
-			continue
-		}
-		lease, found, err := r.store.ClaimLease(b.ID)
-		if err == nil && found {
-			r.leases[b.ID] = lease
-			r.leaseFound[b.ID] = true
-		}
-	}
-	r.loadOK = true
-	return true
-}
-
-func (r *workerClaimReleaser) release(workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
-	workerID = strings.TrimSpace(workerID)
-	primaryBeadID = strings.TrimSpace(primaryBeadID)
-	if r == nil || r.store == nil || workerID == "" || !r.load() {
-		return nil
-	}
-
-	seen := make(map[string]struct{})
-	var released []string
-	for i := range r.beads {
-		b := &r.beads[i]
-		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
-			continue
-		}
-		lease := r.leases[b.ID]
-		releaseAssignee, ok := workerReleaseAssigneeCached(b, workerID, primaryBeadID, strings.TrimSpace(lease.Owner), r.leaseFound[b.ID])
-		if !ok {
-			continue
-		}
-		if _, ok := seen[b.ID]; ok {
-			continue
-		}
-		seen[b.ID] = struct{}{}
-
-		ev := event
-		if ev.CreatedAt.IsZero() {
-			ev.CreatedAt = now
-		}
-		_ = r.store.AppendEvent(b.ID, ev)
-		_ = r.store.Release(b.ID, releaseAssignee, bead.StatusOpen)
-		b.Status = bead.StatusOpen
-		b.Owner = ""
-		delete(r.leases, b.ID)
-		delete(r.leaseFound, b.ID)
-		released = append(released, b.ID)
-	}
-	return released
-}
-
-func workerReleaseAssignee(store *bead.Store, b *bead.Bead, workerID, primaryBeadID string) (string, bool) {
-	workerID = strings.TrimSpace(workerID)
-	if workerID == "" || b == nil {
-		return "", false
-	}
-	leaseOwner := ""
-	leaseFound := false
-	if lease, found, err := store.ClaimLease(b.ID); err == nil && found {
-		leaseFound = true
-		leaseOwner = strings.TrimSpace(lease.Owner)
-	}
-	return workerReleaseAssigneeCached(b, workerID, primaryBeadID, leaseOwner, leaseFound)
-}
-
-func workerReleaseAssigneeCached(b *bead.Bead, workerID, primaryBeadID, leaseOwner string, leaseFound bool) (string, bool) {
-	workerID = strings.TrimSpace(workerID)
-	if workerID == "" || b == nil {
-		return "", false
-	}
-	trackerOwner := strings.TrimSpace(b.Owner)
-	leaseOwner = strings.TrimSpace(leaseOwner)
-	if trackerOwner == workerID || leaseOwner == workerID {
-		return workerID, true
-	}
-	if primaryBeadID != "" && b.ID == primaryBeadID && b.Status == bead.StatusInProgress {
-		if leaseFound && trackerOwner == "" && leaseOwner != "" {
-			return "", false
-		}
-		if trackerOwner != "" {
-			return trackerOwner, true
-		}
-		return workerID, true
-	}
-	return "", false
-}
-
-func workerReleaseAssigneeByID(store *bead.Store, beadID, workerID string) (string, bool) {
-	b, err := store.Get(context.Background(), beadID)
-	if err != nil {
-		return "", false
-	}
-	return workerReleaseAssignee(store, b, workerID, beadID)
-}
-
 func (m *WorkerManager) Stop(id string) error {
 	m.mu.Lock()
 	handle := m.workers[id]
@@ -2081,10 +1463,6 @@ func (m *WorkerManager) Stop(id string) error {
 		return nil
 	}
 	handle.stopped = true
-	// An explicit operator stop is a terminal management action, not a crash.
-	// Keep the worker finalizer from immediately refilling desired_count before
-	// the caller can decide whether to restart or lower desired state.
-	handle.suppressDesiredRefill = true
 
 	now := time.Now().UTC()
 	projectRoot := handle.record.ProjectRoot
@@ -2093,16 +1471,14 @@ func (m *WorkerManager) Stop(id string) error {
 	}
 	pid := handle.record.PID
 	beadID := ""
-	attemptID := ""
 	if handle.record.CurrentAttempt != nil {
 		beadID = handle.record.CurrentAttempt.BeadID
-		attemptID = handle.record.CurrentAttempt.AttemptID
 	}
 	if beadID == "" {
 		beadID = handle.record.CurrentBead
 	}
-	attemptID = resolveWorkerAttemptID(projectRoot, beadID, attemptID)
 	startedAt := handle.record.StartedAt
+	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
 	handle.record.State = "stopping"
 	handle.record.Status = "stopping"
 	handle.record.Lifecycle = append(handle.record.Lifecycle, WorkerLifecycleEvent{
@@ -2122,6 +1498,7 @@ func (m *WorkerManager) Stop(id string) error {
 	// Release the bead claim first — this is durable and must not be
 	// leaked even if the SIGKILL path blocks for the full grace window.
 	if beadID != "" {
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		runtime := time.Duration(0)
 		if !startedAt.IsZero() {
 			runtime = now.Sub(startedAt)
@@ -2130,7 +1507,7 @@ func (m *WorkerManager) Stop(id string) error {
 			"worker=%s runtime=%s pid=%d reason=stop",
 			id, runtime.Round(time.Second), pid,
 		)
-		releaseWorkerClaims(projectRoot, id, beadID, now, bead.BeadEvent{
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      "bead.stopped",
 			Summary:   "stop",
 			Body:      body,
@@ -2138,36 +1515,17 @@ func (m *WorkerManager) Stop(id string) error {
 			Source:    "server-workers",
 			CreatedAt: now,
 		})
-	} else {
-		runtime := time.Duration(0)
-		if !startedAt.IsZero() {
-			runtime = now.Sub(startedAt)
-		}
-		body := fmt.Sprintf(
-			"worker=%s runtime=%s pid=%d reason=stop",
-			id, runtime.Round(time.Second), pid,
-		)
-		releaseWorkerClaims(projectRoot, id, "", now, bead.BeadEvent{
-			Kind:      "bead.stopped",
-			Summary:   "stop",
-			Body:      body,
-			Actor:     "ddx",
-			Source:    "server-workers",
-			CreatedAt: now,
-		})
+		_ = store.Unclaim(beadID)
 	}
 
-	// Escalate to the process group if we know the PID.
+	// Escalate to the worker process tree if we know any server-owned
+	// process groups. This keeps operator Stop scoped to the worker while
+	// still reaching provider shells and their descendants.
 	_, _, _, grace := m.watchdogDeadlines()
-	if pid > 0 {
-		terminateProcessGroup(pid, grace)
-	}
+	cleanupReport := cleanupManagedWorkerProcessTree(pid, cleanupPGIDs, grace)
 
 	// Cancel the worker goroutine so any in-process code sees context.Canceled.
 	cancel()
-	if pid == 0 {
-		terminateWorkerDescendantsUntilQuiet(os.Getpid(), attemptID, grace)
-	}
 
 	// Flip in-memory state to the terminal "stopped" label. For real
 	// workers, runWorker's final writeRecord (with preservedState) will
@@ -2177,6 +1535,12 @@ func (m *WorkerManager) Stop(id string) error {
 	// have their state observable in-memory; callers that need disk
 	// persistence for those can call writeRecord directly.
 	m.mu.Lock()
+	if cleanupSummary := cleanupReport.String(); cleanupSummary != "" {
+		if len(handle.record.Lifecycle) > 0 {
+			handle.record.Lifecycle[len(handle.record.Lifecycle)-1].Detail =
+				fmt.Sprintf("reason=stop pid=%d cleanup=%s", pid, cleanupSummary)
+		}
+	}
 	handle.record.State = "stopped"
 	handle.record.Status = "stopped"
 	// Only stamp FinishedAt for handles with no attached runWorker
@@ -2193,67 +1557,165 @@ func (m *WorkerManager) Stop(id string) error {
 	return nil
 }
 
-// RestartWorker stops worker id (if still alive) then starts a new worker
-// using the spec recorded at worker start time. It returns the new WorkerRecord.
-// The caller may pass restartCount to record how many times the worker has been
-// restarted; the new record will have RestartCount set to that value.
-func (m *WorkerManager) RestartWorker(id string, restartCount int) (WorkerRecord, error) {
-	old, err := m.Show(id)
-	if err != nil {
-		return WorkerRecord{}, fmt.Errorf("restart worker: show %s: %w", id, err)
+// Shutdown stops every live server-owned worker, reaps any running worker
+// records left on disk after a restart, and waits for managed workers that
+// still have a live goroutine to persist their terminal stopped state.
+// It is idempotent and best-effort: shutdown continues past individual worker
+// errors and returns the first one encountered.
+func (m *WorkerManager) Shutdown() error {
+	if m == nil {
+		return nil
 	}
-	m.mu.Lock()
-	if handle := m.workers[id]; handle != nil {
-		handle.suppressDesiredRefill = true
-	}
-	m.mu.Unlock()
-	// Stop the old worker; ignore "already stopped" errors.
-	_ = m.Stop(id)
 
-	// Read the original spec from disk.
-	dir := filepath.Join(m.rootDir, id)
-	specPath := filepath.Join(dir, "spec.json")
-	specData, err := os.ReadFile(specPath)
-	if err != nil {
-		return WorkerRecord{}, fmt.Errorf("restart worker: read spec for %s: %w", id, err)
+	m.StopWatchdog()
+
+	type liveWorker struct {
+		id         string
+		waitForEnd bool
 	}
-	var spec ExecuteLoopWorkerSpec
-	if err := json.Unmarshal(specData, &spec); err != nil {
-		return WorkerRecord{}, fmt.Errorf("restart worker: parse spec for %s: %w", id, err)
-	}
-	// Preserve project root from the old record when spec has none.
-	if spec.ProjectRoot == "" {
-		spec.ProjectRoot = old.ProjectRoot
-	}
-	rec, err := m.StartExecuteLoop(spec)
-	if err != nil {
-		return WorkerRecord{}, fmt.Errorf("restart worker: start: %w", err)
-	}
-	if restartCount <= old.RestartCount {
-		restartCount = old.RestartCount + 1
-	}
-	rec.Managed = true
-	rec.RestartCount = restartCount
-	now := time.Now().UTC()
-	rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
-		Action:    "restart",
-		Actor:     "ddx-server",
-		Timestamp: now,
-		Detail:    fmt.Sprintf("old_id=%s restart_count=%d", id, restartCount),
-	})
-	dir = filepath.Join(m.rootDir, rec.ID)
+
 	m.mu.Lock()
-	if handle := m.workers[rec.ID]; handle != nil {
-		handle.record.Managed = true
-		handle.record.RestartCount = restartCount
-		handle.record.Lifecycle = rec.Lifecycle
-		rec = handle.record
+	live := make([]liveWorker, 0, len(m.workers))
+	liveIDs := make(map[string]struct{}, len(m.workers))
+	for id, handle := range m.workers {
+		if handle == nil {
+			continue
+		}
+		rec := handle.record
+		if rec.State != "running" && rec.State != "stopping" {
+			continue
+		}
+		if !rec.FinishedAt.IsZero() {
+			continue
+		}
+		liveIDs[id] = struct{}{}
+		live = append(live, liveWorker{
+			id:         id,
+			waitForEnd: handle.logFile != nil,
+		})
 	}
 	m.mu.Unlock()
-	if err := m.writeRecord(dir, rec); err != nil {
-		return WorkerRecord{}, fmt.Errorf("restart worker: persist replacement: %w", err)
+
+	var firstErr error
+	for _, worker := range live {
+		if err := m.Stop(worker.id); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return rec, nil
+
+	if entries, err := os.ReadDir(m.rootDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			id := entry.Name()
+			if _, ok := liveIDs[id]; ok {
+				continue
+			}
+
+			rec, err := m.readRecord(filepath.Join(m.rootDir, id))
+			if err != nil {
+				continue
+			}
+			if rec.State != "running" && rec.State != "stopping" {
+				continue
+			}
+			if rec.PID > 0 || rec.PGID > 0 {
+				if err := m.shutdownManagedDiskEntry(rec); err != nil && firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if err := m.stopStaleDiskEntry(id); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) && firstErr == nil {
+		firstErr = err
+	}
+
+	const shutdownWaitTimeout = 5 * time.Second
+	for _, worker := range live {
+		if !worker.waitForEnd {
+			continue
+		}
+		if err := m.waitForStoppedRecord(worker.id, shutdownWaitTimeout); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return firstErr
+}
+
+func (m *WorkerManager) waitForStoppedRecord(id string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		rec, err := m.Show(id)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				time.Sleep(25 * time.Millisecond)
+				continue
+			}
+			return err
+		}
+		if rec.State == "stopped" && rec.Status == "stopped" && !rec.FinishedAt.IsZero() {
+			return nil
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	return fmt.Errorf("worker %s did not persist stopped state before shutdown timeout", id)
+}
+
+func (m *WorkerManager) shutdownManagedDiskEntry(rec WorkerRecord) error {
+	now := time.Now().UTC()
+	projectRoot := rec.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = m.projectRoot
+	}
+	beadID := ""
+	if rec.CurrentAttempt != nil {
+		beadID = rec.CurrentAttempt.BeadID
+	}
+	if beadID == "" {
+		beadID = rec.CurrentBead
+	}
+	rootPID := rec.PID
+	if rootPID <= 0 {
+		rootPID = rec.PGID
+	}
+
+	if beadID != "" {
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+		body := fmt.Sprintf("worker=%s pid=%d reason=shutdown", rec.ID, rootPID)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "shutdown",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
+	}
+
+	_, _, _, grace := m.watchdogDeadlines()
+	cleanupReport := cleanupManagedWorkerProcessTree(rootPID, nil, grace)
+	cleanupSummary := cleanupReport.String()
+
+	rec.State = "stopped"
+	rec.Status = "stopped"
+	if rec.FinishedAt.IsZero() {
+		rec.FinishedAt = now
+	}
+	rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+		Action:    "stop",
+		Actor:     "local-operator",
+		Timestamp: now,
+		Detail:    fmt.Sprintf("reason=shutdown pid=%d cleanup=%s", rootPID, cleanupSummary),
+		BeadID:    beadID,
+	})
+	dir := filepath.Join(m.rootDir, rec.ID)
+	return m.writeRecord(dir, rec)
 }
 
 // ensureWatchdog starts the supervisor goroutine exactly once per manager.
@@ -2308,12 +1770,7 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 		if h == nil || h.reaped {
 			continue
 		}
-		// External (server-managed) workers do not stream progress back into
-		// the in-memory handle, so h.record.CurrentAttempt stays nil even while
-		// an attempt is in flight. Refresh it from the durable run-state on disk
-		// — the same source List()/Show() use — so the watchdog can reap a
-		// stalled external worker instead of leaving its process tree running.
-		rec := refreshWorkerCurrentAttemptFromRunState(h.record)
+		rec := h.record
 		if !rec.FinishedAt.IsZero() {
 			continue
 		}
@@ -2346,6 +1803,11 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 			beadID = rec.CurrentBead
 		}
 
+		pid := rec.PID
+		if pid <= 0 && h.managed {
+			pid = rec.PGID
+		}
+
 		h.reaped = true
 		picks = append(picks, candidate{
 			id:      id,
@@ -2353,7 +1815,7 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 			runtime: runtime,
 			stalled: stalled,
 			beadID:  beadID,
-			pid:     rec.PID,
+			pid:     pid,
 		})
 	}
 	m.mu.Unlock()
@@ -2366,8 +1828,9 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 // reapWorker performs the escalation for a stalled worker:
 //  1. Emit bead.reaped event on the bead tracker (if a bead is claimed).
 //  2. Release the bead claim (Unclaim → status=open).
-//  3. SIGTERM → grace → SIGKILL the worker's process group, if a PID is
-//     registered. Fall back to ctx cancellation for pure-goroutine workers.
+//  3. SIGTERM → grace → SIGKILL the worker's process group and any
+//     registered child process groups, if any are present. Fall back to
+//     ctx cancellation for pure-goroutine workers.
 //  4. Mark the WorkerRecord state=reaped and persist it.
 func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, beadID string, runtime, stalled time.Duration, reason string) {
 	now := time.Now().UTC()
@@ -2378,46 +1841,40 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
-	attemptID := ""
-	if rec.CurrentAttempt != nil {
-		attemptID = rec.CurrentAttempt.AttemptID
+	processRoot := pid
+	if processRoot <= 0 && handle.managed {
+		processRoot = rec.PGID
 	}
+	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
 	m.mu.Unlock()
-	attemptID = resolveWorkerAttemptID(projectRoot, beadID, attemptID)
 
 	// 1. Emit the reap event and release the bead claim before killing, so
 	//    the claim is not leaked even if the kill blocks for the full grace.
 	if beadID != "" {
 		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-		if releaseAssignee, ok := workerReleaseAssigneeByID(store, beadID, id); ok {
-			body := fmt.Sprintf(
-				"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
-				id, runtime.Round(time.Second), stalled.Round(time.Second), pid, reason,
-			)
-			_ = store.AppendEvent(beadID, bead.BeadEvent{
-				Kind:      "bead.reaped",
-				Summary:   reason,
-				Body:      body,
-				Actor:     "ddx-watchdog",
-				Source:    "server-workers",
-				CreatedAt: now,
-			})
-			_ = store.Release(beadID, releaseAssignee, bead.StatusOpen)
-		}
+		body := fmt.Sprintf(
+			"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
+			id, runtime.Round(time.Second), stalled.Round(time.Second), processRoot, reason,
+		)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.reaped",
+			Summary:   reason,
+			Body:      body,
+			Actor:     "ddx-watchdog",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
 	}
 
-	// 2. Escalate to the worker process group if we know the PID.
+	// 2. Escalate to the worker process tree if we know any server-owned
+	//    process groups.
 	_, _, _, grace := m.watchdogDeadlines()
-	if pid > 0 {
-		terminateProcessGroup(pid, grace)
-	}
+	cleanupReport := cleanupManagedWorkerProcessTree(processRoot, cleanupPGIDs, grace)
 
 	// 3. Cancel the goroutine so any in-process code sees context.Canceled.
 	if handle.cancel != nil {
 		handle.cancel()
-	}
-	if pid == 0 {
-		terminateWorkerDescendantsUntilQuiet(os.Getpid(), attemptID, grace)
 	}
 
 	// 4. Flip state=reaped and persist. runWorker may still race to
@@ -2433,6 +1890,9 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	if handle.record.LastError == "" {
 		handle.record.LastError = fmt.Sprintf("watchdog reaped worker after runtime=%s stalled=%s",
 			runtime.Round(time.Second), stalled.Round(time.Second))
+	}
+	if cleanupSummary := cleanupReport.String(); cleanupSummary != "" {
+		handle.record.LastError = fmt.Sprintf("%s; cleanup=%s", handle.record.LastError, cleanupSummary)
 	}
 	dir := filepath.Join(m.rootDir, id)
 	snapshot := handle.record
@@ -2488,16 +1948,9 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 			continue
 		case "loop.active":
 			rec.Substate = ""
-			if evt.BeadID != "" {
-				rec.CurrentBead = evt.BeadID
-			}
 			handle.record = rec
 			m.mu.Unlock()
 			continue
-		}
-
-		if evt.BeadID != "" {
-			rec.CurrentBead = evt.BeadID
 		}
 
 		if !evt.Heartbeat {
@@ -2528,17 +1981,9 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 
 			// Move CurrentAttempt → LastAttempt
 			if rec.CurrentAttempt != nil {
-				lastAttemptID := rec.CurrentAttempt.AttemptID
-				if evt.AttemptID != "" {
-					lastAttemptID = evt.AttemptID
-				}
-				lastBeadID := rec.CurrentAttempt.BeadID
-				if evt.BeadID != "" {
-					lastBeadID = evt.BeadID
-				}
 				rec.LastAttempt = &LastAttemptInfo{
-					AttemptID: lastAttemptID,
-					BeadID:    lastBeadID,
+					AttemptID: rec.CurrentAttempt.AttemptID,
+					BeadID:    rec.CurrentAttempt.BeadID,
 					Phase:     evt.Phase,
 					StartedAt: rec.CurrentAttempt.StartedAt,
 					EndedAt:   evt.TS,
@@ -2548,19 +1993,15 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 			rec.CurrentAttempt = nil
 		} else {
 			// Update or initialise CurrentAttempt
-			if rec.CurrentAttempt == nil || (evt.AttemptID != "" && rec.CurrentAttempt.AttemptID != evt.AttemptID) {
+			if rec.CurrentAttempt == nil {
 				rec.CurrentAttempt = &CurrentAttemptInfo{
 					AttemptID: evt.AttemptID,
 					BeadID:    evt.BeadID,
 					StartedAt: evt.TS,
 				}
 			}
-			if evt.AttemptID != "" {
-				rec.CurrentAttempt.AttemptID = evt.AttemptID
-			}
-			if evt.BeadID != "" {
-				rec.CurrentAttempt.BeadID = evt.BeadID
-			}
+			rec.CurrentAttempt.AttemptID = evt.AttemptID
+			rec.CurrentAttempt.BeadID = evt.BeadID
 			rec.CurrentAttempt.Phase = evt.Phase
 			rec.CurrentAttempt.PhaseSeq = evt.PhaseSeq
 			rec.CurrentAttempt.ElapsedMS = evt.ElapsedMS
@@ -2830,8 +2271,7 @@ type WorkerPruneResult struct {
 
 // Prune reaps registry entries whose recorded PID is no longer alive, or
 // whose age exceeds maxAge (when maxAge > 0). Only entries with state=running
-// or state=stopping that are not attached to a live goroutine in this manager
-// are eligible.
+// that are not attached to a live goroutine in this manager are eligible.
 // For each pruned entry the bead claim is released and the on-disk record is
 // updated to state=reaped. Returns the list of reaped entries.
 func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error) {
@@ -2844,7 +2284,7 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 	var results []WorkerPruneResult
 
 	for _, rec := range recs {
-		if rec.State != "running" && rec.State != "stopping" {
+		if rec.State != "running" {
 			continue
 		}
 
@@ -2895,17 +2335,18 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 			projectRoot = m.projectRoot
 		}
 
-		body := fmt.Sprintf("worker=%s pid=%d reason=prune %s", rec.ID, rec.PID, reason)
-		released := releaseWorkerClaims(projectRoot, rec.ID, beadID, now, bead.BeadEvent{
-			Kind:      "bead.reaped",
-			Summary:   "prune",
-			Body:      body,
-			Actor:     "ddx",
-			Source:    "server-workers",
-			CreatedAt: now,
-		})
-		if beadID == "" && len(released) > 0 {
-			beadID = released[0]
+		if beadID != "" {
+			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+			body := fmt.Sprintf("worker=%s pid=%d reason=prune %s", rec.ID, rec.PID, reason)
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.reaped",
+				Summary:   "prune",
+				Body:      body,
+				Actor:     "ddx",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			_ = store.Unclaim(beadID)
 		}
 
 		rec.State = "reaped"
@@ -2942,67 +2383,23 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 }
 
 // ReconcileStaleWorkers scans the on-disk worker registry and marks entries
-// that are still in state=running/stopping but have a dead (or missing) PID as
-// "exited". It also releases any bead claim still owned by terminal worker
-// records, which can happen when an earlier restart marked the worker exited
-// before its tracked claim was cleared. Called once at server startup to repair
-// records left by a previous server crash without starting new goroutines for
-// them.
+// that are still in state=running but have a dead (or missing) PID as
+// "exited". Called once at server startup to repair records left running by a
+// previous server crash without starting new goroutines for them. Bead claims
+// are released so the queue drainer can pick up the work again.
 func (m *WorkerManager) ReconcileStaleWorkers() {
 	entries, err := os.ReadDir(m.rootDir)
 	if err != nil {
 		return
 	}
 	now := time.Now().UTC()
-	releasers := map[string]*workerClaimReleaser{}
-	releaserForProject := func(projectRoot string) *workerClaimReleaser {
-		projectRoot = strings.TrimSpace(projectRoot)
-		if projectRoot == "" {
-			projectRoot = m.projectRoot
-		}
-		canonical := canonicalizePath(projectRoot)
-		if canonical == "" {
-			canonical = projectRoot
-		}
-		if releaser, ok := releasers[canonical]; ok {
-			return releaser
-		}
-		releaser := newWorkerClaimReleaser(bead.NewStore(ddxroot.JoinProject(projectRoot)))
-		releasers[canonical] = releaser
-		return releaser
-	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		dir := filepath.Join(m.rootDir, entry.Name())
 		rec, err := m.readRecord(dir)
-		if err != nil {
-			continue
-		}
-		if isTerminalWorkerState(rec.State) {
-			projectRoot := rec.ProjectRoot
-			if projectRoot == "" {
-				projectRoot = m.projectRoot
-			}
-			body := fmt.Sprintf("worker=%s state=%s reason=terminal-worker-claim", rec.ID, rec.State)
-			released := releaserForProject(projectRoot).release(rec.ID, "", now, bead.BeadEvent{
-				Kind:      "bead.reaped",
-				Summary:   "terminal-worker-claim",
-				Body:      body,
-				Actor:     "ddx-server",
-				Source:    "server-workers",
-				CreatedAt: now,
-			})
-			if len(released) > 0 {
-				if rec.ReapReason == "" {
-					rec.ReapReason = "terminal-worker-claim"
-				}
-				_ = m.writeRecord(dir, rec)
-			}
-			continue
-		}
-		if rec.State != "running" && rec.State != "stopping" {
+		if err != nil || rec.State != "running" {
 			continue
 		}
 
@@ -3031,18 +2428,20 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		if projectRoot == "" {
 			projectRoot = m.projectRoot
 		}
-		_, _ = lockmetrics.CloseAbandonedForPID(projectRoot, rec.PID, now,
-			"stale managed worker reconciled after server restart")
 
-		body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
-		releaserForProject(projectRoot).release(rec.ID, beadID, now, bead.BeadEvent{
-			Kind:      "bead.reaped",
-			Summary:   "server-restart",
-			Body:      body,
-			Actor:     "ddx-server",
-			Source:    "server-workers",
-			CreatedAt: now,
-		})
+		if beadID != "" {
+			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+			body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.reaped",
+				Summary:   "server-restart",
+				Body:      body,
+				Actor:     "ddx-server",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			_ = store.Unclaim(beadID)
+		}
 
 		rec.State = "exited"
 		rec.Status = "exited"
@@ -3052,108 +2451,6 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		}
 		rec.LastError = "server restarted while worker was running"
 		_ = m.writeRecord(dir, rec)
-	}
-}
-
-// ReconcileDesiredWorkers brings server-managed workers in line with the
-// persisted desired state for this manager's project.
-func (m *WorkerManager) ReconcileDesiredWorkers() (ReconcileResult, error) {
-	m.ReconcileStaleWorkers()
-	return m.reconcileDesiredWorkersOnly()
-}
-
-func (m *WorkerManager) reconcileDesiredWorkersOnly() (ReconcileResult, error) {
-	m.desiredReconcileMu.Lock()
-	defer m.desiredReconcileMu.Unlock()
-
-	if m.desiredSupervisor == nil {
-		m.desiredSupervisor = NewWorkerSupervisor(m.projectRoot, m)
-	}
-	return m.desiredSupervisor.Reconcile()
-}
-
-func (m *WorkerManager) provisionDesiredWorkersBeforeStaleSweep() (ReconcileResult, error) {
-	var result ReconcileResult
-	desired, err := LoadWorkerDesiredState(m.projectRoot)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return result, nil
-		}
-		return result, err
-	}
-	running := m.fastLiveManagedWorkerCount(m.projectRoot)
-	sup := NewWorkerSupervisor(m.projectRoot, m)
-	for running < desired.DesiredCount {
-		rec, startErr := sup.startWorker(desired)
-		if startErr != nil {
-			result.Errors = append(result.Errors, startErr.Error())
-			break
-		}
-		running++
-		result.Started = append(result.Started, rec.ID)
-	}
-	return result, nil
-}
-
-func (m *WorkerManager) fastLiveManagedWorkerCount(projectRoot string) int {
-	seen := map[string]bool{}
-	count := 0
-
-	m.mu.Lock()
-	for id, handle := range m.workers {
-		if handle == nil {
-			continue
-		}
-		rec := handle.record
-		root := rec.ProjectRoot
-		if root == "" {
-			root = m.projectRoot
-		}
-		if rec.Managed && sameCanonicalPath(root, projectRoot) && !isTerminalWorkerState(rec.State) {
-			if rec.PID > 0 && !isPIDAlive(rec.PID) {
-				continue
-			}
-			count++
-			seen[id] = true
-		}
-	}
-	m.mu.Unlock()
-
-	entries, err := os.ReadDir(m.rootDir)
-	if err != nil {
-		return count
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() || seen[entry.Name()] {
-			continue
-		}
-		rec, err := m.readRecord(filepath.Join(m.rootDir, entry.Name()))
-		if err != nil || !rec.Managed || isTerminalWorkerState(rec.State) {
-			continue
-		}
-		root := rec.ProjectRoot
-		if root == "" {
-			root = m.projectRoot
-		}
-		if !sameCanonicalPath(root, projectRoot) {
-			continue
-		}
-		if rec.PID > 0 && isPIDAlive(rec.PID) {
-			count++
-			seen[rec.ID] = true
-		}
-	}
-	return count
-}
-
-func mergeReconcileResults(left, right ReconcileResult) ReconcileResult {
-	return ReconcileResult{
-		Started:        append(left.Started, right.Started...),
-		Restarted:      append(left.Restarted, right.Restarted...),
-		Stopped:        append(left.Stopped, right.Stopped...),
-		StaleMarked:    append(left.StaleMarked, right.StaleMarked...),
-		RestartSkipped: append(left.RestartSkipped, right.RestartSkipped...),
-		Errors:         append(left.Errors, right.Errors...),
 	}
 }
 

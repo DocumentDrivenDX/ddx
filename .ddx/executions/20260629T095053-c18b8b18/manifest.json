@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260629T095053-c18b8b18",
+  "bead_id": "ddx-aef568e7",
+  "base_rev": "898ce4a9d67cd671275504f1f6c020e826682a74",
+  "created_at": "2026-06-29T09:51:26.384077866Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aef568e7",
+    "title": "server: stop managed worker process trees idempotently",
+    "description": "PROBLEM\nOperator Stop must fully clean a server-managed worker, including claude, codex, shell, and sleep descendants, without killing unrelated processes or duplicating bead transitions when Stop is called more than once.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:1214-1227 has an idempotence guard for in-memory handles, but the cleanup path still depends on a single recorded PID. cli/internal/server/workers.go:1234 reads WorkerRecord.PID, and cli/internal/server/workers.go:1282-1286 calls terminateProcessGroup only when pid \u003e 0. cli/internal/server/workers.go:1288-1289 then cancels the goroutine, which cannot guarantee cleanup of harness descendants when the server-owned worker lacks a process boundary. cli/internal/server/workers_reap_unix.go:22-32 documents that callers must register only processes spawned in their own process group.\n\nPROPOSED FIX\nIntroduce or reuse one cleanup helper that terminates only server-owned managed worker process groups by PGID when available, falling back to registered child process groups for any transitional in-process harness path. Wire WorkerManager.Stop through that helper after the existing bead.stopped event and Unclaim call. The helper must send SIGTERM, wait WatchdogKillGrace, send SIGKILL to remaining descendants, report what it killed, and make repeated Stop calls no-ops for bead transitions and process cleanup.\n\nNON-SCOPE\nDo not kill external reported workers or interactive Claude/Codex sessions. Do not change bead claim semantics except releasing claims for the stopped/reaped managed worker. Do not implement UI controls.\n\nGOVERNING ARTIFACT AND RELATIONSHIP\nParent bead: ddx-9d1af129. Governing artifact reference: plan:server-managed-workers. No explicit dependency IDs were provided by the parent bead.",
+    "acceptance": "1. TestManagedWorkerStopKillsClaudeCodexDescendants uses fake claude and codex binaries on PATH that spawn sleeping children, calls Stop, and proves none of those descendants remain running.\n2. TestManagedWorkerStopIsIdempotent calls Stop twice and proves exactly one bead.stopped transition, one claim release, and one terminal worker status write.\n3. TestManagedWorkerStopSkipsExternalReportedWorkers proves Stop does not terminate an external reported worker PID, an interactive Claude/Codex session, or an unrelated process in another process group.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerStopIsIdempotent|TestManagedWorkerStopSkipsExternalReportedWorkers' passes.\n5. make install is run after the code change lands.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T095053-c18b8b18",
+    "prompt": ".ddx/executions/20260629T095053-c18b8b18/prompt.md",
+    "manifest": ".ddx/executions/20260629T095053-c18b8b18/manifest.json",
+    "result": ".ddx/executions/20260629T095053-c18b8b18/result.json",
+    "checks": ".ddx/executions/20260629T095053-c18b8b18/checks.json",
+    "usage": ".ddx/executions/20260629T095053-c18b8b18/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-aef568e7-20260629T095053-c18b8b18"
+  },
+  "prompt_sha": "ac9bd3bdbe3938219b06cb6758632f72223d9c4b38aa28bd18314fa89b16b72a"
+}

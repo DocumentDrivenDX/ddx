@@ -49,15 +49,6 @@ func NewMetaPromptInjectorWithPaths(claudeFile, libraryPath, workingDir string) 
 	}
 }
 
-func (m *MetaPromptInjectorImpl) libraryFilePath(parts ...string) string {
-	base := m.libraryPath
-	if !filepath.IsAbs(base) {
-		base = filepath.Join(m.workingDir, base)
-	}
-	elems := append([]string{base}, parts...)
-	return filepath.Join(elems...)
-}
-
 // InjectMetaPrompt injects a meta-prompt from library into CLAUDE.md
 func (m *MetaPromptInjectorImpl) InjectMetaPrompt(promptPath string) error {
 	// 1. Validate prompt path
@@ -66,7 +57,7 @@ func (m *MetaPromptInjectorImpl) InjectMetaPrompt(promptPath string) error {
 	}
 
 	// 2. Read prompt content from library
-	promptFullPath := m.libraryFilePath("prompts", promptPath)
+	promptFullPath := filepath.Join(m.workingDir, m.libraryPath, "prompts", promptPath)
 	// evidence:allow-unbounded reason="prompt files are repo-local and bounded by MaxMetaPromptSize immediately after read"
 	promptContent, err := os.ReadFile(promptFullPath)
 	if err != nil {
@@ -148,7 +139,7 @@ func (m *MetaPromptInjectorImpl) IsInSync() (bool, error) {
 	}
 
 	// 3. Read library prompt
-	promptFullPath := m.libraryFilePath("prompts", sourcePath)
+	promptFullPath := filepath.Join(m.workingDir, m.libraryPath, "prompts", sourcePath)
 	if !fileExists(promptFullPath) {
 		// Library file missing - definitely out of sync
 		return false, nil

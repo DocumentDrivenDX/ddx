@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIntake_TooLargeDecomposed_CreatesChildrenAndClosesParent(t *testing.T) {
+func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
@@ -70,11 +70,11 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndClosesParent(t *testing.T) 
 	assert.Equal(t, 0, result.Successes)
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must not run")
 
-	// Parent must be closed after a successful decomposition.
+	// Parent must remain open (not proposed) after a successful decomposition.
 	got, err := store.Get(context.Background(), "ddx-decomp-parent")
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status, "parent must be closed after successful decomposition")
-	assert.Empty(t, got.Owner, "closed decomposed parent must not retain an owner")
+	assert.Equal(t, bead.StatusOpen, got.Status, "parent must remain open after successful decomposition")
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent must be marked execution-ineligible after successful decomposition")
 
 	// Two children must exist with Parent == candidate.ID.
 	all, err := store.ReadAll(context.Background())
@@ -86,18 +86,6 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndClosesParent(t *testing.T) 
 		}
 	}
 	assert.Len(t, children, 2, "two children must be created")
-
-	// Children with no explicit deps must be in ReadyExecution despite having
-	// Parent == closed-parent-id.
-	ready, err := store.ReadyExecution()
-	require.NoError(t, err)
-	readyIDs := make(map[string]bool, len(ready))
-	for _, rb := range ready {
-		readyIDs[rb.ID] = true
-	}
-	for _, child := range children {
-		assert.True(t, readyIDs[child.ID], "child %s must be in ReadyExecution despite closed parent", child.ID)
-	}
 
 	// Parent must not gain dependency edges to its children.
 	got, err = store.Get(context.Background(), "ddx-decomp-parent")
@@ -170,7 +158,8 @@ func TestDecomposeDoesNotSelfDep(t *testing.T) {
 
 	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status, "parent must be closed after decomposition")
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent must be parked as execution-ineligible")
 	assert.Empty(t, got.DepIDs(), "parent must not depend on its children")
 
 	all, err := store.ReadAll(context.Background())
@@ -253,7 +242,8 @@ func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing
 
 	parent, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, parent.Status, "parent must be closed after hook decomposition")
+	assert.Equal(t, bead.StatusOpen, parent.Status)
+	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig], "parent must be marked execution-ineligible after hook decomposition")
 	assert.Empty(t, parent.DepIDs(), "parent must not depend on its decomposed child")
 }
 
@@ -464,7 +454,7 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 		"needs-human-decomposition label must be added when depth cap fires")
 }
 
-func TestPostAttemptTooLargeNoChanges_ClosesParentAndLeavesChildrenReady(t *testing.T) {
+func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
@@ -518,13 +508,7 @@ func TestPostAttemptTooLargeNoChanges_ClosesParentAndLeavesChildrenReady(t *test
 	assert.Equal(t, 1, result.Failures, "decomposed no_changes must count as a failure")
 	assert.Equal(t, 0, result.Successes)
 
-	// The parent must be closed after decomposition.
-	got, err := store.Get(context.Background(), "ddx-postdecomp-01")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status, "post-attempt decomposition must close the parent")
-	assert.Empty(t, got.Owner, "closed decomposed parent must not retain owner metadata")
-
-	// Two children must be created with Parent == candidate.ID and remain ready.
+	// Two children must be created with Parent == candidate.ID.
 	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
@@ -534,20 +518,6 @@ func TestPostAttemptTooLargeNoChanges_ClosesParentAndLeavesChildrenReady(t *test
 		}
 	}
 	assert.Len(t, children, 2, "two children must be created after post-attempt decomposition")
-	for _, child := range children {
-		assert.Empty(t, child.DepIDs(), "generated child %s must not carry explicit deps", child.ID)
-	}
-
-	ready, err := store.ReadyExecution()
-	require.NoError(t, err)
-	assert.Len(t, ready, 2, "generated children must remain ready for execution")
-	readyIDs := make([]string, 0, len(ready))
-	for _, bb := range ready {
-		readyIDs = append(readyIDs, bb.ID)
-	}
-	for _, child := range children {
-		assert.Contains(t, readyIDs, child.ID, "ready queue must include the generated child")
-	}
 
 	// triage-decomposed event must be appended to parent.
 	events, err := store.Events("ddx-postdecomp-01")

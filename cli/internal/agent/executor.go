@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -85,7 +84,7 @@ func withExecutionEnv(ctx context.Context, env map[string]string) context.Contex
 	if len(env) == 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, executionEnvKey{}, scrubbedExecutionEnvOverrides(env))
+	return context.WithValue(ctx, executionEnvKey{}, cloneStringMap(env))
 }
 
 func executionEnvFromContext(ctx context.Context) map[string]string {
@@ -96,7 +95,7 @@ func executionEnvFromContext(ctx context.Context) map[string]string {
 	if !ok || len(env) == 0 {
 		return nil
 	}
-	return scrubbedExecutionEnvOverrides(env)
+	return cloneStringMap(env)
 }
 
 // authCancelPatterns are regexps matched against lowercased stderr lines that indicate
@@ -160,7 +159,7 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = envWithOverrides(scrubbedExecutionProcessEnv(), executionEnvFromContext(ctx))
+	cmd.Env = envWithOverrides(internalgit.CleanEnv(), executionEnvFromContext(ctx))
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -367,79 +366,6 @@ func envWithOverrides(base []string, overrides map[string]string) []string {
 		env = append(env, key+"="+overrides[key])
 	}
 	return env
-}
-
-func scrubbedExecutionProcessEnv() []string {
-	return scrubEnvKeys(internalgit.CleanEnv(),
-		"DDX_PROJECT_ROOT",
-		"DDX_AGENT_NAME",
-		"DDX_SERVER_MANAGED_WORKER_ID",
-		"DDX_WORKER_ID",
-	)
-}
-
-func scrubEnvKeys(base []string, keys ...string) []string {
-	if len(base) == 0 || len(keys) == 0 {
-		return append([]string{}, base...)
-	}
-	drop := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		drop[key] = struct{}{}
-	}
-	env := make([]string, 0, len(base))
-	for _, kv := range base {
-		eq := strings.IndexByte(kv, '=')
-		if eq < 0 {
-			env = append(env, kv)
-			continue
-		}
-		if _, ok := drop[kv[:eq]]; ok {
-			continue
-		}
-		env = append(env, kv)
-	}
-	return env
-}
-
-func scrubbedExecutionEnvOverrides(env map[string]string) map[string]string {
-	if len(env) == 0 {
-		return nil
-	}
-	out := cloneStringMap(env)
-	delete(out, "DDX_PROJECT_ROOT")
-	delete(out, "DDX_AGENT_NAME")
-	delete(out, "DDX_SERVER_MANAGED_WORKER_ID")
-	return out
-}
-
-func withScrubbedExecutionProcessEnv(fn func() error) error {
-	restore := scrubCurrentProcessEnv("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
-	defer restore()
-	return fn()
-}
-
-func scrubCurrentProcessEnv(keys ...string) func() {
-	type savedEnv struct {
-		key   string
-		value string
-		ok    bool
-	}
-	saved := make([]savedEnv, 0, len(keys))
-	for _, key := range keys {
-		value, ok := os.LookupEnv(key)
-		saved = append(saved, savedEnv{key: key, value: value, ok: ok})
-		_ = os.Unsetenv(key)
-	}
-	return func() {
-		for i := len(saved) - 1; i >= 0; i-- {
-			item := saved[i]
-			if item.ok {
-				_ = os.Setenv(item.key, item.value)
-			} else {
-				_ = os.Unsetenv(item.key)
-			}
-		}
-	}
 }
 
 type activityWriter struct {

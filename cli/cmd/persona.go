@@ -48,7 +48,7 @@ func deprecationNoticeFor(name string) string {
 	if replacement != "" {
 		return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release; use %q instead", name, replacement)
 	}
-	return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release with no direct replacement; install a marketplace or project-specific plugin for replacement personas", name)
+	return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release with no direct replacement; see library/personas/README.md for the current 5-persona roster", name)
 }
 
 // PersonaMetadata represents parsed persona frontmatter
@@ -811,10 +811,26 @@ func validatePersonaContent(content, personaName string) error {
 
 // getPersonaLibraryPath gets library path with working directory context for persona operations
 func getPersonaLibraryPath(workingDir string) (string, error) {
+	// Use the config system with working directory parameter
 	if workingDir == "" {
 		return "", fmt.Errorf("working directory must be provided")
 	}
-	return resolveCommandLibraryPath(workingDir)
+
+	// Use the library path resolution from config
+	cfg, err := config.LoadWithWorkingDir(workingDir)
+	if err != nil {
+		return "", err
+	}
+
+	if cfg.Library != nil {
+		libPath := cfg.Library.Path
+		// If path is relative, resolve it relative to working directory
+		if !filepath.IsAbs(libPath) {
+			libPath = filepath.Join(workingDir, libPath)
+		}
+		return libPath, nil
+	}
+	return "", fmt.Errorf("library path not configured")
 }
 
 // loadPersonaConfig loads config with working directory context for persona operations

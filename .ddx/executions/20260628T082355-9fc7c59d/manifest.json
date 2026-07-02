@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260628T082355-9fc7c59d",
+  "bead_id": "ddx-76647136",
+  "base_rev": "a531072c05ebfbacb8d268ca845395482b3670f3",
+  "created_at": "2026-06-28T08:24:05.133016272Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-76647136",
+    "title": "cleanup: expose stale process findings in ddx cleanup output",
+    "description": "PROBLEM\nEven if the cleanup manager can find stale DDx-owned attempt-descendant processes, operators still need `ddx cleanup` dry-run and JSON output to show the process findings, process counts, stale reasons, and blocked warnings without breaking existing cleanup report fields.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/cmd/cleanup.go:11-30` defines `cleanupCommandReport` without process findings, PIDs, process-group counts, stale reasons, warnings, or recovery fields.\n- `cli/cmd/cleanup.go:69-72` constructs `agent.NewExecutionCleanupManager` and runs cleanup in dry-run or `--apply`, but the command output only reflects the current file/resource cleanup summary shape.\n- `cli/internal/agent/execution_cleanup.go:110-138` reports file/resource counts only, which leaves the command layer without a stable JSON/text contract for process cleanup status.\n\nPROPOSED FIX\nUpdate the cleanup command's text and JSON reporting to include process findings and counts from the cleanup manager. Dry-run text and `ddx cleanup --json` should show PID/process group, command basename or truncated command, cwd/worktree, bead/attempt when inferable, stale reason, `would_kill`, killed/preserved status where applicable, and blocked warnings. Preserve the existing stale temp dir, run-state, scratch, worktree, evidence/log, worker, and ref report fields so downstream consumers are not broken.\n\nIN-SCOPE FILES\n- `cli/cmd/cleanup.go` and `cli/cmd/cleanup_test.go` for text/JSON reporting.\n- `cli/internal/agent/execution_cleanup.go` only as needed to consume or expose the process summary fields.\n- `docs/helix/01-frame/features/FEAT-010-task-execution.md` and `docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md` only if this child changes the documented cleanup contract.\n\nNON-SCOPE\n- Do not edit Niflheim.\n- Do not duplicate `ddx-e0de6369`; that bead owns `.ddx/harness-sessions/` scratch ignore/prune behavior.\n- Do not duplicate `ddx-bbea954f`; that bead owns dirty timeout worktree edit preservation before cleanup deletion.\n- Do not replace the existing parent-death/process-group fixes from `ddx-0d7d5f0e`, `ddx-3113d524`, or `ddx-418c3849`.\n- Do not implement a general-purpose port scanner or host process manager. Port conflict recovery here comes only from safely reaping stale DDx-owned attempt process groups.\n- Do not kill processes outside the current project's DDx execution root, processes tied to live run-state/worker liveness, active registered worktrees, or non-DDx user workloads.\n\nGOVERNING ARTIFACTS\n- `spec:FEAT-010`\n- `spec:SD-025`\n\nPARENT AND DEPS\nParent: `ddx-3106674f` (multi-worker reliability and Niflheim local gates).\nDeps: none.",
+    "acceptance": "1. Add `TestCleanupCommand_JSONIncludesProcessFindings` proving `ddx cleanup --json` includes process findings/counts, PID/process-group identity, command, worktree/cwd, stale reason, `would_kill`, and warnings when present.\n2. Add `TestCleanupCommand_DryRunTextIncludesProcessFindingsAndCounts` proving dry-run text output includes process findings/counts and does not imply that dry-run killed anything.\n3. Add `TestCleanupCommand_JSONPreservesExistingCleanupFields` proving stale temp dir, run-state, scratch, worktree, evidence/log, worker, and ref report fields keep their existing JSON shape while process fields are added.\n4. Focused cleanup tests pass: `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'Cleanup.*Process|AttemptDescendant|CleanupCommand' -count=1` passes.\n5. Package-level gate passes: `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "queue-rank": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260628T082355-9fc7c59d",
+    "prompt": ".ddx/executions/20260628T082355-9fc7c59d/prompt.md",
+    "manifest": ".ddx/executions/20260628T082355-9fc7c59d/manifest.json",
+    "result": ".ddx/executions/20260628T082355-9fc7c59d/result.json",
+    "checks": ".ddx/executions/20260628T082355-9fc7c59d/checks.json",
+    "usage": ".ddx/executions/20260628T082355-9fc7c59d/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-76647136-20260628T082355-9fc7c59d"
+  },
+  "prompt_sha": "9100d1b0dfe168a644c0aee60c4a51f5b0634e5a809561b460531d06a53d312d"
+}

@@ -5,12 +5,11 @@ generated: true
 
 ## ddx verify
 
-Retired: use ddx doctor --plugins
+Verify installed package integrity
 
 ### Synopsis
 
-`ddx verify` is retired. Use `ddx doctor --plugins` to inspect plugin lock,
-cache, and generated adapter health.
+Check that all files recorded for installed packages still exist and symlinks resolve correctly.
 
 ```
 ddx verify [flags]

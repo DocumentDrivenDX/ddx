@@ -1,12 +1,44 @@
 package skills
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
+
+func TestEmbeddedSkillsHaveValidMetadata(t *testing.T) {
+	var skillFiles []string
+	err := fs.WalkDir(SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Base(path) == "SKILL.md" {
+			skillFiles = append(skillFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk embedded skills: %v", err)
+	}
+	if len(skillFiles) == 0 {
+		t.Fatal("no embedded SKILL.md files found")
+	}
+
+	for _, path := range skillFiles {
+		data, err := SkillFiles.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read embedded skill %s: %v", path, err)
+		}
+		if issues := ValidateContent(path, data); len(issues) > 0 {
+			t.Fatalf("embedded skill validation failed: %v", issues[0])
+		}
+	}
+}
 
 func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
@@ -16,8 +48,12 @@ func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
 	skillGlobs := []string{
-		filepath.Join(repoRoot, "library", "skills", "*", "SKILL.md"),
-		filepath.Join(repoRoot, "cli", "internal", "registry", "defaultplugin", "library", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, "cli", "internal", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, "library", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".agents", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".claude", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "*", "SKILL.md"),
 	}
 
 	var matches []string
@@ -52,9 +88,11 @@ func TestHumanWritingSupportSkillContent(t *testing.T) {
 	}
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
 
-	candidates := []string{
+	skillPaths := []string{
+		filepath.Join(repoRoot, "library", ".agents", "skills", "human-writing-support", "SKILL.md"),
 		filepath.Join(repoRoot, ".agents", "skills", "human-writing-support", "SKILL.md"),
 		filepath.Join(repoRoot, ".claude", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(repoRoot, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"),
 	}
 
 	// Required substrings: workflow command (AC3) and preservation rule
@@ -69,25 +107,17 @@ func TestHumanWritingSupportSkillContent(t *testing.T) {
 		"acceptance criteria",
 	}
 
-	var checked int
-	for _, p := range candidates {
+	for _, p := range skillPaths {
 		data, err := os.ReadFile(p)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		checked++
 		text := string(data)
 		for _, want := range required {
 			if !strings.Contains(text, want) {
 				t.Errorf("%s: missing required substring %q", p, want)
 			}
 		}
-	}
-	if checked == 0 {
-		t.Fatal("no human-writing-support skill copies found")
 	}
 }

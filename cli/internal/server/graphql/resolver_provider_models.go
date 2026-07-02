@@ -177,7 +177,6 @@ func fetchProviderModelsLive(ctx context.Context, workDir, name string, kind Pro
 	if err != nil {
 		return nil, fmt.Errorf("agent service: %w", err)
 	}
-	defer cleanupCurrentProcessProviderProbes()
 
 	filter := agentlib.ModelFilter{}
 	switch kind {

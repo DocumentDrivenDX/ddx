@@ -522,18 +522,6 @@ type Worker implements Node {
   recentEvents: [WorkerRecentEvent!]!
   """Operator lifecycle actions recorded for this worker"""
   lifecycleEvents: [WorkerLifecycleEvent!]!
-  """True when this worker was started and is owned by the server supervisor."""
-  managed: Boolean
-  """Desired running worker count for this project (from desired-state file)."""
-  desiredCount: Int
-  """Number of automatic restarts the supervisor has performed for this worker."""
-  restartCount: Int
-  """ISO timestamp of the most recent automatic restart, or null."""
-  lastRestartAt: DateTime
-  """ISO timestamp until which the supervisor is backing off before restarting."""
-  backoffUntil: DateTime
-  """True when the worker exited uncleanly and manual cleanup may be needed."""
-  cleanupNeeded: Boolean
 }
 
 """
@@ -1928,8 +1916,6 @@ type WorkerDispatchResult {
   state: String!
   """Worker kind"""
   kind: String!
-  """Every worker started by this dispatch, including id/state/kind."""
-  workers: [WorkerLifecycleResult!]!
 }
 
 """WorkerLifecycleResult describes a lifecycle mutation result."""
@@ -1946,14 +1932,8 @@ type WorkerLifecycleResult {
 input StartWorkerInput {
   """Project identifier"""
   projectId: String!
-  """Number of workers to start. Defaults to 1."""
-  count: Int
   """Optional harness override"""
   harness: String
-  """Optional provider override"""
-  provider: String
-  """Optional model override"""
-  model: String
   """Routing profile, defaulting to smart when omitted"""
   profile: String
   """Reasoning effort, defaulting to medium when omitted"""
@@ -1964,36 +1944,6 @@ input StartWorkerInput {
   mode: String
   """Sleep duration between empty-queue scans in watch mode (for example "30s")."""
   idleInterval: String
-  """Absolute provider request timeout for each worker attempt (for example "20m")."""
-  requestTimeout: String
-}
-
-"""WorkerDesiredStateInput configures the durable supervision goal for a project."""
-input WorkerDesiredStateInput {
-  """Project identifier"""
-  projectId: String!
-  """Desired number of concurrently running managed workers"""
-  desiredCount: Int!
-  """Optional harness override for managed workers"""
-  harness: String
-  """Optional provider override"""
-  provider: String
-  """Optional model override"""
-  model: String
-  """Routing profile, defaulting to smart when omitted"""
-  profile: String
-  """Reasoning effort, defaulting to medium when omitted"""
-  effort: String
-}
-
-"""WorkerDesiredStateResult reports the outcome of a setWorkerDesiredState mutation."""
-type WorkerDesiredStateResult {
-  """Project identifier"""
-  projectId: String!
-  """Desired count now recorded"""
-  desiredCount: Int!
-  """Number of workers currently running after reconcile"""
-  actualCount: Int!
 }
 
 """PluginDispatchResult describes the worker started by a plugin action."""
@@ -3310,14 +3260,12 @@ type Mutation {
     externalBlockerReason: String!
   ): Bead!
 
-  """Write or update a document in the library and return the freshly re-read document; use docGraph/docStale for deterministic follow-up refreshes (maps to PUT /api/docs/{id})"""
+  """Write or update a document in the library (maps to PUT /api/docs/{id})"""
   documentWrite(
     """Document path relative to the library root"""
     path: String!,
     """Document content"""
-    content: String!,
-    """Optional current content hash; mismatches return a conflict error"""
-    expectedHash: String
+    content: String!
   ): Document!
 
   """Dispatch a project worker action."""
@@ -3335,12 +3283,6 @@ type Mutation {
 
   """Stop a running worker through the same path as legacy agent workers stop."""
   stopWorker(id: ID!): WorkerLifecycleResult!
-
-  """Set the desired running worker count and default spec for a project."""
-  setWorkerDesiredState(input: WorkerDesiredStateInput!): WorkerDesiredStateResult!
-
-  """Restart a managed worker, cancelling the current run and starting fresh."""
-  restartWorker(id: ID!): WorkerLifecycleResult!
 
   """Dispatch a plugin install/update/uninstall action."""
   pluginDispatch(

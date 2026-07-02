@@ -71,10 +71,21 @@ persona's body as a system-prompt addendum to `ddx run` —
 same persona, same behavior across every harness, because the
 harness sees a flat system prompt, not a persona file.
 
-The built-in `ddx` plugin is a bootstrap skill package and does not ship a
-default persona roster. Install a marketplace plugin such as `helix`, or a
-project-specific plugin, to add personas, prompts, workflow skills, checks, and
-other higher-level assets without copying those payloads into every project.
+### Default roster
+
+The default `ddx` plugin ships five role-focused personas:
+
+- `code-reviewer` — security-first review with structured verdicts
+- `test-engineer` — stubs-over-mocks, real-e2e, baselined
+  performance, testing pyramid as shape not ratios
+- `implementer` — YAGNI / KISS / DOWITYTD, ships tests with code
+- `architect` — opinionated on when to reach for each pattern
+  (monolith-first, data-model-first)
+- `specification-enforcer` — refuses drift from governing artifacts
+
+See `.ddx/plugins/ddx/personas/README.md` for the quality bar and
+authoring guidance. Projects can install additional personas via
+plugins.
 
 ### Using a persona
 
@@ -116,37 +127,38 @@ ddx run --persona architect --prompt review.md
 
 ## Getting more capabilities
 
-`ddx plugin install <name>` records a project plugin dependency. Registry
-payloads are cached under XDG and only generated agent adapters are
-materialized into the project, so marketplace plugins can behave like an
-`npx` dependency instead of copied source assets. Plugins can ship personas,
-prompts, patterns, templates, and workflow skills.
+`ddx install <name>` adds plugins to the project. Plugins can ship
+personas, prompts, patterns, templates, and workflow skills.
 
 ```bash
-ddx plugin install helix       # HELIX workflow plugin
+ddx install helix              # HELIX workflow plugin
 ddx search <term>              # discover available plugins
-ddx plugin list                # list project plugin locks
-ddx plugin show helix          # show lock/cache/adapter details
-ddx plugin sync                # recreate generated adapters
+ddx installed                  # list installed plugins
+ddx uninstall <name>           # remove
 ```
 
-Custom personas belong in a plugin package, typically under
-`library/personas/<name>.md` in that plugin's source tree. Registry installs
-cache that package under XDG and generate adapters into the project; local
-development overlays may expose `.ddx/plugins/<plugin>/personas/<name>.md`.
+Custom personas go in `.ddx/plugins/<plugin>/personas/<name>.md`
+(or directly in `library/personas/<name>.md` for local-only use).
+See the personas README for the authoring quality bar.
 
 ## Install topology
 
-DDx resolves marketplace plugins from the project plugin lock and the XDG
-cache (`${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`). The baked-in
-default package exists only for `ddx` itself so the CLI remains usable
-offline. `ddx doctor --plugins` exposes lock, cache, and generated adapter
-state.
+DDx resolves package installs in this order: project tier
+`ddxroot.Path()/plugins/<name>/` (which is `<project>/.ddx/plugins/<name>/` in-tree
+or `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` in convention
+mode), then the global install at `${XDG_DATA_HOME}/ddx/global/plugins/<name>/`,
+then the baked-in default package for `ddx` itself. This is project > global > baked-in precedence.
+`ddx doctor` exposes the project and global `ddx` layers
+separately so operators can distinguish a real project install from a global
+fallback.
 
-The agent-facing skill outputs are the project-local `.agents/skills/`
-and `.claude/skills/` directories. Those are the install targets for the
-resolved package; home-directory/global plugin installs are retired as the
-forward model.
+The agent-facing skill outputs for project installs are the project-local
+`.agents/skills/<name>/` and `.claude/skills/<name>/` directories. Global
+installs created with `ddx install <name> --global` write the plugin to
+`${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and create links under
+`~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. Managed global
+installs are the supported machine-wide path; unmanaged home-directory skill
+installs are retired.
 
 ## Anti-patterns
 
@@ -160,10 +172,9 @@ forward model.
   they don't make a bad prompt good. Start with a clear prompt;
   reach for a persona when you want consistent style/standards
   across invocations.
-- **Persona files in skill directories**. Personas live in plugin packages,
-  not in `.claude/skills/` or `.agents/skills/`. Local overlays may use
-  `.ddx/plugins/<plugin>/personas/`; registry installs resolve from the XDG
-  plugin cache. Don't mix personas with generated skill adapters.
+- **Persona files in skill directories**. Personas live in
+  `library/personas/` or `.ddx/plugins/<plugin>/personas/`, not in
+  `.claude/skills/` or `.agents/skills/`. Don't mix the two.
 
 ## CLI reference
 
@@ -188,12 +199,11 @@ ddx persona bind <role> <persona>
 ddx persona bindings
 
 # Plugin install
-ddx plugin install <plugin>
+ddx install <plugin>
 ddx search <term>
-ddx plugin list
-ddx plugin show <name>
-ddx plugin sync
+ddx installed
+ddx uninstall <name>
 ```
 
 Full flag list: `ddx run --help`, `ddx persona --help`,
-`ddx plugin --help`.
+`ddx install --help`.

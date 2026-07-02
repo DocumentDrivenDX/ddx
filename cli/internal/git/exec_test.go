@@ -114,28 +114,6 @@ func TestCleanEnv_StripsLocalEnvVars(t *testing.T) {
 	}
 }
 
-func TestCommandNoOptionalLocksDisablesOptionalIndexLocks(t *testing.T) {
-	t.Setenv("GIT_OPTIONAL_LOCKS", "1")
-	t.Setenv("GIT_INDEX_FILE", "/tmp/should-be-stripped")
-
-	cmd := CommandNoOptionalLocks(context.Background(), t.TempDir(), "status", "--porcelain")
-	gotOptionalLocks := 0
-	for _, kv := range cmd.Env {
-		if kv == "GIT_OPTIONAL_LOCKS=0" {
-			gotOptionalLocks++
-		}
-		if strings.HasPrefix(kv, "GIT_OPTIONAL_LOCKS=") && kv != "GIT_OPTIONAL_LOCKS=0" {
-			t.Fatalf("inherited optional-lock setting leaked into command env: %q", kv)
-		}
-		if strings.HasPrefix(kv, "GIT_INDEX_FILE=") {
-			t.Fatalf("local-env-var leaked into lockless command env: %q", kv)
-		}
-	}
-	if gotOptionalLocks != 1 {
-		t.Fatalf("GIT_OPTIONAL_LOCKS=0 count = %d, want 1", gotOptionalLocks)
-	}
-}
-
 // TestGitFixtureHelpersStripHookEnv proves that fixture git config writes
 // (user.email, user.name) land in the fixture repo even when GIT_DIR,
 // GIT_WORK_TREE, and GIT_INDEX_FILE are contaminated to point at an outer

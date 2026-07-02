@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260628T090211-272f4f4e",
+  "bead_id": "ddx-6ee2b0c3",
+  "base_rev": "710d6932d09b10fc34fbce6fd5ce03d3bf6bb754",
+  "created_at": "2026-06-28T09:02:21.016294819Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6ee2b0c3",
+    "title": "workers: run stale attempt process cleanup before bead claim",
+    "description": "PROBLEM\nQueue-control startup and pre-claim cleanup can remove stale worker sidecar directories, but it does not run the conservative stale attempt-descendant process pass before claiming more work. A worker can therefore continue draining while orphaned DDx-owned processes from older attempts still burn CPU or hold ports.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/cmd/startup_housekeeping.go:218-267` removes stale `.ddx/workers/agent-loop-*` sidecar dirs, but it does not terminate or report the underlying stale DDx-owned process tree when a stale sidecar corresponds to an orphaned attempt descendant.\n- `cli/internal/agent/execution_cleanup.go:230-527` owns cleanup of stale DDx execution artifacts, but work startup/pre-claim cleanup does not invoke the same conservative process pass before queue claim.\n- `cli/internal/agent/orphan_harness_reaper.go:42-152` handles startup reaping for orphaned top-level harnesses only and does not cover shell, cargo, benchmark, or test-server descendants left under stale execution worktrees.\n\nPROPOSED FIX\nWire the same conservative stale attempt process cleanup pass into work startup/pre-claim cleanup before the next bead is claimed. Preserve existing cleanup lock and jitter behavior so multiple workers do not race to kill the same process group. Emit a structured cleanup observation whenever startup/pre-claim cleanup reaps, preserves, or cannot safely reap a stale process group. The startup path must use the same ownership and liveness rules as `ddx cleanup --apply`: current-project execution root, stale or missing run-state liveness, dead owner PID, no live worker sidecar, and no active registered worktree.\n\nIN-SCOPE FILES\n- `cli/cmd/startup_housekeeping.go` and existing work-startup cleanup tests.\n- `cli/internal/agent/execution_cleanup.go` only as needed to reuse the process cleanup pass.\n- `cli/internal/workerstatus/*` or `cli/internal/agent/orphan_harness_reaper*` only for reused process-scanning helpers, not broad rewrites.\n- `docs/helix/01-frame/features/FEAT-010-task-execution.md` and `docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md` only if this child changes the documented cleanup contract.\n\nNON-SCOPE\n- Do not edit Niflheim.\n- Do not duplicate `ddx-e0de6369`; that bead owns `.ddx/harness-sessions/` scratch ignore/prune behavior.\n- Do not duplicate `ddx-bbea954f`; that bead owns dirty timeout worktree edit preservation before cleanup deletion.\n- Do not replace the existing parent-death/process-group fixes from `ddx-0d7d5f0e`, `ddx-3113d524`, or `ddx-418c3849`.\n- Do not implement a general-purpose port scanner or host process manager. Port conflict recovery here comes only from safely reaping stale DDx-owned attempt process groups.\n- Do not kill processes outside the current project's DDx execution root, processes tied to live run-state/worker liveness, active registered worktrees, or non-DDx user workloads.\n\nGOVERNING ARTIFACTS\n- `spec:FEAT-010`\n- `spec:SD-025`\n\nPARENT AND DEPS\nParent: `ddx-3106674f` (multi-worker reliability and Niflheim local gates).\nDeps: none.",
+    "acceptance": "1. Add `TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim` proving work startup/pre-claim cleanup runs the conservative process pass before claiming the next bead.\n2. Add `TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation` proving live run-state, live worker sidecar, active registered worktree, other-project processes, and uncertain candidates are preserved and produce structured cleanup observations.\n3. Add `TestWorkStartupCleanup_UsesCleanupLockForProcessReaping` or an equivalent assertion proving the startup process pass keeps existing cleanup lock/jitter behavior and does not race multiple workers against the same process group.\n4. Focused cleanup tests pass: `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'WorkStartupCleanup|AttemptDescendant|Cleanup.*Process|CleanupCommand' -count=1` passes.\n5. Package-level gate passes: `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "queue-rank": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260628T090211-272f4f4e",
+    "prompt": ".ddx/executions/20260628T090211-272f4f4e/prompt.md",
+    "manifest": ".ddx/executions/20260628T090211-272f4f4e/manifest.json",
+    "result": ".ddx/executions/20260628T090211-272f4f4e/result.json",
+    "checks": ".ddx/executions/20260628T090211-272f4f4e/checks.json",
+    "usage": ".ddx/executions/20260628T090211-272f4f4e/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T090211-272f4f4e"
+  },
+  "prompt_sha": "d7ec2c9b7c49bb805586126887366957875ef4d824f3c3caf874078d5c926c03"
+}

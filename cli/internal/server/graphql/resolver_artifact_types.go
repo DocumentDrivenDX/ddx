@@ -25,12 +25,15 @@ func artifactTypeDefinitionsForPath(workingDir, artifactPath string) ([]*Artifac
 		return []*ArtifactTypeDefinition{}, nil
 	}
 
-	libPath, err := config.ResolveLibraryPath(workingDir)
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
-		return nil, fmt.Errorf("resolving library path: %w", err)
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if cfg.Library == nil || strings.TrimSpace(cfg.Library.Path) == "" {
+		return []*ArtifactTypeDefinition{}, nil
 	}
 
-	roots, err := artifactTypeRootsForLibraryPath(workingDir, libPath)
+	roots, err := artifactTypeRootsForLibraryPath(workingDir, cfg.Library.Path)
 	if err != nil {
 		return nil, err
 	}

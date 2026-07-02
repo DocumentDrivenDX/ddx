@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260630T110144-4b57ebcd",
+  "bead_id": "ddx-6c17de78",
+  "base_rev": "b684e8a49b4a7b8afb0c505bf64bed7b0fea9dbe",
+  "created_at": "2026-06-30T11:01:55.262400333Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6c17de78",
+    "title": "cmd: run stale attempt-process cleanup during work startup",
+    "description": "PROBLEM\n`ddx work` startup cleanup can already reap stale worktrees and stale worker-sidecar directories, but it does not terminate or report the underlying DDx-owned process group when a stale sidecar corresponds to an already-orphaned attempt descendant. That leaves the queue controller looking healthy while the host still burns CPU or holds ports.\n\nROOT CAUSE\n`cli/cmd/startup_housekeeping.go:97-126` only reads run-states and then calls `scanWorktrees`, `scanWorkerDirs`, and `scanExecutionDirs`; there is no process-cleanup pass in the pre-claim path.\n`cli/cmd/startup_housekeeping.go:218-267` only reaps stale `.ddx/workers/agent-loop-*` directories after liveness checks. It does not consult process-group evidence or emit a structured observation when a stale attempt descendant is reaped or preserved.\n\nPROPOSED FIX\n- Wire the same conservative attempt-process pass used by the cleanup manager into startup housekeeping before the next bead claim.\n- Emit a structured cleanup observation when startup reaps or preserves a process group so operators can see why the host was or was not cleaned.\n- Keep the existing worktree, worker-dir, and execution-dir retention logic intact, including the cleanup lock/jitter behavior already in place for long-lived workers.\n- Add command tests that prove startup cleanup runs the process pass before claim and preserves live run-state / worker-sidecar / registered-worktree / other-project processes.\n\nNON-SCOPE\n- `ddx cleanup` JSON/text shaping is covered by the sibling cleanup-command bead.\n- The process-census/reaper logic itself lives in the sibling agent bead.\n- Documentation updates in `docs/` are handled separately.\n- No change to worker modes, queue selection, or retention-policy semantics.",
+    "acceptance": "1. `TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim` (or equivalent) proves `ddx work` startup/pre-claim cleanup runs the same process pass before claiming the next bead and emits a structured cleanup observation when it reaps or preserves a process group.\n2. A preservation regression proves live run-state, live worker sidecar, active registered worktree, and other-project processes survive the widened startup pass.\n3. Existing startup cleanup coverage, including `TestWorkStartup_ReapsStaleWorktrees` and `TestWorkStartup_PreservesLiveWorktrees`, remains green with the new process pass wired in.\n4. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'WorkStartupCleanup|AttemptDescendant|Cleanup.*Process' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -count=1` passes and `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260630T110144-4b57ebcd",
+    "prompt": ".ddx/executions/20260630T110144-4b57ebcd/prompt.md",
+    "manifest": ".ddx/executions/20260630T110144-4b57ebcd/manifest.json",
+    "result": ".ddx/executions/20260630T110144-4b57ebcd/result.json",
+    "checks": ".ddx/executions/20260630T110144-4b57ebcd/checks.json",
+    "usage": ".ddx/executions/20260630T110144-4b57ebcd/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c17de78-20260630T110144-4b57ebcd"
+  },
+  "prompt_sha": "f5622a5a58c9ea6521cf1867aad4f62df64982be9f3b87e203eb26f0e5d420b8"
+}

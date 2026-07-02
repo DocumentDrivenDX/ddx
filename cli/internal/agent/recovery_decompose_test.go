@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent verifies
-// that a TooLarge failure class routes to runDecomposer and, on valid children,
-// closes the parent while leaving the generated children execution-ready.
-func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent(t *testing.T) {
+// TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge verifies that a
+// TooLarge failure class routes to runDecomposer and, on valid children,
+// creates child beads and sets parent execution-eligible=false.
+func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
@@ -28,7 +28,7 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent(t *t
 		ID:          "ddx-decompose-toolarge",
 		Title:       "decompose too-large test",
 		Description: "PROBLEM\nThis bead is too large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42 does too much.\n",
-		Acceptance:  "1. TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent passes\n2. cd cli && go test ./internal/agent/... green\n",
+		Acceptance:  "1. TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge passes\n2. cd cli && go test ./internal/agent/... green\n",
 	}
 	require.NoError(t, store.Create(context.
 
@@ -96,8 +96,7 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent(t *t
 
 	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status, "parent must be closed after decomposition")
-	assert.Empty(t, got.Owner, "closed decomposed parent must not keep a live owner")
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent execution-eligible must be false after decompose")
 
 	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
@@ -108,21 +107,6 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent(t *t
 		}
 	}
 	assert.Len(t, childBeads, 2, "two child beads must be created")
-	for _, child := range childBeads {
-		assert.Equal(t, b.ID, child.Parent, "child %s must remain attached through Parent", child.ID)
-		assert.Empty(t, child.DepIDs(), "child %s must not depend on its decomposed parent", child.ID)
-	}
-
-	ready, err := store.ReadyExecution()
-	require.NoError(t, err)
-	assert.Len(t, ready, 2, "generated children must remain ready for execution")
-	readyIDs := make([]string, 0, len(ready))
-	for _, bb := range ready {
-		readyIDs = append(readyIDs, bb.ID)
-	}
-	for _, child := range childBeads {
-		assert.Contains(t, readyIDs, child.ID, "ready queue must include the generated child")
-	}
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
@@ -147,15 +131,6 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 		Title:       "decompose dispatch isolation test",
 		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
 		Acceptance:  "1. TestPostLadderDecomposerDispatchesOutsideProjectRoot\n2. cd cli && go test ./internal/agent/...",
-		Owner:       "worker",
-		Extra: map[string]any{
-			"claimed-at":                "2026-01-01T00:00:00Z",
-			"claimed-pid":               12345,
-			"claimed-machine":           "laptop",
-			"claimed-session":           "sess-post-ladder-dispatch",
-			"claimed-worktree":          "/tmp/ddx-worktree",
-			bead.ClaimHeartbeatExtraKey: "2026-01-01T00:00:00Z",
-		},
 	}
 	require.NoError(t, store.Create(context.Background(), b))
 
@@ -210,14 +185,7 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 
 	parent, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, parent.Status, "parent must be closed after decomposition")
-	assert.Empty(t, parent.Owner, "closed decomposed parent must not keep owner metadata")
-	assert.NotContains(t, parent.Extra, "claimed-at")
-	assert.NotContains(t, parent.Extra, "claimed-pid")
-	assert.NotContains(t, parent.Extra, "claimed-machine")
-	assert.NotContains(t, parent.Extra, "claimed-session")
-	assert.NotContains(t, parent.Extra, "claimed-worktree")
-	assert.NotContains(t, parent.Extra, bead.ClaimHeartbeatExtraKey)
+	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig])
 
 	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
@@ -228,11 +196,6 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 		}
 	}
 	assert.Len(t, childBeads, 1)
-
-	ready, err := store.ReadyExecution()
-	require.NoError(t, err)
-	assert.Len(t, ready, 1)
-	assert.Equal(t, childBeads[0].ID, ready[0].ID)
 }
 
 // TestDecomposerInvalidChildren_CountsAsFailure verifies that a stub agent

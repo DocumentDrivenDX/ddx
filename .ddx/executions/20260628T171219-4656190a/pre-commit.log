@@ -1,0 +1,73 @@
+[38;2;0;0;0m╭[38;2;5;5;5m─[38;2;11;11;11m─[38;2;16;16;16m─[38;2;19;19;19m─[38;2;23;23;23m─[38;2;26;26;26m─[38;2;29;29;29m─[38;2;32;32;32m─[38;2;35;35;35m─[38;2;39;39;39m─[38;2;42;42;42m─[38;2;45;45;45m─[38;2;49;49;49m─[38;2;52;52;52m─[38;2;56;56;56m─[38;2;56;56;56m─[38;2;52;52;52m─[38;2;49;49;49m─[38;2;45;45;45m─[38;2;42;42;42m─[38;2;39;39;39m─[38;2;35;35;35m─[38;2;32;32;32m─[38;2;29;29;29m─[38;2;26;26;26m─[38;2;23;23;23m─[38;2;19;19;19m─[38;2;16;16;16m─[38;2;11;11;11m─[38;2;5;5;5m─[38;2;0;0;0m─[38;2;0;0;0m─[38;2;6;6;6m─[38;2;12;12;12m─[38;2;17;17;17m─[38;2;20;20;20m─[38;2;24;24;24m─[38;2;27;27;27m─[38;2;31;31;31m─[38;2;34;34;34m─[38;2;38;38;38m─[38;2;41;41;41m╮[m
+[38;2;0;0;0m│[m 🥊 lefthook  v2.1.9   hook:  [1mpre-commit[m [38;2;52;52;52m│[m
+[38;2;6;6;6m╰[38;2;12;12;12m─[38;2;17;17;17m─[38;2;20;20;20m─[38;2;24;24;24m─[38;2;27;27;27m─[38;2;31;31;31m─[38;2;34;34;34m─[38;2;38;38;38m─[38;2;41;41;41m─[38;2;45;45;45m─[38;2;48;48;48m─[38;2;52;52;52m─[38;2;56;56;56m─[38;2;56;56;56m─[38;2;52;52;52m─[38;2;48;48;48m─[38;2;45;45;45m─[38;2;41;41;41m─[38;2;38;38;38m─[38;2;34;34;34m─[38;2;31;31;31m─[38;2;27;27;27m─[38;2;24;24;24m─[38;2;20;20;20m─[38;2;17;17;17m─[38;2;12;12;12m─[38;2;6;6;6m─[38;2;0;0;0m─[38;2;0;0;0m─[38;2;6;6;6m─[38;2;12;12;12m─[38;2;17;17;17m─[38;2;20;20;20m─[38;2;24;24;24m─[38;2;27;27;27m─[38;2;31;31;31m─[38;2;34;34;34m─[38;2;38;38;38m─[38;2;41;41;41m─[38;2;45;45;45m─[38;2;48;48;48m─[38;2;52;52;52m╯[m
+│  test-engineer-persona-drift (skip) no matching staged files
+│  debug-python (skip) no files for inspection
+│  design-md-lint (skip) no matching staged files
+┃  git-config-health ❯ 
+
+┃  ddx-validate ❯ 
+
+┃  skill-dir-anchor ❯ 
+
+┃  conflicts ❯ 
+
+┃  ddxroot-path-audit ❯ 
+
+┃  skill-schema ❯ 
+┃  sync-embedded-default-plugin ❯ 
+
+
+┃  go-fmt ❯ 
+
+┃  no-tmp-in-test-factory ❯ 
+
+┃  beads-tracker-health ❯ 
+
+┃  large-files ❯ 
+
+┃  secrets ❯ 
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+3:35PM INF 0 commits scanned.
+3:35PM INF scanned ~17855 bytes (17.85 KB) in 448ms
+3:35PM INF no leaks found
+
+┃  evidence-lint ❯ 
+
+┃  go-lint ❯ 
+0 issues.
+0 issues.
+
+┃  runtime-lint ❯ 
+
+┃  go-build ❯ 
+
+┃  go-test ❯ 
+ok  	github.com/DocumentDrivenDX/ddx/cmd	303.918s
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent	890.250s
+
+[38;2;56;56;56m  ────────────────────────────────────[m
+summary: (done in 1390.82 seconds)
+✔️ git-config-health (0.03 seconds)
+✔️ ddx-validate (0.07 seconds)
+✔️ skill-dir-anchor (0.08 seconds)
+✔️ conflicts (0.09 seconds)
+✔️ ddxroot-path-audit (0.09 seconds)
+✔️ sync-embedded-default-plugin (0.14 seconds)
+✔️ skill-schema (0.14 seconds)
+✔️ go-fmt (0.14 seconds)
+✔️ no-tmp-in-test-factory (0.17 seconds)
+✔️ beads-tracker-health (0.20 seconds)
+✔️ large-files (0.22 seconds)
+✔️ secrets (1.11 seconds)
+✔️ evidence-lint (4.91 seconds)
+✔️ go-lint (5.73 seconds)
+✔️ runtime-lint (5.80 seconds)
+✔️ go-build (7.19 seconds)
+✔️ go-test (1390.55 seconds)

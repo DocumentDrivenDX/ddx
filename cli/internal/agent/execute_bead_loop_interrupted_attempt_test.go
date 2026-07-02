@@ -26,7 +26,7 @@ type interruptedAttemptGitRun struct {
 	runStateAttemptRel string
 }
 
-func TestExecuteLoopInterruptedAttemptCommitsTrackerCleanup(t *testing.T) {
+func TestWorkInterrupt_CommitsTrackerCleanup(t *testing.T) {
 	run := runInterruptedAttemptInGitRepo(t, false)
 
 	require.ErrorIs(t, run.err, context.Canceled)
@@ -52,7 +52,7 @@ func TestExecuteLoopInterruptedAttemptCommitsTrackerCleanup(t *testing.T) {
 	assert.Contains(t, show, ".ddx/beads.jsonl")
 }
 
-func TestExecuteLoopInterruptedAttemptDoesNotCommitRunState(t *testing.T) {
+func TestWorkInterrupt_DoesNotCommitRunState(t *testing.T) {
 	run := runInterruptedAttemptInGitRepo(t, true)
 
 	require.ErrorIs(t, run.err, context.Canceled)
@@ -74,7 +74,7 @@ func TestExecuteLoopInterruptedAttemptDoesNotCommitRunState(t *testing.T) {
 	assert.Empty(t, trackerStatus, "tracker cleanup commit must still land while run-state stays dirty")
 }
 
-func TestExecuteLoopInterruptedAttemptDoesNotRecordTerminalOutcome(t *testing.T) {
+func TestWorkInterrupt_DoesNotRecordTerminalOutcome(t *testing.T) {
 	run := runInterruptedAttemptInGitRepo(t, false)
 
 	require.ErrorIs(t, run.err, context.Canceled)

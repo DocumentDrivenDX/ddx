@@ -90,9 +90,8 @@ func setupIntegrationDir(t *testing.T) (workDir string, store *bead.Store) {
 		t.Fatal(err)
 	}
 
-	// Minimal config so bead.NewStore can resolve an ID prefix and the
-	// artifact-type resolvers can discover the local plugin library fixtures.
-	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nlibrary:\n  path: .ddx/plugins/ddx\n"
+	// Minimal config so bead.NewStore can resolve an ID prefix.
+	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\n"
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -123,10 +122,7 @@ func newGQLHandler(state ddxgraphql.StateProvider, workDir string, beadBus ddxgr
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	})
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(ddxgraphql.WithHTTPRequest(r.Context(), r))
-		gqlSrv.ServeHTTP(w, r)
-	})
+	return gqlSrv
 }
 
 type testActionDispatcher struct{}
@@ -139,11 +135,6 @@ func (testActionDispatcher) DispatchWorker(ctx context.Context, kind string, pro
 		ID:    "queued-worker-" + kind,
 		State: "queued",
 		Kind:  kind,
-		Workers: []*ddxgraphql.WorkerLifecycleResult{{
-			ID:    "queued-worker-" + kind,
-			State: "queued",
-			Kind:  kind,
-		}},
 	}, nil
 }
 
@@ -340,7 +331,8 @@ type stubBeadBus struct {
 	ch chan bead.LifecycleEvent
 }
 
-func (s *stubBeadBus) SubscribeLifecycle(_ context.Context, _ string) (<-chan bead.LifecycleEvent, func(), error) {
+func (s *stubBeadBus) SubscribeLifecycle(ctx context.Context, _ string) (<-chan bead.LifecycleEvent, func(), error) {
+	_ = ctx
 	return s.ch, func() {}, nil
 }
 

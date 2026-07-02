@@ -30,24 +30,6 @@ import (
 
 const defaultWorktreeReapMaxAge = 72 * time.Hour
 
-func probeLocalServerHealth(ctx context.Context, addr string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(addr, "/")+"/api/health", nil)
-	if err != nil {
-		return err
-	}
-	client := newLocalServerClient()
-	client.Timeout = 5 * time.Second
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server health status %s", resp.Status)
-	}
-	return nil
-}
-
 func hostnameOrEmpty() string {
 	h, err := os.Hostname()
 	if err != nil {
@@ -63,6 +45,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	model, _ := cmd.Flags().GetString("model")
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
+	labelFilter, _ := cmd.Flags().GetString("label-filter")
 	effort, _ := cmd.Flags().GetString("effort")
 	attemptBackend, _ := cmd.Flags().GetString("attempt-backend")
 	ignoreCooldown, _ := cmd.Flags().GetBool("ignore-cooldown")
@@ -119,6 +102,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		Model:                  model,
 		Profile:                profile,
 		Provider:               provider,
+		LabelFilter:            labelFilter,
 		Effort:                 effort,
 		AttemptBackend:         attemptBackend,
 		Mode:                   mode,
@@ -199,67 +183,14 @@ func optionalFloat64Flag(cmd *cobra.Command, name string, defaultValue float64) 
 	return value
 }
 
-func optionalBoolFlag(cmd *cobra.Command, name string, defaultValue bool) bool {
-	if cmd.Flags().Lookup(name) == nil {
-		return defaultValue
-	}
-	value, err := cmd.Flags().GetBool(name)
-	if err != nil {
-		return defaultValue
-	}
-	return value
-}
-
-// buildIdleAutoRemediationConfig resolves the idle-path auto-remediation
-// toggles: each remediation is enabled when its work.autoRemediations config
-// value (default true) is on AND its --no-auto-* override flag is not set.
-// CLI flags override per-project config.
-func buildIdleAutoRemediationConfig(cmd *cobra.Command, store agent.ExecuteBeadLoopStore, runner agent.AgentRunner, rcfg config.ResolvedConfig, projectRoot string, maxRecoveryCostUSD float64) agent.IdleAutoRemediationConfig {
-	noSupersede := optionalBoolFlag(cmd, "no-auto-supersede-close", false)
-	noDecompose := optionalBoolFlag(cmd, "no-auto-epic-decompose", false)
-	noReclassify := optionalBoolFlag(cmd, "no-auto-closure-reclassify", false)
-	return agent.IdleAutoRemediationConfig{
-		AutoSupersedeClose:    rcfg.AutoSupersedeClose() && !noSupersede,
-		AutoEpicDecompose:     rcfg.AutoEpicDecompose() && !noDecompose,
-		AutoClosureReclassify: rcfg.AutoClosureReclassify() && !noReclassify,
-		MaxRecoveryCostUSD:    maxRecoveryCostUSD,
-		Decompose: func(ctx context.Context, beadID string) (agent.DecomposeResult, error) {
-			return agent.AutoDecomposeEpic(ctx, store, runner, rcfg, projectRoot, beadID)
-		},
-	}
-}
-
-func scrubServerManagedWorkerProcessEnv() {
-	for _, key := range []string{
-		"DDX_PROJECT_ROOT",
-		"DDX_AGENT_NAME",
-		"DDX_SERVER_MANAGED_WORKER_ID",
-		"DDX_WORKER_ID",
-	} {
-		_ = os.Unsetenv(key)
-	}
-}
-
 func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
 	spec, dispatch, err := parseExecuteLoopSpec(cmd, treatPassthroughAsOpaque)
 	if err != nil {
 		return err
 	}
-	claimAssignee := resolveClaimAssignee()
-	serverManagedWorkerID := ""
-	if cmd.Flags().Lookup("server-managed-worker-id") != nil {
-		serverManagedWorkerID, _ = cmd.Flags().GetString("server-managed-worker-id")
-		serverManagedWorkerID = strings.TrimSpace(serverManagedWorkerID)
-	}
-	if serverManagedWorkerID != "" {
-		claimAssignee = serverManagedWorkerID
-	}
 	projectFlag := spec.ProjectRoot
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	spec.ProjectRoot = projectRoot
-	if serverManagedWorkerID != "" {
-		scrubServerManagedWorkerProcessEnv()
-	}
 	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
 	if tryTargetBeadID != "" {
 		spec.Mode = executeloop.ModeOnce
@@ -344,7 +275,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	overrides := config.CLIOverrides{
-		Assignee:          claimAssignee,
+		Assignee:          resolveClaimAssignee(),
 		Harness:           spec.Harness,
 		Model:             spec.Model,
 		Provider:          spec.Provider,
@@ -363,10 +294,29 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		if strings.TrimSpace(addr) == "" {
 			return false, nil
 		}
-		if err := probeLocalServerHealth(ctx, addr); err != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(addr, "/")+"/api/health", nil)
+		if err != nil {
 			return false, err
 		}
-		return true, nil
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return false, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("server health status %s", resp.Status)
+		}
+		smokeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		smokeResult, smokeErr := agent.RunWithConfigViaService(smokeCtx, projectRoot, rcfg, agent.AgentRunRuntime{
+			Prompt:  "server health smoke test",
+			WorkDir: projectRoot,
+		})
+		if smokeErr != nil {
+			return false, smokeErr
+		}
+		return smokeResult != nil && smokeResult.ExitCode == 0, nil
 	}
 
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
@@ -395,7 +345,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
 			Events:      bead.NewStore(beadStoreRoot),
-			Actor:       claimAssignee,
+			Actor:       resolveClaimAssignee(),
 			Source:      "ddx work",
 		})
 	}
@@ -404,7 +354,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		MaxRecoveryCostUSD: spec.MaxRecoveryCostUSD,
 		MaxBeadCostUSD:     spec.MaxBeadCostUSD,
 	})
-	idleAutoRemediation := buildIdleAutoRemediationConfig(cmd, store, qualityRunner, rcfg, projectRoot, spec.MaxRecoveryCostUSD)
 
 	harnessBilledLookup := func(harnessName string) bool {
 		svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(f.WorkingDir)
@@ -502,12 +451,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return reportFromResult(res), nil
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-			targetBead, _ := store.Get(context.Background(), beadID)
+			targetBead, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
+				if store == nil {
+					return nil
+				}
+				return bead.NewStoreWithCollection(store.Dir, store.Collection)
+			}, nil)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
 				bead.NewStore(beadStoreRoot),
-				claimAssignee, "ddx work",
+				resolveClaimAssignee(), "ddx work",
 				nil,
 			)
 			if landErr == nil {
@@ -559,7 +516,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	executor := f.tryExecutorOverride
 	if executor == nil {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			targetBead, err := store.Get(context.Background(), beadID)
+			targetBead, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
+				if store == nil {
+					return nil
+				}
+				return bead.NewStoreWithCollection(store.Dir, store.Collection)
+			}, nil)
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
@@ -587,7 +549,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				// in memory for the next attempt.
 				if svcForExcl, svcExclErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot); svcExclErr == nil {
 					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
-						ctx, svcForExcl, store, beadID, claimAssignee,
+						ctx, svcForExcl, store, beadID, resolveClaimAssignee(),
 						targetBead.Extra, time.Now().UTC(), initialMinPower,
 						svcForExcl.ResolveRoute,
 						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
@@ -698,9 +660,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Log:                    progressLog,
 		CleanupLog:             cleanupLog,
 		EventSink:              loopSink,
-		WorkerID:               claimAssignee,
+		WorkerID:               resolveClaimAssignee(),
 		ProjectRoot:            projectRoot,
-		DisableLivenessSidecar: serverManagedWorkerID != "",
 		CleanupRunner:          cleanupRunner,
 		ResourceChecker:        resourceChecker,
 		ServerHealthProbe:      serverHealthProbe,
@@ -739,7 +700,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		ReviewCostCap:                costCap,
 		FinalizeDurableAudit:         f.buildAttemptAuditFinalizer(projectRoot, store),
 		PostLadderExhaustionHook:     recoveryHook,
-		IdleAutoRemediation:          idleAutoRemediation,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)

@@ -15,7 +15,7 @@ ddx:
 
 DDx invokes LLMs through the upstream Fizeau execution contract,
 **CONTRACT-003**, in the `~/Projects/agent` repo
-(`docs/helix/02-design/contracts/CONTRACT-003-ddx-agent-service.md`).
+(`docs/helix/02-design/contracts/CONTRACT-003-fizeau-service.md`).
 
 That contract is the entire execution boundary. DDx exposes the public
 `ddx run` / `ddx try` / `ddx work` layers, forwards raw passthrough constraints

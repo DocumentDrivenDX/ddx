@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260629T165646-f6cb495d",
+  "bead_id": "ddx-29491a0e",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d",
+  "trigger": "",
+  "started_at": "2026-06-29T17:42:53.214630565Z",
+  "finished_at": "2026-06-29T17:42:53.691661603Z",
+  "scanned": 1197,
+  "candidates": [
+    {
+      "pid": 77003,
+      "ppid": 1,
+      "pgid": 75420,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1613495496/b001/cmd.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    },
+    {
+      "pid": 77000,
+      "ppid": 1,
+      "pgid": 75420,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1613495496/b885/agent.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    },
+    {
+      "pid": 72808,
+      "ppid": 1,
+      "pgid": 72329,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build3844049715/b885/agent.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    },
+    {
+      "pid": 57220,
+      "ppid": 1,
+      "pgid": 49812,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1422095130/b885/agent.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 77003,
+      "ppid": 1,
+      "pgid": 75420,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1613495496/b001/cmd.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    },
+    {
+      "pid": 77000,
+      "ppid": 1,
+      "pgid": 75420,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1613495496/b885/agent.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    },
+    {
+      "pid": 72808,
+      "ppid": 1,
+      "pgid": 72329,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build3844049715/b885/agent.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    },
+    {
+      "pid": 57220,
+      "ppid": 1,
+      "pgid": 49812,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T165646-f6cb495d/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1422095130/b885/agent.test -test.paniconexit0 -test.timeout=10m0s -test.count=1"
+    }
+  ]
+}

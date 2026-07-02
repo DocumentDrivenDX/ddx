@@ -73,22 +73,19 @@ go-discovery-verify:
 		exit 1; \
 	fi
 
-# Sync the minimal built-in DDx bootstrap package into
-# internal/registry/defaultplugin/library/ so //go:embed (which cannot traverse
-# upward out of the package) picks it up. The embedded fallback must stay small:
-# package metadata plus skills/ddx only. Optional library assets resolve through
-# marketplace/cache packages instead of the DDx binary.
+# Sync the canonical default-plugin skill tree (../library/skills/) and its
+# manifest into internal/registry/defaultplugin/library/ so //go:embed (which
+# cannot traverse upward out of the package) picks them up. Runs as a prereq
+# of build/test/dev so contributors never see a stale embedded default
+# package. rsync --delete keeps the skill destination in exact sync.
 DEFAULT_PKG_SRC := ../library
-DEFAULT_PKG_MANIFEST := internal/registry/defaultplugin/package.yaml
 DEFAULT_PKG_DST := internal/registry/defaultplugin/library
 copy-skills:
-	@if [ ! -f "$(DEFAULT_PKG_MANIFEST)" ]; then \
-		echo "error: $(DEFAULT_PKG_MANIFEST) not found (run from cli/)"; exit 1; \
+	@if [ ! -d "$(DEFAULT_PKG_SRC)/skills" ]; then \
+		echo "error: $(DEFAULT_PKG_SRC)/skills not found (run from cli/)"; exit 1; \
 	fi
-	@rm -rf $(DEFAULT_PKG_DST)
-	@mkdir -p $(DEFAULT_PKG_DST)/skills
-	@rsync -a $(DEFAULT_PKG_MANIFEST) $(DEFAULT_PKG_DST)/package.yaml
-	@rsync -a --delete $(DEFAULT_PKG_SRC)/skills/ddx/ $(DEFAULT_PKG_DST)/skills/ddx/
+	@rsync -a --delete $(DEFAULT_PKG_SRC)/skills/ $(DEFAULT_PKG_DST)/skills/
+	@cp $(DEFAULT_PKG_SRC)/package.yaml $(DEFAULT_PKG_DST)/package.yaml
 
 # Build for current platform
 build: copy-skills frontend-build frontend-verify

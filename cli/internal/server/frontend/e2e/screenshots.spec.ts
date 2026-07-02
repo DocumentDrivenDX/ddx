@@ -73,9 +73,8 @@ const PAGES: readonly PageSpec[] = [
 		tolerance: 0.04
 	},
 	{
-		path: ({ nodeId, projectId }) =>
-			`/nodes/${nodeId}/projects/${projectId}/artifacts?mediaType=text%2Fmarkdown`,
-		name: 'artifacts',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/documents`,
+		name: 'documents',
 		ready: 'h1',
 		tolerance: 0.02
 	},

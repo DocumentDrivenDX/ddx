@@ -5,6 +5,9 @@
 // Path traversal and absolute paths are rejected; stale writes return a
 // conflict error; federation forwards spoke document writes; graph/staleness
 // views refresh after save.
+//
+// These tests MUST FAIL until the full spec-editing UI with path confinement,
+// stale-write detection, federation forwarding, and graph refresh is implemented.
 
 import { expect, test } from '@playwright/test';
 
@@ -25,21 +28,6 @@ const HELIX_FEAT_DOC = {
 	content: '---\nid: FEAT-026\n---\n# Federation\n\nInitial content.'
 };
 
-const HELIX_FEAT_ARTIFACT = {
-	id: 'doc:doc-feat-026',
-	path: HELIX_FEAT_DOC.path,
-	title: HELIX_FEAT_DOC.title,
-	mediaType: 'text/markdown',
-	sha256: 'abc123-initial-hash',
-	staleness: 'fresh',
-	description: null,
-	updatedAt: null,
-	ddxFrontmatter: null,
-	content: HELIX_FEAT_DOC.content,
-	typeDefinitions: [],
-	generatedBy: null
-};
-
 const BASE_URL = `/nodes/node-abc/projects/${PROJECT_ID}/documents`;
 
 async function mockDocBase(
@@ -49,7 +37,7 @@ async function mockDocBase(
 		extraQuery?: (query: string, vars: Record<string, unknown>) => Record<string, unknown> | null;
 	} = {}
 ) {
-	await page.route('**/graphql', async (route) => {
+	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		const vars = body.variables ?? {};
 
@@ -66,10 +54,6 @@ async function mockDocBase(
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { documentByPath: { ...HELIX_FEAT_DOC, path: path || HELIX_FEAT_DOC.path } } })
 			});
-		} else if (body.query.includes('ArtifactDetail')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { artifact: HELIX_FEAT_ARTIFACT } }) });
-		} else if (body.query.includes('RunExists')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { run: null } }) });
 		} else if (body.query.includes('DocumentWrite') || body.query.includes('documentWrite')) {
 			if (opts.onDocumentWrite) {
 				const result = opts.onDocumentWrite(vars);
@@ -95,7 +79,7 @@ async function mockDocBase(
 }
 
 // TC-019.1: Editing and saving a docs/helix/** document writes through documentWrite.
-test('TestSpecEditing_SavesFeatDocument', async ({ page }) => {
+test('saves a helix spec in the selected project', async ({ page }) => {
 	let writeCalled = false;
 	let writePath = '';
 	let writeContent = '';
@@ -133,7 +117,7 @@ test('TestSpecEditing_SavesFeatDocument', async ({ page }) => {
 });
 
 // TC-019.2: Absolute paths and ../ traversal writes are rejected; no file is written.
-test('TestSpecEditing_RejectsPathEscape', async ({ page }) => {
+test('rejects traversal and absolute document writes', async ({ page }) => {
 	let writeCalled = false;
 
 	await mockDocBase(page, {
@@ -178,7 +162,7 @@ test('TestSpecEditing_RejectsPathEscape', async ({ page }) => {
 });
 
 // TC-019.3: Saving after the document changed externally fails with a conflict message.
-test('TestSpecEditing_RejectsStaleSave', async ({ page }) => {
+test('refuses stale document saves', async ({ page }) => {
 	let saveAttempts = 0;
 
 	await mockDocBase(page, {
@@ -218,13 +202,13 @@ test('TestSpecEditing_RejectsStaleSave', async ({ page }) => {
 });
 
 // TC-019.4: Hub save for a spoke project forwards to the owning spoke.
-test('TestSpecEditing_FederatedWritePersistsOnOwner', async ({ page }) => {
+test('forwards spoke document writes from the hub', async ({ page }) => {
 	let writeCalled = false;
 	let writeVars: Record<string, unknown> = {};
 
 	const SPOKE_DOC_URL = `/nodes/node-abc/projects/${SPOKE_PROJECT_ID}/documents/${HELIX_FEAT_DOC.path}`;
 
-	await page.route('**/graphql', async (route) => {
+	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		if (body.query.includes('NodeInfo')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
@@ -232,10 +216,6 @@ test('TestSpecEditing_FederatedWritePersistsOnOwner', async ({ page }) => {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
 		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentByPath: HELIX_FEAT_DOC } }) });
-		} else if (body.query.includes('ArtifactDetail')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { artifact: HELIX_FEAT_ARTIFACT } }) });
-		} else if (body.query.includes('RunExists')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { run: null } }) });
 		} else if (body.query.includes('Documents')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documents: { edges: [{ node: HELIX_FEAT_DOC, cursor: 'c0' }], pageInfo: { hasNextPage: false, endCursor: null }, totalCount: 1 } } }) });
 		} else if (body.query.includes('DocumentWrite') || body.query.includes('documentWrite')) {
@@ -277,7 +257,7 @@ test('TestSpecEditing_FederatedWritePersistsOnOwner', async ({ page }) => {
 });
 
 // TC-019.5: After a spec save, document graph/staleness views refresh or show a refresh affordance.
-test('TestSpecEditing_RefreshesGraphAfterSave', async ({ page }) => {
+test('refreshes graph or staleness state after save', async ({ page }) => {
 	let graphRefreshRequested = false;
 
 	await mockDocBase(page, {

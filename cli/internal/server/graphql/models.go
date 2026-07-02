@@ -239,8 +239,7 @@ type AggregateSummarySessions struct {
 type Artifact struct {
 	// Globally unique artifact identifier
 	ID string `json:"id"`
-	// File path relative to the project root, or a stable virtual path for
-	// cache-backed plugin artifacts.
+	// File path relative to the project root
 	Path string `json:"path"`
 	// Human-readable title
 	Title string `json:"title"`
@@ -262,9 +261,6 @@ type Artifact struct {
 	Content *string `json:"content,omitempty"`
 	// Matched artifact type definitions for the artifact's path prefix.
 	TypeDefinitions []*ArtifactTypeDefinition `json:"typeDefinitions"`
-	// DiskPath is the optional absolute backing path for artifacts that are not
-	// stored under the project root, such as cache-backed plugin payloads.
-	DiskPath string `json:"-"`
 }
 
 func (Artifact) IsNode() {}
@@ -1951,9 +1947,6 @@ type ReportedWorker struct {
 	CurrentBead *string `json:"currentBead,omitempty"`
 	// Attempt ID from the most recent event/backfill payload, if any.
 	CurrentAttempt *string `json:"currentAttempt,omitempty"`
-	// Managed is always false for reported workers; they are observed externally,
-	// not started by the server supervisor.
-	Managed bool `json:"managed"`
 }
 
 // ResultSpec describes how to interpret an execution result
@@ -2343,14 +2336,8 @@ type StaleReason struct {
 type StartWorkerInput struct {
 	// Project identifier
 	ProjectID string `json:"projectId"`
-	// Number of workers to start. Defaults to 1.
-	Count *int `json:"count,omitempty"`
 	// Optional harness override
 	Harness *string `json:"harness,omitempty"`
-	// Optional provider override
-	Provider *string `json:"provider,omitempty"`
-	// Optional model override
-	Model *string `json:"model,omitempty"`
 	// Routing profile, defaulting to smart when omitted
 	Profile *string `json:"profile,omitempty"`
 	// Reasoning effort, defaulting to medium when omitted
@@ -2361,8 +2348,6 @@ type StartWorkerInput struct {
 	Mode *string `json:"mode,omitempty"`
 	// Sleep duration between empty-queue scans in watch mode (for example "30s").
 	IdleInterval *string `json:"idleInterval,omitempty"`
-	// Absolute provider request timeout for each worker attempt (for example "20m").
-	RequestTimeout *string `json:"requestTimeout,omitempty"`
 }
 
 // Subscription is the root entry point for all real-time events
@@ -2453,11 +2438,6 @@ type Worker struct {
 	RecentEvents []*WorkerRecentEvent `json:"recentEvents"`
 	// Operator lifecycle actions recorded for this worker
 	LifecycleEvents []*WorkerLifecycleEvent `json:"lifecycleEvents"`
-	// True when this worker was started by the server supervisor (managed).
-	// False for externally-started workers.
-	Managed *bool `json:"managed,omitempty"`
-	// Number of times this worker has been restarted by the supervisor.
-	RestartCount *int `json:"restartCount,omitempty"`
 }
 
 func (Worker) IsNode() {}
@@ -2483,8 +2463,6 @@ type WorkerDispatchResult struct {
 	State string `json:"state"`
 	// Worker kind
 	Kind string `json:"kind"`
-	// Every worker started by this dispatch, including id/state/kind.
-	Workers []*WorkerLifecycleResult `json:"workers"`
 }
 
 // WorkerEdge is one edge in a WorkerConnection

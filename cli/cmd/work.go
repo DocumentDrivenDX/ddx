@@ -82,6 +82,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx work does not validate)")
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx work does not validate)")
+	cmd.Flags().String("label-filter", "", "Filter queue selection by label intersection")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().String("attempt-backend", "", "Attempt backend: worktree, local-clone, docker-clone, or in-tree (default: executions.attempt_backend)")
 	cmd.Flags().Bool("ignore-cooldown", false, "Ignore retry cooldown across this worker session (requires --reason)")
@@ -90,12 +91,12 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")
 	cmd.Flags().Bool("self-refresh", false, "Force re-exec onto a newer installed ddx binary between iterations (on by default in watch mode; use --no-self-refresh to disable)")
 	cmd.Flags().Bool("no-self-refresh", false, "Disable self-refresh: do NOT re-exec onto a newer installed ddx binary between watch iterations (self-refresh is on by default in watch mode)")
-	cmd.Flags().String("server-managed-worker-id", "", "internal: server-managed worker id")
-	_ = cmd.Flags().MarkHidden("server-managed-worker-id")
 	cmd.Flags().Duration("idle-interval", 30*time.Second, "Sleep duration between empty-queue scans in watch mode")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "ddx work always runs inline; the flag is a no-op (ADR-022)")
+	cmd.Flags().String("server-managed", "", "Internal: server-managed worker id")
+	_ = cmd.Flags().MarkHidden("server-managed")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
@@ -116,11 +117,6 @@ work runs inline in the current process; per ADR-022 there is no separate
 	// for operator-constrained power within which the agent selects the route.
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged")
-	// Idle-path auto-remediation overrides (FEAT-010). Each remediation is on
-	// by default via work.autoRemediations config; these flags disable one.
-	cmd.Flags().Bool("no-auto-supersede-close", false, "Disable idle-path cascade-close of beads superseded by a closed bead")
-	cmd.Flags().Bool("no-auto-epic-decompose", false, "Disable idle-path auto-decomposition of genuinely undecomposed epics")
-	cmd.Flags().Bool("no-auto-closure-reclassify", false, "Disable idle-path closure of misclassified closure-candidate and dead-intermediate beads")
 
 	// Register "ddx work plan", "ddx work focus", "ddx work clear-cooldowns",
 	// "ddx work metrics", "ddx work analyze", and "ddx work status" as

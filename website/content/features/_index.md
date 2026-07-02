@@ -74,10 +74,10 @@ ls .ddx/executions/
 
 ![Skill listing](/ui/feature-skills.png "Skills — planned UI")
 
-Skills are reusable, agent-invocable capabilities declared by the project and resolved from the plugin cache. `ddx init` and `ddx plugin sync` generate adapters under `.agents/skills/` and `.claude/skills/` so harnesses can discover them without committing plugin payload trees. Plugins ship skills the way they ship templates and prompts: versioned, project-scoped, cache-backed.
+Skills are reusable, agent-invocable capabilities packaged alongside the project. They install under `.agents/skills/` and `.claude/skills/` and become available to any harness that supports skill discovery. Plugins ship skills the way they ship templates and prompts — versioned, project-local, no global state.
 
 ```
-ddx plugin install <plugin-name>     # plugins can carry skills
+ddx install <plugin-name>     # plugins can carry skills
 ls .claude/skills/
 ```
 

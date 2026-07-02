@@ -30,12 +30,12 @@ Bad:
 > Fix the sync bug from last week's incident.
 
 Good:
-> When `ddx bead import --from jsonl beads.jsonl` imports a bead with
-> `dependencies[].depends_on_id` missing from active and archive data, the
-> command prints `dangling dep (skipped)` but still writes the dependency.
-> Root cause: `cli/internal/bead/import.go:281` detects the dangling edge
-> without filtering `bead.Dependencies` before append/write. Strip those edges
-> and report an accurate stripped count.
+> When `ddx update` runs in a worktree whose `.ddx/config.yaml`
+> specifies `library.path: /custom/path`, the library fetch uses the
+> wrong remote. Root cause: `resolveLibraryPath()` in
+> `cli/internal/config/paths.go:43` returns the default path when
+> `library.path` is an absolute path. Make the function respect
+> absolute paths without prefixing the worktree root.
 
 ## Explicit file scope
 

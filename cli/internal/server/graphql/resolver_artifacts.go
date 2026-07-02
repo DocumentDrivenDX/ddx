@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"gopkg.in/yaml.v3"
 )
 
@@ -89,8 +88,7 @@ type ddxGeneratedBy struct {
 // Artifacts is the resolver for the artifacts query.
 // It returns a paginated, optionally-filtered list of DDx-tracked artifacts
 // for the given project. Documents come from the FEAT-007 doc graph; other
-// artifacts come from .ddx.yaml sidecar files found under .ddx/plugins/ or
-// cache-backed plugin payloads recorded in .ddx/plugins.lock.yaml.
+// artifacts come from .ddx.yaml sidecar files found under .ddx/plugins/.
 func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sortKey *ArtifactSort, staleness *string, phase *string, prefix []string) (*ArtifactConnection, error) {
 	root := r.projectRoot(ctx, projectID)
 
@@ -371,7 +369,7 @@ func matchArtifactForSearch(a *Artifact, root, qLower string) (string, bool) {
 	}
 	// Body search — bounded by size cap and binary skip.
 	if shouldSearchBody(a.Path) {
-		body, ok := readBodyForSearch(artifactDiskPath(root, a))
+		body, ok := readBodyForSearch(filepath.Join(root, filepath.FromSlash(a.Path)))
 		if ok {
 			if hit, ok := substringSnippet(body, qLower); ok {
 				return hit, true
@@ -491,7 +489,6 @@ func dependsOnCount(a *Artifact) int {
 // collectArtifacts gathers all DDx-tracked artifacts from two sources:
 //  1. The doc graph (markdown documents under the project root).
 //  2. .ddx.yaml sidecar files under .ddx/plugins/.
-//  3. .ddx.yaml sidecar files under locked plugin cache payloads.
 func collectArtifacts(root string) ([]*Artifact, error) {
 	var artifacts []*Artifact
 
@@ -502,11 +499,6 @@ func collectArtifacts(root string) ([]*Artifact, error) {
 
 	// 2. Sidecar artifacts from .ddx/plugins/.
 	if sidecars, err := collectSidecarArtifacts(root); err == nil {
-		artifacts = append(artifacts, sidecars...)
-	}
-
-	// 3. Sidecar artifacts from cache-backed marketplace plugins.
-	if sidecars, err := collectLockedPluginSidecarArtifacts(root); err == nil {
 		artifacts = append(artifacts, sidecars...)
 	}
 
@@ -587,36 +579,9 @@ func collectSidecarArtifacts(root string) ([]*Artifact, error) {
 	if _, err := os.Stat(pluginsDir); os.IsNotExist(err) {
 		return nil, nil
 	}
-	return collectSidecarArtifactsFromRoot(root, pluginsDir, "", "")
-}
 
-func collectLockedPluginSidecarArtifacts(root string) ([]*Artifact, error) {
-	lock, err := registry.LoadProjectPluginLock(context.Background(), root)
-	if err != nil {
-		return nil, err
-	}
 	var out []*Artifact
-	for _, entry := range lock.Plugins {
-		cachePath := entry.CachePath
-		if cachePath == "" {
-			cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
-		}
-		if stat, statErr := os.Stat(cachePath); statErr != nil || !stat.IsDir() {
-			continue
-		}
-		prefix := filepath.ToSlash(filepath.Join("plugin-cache", entry.Name))
-		sidecars, sidecarErr := collectSidecarArtifactsFromRoot(root, cachePath, prefix, cachePath)
-		if sidecarErr != nil {
-			return out, sidecarErr
-		}
-		out = append(out, sidecars...)
-	}
-	return out, nil
-}
-
-func collectSidecarArtifactsFromRoot(projectRoot, scanRoot, displayPrefix, diskRoot string) ([]*Artifact, error) {
-	var out []*Artifact
-	err := filepath.WalkDir(scanRoot, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(pluginsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
@@ -637,23 +602,14 @@ func collectSidecarArtifactsFromRoot(projectRoot, scanRoot, displayPrefix, diskR
 			return nil // skip malformed sidecars
 		}
 
-		relRoot := projectRoot
-		if diskRoot != "" {
-			relRoot = diskRoot
-		}
-		rel, relErr := filepath.Rel(relRoot, artifactPath)
+		rel, relErr := filepath.Rel(root, artifactPath)
 		if relErr != nil {
 			rel = artifactPath
-		}
-		rel = filepath.ToSlash(rel)
-		displayPath := rel
-		if displayPrefix != "" {
-			displayPath = filepath.ToSlash(filepath.Join(displayPrefix, rel))
 		}
 
 		id := sidecar.DDx.ID
 		if id == "" {
-			id = "sidecar:" + displayPath
+			id = "sidecar:" + rel
 		}
 
 		title := sidecar.DDx.Title
@@ -670,11 +626,10 @@ func collectSidecarArtifactsFromRoot(projectRoot, scanRoot, displayPrefix, diskR
 
 		a := &Artifact{
 			ID:        id,
-			Path:      displayPath,
+			Path:      filepath.ToSlash(rel),
 			Title:     title,
 			MediaType: mediaType,
 			Staleness: staleness,
-			DiskPath:  artifactPath,
 		}
 
 		if sidecar.DDx.Description != "" {
@@ -746,16 +701,6 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h[:]), nil
 }
 
-func artifactDiskPath(root string, a *Artifact) string {
-	if a == nil {
-		return ""
-	}
-	if a.DiskPath != "" {
-		return a.DiskPath
-	}
-	return filepath.Join(root, filepath.FromSlash(a.Path))
-}
-
 // titleFromDoc derives a human-readable title from a docgraph document.
 // Uses the Title field if set, otherwise derives from the path's base name.
 func titleFromDoc(d docgraph.Document) string {
@@ -780,11 +725,11 @@ func (r *queryResolver) Artifact(ctx context.Context, projectID string, id strin
 	}
 	for _, a := range artifacts {
 		if a.ID == id {
-			if hash, hashErr := fileSHA256(artifactDiskPath(root, a)); hashErr == nil {
+			if hash, hashErr := fileSHA256(filepath.Join(root, filepath.FromSlash(a.Path))); hashErr == nil {
 				a.Sha256 = &hash
 			}
 			if isTextMediaType(a.MediaType) {
-				a.Content = loadArtifactContent(artifactDiskPath(root, a))
+				a.Content = loadArtifactContent(root, a.Path)
 			}
 			if err := attachArtifactTypeDefinitions(root, a); err != nil {
 				return nil, fmt.Errorf("loading artifact type definitions: %w", err)
@@ -802,8 +747,9 @@ func isTextMediaType(mt string) bool {
 }
 
 // loadArtifactContent reads the raw file content for an artifact at the given
-// disk path. Returns nil if the file cannot be read.
-func loadArtifactContent(absPath string) *string {
+// project-relative path. Returns nil if the file cannot be read.
+func loadArtifactContent(root, relPath string) *string {
+	absPath := filepath.Join(root, filepath.FromSlash(relPath))
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil

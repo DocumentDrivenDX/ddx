@@ -10,7 +10,7 @@ ddx:
 # Feature: Multi-Machine Sync
 
 **ID:** FEAT-023
-**Status:** Complete
+**Status:** Implemented
 **Priority:** P1
 **Owner:** DDx Team
 

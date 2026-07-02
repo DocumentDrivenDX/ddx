@@ -153,7 +153,7 @@ func TestExecuteBeadLoop_NiflheimEvidence_DecomposedParentIsExecutionIneligible(
 
 	got, err := store.Get(context.Background(), parent.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status, "decomposed parent must be closed")
+	assert.Equal(t, bead.StatusOpen, got.Status, "decomposed parent must stay open")
 	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "decomposed parent must be execution-ineligible")
 
 	events, err := store.Events(parent.ID)

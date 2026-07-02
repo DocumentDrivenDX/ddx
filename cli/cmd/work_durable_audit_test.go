@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -171,7 +171,11 @@ func stubQualityRunner(t *testing.T) agent.AgentRunner {
 func newWorkAuditRepo(t *testing.T, beadCount int) (string, *bead.Store, []string, string) {
 	t.Helper()
 
-	projectRoot := testutils.NewFixtureRepo(t, "minimal")
+	projectRoot := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# test\n"), 0o644))
+	runGitWorkAudit(t, projectRoot, "init", "-b", "main")
+	runGitWorkAudit(t, projectRoot, "config", "user.email", "test@ddx.test")
+	runGitWorkAudit(t, projectRoot, "config", "user.name", "DDx Test")
 
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	require.NoError(t, store.Init(context.Background()))

@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLegacyInstallPackageHonorsSkillSource(t *testing.T) {
+func TestInstallPackageHonorsSkillSource(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := newPackageArchiveServer(t, samplePackageTarball(t))
 	defer server.Close()
@@ -47,7 +47,7 @@ func TestLegacyInstallPackageHonorsSkillSource(t *testing.T) {
 	}
 }
 
-func TestLegacyInstallPackagePreservesUnrelatedProjectSkills(t *testing.T) {
+func TestInstallPackagePreservesUnrelatedProjectSkills(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := newPackageArchiveServer(t, samplePackageTarball(t))
 	defer server.Close()
@@ -75,7 +75,7 @@ func TestLegacyInstallPackagePreservesUnrelatedProjectSkills(t *testing.T) {
 	}
 }
 
-func TestLegacyInstallPackageRecordsManifestSkillTargets(t *testing.T) {
+func TestInstallPackageRecordsManifestSkillTargets(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := newPackageArchiveServer(t, samplePackageTarball(t))
 	defer server.Close()
@@ -204,18 +204,17 @@ install:
 	}
 }
 
-// TestLegacyInstallPackageFromFSHonorsManifestMappings proves that the
-// compatibility copy installer reads package.yaml and applies both the root
-// mapping and the declared skill mappings when fed an embedded fs.FS.
-func TestLegacyInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
+// TestInstallPackageFromFSHonorsManifestMappings proves that an embedded
+// fs.FS rooted at a package directory reads package.yaml and applies both
+// the root mapping and the declared skill mappings.
+func TestInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
 	projectRoot := t.TempDir()
 	pkg := sampleInstallPackage("https://example.com/sample-plugin")
 
 	entry, err := InstallPackageFromFS(pkg, samplePackageFS(), projectRoot)
 	require.NoError(t, err)
 
-	// Legacy root mapping: package.yaml from the embedded FS lands under the
-	// manifest target. Marketplace installs use the cache/sync path instead.
+	// Root mapping: package.yaml from the embedded FS lands under .ddx/plugins/<name>/.
 	rootManifest := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "sample-plugin", "package.yaml")
 	_, statErr := os.Stat(rootManifest)
 	require.NoError(t, statErr, "package.yaml should be installed via root mapping")
@@ -233,10 +232,10 @@ func TestLegacyInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
 	}
 }
 
-// TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline proves the
-// embedded default ddx package remains usable through the compatibility copy
-// installer without invoking network download code.
-func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
+// TestInstallPackageFromFSInstallsDefaultDDxPackageOffline proves the embedded
+// default ddx package can install .ddx/plugins/ddx, .agents/skills/ddx, and
+// .claude/skills/ddx without invoking any network download code.
+func TestInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
 	projectRoot := t.TempDir()
 
 	// Block network: any HTTP attempt should fail this test loudly.
@@ -255,6 +254,7 @@ func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T
 	require.NoError(t, err)
 
 	for _, rel := range []string{
+		filepath.Join(ddxroot.DirName, "plugins", "ddx", "package.yaml"),
 		filepath.Join(".agents", "skills", "ddx", "SKILL.md"),
 		filepath.Join(".claude", "skills", "ddx", "SKILL.md"),
 	} {
@@ -262,8 +262,6 @@ func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T
 		_, statErr := os.Stat(path)
 		require.NoError(t, statErr, "expected embedded default package to install %s", rel)
 	}
-	assert.NoDirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx"),
-		"embedded default package install must not create a project payload root")
 
 	// The recorded file list must include the skill targets so the install
 	// state can be uninstalled/reverified later.
@@ -275,10 +273,10 @@ func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T
 	}
 }
 
-// TestLegacyInstallPackageFromRemoteUsesSharedCore proves the remote and
-// embedded-FS compatibility entrypoints share the same copy behavior for a
-// fixture package: same recorded files, same on-disk layout.
-func TestLegacyInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
+// TestInstallPackageFromRemoteUsesSharedCore proves the remote entrypoint
+// and embedded-FS entrypoint share the same skill mapping behavior for a
+// fixture package — same recorded files, same on-disk layout.
+func TestInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
 	remoteRoot := t.TempDir()
 	fsRoot := t.TempDir()
 
@@ -310,48 +308,23 @@ func TestLegacyInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
 	}
 }
 
-// TestDDxDefaultManifestIsBootstrapOnly proves the source and embedded default
-// ddx manifests advertise only the bootstrap skill package. HELIX-style workflow
-// assets must stay in separately versioned marketplace/cache packages instead
-// of being installed as part of the built-in ddx payload.
-func TestDDxDefaultManifestIsBootstrapOnly(t *testing.T) {
-	manifestRoots := []string{
-		filepath.Join("..", "..", "..", "library"),
-		filepath.Join("defaultplugin", "library"),
-		filepath.Join("defaultplugin"),
+// TestDefaultDDxPackageManifestUsesPackageLocalSkillSource proves the
+// canonical library/package.yaml declares package-local skill sources
+// (i.e. source: skills/) so the embedded default-package install copies
+// the DDx skill out of library/skills/ rather than out of a checked-in
+// .agents/skills mirror.
+func TestDefaultDDxPackageManifestUsesPackageLocalSkillSource(t *testing.T) {
+	manifestPath := filepath.Join("..", "..", "..", "library", "package.yaml")
+	pkg, issues, err := LoadPackageManifest(filepath.Dir(manifestPath))
+	require.NoError(t, err, "library/package.yaml must load cleanly")
+	require.Empty(t, issues, "library/package.yaml must have no schema issues")
+	require.NotNil(t, pkg)
+
+	require.NotEmpty(t, pkg.Install.Skills, "library/package.yaml must declare install.skills mappings")
+	for _, m := range pkg.Install.Skills {
+		assert.Equal(t, "skills/", m.Source,
+			"library/package.yaml install.skills[*].source must be package-local 'skills/', got %q", m.Source)
 	}
-
-	for _, root := range manifestRoots {
-		t.Run(filepath.ToSlash(root), func(t *testing.T) {
-			pkg, issues, err := LoadPackageManifest(root)
-			require.NoError(t, err, "%s/package.yaml must load cleanly", root)
-			require.Empty(t, issues, "%s/package.yaml must have no schema issues", root)
-			require.NotNil(t, pkg)
-
-			assert.Nil(t, pkg.Install.Root, "%s/package.yaml must not advertise a DDx project payload root", root)
-			assert.Nil(t, pkg.Install.Scripts, "%s/package.yaml must not install scripts as part of the bootstrap plugin", root)
-			assert.Empty(t, pkg.Install.Symlinks, "%s/package.yaml must not create non-skill symlinks", root)
-			assert.Empty(t, pkg.Install.Executable, "%s/package.yaml must not mark executables", root)
-			assert.Contains(t, pkg.Description, "bootstrap skill package")
-			assert.NotContains(t, pkg.Description, "prompts, personas")
-			for _, forbidden := range []string{"prompts", "personas", "templates", "checks", "tools", "mcp", "workflows", "helix"} {
-				assert.NotContains(t, pkg.Keywords, forbidden, "%s/package.yaml must not advertise %q", root, forbidden)
-			}
-			assert.Empty(t, pkg.Install.Skills, "%s/package.yaml must not require legacy install.skills mappings", root)
-			require.NotEmpty(t, pkg.Materialize.Skills, "%s/package.yaml must declare materialize.skills mappings", root)
-			for _, m := range pkg.Materialize.Skills {
-				assert.Equal(t, "skills/", m.Source,
-					"%s/package.yaml materialize.skills[*].source must be package-local 'skills/', got %q", root, m.Source)
-			}
-		})
-	}
-}
-
-func TestInstallResourceIsRetired(t *testing.T) {
-	entry, err := InstallResource("persona/strict-code-reviewer")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "individual resource installs are retired")
-	assert.Empty(t, entry.Files)
 }
 
 // TestDefaultPackageEmbedCopyIncludesDDxSkill proves the embedded
@@ -366,25 +339,6 @@ func TestDefaultPackageEmbedCopyIncludesDDxSkill(t *testing.T) {
 	require.NoError(t, err, "canonical library/skills/ddx/SKILL.md must exist on disk")
 	assert.Equal(t, string(canonical), string(data),
 		"embedded skills/ddx/SKILL.md must match the canonical library/skills/ddx/SKILL.md (run `make copy-skills` to sync)")
-}
-
-func TestBuiltinDDxCacheReadyRequiresFreshEmbeddedBootstrapPackage(t *testing.T) {
-	cachePath := t.TempDir()
-
-	require.NoError(t, EnsureBuiltinDDxCache(cachePath, true))
-	require.True(t, BuiltinDDxCacheReady(cachePath), "fresh embedded bootstrap package should make built-in ddx cache ready")
-	require.NoDirExists(t, filepath.Join(cachePath, "personas"))
-	require.NoDirExists(t, filepath.Join(cachePath, "prompts"))
-	require.NoDirExists(t, filepath.Join(cachePath, "templates"))
-
-	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "skills", "ddx", "reference", "agents.md"), []byte("stale"), 0o644))
-	require.False(t, BuiltinDDxCacheReady(cachePath), "changed embedded skill content must force cache refresh")
-
-	require.NoError(t, EnsureBuiltinDDxCache(cachePath, true))
-	extra := filepath.Join(cachePath, "personas", "README.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(extra), 0o755))
-	require.NoError(t, os.WriteFile(extra, []byte("old full-package asset"), 0o644))
-	require.False(t, BuiltinDDxCacheReady(cachePath), "extra old default-plugin assets must force cache refresh")
 }
 
 // offlineTransport fails any HTTP attempt so tests can prove an install path

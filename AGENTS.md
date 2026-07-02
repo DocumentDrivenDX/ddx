@@ -128,8 +128,7 @@ is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
 - Use `argument-hint` only when the skill accepts a trailing positional or shorthand invocation hint.
 - Do not use nested `skill:` frontmatter for DDx repo skills.
 - Run `ddx skills check [path ...]` for reusable validation across repo skills and plugin skills.
-- Run `make skill-schema` after editing any file under `library/skills/*/SKILL.md` or the embedded default-plugin copy under `cli/internal/registry/defaultplugin/library/skills/*/SKILL.md`.
-- Do not treat `.agents/skills/` or `.claude/skills/` as skill source assets; those are generated adapter links recreated by `ddx plugin sync`.
+- Run `make skill-schema` after editing any file under `skills/*/SKILL.md` or `cli/internal/skills/*/SKILL.md`.
 
 ## Reviewer Mode
 
@@ -225,32 +224,8 @@ regress this:
 This project uses [DDx](https://github.com/DocumentDrivenDX/ddx) for
 document-driven development. Use the `ddx` skill for beads, work,
 review, agents, and status — every skills-compatible harness (Claude
-Code, OpenAI Codex, Gemini CLI, etc.) discovers it through generated
-adapters under `.claude/skills/ddx/` and `.agents/skills/ddx/`.
-
-## Default Interactive Mode
-
-Broad conversational DDx prompts — queue orientation, planning, review,
-guidance folding, spec alignment, and bead breakdown — use
-`interactive-steward` / `queue_steward`. Explicit worker commands
-(`ddx work`, `ddx try <id>`, "execute bead `<id>`") route to
-`bead_execution`. Explicit code/doc edit requests route to
-`direct_user_implementation`. Explicit review-only requests route to
-`review`.
-
-`DDX_MODE=bead_execution` overrides only the interactive queue-steward default.
-It **never** overrides tracker, merge, commit, safety, or verification policy —
-those apply in every mode.
-
-### Mutation policy
-
-- **read / plan / fresh-eyes review / fold guidance / align specs** — non-mutating
-  by default; no tracker writes, no code edits.
-- **Tracker mutation** (e.g. `ddx bead create`, `ddx bead update`) requires an
-  explicit durable-output verb: "create a bead", "file this as work",
-  "break down into beads".
-- **Code edits** require explicit implementation intent ("fix this",
-  "implement X") or `bead_execution` mode.
+Code, OpenAI Codex, Gemini CLI, etc.) discovers it from
+`.claude/skills/ddx/` and `.agents/skills/ddx/`.
 
 ## Files to commit
 
@@ -258,12 +233,9 @@ After modifying any of these paths, stage and commit them:
 
 - `.ddx/beads.jsonl` — work item tracker
 - `.ddx/config.yaml` — project configuration
+- `.agents/skills/ddx/` — the ddx skill (shipped by ddx init)
+- `.claude/skills/ddx/` — same skill, Claude Code location
 - `docs/` — project documentation and artifacts
-
-Do not commit generated plugin payloads or agent adapters under
-`.ddx/plugins/`, `.agents/skills/`, or `.claude/skills/`.
-`ddx plugin sync` recreates those local files from the project lock,
-the XDG plugin cache, or the baked-in default `ddx` package.
 
 ## Conventions
 

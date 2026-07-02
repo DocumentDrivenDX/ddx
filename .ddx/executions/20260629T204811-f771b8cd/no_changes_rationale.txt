@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./cmd/...` exceeds Go's default 10m timeout in this checkout; the run reached `TestWork_IgnoreCooldownDrainsCooledQueue` and timed out while the bead-targeted tests (`TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified`, `TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting`) already pass. Retry after reducing suite runtime or running the full cmd suite with a larger timeout.

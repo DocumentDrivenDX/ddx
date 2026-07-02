@@ -161,12 +161,13 @@ func TestDDxInteractiveStewardRouteFixtures(t *testing.T) {
 }
 
 // TestDDxSkillCopiedTreesMatchSource compares the touched ddx skill files
-// against the embedded default-plugin fixture so a stale release copy cannot pass.
+// across all shipped skill paths so a stale project copy cannot pass.
 func TestDDxSkillCopiedTreesMatchSource(t *testing.T) {
 	root := interactiveStewardRepoRoot(t)
 	srcDir := filepath.Join(root, "library", "skills", "ddx")
 
 	copyDirs := []string{
+		filepath.Join(root, "cli", "internal", "skills", "ddx"),
 		filepath.Join(root, "cli", "internal", "registry", "defaultplugin", "library", "skills", "ddx"),
 	}
 

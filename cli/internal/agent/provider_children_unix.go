@@ -48,26 +48,12 @@ func scanProviderChildProcessesImpl(ctx context.Context, rootPID int, now time.T
 		}
 		out2 = append(out2, providerChildProcess{
 			PID:       pid,
-			PPID:      r.PPID,
 			Provider:  provider,
 			Command:   r.Command,
-			CWD:       providerProcessCWD(pid),
 			StartedAt: started,
-			Defunct:   isDefunctProviderCommand(r.Command),
 		})
 	}
 	return out2, nil
-}
-
-func providerProcessCWD(pid int) string {
-	if pid <= 0 {
-		return ""
-	}
-	cwd, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/cwd")
-	if err != nil {
-		return ""
-	}
-	return cwd
 }
 
 type providerPSRow struct {
@@ -98,10 +84,6 @@ func parseProviderPS(out []byte) []providerPSRow {
 		})
 	}
 	return rows
-}
-
-func isDefunctProviderCommand(command string) bool {
-	return strings.Contains(command, "<defunct>")
 }
 
 func parseEtime(s string) int64 {
@@ -169,35 +151,16 @@ func terminateProviderChildImpl(pid int) {
 	signalProviderChildGroup(pid, syscall.SIGTERM)
 	deadline := time.Now().Add(750 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		if waitProviderChildNoHang(pid) {
-			return
-		}
 		if !signalProcessAlive(pid) {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
 	signalProviderChildGroup(pid, syscall.SIGKILL)
-	killDeadline := time.Now().Add(750 * time.Millisecond)
-	for time.Now().Before(killDeadline) {
-		if waitProviderChildNoHang(pid) {
-			return
-		}
-		if !signalProcessAlive(pid) {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
 }
 
 func signalProviderChildGroup(pid int, sig syscall.Signal) {
 	if err := syscall.Kill(-pid, sig); err != nil && err != syscall.ESRCH {
 		_ = syscall.Kill(pid, sig)
 	}
-}
-
-func waitProviderChildNoHang(pid int) bool {
-	var status syscall.WaitStatus
-	waited, err := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
-	return err == nil && waited == pid
 }

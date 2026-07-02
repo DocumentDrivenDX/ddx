@@ -2,7 +2,6 @@
 	import { untrack } from 'svelte';
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
-	import { extractGraphQLErrorMessage } from '$lib/gql/error';
 
 	interface Dependency {
 		issueId: string;
@@ -32,12 +31,10 @@
 
 	let {
 		bead = null,
-		projectId = undefined,
 		onSuccess,
 		onCancel
 	}: {
 		bead?: Bead | null;
-		projectId?: string;
 		onSuccess: (bead: Bead) => void;
 		onCancel: () => void;
 	} = $props();
@@ -89,7 +86,7 @@
 			.filter(Boolean);
 
 		try {
-			const client = createClient(undefined, projectId);
+			const client = createClient();
 			if (isUpdate && bead) {
 				const result = await client.request<{ beadUpdate: Bead }>(UPDATE_MUTATION, {
 					id: bead.id,
@@ -123,7 +120,7 @@
 				onSuccess(result.beadCreate);
 			}
 		} catch (e) {
-			error = extractGraphQLErrorMessage(e);
+			error = e instanceof Error ? e.message : 'Operation failed';
 		} finally {
 			submitting = false;
 		}
@@ -158,8 +155,6 @@
 <form onsubmit={handleSubmit} class="space-y-4">
 	{#if error}
 		<div
-			role="alert"
-			data-testid="error-message"
 			class="rounded-none border border-error/30 bg-error/10 px-3 py-2 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 		>
 			{error}

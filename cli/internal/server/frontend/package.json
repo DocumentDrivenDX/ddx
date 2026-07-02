@@ -16,7 +16,6 @@
 		"test": "bun run test:unit -- --run && bun run test:e2e",
 		"test:e2e": "playwright test",
 		"test:e2e:functional": "playwright test --grep-invert \"DDx Server UI Screenshots|DDx feature-area marketing screenshots\"",
-		"test:e2e:workbench": "playwright test e2e/workers-single-pane.spec.ts e2e/workers-dispatch.spec.ts e2e/federation-worker-control.spec.ts e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts",
 		"test:e2e:visual": "playwright test e2e/screenshots.spec.ts",
 		"test:a11y": "playwright test e2e/a11y.spec.ts"
 	},

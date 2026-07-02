@@ -6,9 +6,6 @@
 // required. These tests pass once the /nodes/:nodeId/workers route and
 // node-wide workers query land (implementation beads).
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 // Static fixture identifiers — no live server request is made.
@@ -320,30 +317,4 @@ test('shows hub and spoke workers in federation scope', async ({ page }) => {
 
 	// Total count covers both nodes.
 	await expect(page.getByText(/2 total/)).toBeVisible();
-});
-
-// Gate integrity: verify that running the workbench specs cannot dirty tracked
-// paths. Playwright output directories (test-results, playwright-report) must
-// be gitignored so no generated video or screenshot artifacts land in the tree.
-test('workbench gate leaves no tracked dirtiness', () => {
-	const __dirname = path.dirname(fileURLToPath(import.meta.url));
-	const frontendDir = path.resolve(__dirname, '..');
-	// repo root is 4 levels up from frontend/: server/ -> internal/ -> cli/ -> repo
-	const repoDir = path.resolve(frontendDir, '../../../..');
-
-	const frontendIgnore = readFileSync(path.join(frontendDir, '.gitignore'), 'utf-8');
-	const rootIgnore = readFileSync(path.join(repoDir, '.gitignore'), 'utf-8');
-	const combined = frontendIgnore + '\n' + rootIgnore;
-
-	// test-results/ must be covered by a gitignore pattern (playwright failure artifacts)
-	expect(
-		combined.includes('test-results'),
-		'test-results/ must be listed in .gitignore to prevent tracking E2E artifacts'
-	).toBe(true);
-
-	// playwright-report/ must be covered (HTML report output)
-	expect(
-		combined.includes('playwright-report'),
-		'playwright-report/ must be listed in .gitignore to prevent tracking E2E artifacts'
-	).toBe(true);
 });

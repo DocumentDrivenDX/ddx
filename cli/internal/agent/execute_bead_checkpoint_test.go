@@ -14,11 +14,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -185,59 +183,6 @@ func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
 	requireHeadMissingPath(t, projectRoot, runStateRootRel)
 	requireHeadMissingPath(t, projectRoot, runStateAttemptRel)
 	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, runStateRootRel, runStateAttemptRel)
-}
-
-func TestCheckpointPreDispatchDirtRecoversStaleIndexLockBeforeSync(t *testing.T) {
-	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	const attemptID = "20260616T000001-index-lock"
-	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
-	writeCheckpointTestFile(t, projectRoot, metricsRel, `{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n")
-
-	prevStaleAge := gitlock.StaleAge
-	gitlock.StaleAge = time.Millisecond
-	t.Cleanup(func() { gitlock.StaleAge = prevStaleAge })
-
-	lockPath := filepath.Join(projectRoot, ".git", "index.lock")
-	require.NoError(t, os.WriteFile(lockPath, nil, 0o644))
-	old := time.Now().Add(-time.Second)
-	require.NoError(t, os.Chtimes(lockPath, old, old))
-
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
-	require.NoError(t, err)
-	require.True(t, committed, "durable metrics dirt should still checkpoint")
-	require.NoFileExists(t, lockPath, "stale real-index lock must be recovered before checkpoint sync")
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(metricsRel)), attemptID)
-}
-
-func TestCheckpointPreDispatchDirtRetriesWhenHeadAdvances(t *testing.T) {
-	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	const attemptID = "20260616T000002-ref-race"
-	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
-	writeCheckpointTestFile(t, projectRoot, metricsRel, `{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n")
-
-	advanced := false
-	previousHook := preDispatchCheckpointBeforeUpdateRef
-	preDispatchCheckpointBeforeUpdateRef = func(projectRoot, ref, commit, head string) {
-		if advanced {
-			return
-		}
-		advanced = true
-		writeCheckpointTestFile(t, projectRoot, "concurrent.txt", "concurrent branch advance\n")
-		runGitInteg(t, projectRoot, "add", "concurrent.txt")
-		runGitInteg(t, projectRoot, "commit", "-m", "test: concurrent branch advance")
-	}
-	t.Cleanup(func() { preDispatchCheckpointBeforeUpdateRef = previousHook })
-
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
-	require.NoError(t, err)
-	require.True(t, committed, "durable metrics dirt should checkpoint after a ref CAS retry")
-	require.True(t, advanced, "test hook must advance HEAD before the first update-ref")
-
-	log := runGitInteg(t, projectRoot, "log", "--format=%s", "-2")
-	assert.Contains(t, log, "chore: checkpoint pre-execute-bead "+attemptID)
-	assert.Contains(t, log, "test: concurrent branch advance")
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(metricsRel)), attemptID)
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:concurrent.txt"), "concurrent branch advance")
 }
 
 func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {

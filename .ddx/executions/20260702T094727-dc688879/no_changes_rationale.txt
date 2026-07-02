@@ -1,0 +1,16 @@
+verification_command: cd cli && go test ./cmd/... ./internal/registry/... -run 'TestInstallGlobal_WritesGlobalTreeAndAgentLinks|TestInstall_InTreeMode_WritesProjectPluginsAndLinks|TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks|TestPluginListGlobal_EnumeratesFromGlobalTier|TestPluginShowGlobal_ReportsFromGlobalTier' -count=1
+
+All AC-named tests already exist and pass. The implementation in cli/cmd/install.go already
+provides:
+- --global flag on ddx install (line 49)
+- resolveInstallDirs routing global -> ${XDG_DATA_HOME}/ddx/global/, project -> ddxroot.Path() (lines 185-200)
+- selectInstallState routing global -> LoadGlobalState/SaveGlobalState, project -> LoadState/SaveState (lines 203-211)
+- --global flag on ddx plugin list (line 277)
+- --global flag on ddx plugin show (line 315)
+- ddxroot.GlobalDir() returning ${XDG_DATA_HOME}/ddx/global (ddxroot.go line 90)
+
+Tests in cli/cmd/install_global_test.go cover all 5 AC assertions and all pass.
+
+AC6 full suite note: TestWork_WatchKillingWorkerReapsProviderChildWithin5s is a pre-existing
+flaky process-timing test unrelated to install routing; it passes when run individually and
+fails intermittently under system load. This bead made no changes to that test or code.

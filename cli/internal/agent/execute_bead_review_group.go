@@ -82,7 +82,6 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
-		stampReviewAttemptCorrelation(&slotRuntime, fmt.Sprintf("%s-%d", groupID, reviewerIndex))
 		// Apply escalated MinPower: use the higher of the base R4 floor and the
 		// escalated profile floor so retries reach a stronger reviewer powerClass.
 		if reviewProfile.MinPower > slotRuntime.MinPowerOverride {
@@ -91,7 +90,6 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 		reviewRouteLabel := r.applyExplicitReviewerPins(&slotRuntime)
 		slotRuntime.PromptFile = artifacts.PromptAbs
 		slotRuntime.WorkDir = reviewWorkDir
-		slotRuntime.WorkLogPhase = "reviewer"
 
 		slotResult, slotErr := r.reviewGroupSlot(ctx, b, impl, resultRev, built, artifacts, reviewHarness, reviewRouteLabel, slotRuntime, caps.MaxPromptBytes)
 		slot := ReviewGroupSlotResult{
@@ -159,14 +157,9 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 	durationMS := int(time.Since(start).Milliseconds())
 
 	if runErr != nil {
-		timeoutDetail := reviewRequestTimeoutDetail(r.ProjectRoot, runtime.Correlation["review_attempt_id"])
-		rationale := runErr.Error()
-		if timeoutDetail != "" {
-			rationale += "\n" + timeoutDetail
-		}
 		reviewRes := &ReviewResult{
 			Verdict:         VerdictBlock,
-			Rationale:       rationale,
+			Rationale:       runErr.Error(),
 			Error:           evidence.OutcomeReviewTransport,
 			ReviewerHarness: reviewHarness,
 			ReviewerModel:   reviewModel,
@@ -177,9 +170,6 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 			CostUSD:         resultCost(result),
 			InputBytes:      len(prompt),
 			OutputBytes:     0,
-		}
-		if timeoutDetail != "" {
-			return reviewRes, fmt.Errorf("review-group: %s: %w\n%s", evidence.OutcomeReviewTransport, runErr, timeoutDetail)
 		}
 		return reviewRes, fmt.Errorf("review-group: %s: %w", evidence.OutcomeReviewTransport, runErr)
 	}

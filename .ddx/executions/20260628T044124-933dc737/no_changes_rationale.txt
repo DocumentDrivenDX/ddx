@@ -1,0 +1,2 @@
+status: blocked
+reason: external blocker in cli/internal/agent package tests prevents a green pre-commit gate; TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers fails on an untracked .ddx/lifecycle-schema.json in its fixture repo, and TestPreDispatchDirtyPreserveRequiresStableImplementationDirt returns nil instead of context deadline exceeded.

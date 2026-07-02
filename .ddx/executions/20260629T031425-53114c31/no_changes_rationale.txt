@@ -1,0 +1,2 @@
+status: open
+reason: full cli/internal/agent suite is blocked by TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers; rerun after the unrelated durable-audit fixture failure involving untracked .ddx/lifecycle-schema.json is fixed.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -62,16 +61,10 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	}
 
 	var spec executeloop.ExecuteLoopSpec
-	count := 1
 	if rawArgs != nil && *rawArgs != "" {
 		if err := rejectLegacyExecuteLoopWorkerArgs([]byte(*rawArgs)); err != nil {
 			return nil, err
 		}
-		parsedCount, err := workerDispatchCount([]byte(*rawArgs))
-		if err != nil {
-			return nil, err
-		}
-		count = parsedCount
 		if err := json.Unmarshal([]byte(*rawArgs), &spec); err != nil {
 			return nil, fmt.Errorf("invalid worker args JSON: %w", err)
 		}
@@ -91,8 +84,8 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		}
 		if wc.MaxCount != nil && *wc.MaxCount >= 0 {
 			running := a.countRunningDrainWorkers(projectRoot)
-			if running+count > *wc.MaxCount {
-				return nil, fmt.Errorf("workers.max_count cap reached: %d running + %d requested exceeds limit %d", running, count, *wc.MaxCount)
+			if running >= *wc.MaxCount {
+				return nil, fmt.Errorf("workers.max_count cap reached: %d running (limit %d)", running, *wc.MaxCount)
 			}
 		}
 	}
@@ -110,60 +103,15 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	if err != nil {
 		return nil, err
 	}
-	workers := make([]*ddxgraphql.WorkerLifecycleResult, 0, count)
-	startedIDs := make([]string, 0, count)
-	for i := 0; i < count; i++ {
-		record, err := a.manager.StartExecuteLoop(workerSpec)
-		if err != nil {
-			for _, id := range startedIDs {
-				_ = a.manager.Stop(id)
-			}
-			return nil, err
-		}
-		startedIDs = append(startedIDs, record.ID)
-		workers = append(workers, &ddxgraphql.WorkerLifecycleResult{
-			ID:    record.ID,
-			State: record.State,
-			Kind:  record.Kind,
-		})
-	}
-	first := workers[0]
-	return &ddxgraphql.WorkerDispatchResult{
-		ID:      first.ID,
-		State:   first.State,
-		Kind:    first.Kind,
-		Workers: workers,
-	}, nil
-}
-
-func workerDispatchCount(raw []byte) (int, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return 1, fmt.Errorf("invalid worker args JSON: %w", err)
-	}
-	value, ok := fields["count"]
-	if !ok || len(value) == 0 || string(value) == "null" {
-		return 1, nil
-	}
-	var n int
-	if err := json.Unmarshal(value, &n); err == nil {
-		if n < 1 {
-			return 0, fmt.Errorf("count must be >= 1")
-		}
-		return n, nil
-	}
-	var s string
-	if err := json.Unmarshal(value, &s); err != nil {
-		return 0, fmt.Errorf("count must be an integer")
-	}
-	parsed, err := strconv.Atoi(s)
+	record, err := a.manager.StartExecuteLoop(workerSpec)
 	if err != nil {
-		return 0, fmt.Errorf("count must be an integer")
+		return nil, err
 	}
-	if parsed < 1 {
-		return 0, fmt.Errorf("count must be >= 1")
-	}
-	return parsed, nil
+	return &ddxgraphql.WorkerDispatchResult{
+		ID:    record.ID,
+		State: record.State,
+		Kind:  record.Kind,
+	}, nil
 }
 
 func rejectLegacyExecuteLoopWorkerArgs(raw []byte) error {
@@ -206,7 +154,7 @@ func (a *workerDispatchAdapter) countRunningDrainWorkers(projectRoot string) int
 	}
 	count := 0
 	for _, rec := range recs {
-		if rec.Kind == "work" && rec.State == "running" && sameCanonicalPath(rec.ProjectRoot, projectRoot) {
+		if rec.Kind == "work" && rec.State == "running" && rec.ProjectRoot == projectRoot {
 			count++
 		}
 	}
@@ -248,70 +196,16 @@ func (a *workerDispatchAdapter) StopWorker(ctx context.Context, id string) (*ddx
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := a.manager.RequestStop(id); err != nil {
+	if err := a.manager.Stop(id); err != nil {
 		return nil, err
 	}
-	return &ddxgraphql.WorkerLifecycleResult{
-		ID:    id,
-		State: "stopping",
-		Kind:  "work",
-	}, nil
-}
-
-// workerStateManagerAdapter implements ddxgraphql.WorkerStateManager using the
-// live WorkerManager and WorkerSupervisor machinery.
-type workerStateManagerAdapter struct {
-	manager *WorkerManager
-}
-
-func (a *workerStateManagerAdapter) SetWorkerDesiredState(projectRoot string, desiredCount int, restartEnabled bool) (*ddxgraphql.WorkerLifecycleResult, error) {
-	if a == nil || a.manager == nil {
-		return nil, fmt.Errorf("worker state manager is not configured")
-	}
-	state := &WorkerDesiredState{
-		Version:      WorkerDesiredStateVersion,
-		ProjectRoot:  projectRoot,
-		DesiredCount: desiredCount,
-		Restart:      WorkerRestartPolicy{Enabled: restartEnabled},
-	}
-	if err := SaveWorkerDesiredState(projectRoot, state); err != nil {
-		return nil, fmt.Errorf("set desired state: %w", err)
-	}
-	return &ddxgraphql.WorkerLifecycleResult{
-		ID:    projectRoot,
-		State: fmt.Sprintf("desired_count=%d restart=%v", desiredCount, restartEnabled),
-		Kind:  "desired-state",
-	}, nil
-}
-
-func (a *workerStateManagerAdapter) RestartWorker(id string) (*ddxgraphql.WorkerLifecycleResult, error) {
-	if a == nil || a.manager == nil {
-		return nil, fmt.Errorf("worker state manager is not configured")
-	}
-	rec, err := a.manager.RestartWorker(id, 0)
+	rec, err := a.manager.Show(id)
 	if err != nil {
-		return nil, err
+		return &ddxgraphql.WorkerLifecycleResult{ID: id, State: "stopping", Kind: "work"}, nil
 	}
 	return &ddxgraphql.WorkerLifecycleResult{
 		ID:    rec.ID,
 		State: rec.State,
 		Kind:  rec.Kind,
-	}, nil
-}
-
-func (a *workerStateManagerAdapter) ReconcileWorkers(projectRoot string) (*ddxgraphql.WorkerLifecycleResult, error) {
-	if a == nil || a.manager == nil {
-		return nil, fmt.Errorf("worker state manager is not configured")
-	}
-	result, err := a.manager.ReconcileDesiredWorkers()
-	if err != nil {
-		return nil, fmt.Errorf("reconcile: %w", err)
-	}
-	summary := fmt.Sprintf("started=%d restarted=%d stopped=%d stale=%d",
-		len(result.Started), len(result.Restarted), len(result.Stopped), len(result.StaleMarked))
-	return &ddxgraphql.WorkerLifecycleResult{
-		ID:    projectRoot,
-		State: summary,
-		Kind:  "reconcile",
 	}, nil
 }

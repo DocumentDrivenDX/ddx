@@ -11,7 +11,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
-	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -44,22 +43,6 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 
 	runtime.WorkDir = scratchDir
 	runtime.PermissionsOverride = PermissionsReadOnlyLifecycle
-	beadID := ""
-	if runtime.Correlation != nil {
-		beadID = strings.TrimSpace(runtime.Correlation["bead_id"])
-	}
-	guard := newRunningProviderGuard(projectRoot, beadID, "", os.Getpid())
-	guard.SetScopeDir(scratchDir)
-	guard.AddProbeScopeDir(projectRoot)
-	baseOnRouteResolved := runtime.OnRouteResolved
-	runtime.OnRouteResolved = func(harness, provider, model string) {
-		guard.UpdateRoute(harness, provider, model)
-		if baseOnRouteResolved != nil {
-			baseOnRouteResolved(harness, provider, model)
-		}
-	}
-	stopProviderGuard := guard.Start(ctx)
-	defer stopProviderGuard()
 
 	before, err := captureLifecycleProjectStatus(projectRoot)
 	if err != nil {
@@ -68,6 +51,10 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 
 	result, dispatchErr := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 
+	beadID := ""
+	if runtime.Correlation != nil {
+		beadID = strings.TrimSpace(runtime.Correlation["bead_id"])
+	}
 	if guardErr := guardLifecycleProjectStatus(projectRoot, before, beadID); guardErr != nil {
 		return nil, guardErr
 	}
@@ -120,7 +107,7 @@ func captureLifecycleProjectStatus(projectRoot string) (lifecycleProjectStatusSn
 		detail := strings.TrimSpace(firstNonEmpty(repair.StatusStderr, repair.StatusOutput))
 		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %s", detail)
 	}
-	out, err := internalgit.CommandNoOptionalLocks(context.Background(), projectRoot, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
+	out, err := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
 	if err != nil {
 		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -145,36 +132,9 @@ func parseLifecycleProjectStatus(raw string) map[string]string {
 		if path == "" {
 			continue
 		}
-		if isLifecycleProjectStatusIgnoredPath(path) {
-			continue
-		}
 		entries[path] = status
 	}
 	return entries
-}
-
-func isLifecycleProjectStatusIgnoredPath(path string) bool {
-	path = strings.TrimSpace(filepath.ToSlash(path))
-	switch {
-	case trackerpaths.IsNonBlockingPreClaimPath(path):
-		return true
-	case path == ".ddx/dirty-root-guard.json":
-		return true
-	case path == ".ddx/metrics/locks.jsonl":
-		return true
-	case path == ".ddx/run-state.json":
-		return true
-	case path == ".ddx/run-state":
-		return true
-	case strings.HasPrefix(path, ".ddx/run-state/"):
-		return true
-	case path == ".ddx/workers":
-		return true
-	case strings.HasPrefix(path, ".ddx/workers/"):
-		return true
-	default:
-		return false
-	}
 }
 
 func guardLifecycleProjectStatus(projectRoot string, before lifecycleProjectStatusSnapshot, beadID string) error {

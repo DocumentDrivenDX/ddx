@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260628T171219-4656190a",
+  "bead_id": "ddx-6ee2b0c3",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T171219-4656190a",
+  "trigger": "",
+  "started_at": "2026-06-28T20:04:50.230533712Z",
+  "finished_at": "2026-06-28T20:04:50.485590512Z",
+  "scanned": 1042,
+  "candidates": [
+    {
+      "pid": 3151724,
+      "ppid": 3151440,
+      "pgid": 3151440,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T171219-4656190a/cli/internal/agent",
+      "command": "/usr/bin/exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?response_type=code\u0026client_id=app_EMoamEEZ73f0CkXaXp7hrann\u0026redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\u0026scope=openid%20profile%20email%20offline_access%20api.connectors.read%20api.connectors.invoke\u0026code_challenge=5tTDtx1Tcisdo7dNKqS2aYDrJ-dOW2nLzYgYIT2v1fg\u0026code_challenge_method=S256\u0026id_token_add_organizations=true\u0026codex_cli_simplified_flow=true\u0026state=LCb5UwuQPl4eldw7WS6cojzDyij8n7XOCws6mUPiXDs\u0026originator=codex-tui"
+    },
+    {
+      "pid": 3151440,
+      "ppid": 1,
+      "pgid": 3151440,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T171219-4656190a/cli/internal/agent",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3151724,
+      "ppid": 3151440,
+      "pgid": 3151440,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T171219-4656190a/cli/internal/agent",
+      "command": "/usr/bin/exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?response_type=code\u0026client_id=app_EMoamEEZ73f0CkXaXp7hrann\u0026redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\u0026scope=openid%20profile%20email%20offline_access%20api.connectors.read%20api.connectors.invoke\u0026code_challenge=5tTDtx1Tcisdo7dNKqS2aYDrJ-dOW2nLzYgYIT2v1fg\u0026code_challenge_method=S256\u0026id_token_add_organizations=true\u0026codex_cli_simplified_flow=true\u0026state=LCb5UwuQPl4eldw7WS6cojzDyij8n7XOCws6mUPiXDs\u0026originator=codex-tui"
+    },
+    {
+      "pid": 3151440,
+      "ppid": 1,
+      "pgid": 3151440,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T171219-4656190a/cli/internal/agent",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    }
+  ]
+}

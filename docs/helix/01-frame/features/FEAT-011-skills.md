@@ -10,7 +10,7 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Complete (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`)
+**Status:** Implemented (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`)
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -207,36 +207,29 @@ wording, which remains only as an implementation detail for older hooks.
 
 ### Installation
 
-> See FEAT-015, FEAT-018, and ADR-027 for the authoritative install model:
-> package-owned source, shared XDG cache payloads, and generated agent
-> adapters. The DDx default package follows the same npx-style topology as
-> marketplace plugins, with an embedded offline fallback.
+> See FEAT-015 (2026-05-12 amendment) and plan-2026-05-13-ddx-skill-package-layout
+> for the authoritative install model: package-owned source, embedded package copy,
+> and project-local installer outputs.
 
 - Canonical DDx skill source lives in `library/skills/ddx/` and is owned by the
   default `ddx` plugin package. This is the single source of truth.
-- The binary embeds the minimal default package bootstrap via `//go:embed` at
-  `cli/internal/registry/defaultplugin/library/`: package metadata plus the
-  `skills/ddx/` tree required for offline init and worker discovery. Optional
-  reusable-library assets such as prompts, personas, templates, checks, tools,
-  MCP examples, and environment templates resolve through registry/cache
-  packages instead of being embedded in the binary.
-- `ddx init` materializes the built-in default package into the shared XDG
-  plugin cache when needed, then creates generated adapters at
-  `.agents/skills/ddx/` and `.claude/skills/ddx/`. These adapters are local
-  generated state, not git-tracked source assets.
+- The binary embeds the entire default package library via `//go:embed` at
+  `cli/internal/registry/defaultplugin/library/`, so the skill ships offline
+  without separate download.
+- `ddx init` installs the default `ddx` plugin through the embedded package
+  installer, producing real project files at `.agents/skills/ddx/` and
+  `.claude/skills/ddx/` (no symlinks, git-trackable).
 - On init and on `ddx init --force`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
   `ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
   `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
   untouched.
 - Nested workflow skills live under `library/skills/ddx/` so the entire tree
-  is owned by the default package. The adapters expose those nested skills from
-  the cache or embedded fallback without copying the payload tree into each
-  project.
+  is owned by the default package. On install, all nested subdirectories become
+  project-local content at `.agents/skills/ddx/` and `.claude/skills/ddx/`.
 - For development overlays, `ddx plugin install ddx --local library --force`
-  creates project-local links to the source for live editing without
-  auto-committing. Local overlays are the exception, not the marketplace
-  install model.
+  creates project-local symlinks to the source for live editing without
+  auto-committing.
 
 ### AGENTS.md: merge, not clobber
 
@@ -286,11 +279,10 @@ load-bearing, not optional. The repo ships:
 4. `reference/*.md` files are linked one level deep from the root `SKILL.md`;
    nested workflow skills carry their own `SKILL.md` and optional local
    `reference/`, `scripts/`, or `evals/` as needed.
-5. `ddx init` materializes generated skill adapters from the XDG cache or the
-   embedded default package, removes stale `ddx-*` dirs, and merges the
-   AGENTS.md block without clobbering user content.
-6. `ddx init --force` refreshes `.agents/skills/ddx/` and
-   `.claude/skills/ddx/` adapters and removes stale dirs.
+5. `ddx init` copies the skill, removes stale `ddx-*` dirs, and
+   merges the AGENTS.md block without clobbering user content.
+6. `ddx init --force` refreshes `.claude/skills/ddx/` and removes stale
+   dirs.
 7. `library/skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
    passing the richer route schema and then passing against `claude` and
    `codex` harnesses via `make eval-skill`.
@@ -299,9 +291,8 @@ load-bearing, not optional. The repo ships:
 9. `reference/interactive.md` is present in `library/skills/ddx/reference/` and
    defines the interactive-steward loop, phase output contracts, mutation policy,
    consent-gated adversarial review, and `ddx work focus` fallback behavior.
-   After `ddx init`, this file resolves through the generated adapters at
-   `.agents/skills/ddx/reference/interactive.md` and
-   `.claude/skills/ddx/reference/interactive.md`.
+   After `ddx init`, this file is present at `.agents/skills/ddx/reference/interactive.md`
+   and `.claude/skills/ddx/reference/interactive.md`.
 10. Generated AGENTS guidance uses the same precedence as the skill: broad
     interactive prompts route to `interactive-steward`, explicit worker prompts
     route to `bead_execution`, and `DDX_MODE=bead_execution` never overrides
@@ -311,10 +302,8 @@ load-bearing, not optional. The repo ships:
     `code_edits_allowed`, `expected_next_action`) instead of relying only on
     the legacy `expected_reference` / `expected_cli` fields.
 12. After `ddx init`, `.agents/skills/ddx/` and `.claude/skills/ddx/` contain
-    generated adapters for the default `ddx` skill. They are local generated
-    state, not source assets to commit; the canonical sources are the project
-    plugin lock plus XDG cache, with the binary's embedded default `ddx`
-    package as the offline fallback.
+    project-local copies of `library/skills/ddx/` generated by the package
+    installer. The canonical source is `library/skills/ddx/`.
 
 ### Non-Functional
 
@@ -408,8 +397,7 @@ current shipped content
 
 **Acceptance Criteria:**
 - After `ddx init --force`, `.claude/skills/ddx/` bytes match the embedded
-  skill content or the resolved project plugin payload when a project lock
-  overrides the default package.
+  skill content.
 - Stale `ddx-*` dirs are removed as in US-112.
 
 ## Dependencies

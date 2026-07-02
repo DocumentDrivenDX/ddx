@@ -52,10 +52,10 @@ require_file() {
 agent_run() {
   local prompt_file="$1"
   local attempt
-  echo "$ ddx run --harness claude --effort high --prompt $prompt_file"
+  echo "$ ddx agent run --harness claude --effort high --prompt $prompt_file"
   echo ""
   for attempt in $(seq 1 "$MAX_RETRIES"); do
-    ddx run --harness claude --effort high --prompt "$prompt_file" 2>&1 && break
+    ddx agent run --harness claude --effort high --prompt "$prompt_file" 2>&1 && break
     if [[ $attempt -lt $MAX_RETRIES ]]; then
       echo "  (retrying $attempt/$MAX_RETRIES...)"
       sleep $((attempt * 3))
@@ -71,7 +71,7 @@ narrate "ACT 1: Setup — Install DDx and HELIX"
 setup_demo_dir
 
 type_command ddx init
-type_command ddx plugin install helix
+type_command ddx install helix
 type_command ddx doctor
 
 echo ""
@@ -131,14 +131,14 @@ sleep 2
 narrate "ACT 5: Inspect — Review the Work"
 
 type_command ddx bead list
-type_command ddx metrics
+type_command ddx agent usage --since today
 type_command git log --oneline
 
 # ── Summary ──────────────────────────────────────────────────
 narrate "Demo Complete!"
 
 echo "What you just saw:"
-echo "  1. Setup: ddx init + ddx plugin install helix"
+echo "  1. Setup: ddx init + ddx install helix"
 echo "  2. Frame: HELIX created PRD, feature spec, and tracker beads"
 echo "  3. Build: Agent implemented a Go task tracker with TDD"
 echo "  4. Evolve: Added priorities — spec updated, code extended"

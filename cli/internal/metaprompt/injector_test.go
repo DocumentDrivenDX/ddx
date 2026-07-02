@@ -143,33 +143,6 @@ func TestInjectMetaPrompt(t *testing.T) {
 	}
 }
 
-func TestInjectMetaPromptSupportsAbsoluteLibraryPath(t *testing.T) {
-	testDir := t.TempDir()
-	libraryPath := filepath.Join(t.TempDir(), "cache", "plugins", "ddx", "0.4.7")
-	promptPath := "claude/system-prompts/test.md"
-	promptContent := "# Cached Prompt\n"
-
-	promptDir := filepath.Join(libraryPath, "prompts", "claude", "system-prompts")
-	if err := os.MkdirAll(promptDir, 0o755); err != nil {
-		t.Fatalf("mkdir prompt dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(libraryPath, "prompts", promptPath), []byte(promptContent), 0o644); err != nil {
-		t.Fatalf("write prompt: %v", err)
-	}
-
-	injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", libraryPath, testDir)
-	if err := injector.InjectMetaPrompt(promptPath); err != nil {
-		t.Fatalf("InjectMetaPrompt: %v", err)
-	}
-	inSync, err := injector.IsInSync()
-	if err != nil {
-		t.Fatalf("IsInSync: %v", err)
-	}
-	if !inSync {
-		t.Fatal("expected injected prompt to be in sync with absolute library path")
-	}
-}
-
 // TestIsInSync tests sync detection
 func TestIsInSync(t *testing.T) {
 	t.Run("in sync after injection", func(t *testing.T) {

@@ -43,22 +43,6 @@ func Command(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-// CommandNoOptionalLocks returns Command with Git's optional index refresh
-// locking disabled. Use it for read-only probes such as status/diff that must
-// not contend with DDx's short mutation windows on .git/index.lock.
-func CommandNoOptionalLocks(ctx context.Context, dir string, args ...string) *exec.Cmd {
-	cmd := Command(ctx, dir, args...)
-	env := cmd.Env[:0]
-	for _, kv := range cmd.Env {
-		if strings.HasPrefix(kv, "GIT_OPTIONAL_LOCKS=") {
-			continue
-		}
-		env = append(env, kv)
-	}
-	cmd.Env = append(env, "GIT_OPTIONAL_LOCKS=0")
-	return cmd
-}
-
 // CleanEnv returns os.Environ() with every git local-env-var removed.
 // Exported so sibling packages (e.g. internal/agent) that spawn NON-git
 // subprocesses inside a worktree can use the same scrub — those child

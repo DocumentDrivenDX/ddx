@@ -1,0 +1,8 @@
+verification_command: cd cli && go test ./internal/server/... -run 'TestManagedWorkerStopKillsClaudeCodexDescendants|TestManagedWorkerStopIsIdempotent' && cd .. && make install && lefthook run pre-commit
+
+The bead's managed-worker stop behavior is already present in HEAD:
+- `cli/internal/server/workers.go` calls `cleanupManagedWorkerProcessTree` from `Stop()` before terminalizing the worker record.
+- `cli/internal/server/workers_reap_unix.go` contains the shared SIGTERM -> grace -> SIGKILL process-tree cleanup helper.
+- `cli/internal/server/workers_stop_test.go` already includes `TestManagedWorkerStopKillsClaudeCodexDescendants` and `TestManagedWorkerStopIsIdempotent`, which cover descendant cleanup and idempotence.
+
+No additional code change was required in this execution worktree.

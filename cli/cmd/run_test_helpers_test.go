@@ -22,7 +22,7 @@ type stubAgentService struct {
 	execute func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
 }
 
-func (s *stubAgentService) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+func (s stubAgentService) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	if s.execute != nil {
 		return s.execute(req)
 	}
@@ -32,58 +32,63 @@ func (s *stubAgentService) Execute(_ context.Context, req agentlib.ServiceExecut
 	return ch, nil
 }
 
-func (s *stubAgentService) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+func (s stubAgentService) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
 	return nil, fmt.Errorf("routinglint: ResolveRoute called in execution path — violates CONTRACT-003 / ddx-da19756a")
 }
 
-func (s *stubAgentService) TailSessionLog(_ context.Context, _ string) (<-chan agentlib.ServiceEvent, error) {
+func (s stubAgentService) TailSessionLog(_ context.Context, _ string) (<-chan agentlib.ServiceEvent, error) {
 	ch := make(chan agentlib.ServiceEvent)
 	close(ch)
 	return ch, nil
 }
 
-func (s *stubAgentService) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
+func (s stubAgentService) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
 	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}, {Name: "codex", Available: true}}, nil
 }
 
-func (s *stubAgentService) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
+func (s stubAgentService) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
 	return nil, nil
 }
 
-func (s *stubAgentService) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+func (s stubAgentService) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	return nil, nil
 }
 
-func (s *stubAgentService) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
+func (s stubAgentService) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
 	return nil
 }
 
-func (s *stubAgentService) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+func (s stubAgentService) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
 	return nil, nil
 }
 
-func (s *stubAgentService) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
+func (s stubAgentService) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
 	return nil
 }
 
-func (s *stubAgentService) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
+func (s stubAgentService) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
 	return nil, nil
 }
 
-func (s *stubAgentService) ListSessionLogs(_ context.Context) ([]agentlib.SessionLogEntry, error) {
+func (s stubAgentService) ListSessionLogs(_ context.Context) ([]agentlib.SessionLogEntry, error) {
 	return nil, nil
 }
 
-func (s *stubAgentService) WriteSessionLog(_ context.Context, _ string, _ io.Writer) error {
+func (s stubAgentService) WriteSessionLog(_ context.Context, _ string, _ io.Writer) error {
 	return nil
 }
 
-func (s *stubAgentService) ReplaySession(_ context.Context, _ string, _ io.Writer) error {
+func (s stubAgentService) ReplaySession(_ context.Context, _ string, _ io.Writer) error {
 	return nil
 }
 
-func (s *stubAgentService) UsageReport(_ context.Context, _ agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
+func (s stubAgentService) UsageReport(_ context.Context, _ agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
 	return nil, nil
+}
+
+type executeCapturingStubService struct {
+	*executeCapturingStub
+	noCache func()
 }
 
 type executeCapturingStub struct {
@@ -179,15 +184,11 @@ func (s *executeCapturingStub) UsageReport(_ context.Context, _ agentlib.UsageRe
 
 func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
 	t.Helper()
-	agent.ResetProfileSnapshotCacheForTesting()
 	stub := &executeCapturingStub{}
 	agent.SetServiceRunFactory(func(_ string) (agentlib.FizeauService, error) {
-		return stub, nil
+		return executeCapturingStubService{executeCapturingStub: stub}, nil
 	})
-	t.Cleanup(func() {
-		agent.SetServiceRunFactory(nil)
-		agent.ResetProfileSnapshotCacheForTesting()
-	})
+	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })
 	return stub
 }
 
@@ -230,9 +231,9 @@ func capturedModelFilters(stub *executeCapturingStub) []agentlib.ModelFilter {
 
 func minimalProjectDir(t *testing.T) string {
 	t.Helper()
-	installCmdTestProviderDiscoveryGuard(t)
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	hermeticRoot := t.TempDir()
+	installCmdHermeticEnvIfUnset(t, hermeticRoot, dir, hermeticRoot)
 	ddxDir := ddxroot.JoinProject(dir)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	cfg := `version: "1.0"

@@ -11,24 +11,23 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
-// InstallPackage downloads the source release tarball and copies declared
-// install mappings into projectRoot. It records installed files
-// (project-relative when possible) in the returned InstalledEntry.
+// InstallPackage downloads the source release tarball and copies declared install mappings
+// into projectRoot. It records installed files (project-relative when possible) in the
+// returned InstalledEntry.
 //
 // Compatibility shim: this is the historical entrypoint that downloads from a
 // remote tarball. New callers should pick the explicit From* variant that
-// matches their source (Remote/Dir/FS). Forward marketplace installs must use
-// CachePackageFromRemote plus SyncProjectPlugin so payloads live in the shared
-// XDG cache and project worktrees contain only lock metadata and generated
-// adapter shims.
+// matches their source (Remote/Dir/FS).
 func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	return InstallPackageFromRemote(pkg, projectRoot)
 }
 
 // InstallPackageFromRemote downloads the source release tarball and installs
-// the package via the legacy copy-based core install implementation.
+// the package via the shared core install implementation.
 func InstallPackageFromRemote(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        pkg.Name,
@@ -62,8 +61,8 @@ func InstallPackageFromRemote(pkg *Package, projectRoot string) (InstalledEntry,
 
 // InstallPackageFromFS installs the package from an in-memory or embedded
 // filesystem (e.g. //go:embed) rooted at the package directory. The FS is
-// materialized into a temporary directory and passed through the legacy
-// copy-based core install implementation. Network is not used.
+// materialized into a temporary directory and passed through the shared core
+// install implementation. Network is not used.
 func InstallPackageFromFS(pkg *Package, src iofs.FS, projectRoot string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        pkg.Name,
@@ -94,10 +93,9 @@ func InstallPackageFromFS(pkg *Package, src iofs.FS, projectRoot string) (Instal
 	return installFromExtractedDir(pkg, tmpDir, projectRoot, entry)
 }
 
-// installFromExtractedDir is the legacy copy-based install routine used by the
-// Remote and FS compatibility entrypoints. It assumes the package contents are
-// already present on disk at sourceDir. Do not use this for marketplace
-// registry installs; use cachePackageFromDir + SyncProjectPlugin.
+// installFromExtractedDir is the shared core install routine used by the
+// Remote, Dir, and FS entrypoints. It assumes the package contents are
+// already present on disk at sourceDir.
 func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry InstalledEntry) (InstalledEntry, error) {
 	// Switch into projectRoot so relative install targets resolve against the
 	// project, not the caller's cwd. This keeps copyMapping, ExpandHome, and
@@ -124,10 +122,7 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 		return entry, fmt.Errorf("loading package manifest: %w", manifestErr)
 	}
 
-	skipRootInstall := false
-	if pkg.Install.Root == nil && pkg.Name == "ddx" {
-		skipRootInstall = true
-	} else if pkg.Install.Root == nil {
+	if pkg.Install.Root == nil {
 		pkg.Install.Root = &InstallMapping{
 			Source: ".",
 			Target: defaultPackageRootTarget(pkg.Name),
@@ -137,7 +132,7 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 	// FEAT-015: plugin install targets must be project-relative. Manifests
 	// that try to write into the user's home are rejected so plugins can't
 	// pollute global state.
-	if pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
+	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
 		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
 	}
 
@@ -145,16 +140,15 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 		return entry, fmt.Errorf("validating package structure: %s", JoinValidationIssues(issues))
 	}
 
-	// Process Root mapping for the legacy copy install path.
-	installedRoot := sourceDir
-	if !skipRootInstall {
-		files, err := copyMapping(sourceDir, pkg.Install.Root)
-		if err != nil {
-			return entry, fmt.Errorf("installing plugin root: %w", err)
-		}
-		entry.Files = append(entry.Files, files...)
-		installedRoot = ExpandHome(pkg.Install.Root.Target)
+	// Process Root mapping — copy the plugin tree into the project-local
+	// install location (e.g. .ddx/plugins/<name>/).
+	var installedRoot string
+	files, err := copyMapping(sourceDir, pkg.Install.Root)
+	if err != nil {
+		return entry, fmt.Errorf("installing plugin root: %w", err)
 	}
+	entry.Files = append(entry.Files, files...)
+	installedRoot = ExpandHome(pkg.Install.Root.Target)
 
 	// Ensure declared executables have the execute bit set.
 	for _, rel := range pkg.Install.Executable {
@@ -164,10 +158,11 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 		}
 	}
 
-	// Process Skills via the manifest mappings for the legacy copy install
-	// path. Forward marketplace installs generate shims from the cache instead.
-	if skillMappings := pkg.SkillMappings(); len(skillMappings) > 0 {
-		written, err := installMappings(sourceDir, skillMappings)
+	// Process Skills via the manifest mappings. Each mapping copies real files
+	// into its declared target. No symlinks are ever created -- this is the
+	// cross-platform invariant that FEAT-015 relies on.
+	if len(pkg.Install.Skills) > 0 {
+		written, err := installMappings(sourceDir, pkg.Install.Skills)
 		if err != nil {
 			return entry, fmt.Errorf("installing skills: %w", err)
 		}
@@ -273,8 +268,8 @@ func installMappings(srcDir string, mappings []InstallMapping) ([]string, error)
 	return written, nil
 }
 
-// InstallResource is the retired pre-plugin resource installer. Resource
-// payloads now come from marketplace plugin caches plus generated adapters.
+// InstallResource installs a single resource file (e.g. "persona/strict-code-reviewer")
+// from the ddx-library GitHub repo into the local .ddx/plugins/ddx/<type>/ directory.
 func InstallResource(resourcePath string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        resourcePath,
@@ -284,7 +279,32 @@ func InstallResource(resourcePath string) (InstalledEntry, error) {
 		InstalledAt: time.Now(),
 	}
 
-	return entry, fmt.Errorf("individual resource installs are retired; install a marketplace plugin with 'ddx plugin install <name>' and run 'ddx plugin sync'")
+	// resourcePath is like "persona/strict-code-reviewer"
+	parts := strings.SplitN(resourcePath, "/", 2)
+	if len(parts) != 2 {
+		return entry, fmt.Errorf("invalid resource path %q: expected <type>/<name>", resourcePath)
+	}
+	resourceType, resourceName := parts[0], parts[1]
+
+	// Determine target directory relative to cwd.
+	target := ddxroot.JoinRelative("plugins", "ddx", resourceType+"s")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		return entry, fmt.Errorf("creating target directory %s: %w", target, err)
+	}
+
+	// Fetch raw file from GitHub.
+	rawURL := fmt.Sprintf(
+		"https://raw.githubusercontent.com/easel/ddx-library/main/%ss/%s.md",
+		resourceType, resourceName,
+	)
+
+	destFile := filepath.Join(target, resourceName+".md")
+	if err := downloadFile(rawURL, destFile); err != nil {
+		return entry, fmt.Errorf("downloading %s: %w", rawURL, err)
+	}
+
+	entry.Files = append(entry.Files, destFile)
+	return entry, nil
 }
 
 // UninstallPackage removes files recorded in the entry.

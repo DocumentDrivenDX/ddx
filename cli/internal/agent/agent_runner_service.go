@@ -15,11 +15,6 @@ import (
 // drainServiceEventsWithRenderer. All fields are optional: nil/zero disables
 // the corresponding check.
 type drainWatchdog struct {
-	// done, when non-nil, stops the drain immediately. This is distinct from the
-	// watchdog timers: caller cancellation (for example pre-claim timeout) must
-	// stop rendering service events even if the upstream service closes its event
-	// channel late.
-	done <-chan struct{}
 	// cancel is called when a wedge condition is detected. Must not be nil
 	// when idleTimeout or toolCallTimeout is non-zero.
 	cancel func()
@@ -32,16 +27,6 @@ type drainWatchdog struct {
 	// catches individually hung subprocesses, not loops (loopDetector handles
 	// loops).
 	toolCallTimeout time.Duration
-	// requestTimeout is the absolute provider-session wall-clock cap for the
-	// attempt (the operator's --request-timeout). Unlike idleTimeout and
-	// toolCallTimeout it is armed once at the start of the drain and is NEVER
-	// reset by activity: a provider session that keeps emitting tool events
-	// past this window is still cancelled at the cap. Zero disables it.
-	requestTimeout time.Duration
-	// onRequestTimeout, when non-nil, is invoked with the elapsed wall-clock
-	// time the instant requestTimeout fires, before cancel(). It reaps the
-	// provider process tree and writes durable request-timeout evidence.
-	onRequestTimeout func(elapsed time.Duration)
 }
 
 // loopDetector maintains a window of the last 8 (tool_call, tool_result) pair
@@ -107,20 +92,26 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		wd, _ = os.Getwd()
 	}
 
-	parentCtx := opts.Context
-	if parentCtx == nil {
-		parentCtx = context.Background()
+	// Install the provider-launch PATH shim before constructing the
+	// Fizeau service so that when fizeau LookPaths codex/claude/etc it
+	// finds our wrapper, which sets PR_SET_PDEATHSIG=SIGKILL before
+	// execve'ing the real binary. This is the local seam that prevents
+	// orphan provider subprocesses when the worker dies abnormally
+	// (bead ddx-01b89378). Best-effort: if the shim fails to install
+	// we still proceed; the orphan reaper remains as a backstop.
+	if ddxBinary, err := os.Executable(); err == nil {
+		if _, _, shimErr := EnsureProviderShimOnPATH(ddxBinary); shimErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
+		}
 	}
-	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
 
-	// Construct the service against the request context so any background
-	// provider probes it owns are cancelled when the caller stops this run.
-	svc, err := ResolveServiceFromWorkDirCtx(ctx, wd)
+	// Construct the service. Reuses NewServiceFromWorkDir so provider/model
+	// routing data lands on the agent the same way every other DDx command
+	// constructs it (see serviceconfig.go).
+	svc, err := NewServiceFromWorkDir(wd)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
-	defer ReapDefunctRootProviderChildren(context.Background(), os.Getpid())
 
 	// Resolve where to write the per-request session log.
 	logDir := opts.SessionLogDir
@@ -151,6 +142,13 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		CorrelationID:   opts.CorrelationID,
 	}
 
+	parentCtx := opts.Context
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	start := time.Now()
 	events, err := svc.Execute(ctx, req)
 	if err != nil {
@@ -158,7 +156,6 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	}
 
 	watchdog := &drainWatchdog{
-		done:            ctx.Done(),
 		cancel:          cancel,
 		idleTimeout:     timeout,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
@@ -168,7 +165,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		provider = firstNonEmpty(provider, strings.TrimSpace(opts.Provider))
 		model = firstNonEmpty(model, strings.TrimSpace(opts.Model))
 		route := providerRouteLabel(provider, model)
-		_, _ = reapSupersededProviderChildren(context.Background(), os.Getpid(), wd, route, harness, time.Now().UTC())
+		_, _ = reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, time.Now().UTC())
 	}
 	final, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), watchdog, onRouteResolved)
 	elapsed := time.Since(start)
@@ -271,7 +268,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 	var progress []agentlib.ServiceProgressData
 
 	// Fast path: no watchdog, simple range loop with no timer overhead.
-	if wd == nil || (wd.idleTimeout == 0 && wd.toolCallTimeout == 0 && wd.requestTimeout == 0) {
+	if wd == nil || (wd.idleTimeout == 0 && wd.toolCallTimeout == 0) {
 		for ev := range events {
 			decoded, err := agentlib.DecodeServiceEvent(ev)
 			if err != nil {
@@ -295,7 +292,6 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 				}
 			case decoded.Final != nil:
 				final = decoded.Final
-				return final, routing, progress
 			}
 		}
 		return final, routing, progress
@@ -364,28 +360,12 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 		idleTimer = time.NewTimer(wd.idleTimeout)
 		idleTimerC = idleTimer.C
 	}
-
-	// Arm the absolute request-timeout cap once. It is intentionally NOT reset
-	// by activity: it bounds the whole provider session by wall-clock so a
-	// session that emits tool events indefinitely cannot outlive the operator's
-	// --request-timeout (ddx-9febbad2).
-	start := time.Now()
-	var requestTimer *time.Timer
-	var requestTimerC <-chan time.Time
-	if wd.requestTimeout > 0 {
-		requestTimer = time.NewTimer(wd.requestTimeout)
-		requestTimerC = requestTimer.C
-	}
-
 	defer func() {
 		if idleTimer != nil {
 			idleTimer.Stop()
 		}
 		if toolCallTimer != nil {
 			toolCallTimer.Stop()
-		}
-		if requestTimer != nil {
-			requestTimer.Stop()
 		}
 	}()
 
@@ -424,7 +404,6 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			case decoded.Final != nil:
 				stopToolCallTimer()
 				final = decoded.Final
-				return final, routing, progress
 
 			case decoded.RoutingDecision != nil:
 				routing = decoded.RoutingDecision
@@ -460,20 +439,6 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			if wd.cancel != nil {
 				wd.cancel()
 			}
-			return final, routing, progress
-
-		case <-requestTimerC:
-			elapsed := time.Since(start)
-			_, _ = fmt.Fprintf(os.Stderr, "agent: request timeout (%s absolute wall-clock cap exceeded after %s): cancelling\n", wd.requestTimeout, elapsed.Round(time.Millisecond))
-			if wd.onRequestTimeout != nil {
-				wd.onRequestTimeout(elapsed)
-			}
-			if wd.cancel != nil {
-				wd.cancel()
-			}
-			return final, routing, progress
-
-		case <-wd.done:
 			return final, routing, progress
 		}
 	}

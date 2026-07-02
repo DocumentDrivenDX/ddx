@@ -18,11 +18,8 @@ and prior attempt history to classify it as:
   or other safe, intent-preserving bead update through `ddx bead update`;
   proceeds to Claim after the mutation.
 - **too_large_decomposed** — multiple independent deliverables; the gate files
-  child beads, records the AC map, and closes the parent as
-  `completed-by-decomposition` when the split is lossless. Generated children
-  carry `Parent` metadata only and must not depend on the decomposed parent.
-  Lossy splits or those requiring operator judgment move the parent to
-  `status=proposed`.
+  child beads, records the AC map, and leaves the parent `status=open` with
+  dependency edges to the children.
 - **ambiguous_requires_operator** — needs human clarification; the gate moves
   the bead to `status=proposed`.
 
@@ -65,27 +62,21 @@ that the gate misclassifies.
 
 ## Decomposed parent state
 
-When the gate decomposes a bead losslessly:
+When the gate decomposes a bead:
 
-1. Child beads are filed with `parent: <id>` linking back to the decomposed bead.
-2. The parent is closed as `completed-by-decomposition` immediately after
-   children are filed; it does not remain `status=open` with child dependency
-   edges.
-3. Generated children carry `Parent` metadata only and must not depend on the
-   decomposed parent.
-4. The parent receives a `kind:triage-decomposed` event whose JSON body lists
+1. Child beads are filed with `parent: <id>` linking back to the epic.
+2. The parent's status remains `open`; dependency waiting is derived from the
+   new child dependency edges, not `status=blocked`.
+3. The parent receives a `kind:triage-decomposed` event whose JSON body lists
    the `child_ids`, the splitter's `rationale`, and an `ac_map`.
-
-**Historical note:** Decomposed beads that predate this rule may remain
-`status=open` with `execution-eligible=false` and child dependency edges. These
-are legacy backfill cases handled by the RC-3 walk-up closure
-(`dead_intermediate_close` event) described in `docs/beads.md`. New lossless
-decompositions always close the parent immediately.
+4. Dependency edges are added: the parent depends on all children, ensuring it
+   cannot be dispatched again until children close (should it be re-opened).
 
 The `ac_map` is load-bearing. Every parent acceptance criterion must map to at
 least one child acceptance criterion or be explicitly marked
 `operator_required` or `non_scope` with a rationale. A split that drops an AC is
-invalid and moves the parent to `status=proposed` rather than closing it.
+invalid and moves the parent to `status=proposed` instead of dispatching
+children as if the work were complete.
 
 Children re-enter the triage gate on their next dispatch cycle. If a child is
 itself decomposable, the gate will split it further — up to the depth cap.
@@ -144,12 +135,12 @@ acceptance. The hard AC map is the gate that prevents lossy decomposition.
 
 ## Regenerating the historical corpus
 
-The frozen eval slice lives in `docs/triage/eval-corpus.jsonl`. To
+The frozen eval slice lives in `library/prompts/triage/eval-corpus.jsonl`. To
 regenerate from live bead history:
 
 ```bash
 go run ./scripts/triage/harvest-corpus.go \
-  --output docs/triage/eval-corpus.jsonl
+  --output library/prompts/triage/eval-corpus.jsonl
 ```
 
 The harvest script reads `.ddx/beads.jsonl` from this repository and includes

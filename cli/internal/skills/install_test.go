@@ -19,7 +19,7 @@ import (
 func TestInstall_FromEmbedFS_CopiesBootstrapSkill(t *testing.T) {
 	projectRoot := t.TempDir()
 
-	require.NoError(t, Install(fixtureSkillFS(), projectRoot, Options{}))
+	require.NoError(t, Install(SkillFiles, projectRoot, Options{}))
 
 	for _, parent := range []string{".agents", ".claude"} {
 		skillFile := filepath.Join(projectRoot, parent, "skills", "ddx", "SKILL.md")
@@ -85,7 +85,7 @@ func TestInstall_RejectsPathTraversal(t *testing.T) {
 
 	t.Run("absolute path projectRoot", func(t *testing.T) {
 		// Empty projectRoot is rejected.
-		err := Install(fixtureSkillFS(), "", Options{})
+		err := Install(SkillFiles, "", Options{})
 		require.Error(t, err)
 	})
 
@@ -111,7 +111,7 @@ func TestInstall_RejectsPathTraversal(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".agents"), 0o755))
 		require.NoError(t, os.Symlink(outside, filepath.Join(projectRoot, ".agents", "skills")))
 
-		err := Install(fixtureSkillFS(), projectRoot, Options{})
+		err := Install(SkillFiles, projectRoot, Options{})
 		require.Error(t, err)
 		// And confirm nothing was written into the outside dir.
 		entries, _ := os.ReadDir(outside)
@@ -151,7 +151,7 @@ func TestInstall_PreExistingSymlinkRemovedUnconditionally(t *testing.T) {
 	require.NoError(t, os.Symlink(someTarget, linkPath))
 
 	// Force=false — symlinks must still be replaced.
-	require.NoError(t, Install(fixtureSkillFS(), projectRoot, Options{Force: false}))
+	require.NoError(t, Install(SkillFiles, projectRoot, Options{Force: false}))
 
 	info, err := os.Lstat(linkPath)
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestInstall_ForceFalseSkipsRealDir(t *testing.T) {
 	customFile := filepath.Join(skillDir, "SKILL.md")
 	require.NoError(t, os.WriteFile(customFile, []byte("# user-customized"), 0o644))
 
-	require.NoError(t, Install(fixtureSkillFS(), projectRoot, Options{Force: false}))
+	require.NoError(t, Install(SkillFiles, projectRoot, Options{Force: false}))
 
 	data, err := os.ReadFile(customFile)
 	require.NoError(t, err)
@@ -189,7 +189,7 @@ func TestInstall_ForceTrueOverwritesRealDir(t *testing.T) {
 	staleExtra := filepath.Join(skillDir, "stale.md")
 	require.NoError(t, os.WriteFile(staleExtra, []byte("stale"), 0o644))
 
-	require.NoError(t, Install(fixtureSkillFS(), projectRoot, Options{Force: true}))
+	require.NoError(t, Install(SkillFiles, projectRoot, Options{Force: true}))
 
 	data, err := os.ReadFile(customFile)
 	require.NoError(t, err)
@@ -197,18 +197,4 @@ func TestInstall_ForceTrueOverwritesRealDir(t *testing.T) {
 	// Stale extra file should be removed by Force=true (whole-dir overwrite).
 	_, err = os.Stat(staleExtra)
 	assert.True(t, os.IsNotExist(err), "Force=true must remove stale extra files in the skill dir")
-}
-
-func fixtureSkillFS() fs.FS {
-	return fstest.MapFS{
-		"ddx/SKILL.md": &fstest.MapFile{Data: []byte(`---
-name: ddx
-description: Test DDx skill fixture
----
-
-# DDx
-
-Fixture skill body.
-`)},
-	}
 }

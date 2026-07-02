@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -236,6 +237,177 @@ func TestExecuteBeadResult_NiflheimEvidence_ReviewDecisionAudit(t *testing.T) {
 	})
 }
 
+func TestExecuteBeadResult_NiflheimEvidence_LandCoordinationDecisionAudit(t *testing.T) {
+	t.Run("cannot lock ref after an already landed result reconciles", func(t *testing.T) {
+		repo := initReportTestRepo(t)
+		baseRev := gitReportTest(t, repo, "rev-parse", "HEAD")
+		gitReportTest(t, repo, "commit", "--allow-empty", "-m", "worker result")
+		resultRev := gitReportTest(t, repo, "rev-parse", "HEAD")
+
+		res := &ExecuteBeadResult{
+			BeadID:      "ddx-land-reconcile",
+			AttemptID:   "attempt-land-reconcile",
+			Harness:     "codex",
+			Provider:    "openai",
+			Model:       "gpt-5",
+			ActualPower: 72,
+			BaseRev:     baseRev,
+			ResultRev:   resultRev,
+			ExitCode:    0,
+			Outcome:     ExecuteBeadOutcomeTaskSucceeded,
+		}
+		MarkResultLandError(repo, res, errors.New("git update-ref refs/heads/main: fatal: cannot lock ref 'refs/heads/main': is at abc but expected def: exit status 128"))
+		require.Equal(t, ExecuteBeadStatusSuccess, res.Status)
+		require.Empty(t, res.FailureMode)
+		require.Contains(t, res.Detail, "land coordination reconciled")
+
+		report := ReportFromExecuteBeadResult(res, "standard")
+		report.RequestedProfile = "standard"
+		report.RoutingIntentSource = "profile"
+		report.EstimatedDifficulty = "hard"
+		report.InferredPowerClass = "standard"
+		review := &CandidateReviewResult{
+			Verdict:         "APPROVE",
+			Classification:  "review_completed",
+			ReviewGroupID:   "rg-land-reconcile",
+			ReviewerIndices: []int{0},
+			ReviewerVerdicts: []string{
+				"APPROVE",
+			},
+		}
+		trace := executionCycleTraceFor(CandidateResult{Report: report, CycleIndex: 0}, review, report.Status)
+		report.CycleTrace = []ExecutionCycleTrace{trace}
+		res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
+
+		raw, err := json.Marshal(res)
+		require.NoError(t, err)
+		var resultJSON map[string]any
+		require.NoError(t, json.Unmarshal(raw, &resultJSON))
+		cycle := firstCycleTrace(t, resultJSON)
+
+		assert.Equal(t, "none", cycle["failure_class"])
+		assert.Equal(t, "reconcile", cycle["retry_action"])
+		assert.Equal(t, float64(0), cycle["escalation_count"])
+		assert.Equal(t, "completed", cycle["review_status"])
+		assert.Equal(t, "APPROVE", nestedString(t, cycle, "review_result", "verdict"))
+		assert.Equal(t, "reconciled", cycle["land_status"])
+		assert.Equal(t, "reconciled", cycle["reconcile_status"])
+		assert.Equal(t, "codex", nestedString(t, cycle, "requested_route", "harness"))
+		assert.Equal(t, "openai", nestedString(t, cycle, "requested_route", "provider"))
+		assert.Equal(t, "gpt-5", nestedString(t, cycle, "requested_route", "model"))
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "profile"))
+		assert.Equal(t, "profile", nestedString(t, cycle, "requested_route", "routing_intent_source"))
+		assert.Equal(t, "hard", nestedString(t, cycle, "requested_route", "estimated_difficulty"))
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "inferred_power_class"))
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "requested_power_class"))
+		actualRoute, ok := cycle["actual_route"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "codex", actualRoute["harness"])
+		assert.Equal(t, "openai", actualRoute["provider"])
+		assert.Equal(t, "gpt-5", actualRoute["model"])
+		assert.Equal(t, float64(72), numericAny(actualRoute["actual_power"]))
+		assert.Equal(t, "profile", actualRoute["route_reason"])
+
+		eventAudit := decisionAuditFromEventBody(t, executeBeadLoopEvent(report, "worker", time.Unix(0, 0)).Body)
+		assert.Equal(t, "none", eventAudit["failure_class"])
+		assert.Equal(t, "reconcile", eventAudit["retry_action"])
+		assert.Equal(t, float64(0), eventAudit["escalation_count"])
+		assert.Equal(t, "completed", eventAudit["review_status"])
+		assert.Equal(t, "APPROVE", eventAudit["review_verdict"])
+		assert.Equal(t, "reconciled", eventAudit["land_status"])
+		assert.Equal(t, "reconciled", eventAudit["reconcile_status"])
+		assert.Equal(t, "codex", nestedString(t, eventAudit, "requested_route", "harness"))
+		assert.Equal(t, "openai", nestedString(t, eventAudit, "requested_route", "provider"))
+		assert.Equal(t, "gpt-5", nestedString(t, eventAudit, "requested_route", "model"))
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "profile"))
+		assert.Equal(t, "profile", nestedString(t, eventAudit, "requested_route", "routing_intent_source"))
+		assert.Equal(t, "hard", nestedString(t, eventAudit, "requested_route", "estimated_difficulty"))
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "inferred_power_class"))
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "requested_power_class"))
+		assert.Equal(t, "codex", nestedString(t, eventAudit, "actual_route", "harness"))
+		assert.Equal(t, "openai", nestedString(t, eventAudit, "actual_route", "provider"))
+		assert.Equal(t, "gpt-5", nestedString(t, eventAudit, "actual_route", "model"))
+	})
+
+	t.Run("generated ddx evidence keeps review skip status while retrying land", func(t *testing.T) {
+		res := &ExecuteBeadResult{
+			BeadID:      "ddx-land-retry",
+			AttemptID:   "attempt-land-retry",
+			Harness:     "codex",
+			Provider:    "openai",
+			Model:       "gpt-5",
+			ActualPower: 72,
+			BaseRev:     "base-retry",
+			ResultRev:   "result-retry",
+			ExitCode:    0,
+			Outcome:     ExecuteBeadOutcomeTaskSucceeded,
+		}
+		MarkResultLandError(t.TempDir(), res, errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260608T010203-retry/result.json"))
+		require.Equal(t, ExecuteBeadStatusLandRetry, res.Status)
+		require.Equal(t, FailureModeLandRetry, res.FailureMode)
+		require.Contains(t, res.Detail, "land coordination retry")
+
+		report := ReportFromExecuteBeadResult(res, "standard")
+		report.RequestedProfile = "standard"
+		report.RoutingIntentSource = "profile"
+		report.EstimatedDifficulty = "hard"
+		report.InferredPowerClass = "standard"
+		report.ReviewSkipReason = "review:skip-reason:land-coordination"
+		trace := executionCycleTraceFor(CandidateResult{Report: report, CycleIndex: 0}, nil, report.Status)
+		report.CycleTrace = []ExecutionCycleTrace{trace}
+		res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
+
+		raw, err := json.Marshal(res)
+		require.NoError(t, err)
+		var resultJSON map[string]any
+		require.NoError(t, json.Unmarshal(raw, &resultJSON))
+		cycle := firstCycleTrace(t, resultJSON)
+
+		assert.Equal(t, FailureModeLandRetry, cycle["failure_class"])
+		assert.Equal(t, "retry_land", cycle["retry_action"])
+		assert.Equal(t, float64(0), cycle["escalation_count"])
+		assert.Equal(t, "skipped", cycle["review_status"])
+		assert.Equal(t, "review:skip-reason:land-coordination", cycle["review_skip_reason"])
+		assert.Equal(t, "retry", cycle["land_status"])
+		assert.Equal(t, "pending", cycle["reconcile_status"])
+		assert.Equal(t, "codex", nestedString(t, cycle, "requested_route", "harness"))
+		assert.Equal(t, "openai", nestedString(t, cycle, "requested_route", "provider"))
+		assert.Equal(t, "gpt-5", nestedString(t, cycle, "requested_route", "model"))
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "profile"))
+		assert.Equal(t, "profile", nestedString(t, cycle, "requested_route", "routing_intent_source"))
+		assert.Equal(t, "hard", nestedString(t, cycle, "requested_route", "estimated_difficulty"))
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "inferred_power_class"))
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "requested_power_class"))
+		actualRoute, ok := cycle["actual_route"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "codex", actualRoute["harness"])
+		assert.Equal(t, "openai", actualRoute["provider"])
+		assert.Equal(t, "gpt-5", actualRoute["model"])
+		assert.Equal(t, float64(72), numericAny(actualRoute["actual_power"]))
+		assert.Equal(t, "profile", actualRoute["route_reason"])
+
+		eventAudit := decisionAuditFromEventBody(t, executeBeadLoopEvent(report, "worker", time.Unix(0, 0)).Body)
+		assert.Equal(t, FailureModeLandRetry, eventAudit["failure_class"])
+		assert.Equal(t, "retry_land", eventAudit["retry_action"])
+		assert.Equal(t, float64(0), eventAudit["escalation_count"])
+		assert.Equal(t, "skipped", eventAudit["review_status"])
+		assert.Equal(t, "review:skip-reason:land-coordination", eventAudit["review_skip_reason"])
+		assert.Equal(t, "retry", eventAudit["land_status"])
+		assert.Equal(t, "pending", eventAudit["reconcile_status"])
+		assert.Equal(t, "codex", nestedString(t, eventAudit, "requested_route", "harness"))
+		assert.Equal(t, "openai", nestedString(t, eventAudit, "requested_route", "provider"))
+		assert.Equal(t, "gpt-5", nestedString(t, eventAudit, "requested_route", "model"))
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "profile"))
+		assert.Equal(t, "profile", nestedString(t, eventAudit, "requested_route", "routing_intent_source"))
+		assert.Equal(t, "hard", nestedString(t, eventAudit, "requested_route", "estimated_difficulty"))
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "inferred_power_class"))
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "requested_power_class"))
+		assert.Equal(t, "codex", nestedString(t, eventAudit, "actual_route", "harness"))
+		assert.Equal(t, "openai", nestedString(t, eventAudit, "actual_route", "provider"))
+		assert.Equal(t, "gpt-5", nestedString(t, eventAudit, "actual_route", "model"))
+	})
+}
+
 func TestExecuteBeadResult_NiflheimEvidence_PreClaimDecisionAudit(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -350,147 +522,6 @@ func TestExecuteBeadResult_NiflheimEvidence_PreClaimDecisionAudit(t *testing.T) 
 			assert.Equal(t, "gpt-5", nestedString(t, audit, "actual_route", "model"))
 			assert.Contains(t, event.Body, "outcome_reason=preclaim_warn_repeated")
 			assert.Contains(t, event.Body, tc.detail)
-		})
-	}
-}
-
-// TestExecuteBeadResult_NiflheimEvidence_LandCoordinationDecisionAudit verifies
-// that land coordination failure scenarios — ref-lock after already landed,
-// staged generated DDx evidence, and staged operator files — produce correct
-// failure_class, retry_action, escalation_count, routing facts, land_status,
-// reconcile_status, and review_status in both result JSON cycle traces and
-// worker event bodies (ddx-67cdc109).
-func TestExecuteBeadResult_NiflheimEvidence_LandCoordinationDecisionAudit(t *testing.T) {
-	cases := []struct {
-		name             string
-		report           ExecuteBeadReport
-		wantFailClass    string
-		wantRetryAction  string
-		wantLandStatus   string
-		wantReconcile    string
-		wantReviewStatus string
-	}{
-		{
-			name: "cannot_lock_ref_already_landed_reconciles",
-			report: ExecuteBeadReport{
-				BeadID:              "ddx-lock-ref-reconcile",
-				AttemptID:           "attempt-lock-ref",
-				Harness:             "codex",
-				Provider:            "openai",
-				Model:               "gpt-5",
-				ActualPower:         80,
-				RequestedProfile:    "smart",
-				RoutingIntentSource: "profile",
-				EstimatedDifficulty: "hard",
-				InferredPowerClass:  "smart",
-				EscalationCount:     1,
-				Status:              ExecuteBeadStatusSuccess,
-				Detail:              "land coordination reconciled: result already landed",
-				BaseRev:             "base-sha",
-				ResultRev:           "result-sha",
-			},
-			wantFailClass:    "none",
-			wantRetryAction:  "reconcile",
-			wantLandStatus:   "reconciled",
-			wantReconcile:    "reconciled",
-			wantReviewStatus: "skipped",
-		},
-		{
-			name: "staged_generated_evidence_land_retry",
-			report: ExecuteBeadReport{
-				BeadID:              "ddx-staged-evidence-retry",
-				AttemptID:           "attempt-staged-evidence",
-				Harness:             "codex",
-				Provider:            "openai",
-				Model:               "gpt-5",
-				ActualPower:         75,
-				RequestedProfile:    "standard",
-				RoutingIntentSource: "profile",
-				EstimatedDifficulty: "medium",
-				InferredPowerClass:  "standard",
-				EscalationCount:     0,
-				Status:              ExecuteBeadStatusLandRetry,
-				Detail:              "land coordination retry: staged changes after waiting 2s\n\t.ddx/executions/attempt-staged-evidence/result.json",
-				OutcomeReason:       FailureModeLandRetry,
-				BaseRev:             "base-sha",
-				ResultRev:           "result-sha",
-			},
-			wantFailClass:    FailureModeLandRetry,
-			wantRetryAction:  "retry_land",
-			wantLandStatus:   "retry",
-			wantReconcile:    "pending",
-			wantReviewStatus: "skipped",
-		},
-		{
-			name: "staged_operator_files_operator_attention",
-			report: ExecuteBeadReport{
-				BeadID:              "ddx-staged-operator-attention",
-				AttemptID:           "attempt-staged-operator",
-				Harness:             "codex",
-				Provider:            "openai",
-				Model:               "gpt-5",
-				ActualPower:         80,
-				RequestedProfile:    "smart",
-				RoutingIntentSource: "profile",
-				EstimatedDifficulty: "hard",
-				InferredPowerClass:  "smart",
-				EscalationCount:     2,
-				Status:              ExecuteBeadStatusLandOperatorAttention,
-				Detail:              "land coordination operator attention: staged changes after waiting 2s\n\toperator-notes.md",
-				OutcomeReason:       FailureModeLandOperatorAttention,
-				BaseRev:             "base-sha",
-				ResultRev:           "result-sha",
-			},
-			wantFailClass:    FailureModeLandOperatorAttention,
-			wantRetryAction:  "operator_attention",
-			wantLandStatus:   "operator_attention",
-			wantReconcile:    "not_applicable",
-			wantReviewStatus: "skipped",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			trace := executionCycleTraceFor(
-				CandidateResult{Report: tc.report, CycleIndex: 0},
-				nil,
-				tc.report.Status,
-			)
-			tc.report.CycleTrace = []ExecutionCycleTrace{trace}
-
-			raw, err := json.Marshal(ExecuteBeadResult{
-				BeadID:     tc.report.BeadID,
-				AttemptID:  tc.report.AttemptID,
-				Status:     tc.report.Status,
-				ResultRev:  tc.report.ResultRev,
-				CycleTrace: tc.report.CycleTrace,
-			})
-			require.NoError(t, err)
-			var resultJSON map[string]any
-			require.NoError(t, json.Unmarshal(raw, &resultJSON))
-			cycle := firstCycleTrace(t, resultJSON)
-			assert.Equal(t, tc.wantFailClass, cycle["failure_class"], "result JSON failure_class")
-			assert.Equal(t, tc.wantRetryAction, cycle["retry_action"], "result JSON retry_action")
-			assert.Equal(t, float64(tc.report.EscalationCount), cycle["escalation_count"], "result JSON escalation_count")
-			assert.Equal(t, tc.wantLandStatus, cycle["land_status"], "result JSON land_status")
-			assert.Equal(t, tc.wantReconcile, cycle["reconcile_status"], "result JSON reconcile_status")
-			assert.Equal(t, tc.wantReviewStatus, cycle["review_status"], "result JSON review_status")
-			assert.Equal(t, tc.report.RequestedProfile, nestedString(t, cycle, "requested_route", "profile"), "result JSON requested_route.profile")
-			assert.Equal(t, tc.report.RoutingIntentSource, nestedString(t, cycle, "requested_route", "routing_intent_source"), "result JSON requested_route.routing_intent_source")
-			assert.Equal(t, tc.report.Provider, nestedString(t, cycle, "actual_route", "provider"), "result JSON actual_route.provider")
-			assert.Equal(t, tc.report.Model, nestedString(t, cycle, "actual_route", "model"), "result JSON actual_route.model")
-
-			eventAudit := decisionAuditFromEventBody(t, executeBeadLoopEvent(tc.report, "worker", time.Unix(0, 0)).Body)
-			assert.Equal(t, tc.wantFailClass, eventAudit["failure_class"], "event failure_class")
-			assert.Equal(t, tc.wantRetryAction, eventAudit["retry_action"], "event retry_action")
-			assert.Equal(t, float64(tc.report.EscalationCount), numericAny(eventAudit["escalation_count"]), "event escalation_count")
-			assert.Equal(t, tc.wantLandStatus, eventAudit["land_status"], "event land_status")
-			assert.Equal(t, tc.wantReconcile, eventAudit["reconcile_status"], "event reconcile_status")
-			assert.Equal(t, tc.wantReviewStatus, eventAudit["review_status"], "event review_status")
-			assert.Equal(t, tc.report.RequestedProfile, nestedString(t, eventAudit, "requested_route", "profile"), "event requested_route.profile")
-			assert.Equal(t, tc.report.RoutingIntentSource, nestedString(t, eventAudit, "requested_route", "routing_intent_source"), "event requested_route.routing_intent_source")
-			assert.Equal(t, tc.report.Provider, nestedString(t, eventAudit, "actual_route", "provider"), "event actual_route.provider")
-			assert.Equal(t, tc.report.Model, nestedString(t, eventAudit, "actual_route", "model"), "event actual_route.model")
 		})
 	}
 }

@@ -395,55 +395,6 @@ Exit:
 - No unmanaged `ddx work`, `claude`, or `codex` process remains from the
   retired tmux workers.
 
-#### Migration Evidence (2026-06-16)
-
-Migration executed via bead `ddx-f6609c33`. Findings:
-
-**External worker audit:** No tmux/shell `ddx work` processes existed at migration
-time. The tmux windows for helix, ddx, pqueue, tablespec, and heimq were all
-interactive Claude/Codex goal sessions, not raw `ddx work` workers. No worker
-processes required stopping.
-
-**Process review (pgrep):** Before migration, only two server-managed workers were
-running (ddx and sesame). All other `claude`/`codex` processes are interactive
-operator sessions unrelated to the worker migration. No retired attempt-owned
-processes were found.
-
-**Desired state set (2026-06-16T04:35:XX UTC):**
-
-| Project    | desired.json desired_count | Worker started              | Status                  |
-|------------|----------------------------|-----------------------------|-------------------------|
-| ddx        | 1 (pre-existing)           | worker-20260616T042728-f086 | running ✓               |
-| helix      | 1                          | worker-20260616T043518-424d | running ✓ (queue empty) |
-| heimq      | 1                          | worker-20260616T043521-7139 | running ✓ (2 ready)     |
-| tablespec  | 1                          | worker-20260616T043520-dd24 | exited — dirty root ⚠   |
-| pqueue     | 1                          | worker-20260616T043521-9bf6 | exited — dirty root ⚠   |
-
-**Queue status at migration:**
-
-| Project   | Total | Open | Ready | Blocked | Op-Attn | Notes                          |
-|-----------|-------|------|-------|---------|---------|--------------------------------|
-| ddx       | 2147  | 52   | 18    | 9       | 1       | Active worker draining         |
-| helix     | 947   | 0    | 0     | 0       | 0       | Queue exhausted; worker idles  |
-| heimq     | 165   | 5    | 1     | 0       | 0       | Active worker, 2 ready beads   |
-| tablespec | 92    | 6    | 1     | 2       | 1       | Blocked by dirty root          |
-| pqueue    | 109   | 1    | 1     | 0       | 0       | Queue exhausted + dirty root   |
-
-**Exception beads:**
-
-- `tablespec-e500fa10` — tablespec dirty root blocks server-managed worker; operator
-  must commit/stash `examples/` and `website/content/` changes before worker can
-  restart.
-- `pqueue-2bf86864` — pqueue dirty root blocks server-managed worker; queue is
-  exhausted (108 closed) but `crates/pqueue-*/` uncommitted changes prevent the
-  worker idle-confirm cycle. Operator must commit/stash pre-existing changes.
-
-**Projected burn-down:** ddx and heimq are actively draining. helix is idle
-(queue empty). tablespec and pqueue require operator dirty-root resolution before
-their workers can run; burn-down is blocked pending operator action on those two.
-24-hour target is not realistic for tablespec; pqueue has nothing to drain once
-clean.
-
 ## Validation
 
 Required commands before feature completion:

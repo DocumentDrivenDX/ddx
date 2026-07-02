@@ -89,10 +89,6 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
-	// registryOverride, when non-nil, replaces the built-in plugin registry
-	// for install/list/show command tests.
-	registryOverride *registry.Registry
-
 	// workBinaryPathOverride, when non-nil, resolves the installed ddx binary
 	// used for watch-mode self-refresh checks.
 	workBinaryPathOverride func() string
@@ -123,16 +119,23 @@ type CommandFactory struct {
 	updateChecker *update.Checker
 	updateDone    chan struct{}
 	updateMu      sync.Mutex
+
+	// Update dependency hooks let tests replace network and install behavior
+	// without mutating package-level globals.
+	updateFetchLatestReleaseForRepo func(string) (*update.GitHubRelease, error)
+	updateInstallPackage            func(*registry.Package, string) (registry.InstalledEntry, error)
 }
 
 // NewCommandFactory creates a new command factory with default settings
 func NewCommandFactory(workingDir string) *CommandFactory {
 	return &CommandFactory{
-		Version:       Version,
-		Commit:        Commit,
-		Date:          Date,
-		WorkingDir:    workingDir,
-		viperInstance: viper.New(),
+		Version:                         Version,
+		Commit:                          Commit,
+		Date:                            Date,
+		WorkingDir:                      workingDir,
+		viperInstance:                   viper.New(),
+		updateFetchLatestReleaseForRepo: update.FetchLatestReleaseForRepo,
+		updateInstallPackage:            registry.InstallPackage,
 	}
 }
 
@@ -494,7 +497,7 @@ func (f *CommandFactory) displayPluginStalenessHints(cmd *cobra.Command) {
 		needsUpgrade, err := update.NeedsUpgrade(entry.Version, latestVersion)
 		if err == nil && needsUpgrade {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-				"\n💡 %s %s installed, %s available. Run 'ddx plugin install %s --force' to update.\n",
+				"\n💡 %s %s installed, %s available. Run 'ddx install %s' to update.\n",
 				entry.Name, entry.Version, latestVersion, entry.Name)
 		}
 	}
@@ -613,6 +616,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newDocCommand())
 	rootCmd.AddCommand(f.newCheckpointCommand())
 	rootCmd.AddCommand(f.newServerCommand())
+	rootCmd.AddCommand(f.newWorkerCommand())
 	rootCmd.AddCommand(f.newSkillsCommand())
 	rootCmd.AddCommand(f.newPluginCommand())
 	rootCmd.AddCommand(f.newInstallCommand())
@@ -623,13 +627,10 @@ PowerShell:
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
 	rootCmd.AddCommand(f.newRunCommand())
-	rootCmd.AddCommand(f.newRunsCommand())
 	rootCmd.AddCommand(f.newWorkCommand())
-	rootCmd.AddCommand(f.newWorkerCommand())
 	rootCmd.AddCommand(f.newTryCommand())
-	rootCmd.AddCommand(f.newTriesCommand())
 	rootCmd.AddCommand(f.newSyncCommand())
-	rootCmd.AddCommand(f.newAdrLegacyCommand())
+	rootCmd.AddCommand(f.newProviderLaunchCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{

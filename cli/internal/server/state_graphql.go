@@ -324,7 +324,7 @@ func (s *ServerState) GetWorkersGraphQL(projectID string) []*ddxgraphql.Worker {
 		if err := json.Unmarshal(data, &rec); err != nil {
 			continue
 		}
-		if expectedPath != "" && !sameCanonicalPath(rec.ProjectRoot, expectedPath) {
+		if expectedPath != "" && rec.ProjectRoot != expectedPath {
 			continue
 		}
 		out = append(out, workerFromRecord(rec))
@@ -515,14 +515,6 @@ func workerFromRecord(rec WorkerRecord) *ddxgraphql.Worker {
 	}
 	if rec.LandSummary != nil {
 		w.LandSummary = landSummaryFromRecord(rec.LandSummary)
-	}
-	if rec.Managed {
-		t := true
-		w.Managed = &t
-	}
-	if rec.RestartCount > 0 {
-		rc := rec.RestartCount
-		w.RestartCount = &rc
 	}
 	return w
 }

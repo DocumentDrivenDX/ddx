@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260629T231801-6aed254e",
+  "bead_id": "ddx-ca5cbafb",
+  "base_rev": "8eeb21c29f8632af44c111233e183f633821da05",
+  "created_at": "2026-06-29T23:18:14.536719959Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ca5cbafb",
+    "title": "ddx work: codex provider subprocesses orphan to PID 1 when worker dies, accumulate as 90% CPU zombies for days",
+    "description": "PROBLEM\nObserved live on 2026-06-29. Found 28 orphaned codex processes (ppid=1, parented to systemd) on this host, ages 50min to 2 days, each consuming ~90% CPU. The current ddx worker (pid 4014720) only owned 1 active codex; all 28 others were ghosts from prior ddx worker incarnations that died without reaping their codex children. Each orphan also had a still-running `exo-open --launch WebBrowser https://auth.openai.com/oauth/authorize?...` child stuck on the OAuth callback (codex hadn't received the auth completion, so it kept the spawn alive).\n\nCumulative effect: load average sustained at 50-80 (on 8-core host) for \u003e24h, choking every ddx work attempt and producing repeat `transport: exit status 1` outcomes because the new codex child gets starved/killed before it can complete the durable_audit phase. Operator must manually `kill -TERM` the orphans to recover.\n\nROOT CAUSE WITH FILE:LINE\n- The executor at cli/internal/agent/executor_unix.go:10-29 sets `Pdeathsig: SIGTERM` and Setpgid for direct harness children. Inspect this path: either (a) codex specifically is forking a detached daemon that escapes the original process group, or (b) the `ddx work --watch` foreground path uses a different executor (not OSExecutor) for the codex spawn, so the Pdeathsig is never wired in.\n- The pre-claim cleanup hook landed in ddx-6ee2b0c3 (`cli/cmd/startup_process_cleanup.go`) scans for DDx-owned stale processes by cwd/worktree ownership. Once codex reparents to systemd it loses its DDx-execution-worktree cwd marker (codex's actual cwd may stay valid but the lineage check may rely on parentage). Investigate `staleAttemptProcessScanner` in cli/internal/agent/execution_cleanup_process.go — what makes a process \"DDx-owned\"? If it requires PID lineage that doesn't survive reparenting, this is the gap.\n- The closed beads ddx-0d7d5f0e (parent-death cleanup for execute-bead harness on Linux) and ddx-3113d524 (docker-clone backend group cleanup) and ddx-418c3849 (work startup reap) cover sibling cases but evidently do not cover the `codex --no-alt-screen` invocation path executed by the current `ddx work --watch` foreground worker against Fizeau-routed providers.\n\nPROPOSED FIX\n1. Wire `prctl(PR_SET_PDEATHSIG, SIGTERM)` (Linux) at every site that spawns a provider subprocess from the watch worker — not just OSExecutor — so the kernel kills the child when its immediate parent dies. Mirror the pattern from `cli/internal/agent/executor_unix.go`.\n2. Set Setpgid on the provider spawn so SIGTERM/SIGKILL to the worker's process group reaps codex AND any descendant (exo-open, browser handoffs, etc.) together.\n3. Extend the pre-claim stale-process classifier to recognize codex/claude/etc. processes whose cwd is `/home/erik/.cache/ddx/exec-wt/...` (regardless of current parent pid) as \"DDx-owned attempt descendants\", and reap them.\n4. Add a non-Linux fallback that uses periodic poll-and-reap by cwd marker.\n\nIN-SCOPE FILES\n- cli/internal/agent/executor_unix.go (verify Pdeathsig is set; if not, add)\n- cli/internal/agent/executor.go (verify all provider spawn sites go through the unix executor; if any bypass, route them)\n- cli/internal/agent/execution_cleanup_process.go (broaden \"DDx-owned\" classifier to include reparented children whose cwd is under .cache/ddx/exec-wt/)\n- cli/cmd/startup_process_cleanup.go (ensure the broader classifier is invoked)\n\nOUT-OF-SCOPE\n- Do not change Fizeau's provider-side cleanup.\n- Do not implement a general-purpose orphan reaper for non-DDx processes.\n- Do not add a periodic \"kill all codex\" sweeper — only reap by lineage+cwd ownership.\n\nAC\n1. Add unit test `TestExecutor_ProviderSpawnSetsPdeathsigAndSetpgid` proving every code path that spawns a harness child sets PR_SET_PDEATHSIG + Setpgid on Linux. Verify by inspecting cmd.SysProcAttr.\n2. Add integration test in cli/cmd/work_test.go that launches `ddx work --watch` against a stub harness, kills the worker with SIGKILL mid-attempt, and asserts the harness child is dead within 5s (proves Pdeathsig fires).\n3. Add unit test `TestStaleAttemptProcessScanner_DetectsReparentedDescendantsByCwd` proving the classifier detects codex-like processes whose cwd is under `.cache/ddx/exec-wt/` even when ppid=1.\n4. Add test that `ddx cleanup --apply` (and the new pre-claim pass) reaps such orphans on the test host.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -count=1 green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:iterate",
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "resource-exhaustion",
+      "prior-art:ddx-0d7d5f0e",
+      "prior-art:ddx-3113d524",
+      "prior-art:ddx-418c3849"
+    ],
+    "metadata": {
+      "queue-rank": 0
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T231801-6aed254e",
+    "prompt": ".ddx/executions/20260629T231801-6aed254e/prompt.md",
+    "manifest": ".ddx/executions/20260629T231801-6aed254e/manifest.json",
+    "result": ".ddx/executions/20260629T231801-6aed254e/result.json",
+    "checks": ".ddx/executions/20260629T231801-6aed254e/checks.json",
+    "usage": ".ddx/executions/20260629T231801-6aed254e/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-ca5cbafb-20260629T231801-6aed254e"
+  },
+  "prompt_sha": "6551e3291085a06d98ebafe57acbcf9730a0b506f3da6b2754c7a3f695590fc4"
+}

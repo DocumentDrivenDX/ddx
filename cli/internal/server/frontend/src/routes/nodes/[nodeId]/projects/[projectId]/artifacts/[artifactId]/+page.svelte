@@ -21,61 +21,9 @@
 		}
 	`;
 
-	const DOCUMENT_WRITE_MUTATION = gql`
-		mutation DocumentWrite($path: String!, $content: String!, $expectedHash: String) {
-			documentWrite(path: $path, content: $content, expectedHash: $expectedHash) {
-				path
-			}
-		}
-	`;
-
 	let regenLoading = $state(false);
 	let regenRunId = $state<string | null>(null);
 	let regenError = $state<string | null>(null);
-
-	// Spec editing state
-	let isEditing = $state(false);
-	let editorContent = $state('');
-	let saveError = $state<string | null>(null);
-	let isSaving = $state(false);
-	let savedContent = $state<string | null>(null);
-	let showGraphRefresh = $state(false);
-
-	function startEdit() {
-		editorContent = savedContent ?? data.artifact?.content ?? '';
-		isEditing = true;
-		saveError = null;
-		showGraphRefresh = false;
-	}
-
-	function cancelEdit() {
-		isEditing = false;
-		saveError = null;
-	}
-
-	async function handleSave() {
-		if (isSaving || !data.artifact) return;
-		isSaving = true;
-		saveError = null;
-		showGraphRefresh = true;
-		try {
-			const client = createClient(undefined, data.projectId);
-			await client.request(DOCUMENT_WRITE_MUTATION, {
-				path: data.artifact.path,
-				content: editorContent,
-				expectedHash: data.artifact.sha256 ?? null
-			});
-			savedContent = editorContent;
-			isEditing = false;
-		} catch (err) {
-			const e = err as { response?: { errors?: Array<{ message: string }> }; message?: string };
-			const gqlMsg = e?.response?.errors?.[0]?.message;
-			saveError = gqlMsg ?? e?.message ?? 'Save failed';
-			showGraphRefresh = false;
-		} finally {
-			isSaving = false;
-		}
-	}
 
 	async function handleRegenerate() {
 		if (!data.artifact?.id || regenLoading) return;
@@ -154,12 +102,10 @@
 		return 'binary';
 	}
 
-	const displayContent = $derived(savedContent ?? data.artifact?.content ?? '');
-
 	// Rendered markdown HTML
 	const renderedMarkdown = $derived.by(() => {
-		if (!data.artifact || rendererType(data.artifact.mediaType) !== 'markdown') return '';
-		const raw = marked.parse(displayContent, { async: false }) as string;
+		if (!data.artifact?.content || rendererType(data.artifact.mediaType) !== 'markdown') return '';
+		const raw = marked.parse(data.artifact.content, { async: false }) as string;
 		return DOMPurify.sanitize(raw);
 	});
 
@@ -278,7 +224,7 @@
 		<!-- Header -->
 		<div class="space-y-2">
 			<div class="flex items-start gap-3">
-				<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink flex-1">
+				<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 					{data.artifact.title}
 				</h1>
 				<span
@@ -286,15 +232,6 @@
 				>
 					{badge.label}
 				</span>
-				{#if rtype === 'markdown' && !isEditing}
-					<button
-						type="button"
-						onclick={startEdit}
-						class="text-body-sm bg-bg-surface dark:bg-dark-bg-surface border-border-line dark:border-dark-border-line text-fg-ink dark:text-dark-fg-ink hover:opacity-80 mt-0.5 rounded border px-3 py-1"
-					>
-						Edit
-					</button>
-				{/if}
 			</div>
 
 			<!-- Core metadata -->
@@ -347,82 +284,9 @@
 
 		<!-- Renderer -->
 		<div class="border-border-line dark:border-dark-border-line border">
-			{#if rtype === 'markdown' && isEditing}
-				<!-- Edit mode: plain markdown editor -->
-				<div class="space-y-3 p-4">
-					<div role="group" aria-label="Editor mode">
-						<label class="inline-flex cursor-pointer items-center gap-2">
-							<input type="radio" name="edit-mode" value="plain" checked />
-							Plain
-						</label>
-					</div>
-					<textarea
-						aria-label="plain markdown editor"
-						bind:value={editorContent}
-						class="border-border-line dark:border-dark-border-line font-mono-code text-mono-code text-fg-ink dark:text-fg-ink dark:bg-dark-bg-surface h-64 w-full rounded border p-2 text-sm"
-					></textarea>
-					{#if saveError}
-						<div
-							data-testid="error-message"
-							role="alert"
-							class="text-body-sm rounded border border-red-300 bg-red-50 p-2 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400"
-						>
-							{saveError}
-						</div>
-					{/if}
-					{#if showGraphRefresh}
-						<div
-							data-testid="graph-refresh-indicator"
-							class="text-body-sm rounded border border-amber-300 bg-amber-50 p-2 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-						>
-							Graph state may be outdated after edit.
-							<button
-								type="button"
-								aria-label="Refresh graph staleness"
-								onclick={async () => { await invalidateAll(); showGraphRefresh = false; }}
-								class="ml-2 underline hover:no-underline"
-							>
-								Refresh
-							</button>
-						</div>
-					{/if}
-					<div class="flex gap-2">
-						<button
-							type="button"
-							onclick={handleSave}
-							disabled={isSaving}
-							class="text-body-sm bg-accent-lever text-fg-on-accent dark:bg-dark-accent-lever rounded px-3 py-1.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{isSaving ? 'Saving…' : 'Save'}
-						</button>
-						<button
-							type="button"
-							onclick={cancelEdit}
-							class="text-body-sm bg-bg-surface dark:bg-dark-bg-surface border-border-line dark:border-dark-border-line text-fg-ink dark:text-dark-fg-ink rounded border px-3 py-1.5 hover:opacity-80"
-						>
-							Cancel
-						</button>
-					</div>
-				</div>
-			{:else if rtype === 'markdown'}
+			{#if rtype === 'markdown'}
 				<!-- Markdown renderer: rendered with syntax-highlighted code blocks -->
 				<!-- Relative intra-repo links are intercepted by handleMarkdownClick for in-UI navigation -->
-				{#if showGraphRefresh}
-					<div
-						data-testid="graph-refresh-indicator"
-						class="border-border-line dark:border-dark-border-line flex items-center gap-2 border-b bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
-					>
-						Graph state may be outdated after edit.
-						<button
-							type="button"
-							aria-label="Refresh graph staleness"
-							onclick={async () => { await invalidateAll(); showGraphRefresh = false; }}
-							class="underline hover:no-underline"
-						>
-							Refresh
-						</button>
-					</div>
-				{/if}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				<div
 					class="prose prose-sm dark:prose-invert max-w-none p-4"

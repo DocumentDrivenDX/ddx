@@ -51,28 +51,6 @@ func initScriptTestRepo(t *testing.T) string {
 	return dir
 }
 
-func TestScrubbedGitEnvScriptScrubsParentWorkerRoutingEnv(t *testing.T) {
-	t.Setenv("DDX_PROJECT_ROOT", "/real/project")
-	t.Setenv("DDX_AGENT_NAME", "worker-real")
-	t.Setenv("DDX_SERVER_MANAGED_WORKER_ID", "worker-real")
-	t.Setenv("DDX_WORKER_ID", "worker-real")
-
-	env := scrubbedGitEnvScript()
-	for _, key := range []string{
-		"DDX_PROJECT_ROOT",
-		"DDX_AGENT_NAME",
-		"DDX_SERVER_MANAGED_WORKER_ID",
-		"DDX_WORKER_ID",
-	} {
-		prefix := key + "="
-		for _, kv := range env {
-			if strings.HasPrefix(kv, prefix) {
-				t.Fatalf("expected %s to be scrubbed from script env", key)
-			}
-		}
-	}
-}
-
 // gitLogCount returns the number of commits reachable from HEAD.
 func gitLogCount(t *testing.T, dir string) int {
 	t.Helper()

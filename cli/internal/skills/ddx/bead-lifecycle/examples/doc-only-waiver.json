@@ -1,0 +1,32 @@
+{
+  "mode": "lint",
+  "bead_type": "doc-only",
+  "source": "Curated from doc-only reliability/spec beads such as ddx-06b77652.",
+  "input_summary": {
+    "title": "docs: publish reliability principles for ddx try and ddx work",
+    "labels": ["phase:2", "area:agent", "area:server", "kind:design", "reliability", "bead-quality"],
+    "description_traits": [
+      "names docs/helix/06-iterate/reliability-principles.md as the target",
+      "explains current state and non-scope",
+      "no production code path is introduced"
+    ],
+    "acceptance_traits": [
+      "asserts the document contains P1-P7 sections",
+      "includes lefthook run pre-commit",
+      "does not name a Test* symbol"
+    ]
+  },
+  "expected_output": {
+    "score": 8,
+    "rationale": [
+      {"criterion": "c", "verdict": "waived", "reason": "doc-only bead legitimately has no Test* symbol when document path and assertions are concrete"},
+      {"criterion": "d", "verdict": "waived", "reason": "doc-only bead introduces no code path"},
+      {"criterion": "e", "verdict": "pass", "reason": "lefthook run pre-commit is present; no go package test is required for documentation-only scope"}
+    ],
+    "suggested_fixes": [],
+    "waivers_applied": [
+      {"criterion": "c", "waiver": "doc-only", "reason": "scope is limited to documentation"},
+      {"criterion": "d", "waiver": "doc-only", "reason": "no code path is introduced"}
+    ]
+  }
+}

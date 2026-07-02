@@ -55,10 +55,6 @@ func newIdleHandle(t *testing.T, m *WorkerManager, id string, beadID string, sta
 // seedClaimedBead creates a ready bead and claims it so Unclaim() has work
 // to do. Returns the bead store.
 func seedClaimedBead(t *testing.T, root string, beadID string) *bead.Store {
-	return seedClaimedBeadByOwner(t, root, beadID, "worker-test")
-}
-
-func seedClaimedBeadByOwner(t *testing.T, root string, beadID string, owner string) *bead.Store {
 	t.Helper()
 	ddx := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddx)
@@ -68,8 +64,68 @@ func seedClaimedBeadByOwner(t *testing.T, root string, beadID string, owner stri
 		Status:    bead.StatusOpen,
 		IssueType: bead.DefaultType,
 	}))
-	require.NoError(t, store.Claim(beadID, owner))
+	require.NoError(t, store.Claim(beadID, "worker-test"))
 	return store
+}
+
+// startManagedWatchdogTree launches a stubborn managed-worker-style process
+// tree for watchdog reaping tests. The root process ignores SIGTERM and owns
+// two descendant process groups whose children also need cleanup.
+func startManagedWatchdogTree(t *testing.T) (binDir string, rootPID, claudePID, claudeSleepPID, codexPID, codexSleepPID int) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group cleanup is covered by Unix implementation")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh not available: %v", err)
+	}
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skipf("setsid not available: %v", err)
+	}
+
+	binDir = t.TempDir()
+	pidDir := t.TempDir()
+	writeFakeProviderBinary(t, binDir, "claude-tree", true)
+	writeFakeProviderBinary(t, binDir, "codex-tree", true)
+	writeFakeProviderBinary(t, binDir, "claude", false)
+	writeFakeProviderBinary(t, binDir, "codex", false)
+
+	cmd := exec.Command("sh", "-c", `trap '' TERM INT; sh -c 'trap "" TERM INT; sleep 600' & claude-tree & codex-tree & wait`)
+	cmd.Env = envWithOverrides(map[string]string{
+		"PATH":    binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"PID_DIR": pidDir,
+	})
+	rootPID = startProcessGroup(t, cmd)
+
+	claudePID = waitForPIDFile(t, filepath.Join(pidDir, "claude-tree.pid"))
+	claudeSleepPID = waitForPIDFile(t, filepath.Join(pidDir, "claude-tree.sleep.pid"))
+	codexPID = waitForPIDFile(t, filepath.Join(pidDir, "codex-tree.pid"))
+	codexSleepPID = waitForPIDFile(t, filepath.Join(pidDir, "codex-tree.sleep.pid"))
+
+	t.Cleanup(func() {
+		_ = syscall.Kill(-claudePID, syscall.SIGKILL)
+		_ = syscall.Kill(-codexPID, syscall.SIGKILL)
+		_ = syscall.Kill(claudeSleepPID, syscall.SIGKILL)
+		_ = syscall.Kill(codexSleepPID, syscall.SIGKILL)
+	})
+	return binDir, rootPID, claudePID, claudeSleepPID, codexPID, codexSleepPID
+}
+
+// newManagedIdleHandle marks a synthetic worker as managed so the watchdog
+// exercises the subprocess-backed path. PID is deliberately zero to verify
+// the PGID fallback that keeps process-tree cleanup working.
+func newManagedIdleHandle(t *testing.T, m *WorkerManager, id string, beadID string, rootPID int, startedAt, lastPhaseTS time.Time) (*workerHandle, *atomic.Bool) {
+	t.Helper()
+	h, cancelled := newIdleHandle(t, m, id, beadID, startedAt, lastPhaseTS)
+	m.mu.Lock()
+	h.managed = true
+	h.record.PID = 0
+	h.record.PGID = rootPID
+	m.mu.Unlock()
+	return h, cancelled
 }
 
 // TestWatchdogSweepReapsStalledWorker is the core AC test: a worker whose
@@ -445,4 +501,168 @@ func TestDrainProgressUpdatesLastPhaseTS(t *testing.T) {
 
 	require.False(t, got.IsZero(), "lastPhaseTS must be set on first phase event")
 	assert.True(t, got.Equal(t0), "heartbeat must not advance lastPhaseTS; got=%v want=%v", got, t0)
+}
+
+// TestManagedWorkerWatchdogReapKillsProcessTree verifies that the watchdog
+// reaps a stalled managed worker, escalates to SIGKILL when the process tree
+// ignores SIGTERM, and removes all managed descendants.
+func TestManagedWorkerWatchdogReapKillsProcessTree(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := seedClaimedBead(t, root, "ddx-wd-managed-tree")
+
+	m := NewWorkerManager(root)
+	m.WatchdogDeadline = 1 * time.Millisecond
+	m.StallDeadline = 1 * time.Millisecond
+	m.WatchdogKillGrace = 300 * time.Millisecond
+	defer m.StopWatchdog()
+
+	_, rootPID, claudePID, claudeSleepPID, codexPID, codexSleepPID := startManagedWatchdogTree(t)
+	now := time.Now().UTC()
+	h, cancelled := newManagedIdleHandle(t, m, "worker-wd-managed-tree", "ddx-wd-managed-tree",
+		rootPID, now.Add(-1*time.Second), now.Add(-1*time.Second))
+
+	m.watchdogSweep(now)
+
+	m.mu.Lock()
+	reaped := h.reaped
+	state := h.record.State
+	reapReason := h.record.ReapReason
+	lastError := h.record.LastError
+	m.mu.Unlock()
+
+	assert.True(t, reaped, "managed worker should be flagged reaped")
+	assert.Equal(t, "reaped", state, "record.State must flip to 'reaped'")
+	assert.Equal(t, "watchdog", reapReason)
+	assert.True(t, cancelled.Load(), "watchdog must invoke cancel() for managed workers")
+	assert.Contains(t, lastError, "cleanup=")
+	assert.Contains(t, lastError, "sigkill=", "watchdog cleanup must escalate to SIGKILL for the stubborn root process")
+
+	b, err := store.Get(context.Background(), "ddx-wd-managed-tree")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status, "watchdog must release the bead claim")
+
+	events, err := store.EventsByKind("ddx-wd-managed-tree", "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1, "expected exactly one bead.reaped event")
+	assert.Equal(t, "watchdog", events[0].Summary)
+
+	waitForProcessGone(t, rootPID)
+	waitForProcessGone(t, claudePID)
+	waitForProcessGone(t, claudeSleepPID)
+	waitForProcessGone(t, codexPID)
+	waitForProcessGone(t, codexSleepPID)
+}
+
+// TestManagedWorkerWatchdogReapReleasesClaim verifies the claim is released
+// and exactly one bead.reaped event is recorded when watchdog reaps a stalled
+// managed worker.
+func TestManagedWorkerWatchdogReapReleasesClaim(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := seedClaimedBead(t, root, "ddx-wd-managed-claim")
+
+	m := NewWorkerManager(root)
+	m.WatchdogDeadline = 1 * time.Millisecond
+	m.StallDeadline = 1 * time.Millisecond
+	m.WatchdogKillGrace = 300 * time.Millisecond
+	defer m.StopWatchdog()
+
+	_, rootPID, _, _, _, _ := startManagedWatchdogTree(t)
+	now := time.Now().UTC()
+	_, cancelled := newManagedIdleHandle(t, m, "worker-wd-managed-claim", "ddx-wd-managed-claim",
+		rootPID, now.Add(-1*time.Second), now.Add(-1*time.Second))
+
+	m.watchdogSweep(now)
+
+	assert.True(t, cancelled.Load(), "watchdog must cancel managed workers before cleanup completes")
+
+	b, err := store.Get(context.Background(), "ddx-wd-managed-claim")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status, "watchdog must unclaim the stalled bead")
+
+	events, err := store.EventsByKind("ddx-wd-managed-claim", "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1, "expected exactly one bead.reaped event")
+	assert.Equal(t, "watchdog", events[0].Summary)
+
+	waitForProcessGone(t, rootPID)
+}
+
+// TestManagedWorkerWatchdogReapSkipsExternalReportedWorkers verifies that the
+// watchdog only cleans the managed worker tree and leaves unrelated external
+// worker reports and process groups alone.
+func TestManagedWorkerWatchdogReapSkipsExternalReportedWorkers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group cleanup is covered by Unix implementation")
+	}
+
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := seedClaimedBead(t, root, "ddx-wd-managed-skip")
+
+	m := NewWorkerManager(root)
+	m.WatchdogDeadline = 1 * time.Millisecond
+	m.StallDeadline = 1 * time.Millisecond
+	m.WatchdogKillGrace = 300 * time.Millisecond
+	defer m.StopWatchdog()
+
+	binDir, rootPID, claudePID, claudeSleepPID, codexPID, codexSleepPID := startManagedWatchdogTree(t)
+
+	reportedCmd := exec.Command(filepath.Join(binDir, "claude"))
+	reportedCmd.Env = envWithOverrides(map[string]string{
+		"PATH": binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	reportedPID := startProcessGroup(t, reportedCmd)
+
+	reg := newWorkerIngestRegistry(root)
+	rec := reg.register(workerIdentity{
+		ProjectRoot:  root,
+		Harness:      "claude",
+		ExecutorPID:  reportedPID,
+		ExecutorHost: "localhost",
+		StartedAt:    time.Now().UTC(),
+	})
+	require.NotEmpty(t, rec.WorkerID)
+
+	interactiveCmd := exec.Command(filepath.Join(binDir, "codex"))
+	interactiveCmd.Env = envWithOverrides(map[string]string{
+		"PATH": binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	interactivePID := startProcessGroup(t, interactiveCmd)
+
+	unrelatedCmd := exec.Command("sh", "-c", "sleep 600")
+	unrelatedPID := startProcessGroup(t, unrelatedCmd)
+
+	now := time.Now().UTC()
+	_, cancelled := newManagedIdleHandle(t, m, "worker-wd-managed-skip", "ddx-wd-managed-skip",
+		rootPID, now.Add(-1*time.Second), now.Add(-1*time.Second))
+
+	m.watchdogSweep(now)
+
+	assert.True(t, cancelled.Load(), "watchdog must cancel the managed worker")
+	waitForProcessGone(t, rootPID)
+	waitForProcessGone(t, claudePID)
+	waitForProcessGone(t, claudeSleepPID)
+	waitForProcessGone(t, codexPID)
+	waitForProcessGone(t, codexSleepPID)
+
+	if !testProcessAlive(reportedPID) {
+		t.Fatalf("watchdog killed external reported worker pid %d", reportedPID)
+	}
+	if !testProcessAlive(interactivePID) {
+		t.Fatalf("watchdog killed interactive Claude/Codex session pid %d", interactivePID)
+	}
+	if !testProcessAlive(unrelatedPID) {
+		t.Fatalf("watchdog killed unrelated process pid %d", unrelatedPID)
+	}
+
+	b, err := store.Get(context.Background(), "ddx-wd-managed-skip")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status, "watchdog must release the bead claim")
+
+	events, err := store.EventsByKind("ddx-wd-managed-skip", "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1, "watchdog must emit exactly one bead.reaped event")
+	assert.Equal(t, "watchdog", events[0].Summary)
 }

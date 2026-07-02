@@ -31,7 +31,6 @@ prompts when an artifact has no generator provenance.`,
 	}
 
 	cmd.AddCommand(f.newArtifactRegenerateCommand())
-	cmd.AddCommand(f.newArtifactListCommand())
 	return cmd
 }
 
@@ -107,63 +106,6 @@ func selectArtifactGenerator(store *ddxexec.Store, artifactID, explicitDefinitio
 		}
 		return "", fmt.Errorf("artifact %q has multiple generator definitions (%s); pass --definition", artifactID, strings.Join(ids, ", "))
 	}
-}
-
-func (f *CommandFactory) newArtifactListCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List artifacts, optionally filtered by media type",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			graph, err := f.buildDocGraph()
-			if err != nil {
-				return err
-			}
-			mediaTypeFilter, _ := cmd.Flags().GetString("media-type")
-			asJSON, _ := cmd.Flags().GetBool("json")
-
-			type listEntry struct {
-				ID        string `json:"id"`
-				Path      string `json:"path"`
-				Title     string `json:"title,omitempty"`
-				MediaType string `json:"media_type"`
-			}
-
-			ids := graph.All()
-			entries := make([]listEntry, 0, len(ids))
-			for _, id := range ids {
-				doc := graph.Documents[id]
-				mt := doc.MediaType
-				if mediaTypeFilter != "" && !strings.EqualFold(mt, mediaTypeFilter) {
-					continue
-				}
-				entries = append(entries, listEntry{
-					ID:        doc.ID,
-					Path:      doc.Path,
-					Title:     doc.Title,
-					MediaType: mt,
-				})
-			}
-
-			if asJSON {
-				enc := json.NewEncoder(cmd.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(entries)
-			}
-
-			if len(entries) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No artifacts found.")
-				return nil
-			}
-			for _, e := range entries {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", e.ID, e.MediaType, e.Path)
-			}
-			return nil
-		},
-	}
-	cmd.Flags().String("media-type", "", "Filter by media type (e.g. text/markdown, image/png)")
-	cmd.Flags().Bool("json", false, "Output as JSON")
-	return cmd
 }
 
 func stringSliceContains(values []string, target string) bool {

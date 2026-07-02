@@ -8,7 +8,7 @@ ddx:
 ---
 # ADR-023: Bead Lifecycle Quality Policy
 
-**Status:** Accepted
+**Status:** Proposed (Accepted after operator review)
 **Date:** 2026-05-04
 **Authors:** bead `ddx-9210f95a`
 
@@ -208,11 +208,8 @@ transitioning to `status=open`.
 If readiness finds the bead too broad, it decomposes before claim. Every parent AC
 must map to at least one child AC or be explicitly marked `operator_required` or
 `non_scope`; token-overlap metrics are heuristics, not proof of preservation.
-The parent is closed as `completed-by-decomposition` when decomposition succeeds
-losslessly, generated children carry `Parent` metadata only and must not depend
-on the decomposed parent, and historical open `execution-eligible=false`
-containers are legacy backfill cases only. The parent moves to
-`status=proposed` when the split would be lossy.
+The parent remains `status=open` with child dependency edges when decomposition
+succeeds, or moves to `status=proposed` when the split would be lossy.
 
 When BLOCK mode stops dispatch, the operator-facing output must be actionable.
 It prints:

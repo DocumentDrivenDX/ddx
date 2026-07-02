@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260628T063046-7248b864",
+  "bead_id": "ddx-298ade98",
+  "base_rev": "dca24d4a8f49bc316c5bb3398ab533957b6eb0c5",
+  "created_at": "2026-06-28T06:31:08.364326658Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-298ade98",
+    "title": "test: fix flaky 150ms timeout in TestPreDispatchDirtyPreserveRequiresStableImplementationDirt",
+    "description": "PROBLEM\nThe test TestPreDispatchDirtyPreserveRequiresStableImplementationDirt at cli/internal/agent/execute_bead_loop_stay_alive_test.go:836 fails on a normally-loaded developer machine because it uses a fixed 150ms context.WithTimeout for an in-process worker.Run() call that has to claim + execute + land + close one bead and continue polling. The 150ms budget is too tight; observed outcome on base revision edbcd9aa5: err is nil (work completes before deadline OR worker exits cleanly via another path), so require.ErrorIs(t, err, context.DeadlineExceeded) at line 882 fails.\n\nThis is a release-blocker: lefthook run pre-commit fails, blocking every subsequent bead from landing. Diagnosed in ddx-47d9100a's no_changes_rationale (the implementer correctly identified it as out-of-scope pre-existing breakage from commit 4555a083f, introduced by ddx-df319cf9).\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop_stay_alive_test.go:871 — context.WithTimeout 150*time.Millisecond\n- cli/internal/agent/execute_bead_loop_stay_alive_test.go:882 — require.ErrorIs(t, err, context.DeadlineExceeded)\n- Adjacent test ~line 726 (TestPreDispatchDirtyPreservePersistsStableImplementationDirt) uses the correct pattern: 30s outer timeout, worker.Run in a goroutine, require.Eventually polling for bead closure, then cancel(). See the comment at lines 772-774 explaining why 750ms was too tight.\n\nPROPOSED FIX\nRewrite TestPreDispatchDirtyPreserveRequiresStableImplementationDirt to match the surrounding require.Eventually pattern:\n1. Outer ctx timeout: 30*time.Second.\n2. Run worker.Run in a goroutine, push result+err to a runCh.\n3. require.Eventually (25s budget, 50ms tick) polls store.Get(\"ddx-int-0001\") until Status == StatusClosed.\n4. cancel() the outer ctx; \u003c-runCh to collect outcome.\n5. Assertions become: outcome.err is one of context.Canceled or context.DeadlineExceeded (use require.True with errors.Is check), Attempts=1, Successes=1, Failures=0, OperatorAttention nil, no \"loop.pre_dispatch_dirty_preserved\" event, no refs/ddx/pre-dispatch references.\n\nIN-SCOPE FILES\n- cli/internal/agent/execute_bead_loop_stay_alive_test.go (only the failing test)\n\nOUT-OF-SCOPE\n- Do not modify production code.\n- Do not touch the passing adjacent test.\n- Do not modify other 150ms or sub-second timeouts in this file; this bead targets only the named test.\n\nAC\n1. cli/internal/agent/execute_bead_loop_stay_alive_test.go:TestPreDispatchDirtyPreserveRequiresStableImplementationDirt rewritten to use require.Eventually + goroutine pattern with 30s outer timeout, mirroring TestPreDispatchDirtyPreservePersistsStableImplementationDirt at ~line 726.\n2. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestPreDispatchDirtyPreserve' -count=5 green (5x to confirm non-flaky).\n3. cd cli \u0026\u0026 go test ./internal/agent/... -count=1 green.\n4. lefthook run pre-commit passes.\n5. The test still verifies the same invariants: a single bead claim+close happens, OperatorAttention is nil, no pre-dispatch refs are written.",
+    "labels": [
+      "phase:iterate",
+      "area:test",
+      "area:agent",
+      "kind:bug",
+      "flaky",
+      "blocks-drain",
+      "pre-commit-blocker",
+      "regression:ddx-df319cf9"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-298ade98)\",\"fingerprint\":\"25f6a39b139540fde6f9fd0f400fecd176d81ec1624c1c57d3fa259b6ec05e9e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"25f6a39b139540fde6f9fd0f400fecd176d81ec1624c1c57d3fa259b6ec05e9e\"}",
+          "created_at": "2026-06-28T06:29:50.542260106Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "queue-rank": 0
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260628T063046-7248b864",
+    "prompt": ".ddx/executions/20260628T063046-7248b864/prompt.md",
+    "manifest": ".ddx/executions/20260628T063046-7248b864/manifest.json",
+    "result": ".ddx/executions/20260628T063046-7248b864/result.json",
+    "checks": ".ddx/executions/20260628T063046-7248b864/checks.json",
+    "usage": ".ddx/executions/20260628T063046-7248b864/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-298ade98-20260628T063046-7248b864"
+  },
+  "prompt_sha": "6a6daed359fb5f6f26e4ab4db2eccd5d6b78bf84e3ff2380f79d5499f792a009"
+}

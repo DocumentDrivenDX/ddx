@@ -1,7 +1,6 @@
 package registry
 
 import (
-	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +8,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,8 +38,8 @@ func TestBuiltinRegistry(t *testing.T) {
 	if pkg.Source == "" {
 		t.Error("expected non-empty source")
 	}
-	if pkg.SkillMappings() == nil {
-		t.Error("expected skill mappings to be set")
+	if pkg.Install.Skills == nil {
+		t.Error("expected install.skills to be set")
 	}
 }
 
@@ -59,58 +57,26 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Type != PackageTypePlugin {
 		t.Errorf("expected type=plugin, got %q", pkg.Type)
 	}
-	if pkg.Install.Root != nil {
-		t.Fatalf("built-in ddx must not advertise a project payload root: %+v", pkg.Install.Root)
+	if pkg.Install.Root == nil {
+		t.Fatal("expected install.root to be set")
 	}
-	// ddx plugin generates project-local skill adapters only (FEAT-018).
-	if len(pkg.Materialize.Skills) != 2 {
-		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Materialize.Skills))
+	if pkg.Install.Root.Source != "library" {
+		t.Errorf("expected root source=library, got %q", pkg.Install.Root.Source)
 	}
-	for _, sk := range pkg.Materialize.Skills {
-		if sk.Source != "skills/" {
-			t.Errorf("expected ddx skill source=skills/, got %q", sk.Source)
-		}
+	if pkg.Install.Root.Target != ".ddx/plugins/ddx" {
+		t.Errorf("expected root target=.ddx/plugins/ddx, got %q", pkg.Install.Root.Target)
+	}
+	// ddx plugin ships skills to project-local skill dirs only (FEAT-015).
+	if len(pkg.Install.Skills) != 2 {
+		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Install.Skills))
+	}
+	for _, sk := range pkg.Install.Skills {
 		if strings.HasPrefix(sk.Target, "~") {
 			t.Errorf("skill target must be project-relative, got %q", sk.Target)
 		}
 	}
 	if pkg.Install.Scripts != nil {
 		t.Error("expected no scripts")
-	}
-}
-
-func TestDefaultPluginPackageDoesNotAdvertiseProjectPayloadInstallTarget(t *testing.T) {
-	data, err := iofs.ReadFile(defaultplugin.FS(), "package.yaml")
-	require.NoError(t, err)
-
-	text := string(data)
-	assert.Contains(t, text, "DDx bootstrap skill package")
-	assert.NotContains(t, text, "prompts, personas")
-	assert.NotContains(t, text, "target: .ddx/plugins/ddx")
-
-	pkg, err := BuiltinRegistry().Find("ddx")
-	require.NoError(t, err)
-	assert.Nil(t, pkg.Install.Root, "built-in ddx must not advertise a project payload root")
-}
-
-func TestBuiltinDDxPackageDoesNotCarryOptionalLibraryAssets(t *testing.T) {
-	for _, rel := range []string{
-		".agents",
-		"artifacts",
-		"checks",
-		"environments",
-		"mcp-servers",
-		"patterns",
-		"personas",
-		"prompts",
-		"templates",
-		"tools",
-	} {
-		_, err := iofs.Stat(defaultplugin.FS(), rel)
-		assert.ErrorIs(t, err, iofs.ErrNotExist, "embedded built-in ddx package must not carry optional %s payload", rel)
-
-		_, err = os.Stat(filepath.Join("..", "..", "..", "library", filepath.FromSlash(rel)))
-		assert.ErrorIs(t, err, os.ErrNotExist, "source built-in ddx package must not carry optional %s payload", rel)
 	}
 }
 
@@ -278,11 +244,11 @@ func TestLoadSaveState(t *testing.T) {
 	}
 }
 
-// Legacy copy-installer invariants:
-//   - when the compatibility InstallPackage* helpers are used directly, their
-//     copied output stays inside projectRoot
-//   - marketplace registry installs do not use this path; they cache payloads
-//     under XDG and generate project-local adapter shims
+// FEAT-015 invariants for project-local plugin installs:
+//   - the plugin tree lives under <projectRoot>/.ddx/plugins/<name>/
+//   - skill copies live under <projectRoot>/.agents/skills/ and .claude/skills/
+//   - NO symlinks anywhere in the install output
+//   - NO file resolves outside <projectRoot>
 //
 // The TestInstallSkills_* tests below replace the legacy TestSymlinkSkills_*
 // tests deleted with symlinkSkills/pruneStaleSkillLinks.
@@ -314,14 +280,13 @@ func walkAndAssertNoSymlinks(t *testing.T, root, projectRoot string) int {
 	return count
 }
 
-func TestLegacyInstallPackageCopiesStayInsideProjectRoot(t *testing.T) {
-	// The compatibility copy-installer must not write through symlinks or
-	// escape projectRoot. Forward marketplace installs are covered by
-	// cmd/plugin_materialization_test.go and should not create this layout.
+func TestInstallSkills_NoSymlinksAnywhere(t *testing.T) {
+	// FEAT-015 cross-platform invariant: a plugin install in a project must
+	// produce zero symlinks anywhere in the three install trees and every
+	// path must resolve inside projectRoot.
 	projectRoot := t.TempDir()
 
-	// Simulate the legacy post-install layout: plugin tree + skill copies as
-	// real files.
+	// Simulate the post-install layout: plugin tree + skill copies as real files.
 	pluginTree := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "sample")
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginTree, ".agents", "skills", "sample-skill"), 0o755))
 	require.NoError(t, os.WriteFile(

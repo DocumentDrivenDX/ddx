@@ -46,9 +46,8 @@ func TestDockerCloneBackendTerminatesContainerOnWorkerCancellation(t *testing.T)
 	// Create a docker command that will be cancelled
 	cmd := dockerAttemptCommand(ctx, "ps")
 
-	// Cancel before Run so the assertion does not depend on docker command
-	// latency or daemon availability.
-	cancel()
+	// Cancel the context to simulate worker shutdown
+	time.AfterFunc(10*time.Millisecond, cancel)
 
 	// The command should respect context cancellation through exec.CommandContext
 	err := cmd.Run()

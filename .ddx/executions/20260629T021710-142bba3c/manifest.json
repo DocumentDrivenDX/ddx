@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260629T021710-142bba3c",
+  "bead_id": "ddx-95d80f7e",
+  "base_rev": "48cc074bc328c97995f85c79aabf67584f8559e6",
+  "created_at": "2026-06-29T02:17:27.132436688Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-95d80f7e",
+    "title": "tests: make zero-config and underspecified-routing work tests use fake harness routes",
+    "description": "PROBLEM\nDuring ddx-0be85773 dogfood on 2026-06-13, TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified and TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting drove real routing/discovery code paths, launching real codex/claude/gemini CLIs and reading the operator's real Fizeau discovery cache. These tests must exercise routing logic without touching live providers.\n\nROOT CAUSE WITH FILE:LINE\nThese tests in cli/cmd (zero-config work and underspecified-routing work paths) route through real provider discovery instead of a fake harness/service route. cli/cmd/testutils_test.go and cli/cmd/run_test_helpers_test.go do not force these tests onto fake harness binaries, so an empty/underspecified config falls through to real provider CLI discovery.\n\nPROPOSED FIX\n- Point TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified and TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting at a fake harness/service route, using the hermetic discovery guard from the sibling bead 'tests: add hermetic provider-discovery guard for the cmd suite' (depends on it).\n- Ensure both tests assert their existing behavior (no under-specified emission; no provider spawn) while running entirely against fake harness binaries and the temp-root discovery cache.\n\nNON-SCOPE\nDo not weaken production provider discovery. Do not skip the affected tests. Do not kill unrelated interactive provider sessions as part of test cleanup. The shared hermetic guard and the process-leak assertion are handled in sibling beads.",
+    "acceptance": "1. TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified passes with PATH containing fake harness binaries and without reading the user's real Fizeau discovery cache.\n2. TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting passes without launching a real provider CLI.\n3. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified|TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting'` passes.\n4. `cd cli \u0026\u0026 go test ./cmd/...` green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-69607adb",
+    "labels": [
+      "phase:build",
+      "area:tests",
+      "area:agent",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T021710-142bba3c",
+    "prompt": ".ddx/executions/20260629T021710-142bba3c/prompt.md",
+    "manifest": ".ddx/executions/20260629T021710-142bba3c/manifest.json",
+    "result": ".ddx/executions/20260629T021710-142bba3c/result.json",
+    "checks": ".ddx/executions/20260629T021710-142bba3c/checks.json",
+    "usage": ".ddx/executions/20260629T021710-142bba3c/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-95d80f7e-20260629T021710-142bba3c"
+  },
+  "prompt_sha": "c69ff72503f1cf064cc6ed998282163d94ab9adf26bc484c975fd8e0fc4fc0ef"
+}

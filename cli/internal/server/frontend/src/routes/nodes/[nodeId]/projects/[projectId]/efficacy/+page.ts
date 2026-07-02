@@ -81,7 +81,6 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	]);
 
 	return {
-		nodeId: params.nodeId,
 		projectId: params.projectId,
 		rows: rowsData.efficacyRows,
 		comparisons: comparisonsData.comparisons,

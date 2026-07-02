@@ -14,8 +14,6 @@ const (
 	providerChildActionTerminated = "terminated"
 	reasonSupersededProviderChild = "superseded_provider_child"
 	reasonRunningPhaseGuard       = "running_phase_non_route_provider_child"
-	reasonPreClaimNonRouteChild   = "pre_claim_non_route_provider_child"
-	reasonDefunctProviderChild    = "defunct_provider_child"
 	reasonAttemptEnded            = "attempt_ended"
 	providerChildCleanupArtifact  = "provider-children.json"
 )
@@ -34,20 +32,11 @@ var providerCLINames = map[string]struct{}{
 	"pi":       {},
 }
 
-var providerRouteAliases = map[string]string{
-	"claude-code": "claude",
-	"claude-tui":  "claude",
-	"gemini-cli":  "gemini",
-}
-
 type providerChildProcess struct {
 	PID       int
-	PPID      int
 	Provider  string
 	Command   string
-	CWD       string
 	StartedAt time.Time
-	Defunct   bool
 }
 
 type providerChildReapRecord struct {
@@ -82,9 +71,6 @@ func providerForCommand(cmdline string) string {
 		return ""
 	}
 	base := filepath.Base(parts[0])
-	if strings.HasPrefix(base, "[") && strings.HasSuffix(base, "]") {
-		base = strings.TrimSuffix(strings.TrimPrefix(base, "["), "]")
-	}
 	if _, ok := providerCLINames[base]; ok {
 		return base
 	}
@@ -115,29 +101,18 @@ func routeOwnsProvider(provider string, routeTokens ...string) bool {
 		return false
 	}
 	for _, tok := range routeTokens {
-		owner := routeTokenProvider(tok)
-		if owner == "" {
+		tok = strings.ToLower(strings.TrimSpace(tok))
+		if tok == "" {
 			continue
 		}
-		if owner == p {
+		if tok == p {
+			return true
+		}
+		if seg := strings.SplitN(tok, "/", 2); len(seg) > 0 && seg[0] == p {
 			return true
 		}
 	}
 	return false
-}
-
-func routeTokenProvider(token string) string {
-	token = strings.ToLower(strings.TrimSpace(token))
-	if token == "" {
-		return ""
-	}
-	if seg := strings.SplitN(token, "/", 2); len(seg) > 0 {
-		token = strings.TrimSpace(seg[0])
-	}
-	if alias, ok := providerRouteAliases[token]; ok {
-		return alias
-	}
-	return token
 }
 
 func scanProviderChildrenForStatus(ctx context.Context, rootPID int, routeLabel, harness, phase string, now time.Time) []workerstatus.ProviderChild {
@@ -202,7 +177,7 @@ func nonRouteProviderDiagnostic(provider, owner string) string {
 // diagnostic. When the active route is not yet known (route and harness both
 // empty) the guard observes without reaping, so it never quarantines a child it
 // cannot yet attribute. Returns the status view and the reap evidence records.
-func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir string, probeScopeDirs []string, routeLabel, harness, phase string, now time.Time) ([]workerstatus.ProviderChild, []providerChildReapRecord) {
+func runningProviderChildGuard(ctx context.Context, rootPID int, routeLabel, harness, phase string, now time.Time) ([]workerstatus.ProviderChild, []providerChildReapRecord) {
 	procs, err := providerChildScanner(ctx, rootPID, now)
 	if err != nil || len(procs) == 0 {
 		return nil, nil
@@ -211,63 +186,7 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir string
 	children := make([]workerstatus.ProviderChild, 0, len(procs))
 	var reaped []providerChildReapRecord
 	for _, proc := range procs {
-		ownedByRoot := providerChildOwnedByRoot(proc, rootPID)
-		if proc.Defunct && ownedByRoot {
-			child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
-			terminateProviderChild(proc.PID)
-			child.Phase = "defunct"
-			child.Diagnostic = "defunct provider child reaped"
-			reaped = append(reaped, providerChildReapRecord{
-				PID:        proc.PID,
-				Provider:   proc.Provider,
-				Command:    proc.Command,
-				AgeSeconds: child.AgeSeconds,
-				Action:     providerChildActionTerminated,
-				Reason:     reasonDefunctProviderChild,
-			})
-			children = append(children, child)
-			continue
-		}
-		inAttemptScope := providerChildInScope(proc, scopeDir)
-		inProbeScope := providerChildInAnyScope(proc, probeScopeDirs)
-		if !inAttemptScope && (!ownedByRoot || !inProbeScope) {
-			continue
-		}
 		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
-		if !inAttemptScope && inProbeScope {
-			if activeOwner == "" {
-				children = append(children, child)
-				continue
-			}
-			if routeOwnsProvider(proc.Provider, routeLabel, harness) {
-				child.RouteOwner = activeOwner
-				child.NonRoute = false
-				child.Diagnostic = "route-owned provider probe outside active attempt scope observed; not terminated"
-				children = append(children, child)
-				continue
-			}
-			child.NonRoute = true
-			child.RouteOwner = ""
-			child.Diagnostic = "provider probe outside active attempt scope terminated by running-phase guard"
-			terminateProviderChild(proc.PID)
-			reaped = append(reaped, providerChildReapRecord{
-				PID:        proc.PID,
-				Provider:   proc.Provider,
-				Command:    proc.Command,
-				AgeSeconds: child.AgeSeconds,
-				Action:     providerChildActionTerminated,
-				Reason:     reasonRunningPhaseGuard,
-			})
-			children = append(children, child)
-			continue
-		}
-		if !ownedByRoot {
-			if child.NonRoute {
-				child.Diagnostic = "nested provider child observed under active agent; not terminated"
-			}
-			children = append(children, child)
-			continue
-		}
 		if child.NonRoute {
 			terminateProviderChild(proc.PID)
 			reaped = append(reaped, providerChildReapRecord{
@@ -294,8 +213,6 @@ type runningProviderGuard struct {
 	beadID      string
 	attemptID   string
 	rootPID     int
-	scopeDir    string
-	probeScopes []string
 	interval    time.Duration
 
 	mu         sync.Mutex
@@ -312,33 +229,6 @@ func newRunningProviderGuard(projectRoot, beadID, attemptID string, rootPID int)
 		rootPID:     rootPID,
 		interval:    runningProviderGuardInterval,
 	}
-}
-
-func (g *runningProviderGuard) SetScopeDir(scopeDir string) {
-	if g == nil {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.scopeDir = strings.TrimSpace(scopeDir)
-}
-
-func (g *runningProviderGuard) AddProbeScopeDir(scopeDir string) {
-	if g == nil {
-		return
-	}
-	scopeDir = strings.TrimSpace(scopeDir)
-	if scopeDir == "" {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	for _, existing := range g.probeScopes {
-		if existing == scopeDir {
-			return
-		}
-	}
-	g.probeScopes = append(g.probeScopes, scopeDir)
 }
 
 // UpdateRoute records the active route. Non-empty harness/route values overwrite
@@ -362,18 +252,6 @@ func (g *runningProviderGuard) snapshotRoute() (string, string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.routeLabel, g.harness
-}
-
-func (g *runningProviderGuard) snapshotScopeDir() string {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.scopeDir
-}
-
-func (g *runningProviderGuard) snapshotProbeScopes() []string {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return append([]string(nil), g.probeScopes...)
 }
 
 // Reaped returns a copy of the running-phase reap evidence accumulated so far,
@@ -414,7 +292,7 @@ func (g *runningProviderGuard) Start(ctx context.Context) func() {
 
 func (g *runningProviderGuard) tick(ctx context.Context, now time.Time) {
 	route, harness := g.snapshotRoute()
-	_, reaped := runningProviderChildGuard(ctx, g.rootPID, g.snapshotScopeDir(), g.snapshotProbeScopes(), route, harness, "running", now)
+	_, reaped := runningProviderChildGuard(ctx, g.rootPID, route, harness, "running", now)
 	if len(reaped) == 0 {
 		return
 	}
@@ -432,7 +310,7 @@ func (g *runningProviderGuard) tick(ctx context.Context, now time.Time) {
 	})
 }
 
-func reapProviderChildren(ctx context.Context, rootPID int, scopeDir string, now time.Time, reasonFor func(providerChildProcess) string) ([]providerChildReapRecord, []workerstatus.ProviderChild, error) {
+func reapProviderChildren(ctx context.Context, rootPID int, now time.Time, reasonFor func(providerChildProcess) string) ([]providerChildReapRecord, []workerstatus.ProviderChild, error) {
 	procs, err := providerChildScanner(ctx, rootPID, now)
 	if err != nil {
 		return nil, nil, err
@@ -440,32 +318,6 @@ func reapProviderChildren(ctx context.Context, rootPID int, scopeDir string, now
 	var reaped []providerChildReapRecord
 	var survivors []workerstatus.ProviderChild
 	for _, proc := range procs {
-		ownedByRoot := providerChildOwnedByRoot(proc, rootPID)
-		if proc.Defunct && ownedByRoot {
-			terminateProviderChild(proc.PID)
-			reaped = append(reaped, providerChildReapRecord{
-				PID:        proc.PID,
-				Provider:   proc.Provider,
-				Command:    proc.Command,
-				AgeSeconds: childAgeSeconds(proc, now),
-				Action:     providerChildActionTerminated,
-				Reason:     reasonDefunctProviderChild,
-			})
-			continue
-		}
-		if !providerChildInScope(proc, scopeDir) {
-			continue
-		}
-		if !ownedByRoot {
-			survivors = append(survivors, workerstatus.ProviderChild{
-				PID:        proc.PID,
-				Provider:   proc.Provider,
-				Harness:    proc.Provider,
-				AgeSeconds: childAgeSeconds(proc, now),
-				Diagnostic: "nested provider child observed under active agent; cleanup is root-owned",
-			})
-			continue
-		}
 		reason := reasonFor(proc)
 		if reason == "" {
 			survivors = append(survivors, workerstatus.ProviderChild{
@@ -489,11 +341,11 @@ func reapProviderChildren(ctx context.Context, rootPID int, scopeDir string, now
 	return reaped, survivors, nil
 }
 
-func reapSupersededProviderChildren(ctx context.Context, rootPID int, scopeDir, routeLabel, harness string, now time.Time) ([]providerChildReapRecord, []workerstatus.ProviderChild) {
+func reapSupersededProviderChildren(ctx context.Context, rootPID int, routeLabel, harness string, now time.Time) ([]providerChildReapRecord, []workerstatus.ProviderChild) {
 	if strings.TrimSpace(routeLabel) == "" && strings.TrimSpace(harness) == "" {
 		return nil, nil
 	}
-	reaped, survivors, err := reapProviderChildren(ctx, rootPID, scopeDir, now, func(proc providerChildProcess) string {
+	reaped, survivors, err := reapProviderChildren(ctx, rootPID, now, func(proc providerChildProcess) string {
 		if routeOwnsProvider(proc.Provider, routeLabel, harness) {
 			return ""
 		}
@@ -505,135 +357,14 @@ func reapSupersededProviderChildren(ctx context.Context, rootPID int, scopeDir, 
 	return reaped, survivors
 }
 
-func reapAllProviderChildren(ctx context.Context, rootPID int, scopeDir string, now time.Time) []providerChildReapRecord {
-	reaped, _, err := reapProviderChildren(ctx, rootPID, scopeDir, now, func(providerChildProcess) string {
+func reapAllProviderChildren(ctx context.Context, rootPID int, now time.Time) []providerChildReapRecord {
+	reaped, _, err := reapProviderChildren(ctx, rootPID, now, func(providerChildProcess) string {
 		return reasonAttemptEnded
 	})
 	if err != nil {
 		return nil
 	}
 	return reaped
-}
-
-// ReapRootProviderChildrenInScope terminates provider CLI processes that are
-// direct children of rootPID and whose cwd is within scopeDir. Status and model
-// inventory surfaces use this after foreground Fizeau probes so server-owned
-// probe CLIs do not survive without touching worker-owned agent children.
-func ReapRootProviderChildrenInScope(ctx context.Context, rootPID int, scopeDir string) int {
-	reaped := reapAllProviderChildren(ctx, rootPID, scopeDir, time.Now().UTC())
-	return len(reaped)
-}
-
-// ReapRootProviderChildrenInScopes terminates direct provider CLI children
-// whose cwd falls under any supplied scope. It intentionally does not treat an
-// empty scope as "everything"; callers use this after short-lived probes where
-// the safe scopes are the process cwd and the requested project root.
-func ReapRootProviderChildrenInScopes(ctx context.Context, rootPID int, scopeDirs ...string) int {
-	if rootPID <= 0 {
-		return 0
-	}
-	seen := map[string]struct{}{}
-	total := 0
-	for _, scopeDir := range scopeDirs {
-		scopeDir = strings.TrimSpace(scopeDir)
-		if scopeDir == "" {
-			continue
-		}
-		if _, ok := seen[scopeDir]; ok {
-			continue
-		}
-		seen[scopeDir] = struct{}{}
-		total += ReapRootProviderChildrenInScope(ctx, rootPID, scopeDir)
-	}
-	return total
-}
-
-// ReapRootNonRouteProviderChildrenInScopes terminates direct provider CLI
-// children under rootPID whose cwd is inside scopeDirs and whose provider does
-// not match the active route. Route-owned children and nested children are
-// preserved. When the active route is unknown, this observes nothing rather
-// than guessing.
-func ReapRootNonRouteProviderChildrenInScopes(ctx context.Context, rootPID int, harness, provider, model string, scopeDirs ...string) int {
-	if rootPID <= 0 {
-		return 0
-	}
-	routeLabel := providerRouteLabel(provider, model)
-	if strings.TrimSpace(routeLabel) == "" && strings.TrimSpace(harness) == "" {
-		return 0
-	}
-	seen := map[string]struct{}{}
-	total := 0
-	for _, scopeDir := range scopeDirs {
-		scopeDir = strings.TrimSpace(scopeDir)
-		if scopeDir == "" {
-			continue
-		}
-		if _, ok := seen[scopeDir]; ok {
-			continue
-		}
-		seen[scopeDir] = struct{}{}
-		reaped, _, err := reapProviderChildren(ctx, rootPID, scopeDir, time.Now().UTC(), func(proc providerChildProcess) string {
-			if routeOwnsProvider(proc.Provider, routeLabel, harness) {
-				return ""
-			}
-			return reasonPreClaimNonRouteChild
-		})
-		if err != nil {
-			continue
-		}
-		total += len(reaped)
-	}
-	return total
-}
-
-func ReapDefunctRootProviderChildren(ctx context.Context, rootPID int) int {
-	if rootPID <= 0 {
-		return 0
-	}
-	procs, err := providerChildScanner(ctx, rootPID, time.Now().UTC())
-	if err != nil {
-		return 0
-	}
-	reaped := 0
-	for _, proc := range procs {
-		if !proc.Defunct || !providerChildOwnedByRoot(proc, rootPID) {
-			continue
-		}
-		terminateProviderChild(proc.PID)
-		reaped++
-	}
-	return reaped
-}
-
-func providerChildOwnedByRoot(proc providerChildProcess, rootPID int) bool {
-	if rootPID <= 0 {
-		return false
-	}
-	if proc.PPID == 0 {
-		return true
-	}
-	return proc.PPID == rootPID
-}
-
-func providerChildInScope(proc providerChildProcess, scopeDir string) bool {
-	scopeDir = strings.TrimSpace(scopeDir)
-	if scopeDir == "" {
-		return true
-	}
-	cwd := strings.TrimSpace(proc.CWD)
-	if cwd == "" {
-		return false
-	}
-	return isPathWithin(cwd, scopeDir)
-}
-
-func providerChildInAnyScope(proc providerChildProcess, scopeDirs []string) bool {
-	for _, scopeDir := range scopeDirs {
-		if providerChildInScope(proc, scopeDir) {
-			return true
-		}
-	}
-	return false
 }
 
 func childAgeSeconds(proc providerChildProcess, now time.Time) float64 {

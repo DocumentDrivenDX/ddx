@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -24,15 +25,11 @@ type cleanupCommandJSON struct {
 	ScannedEvidenceDirs         int              `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs        int              `json:"complete_evidence_dirs"`
 	ScannedScratchDirs          int              `json:"scanned_scratch_dirs"`
-	ScannedProcesses            int              `json:"scanned_processes"`
 	RemovedUnregisteredTempDirs int64            `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64            `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64            `json:"removed_run_state_files"`
 	RemovedScratchDirs          int64            `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64            `json:"preserved_active_scratch_dirs"`
-	StaleAttemptProcesses       int64            `json:"stale_attempt_processes"`
-	ReapedProcessGroups         int64            `json:"reaped_process_groups"`
-	PreservedAttemptProcesses   int64            `json:"preserved_attempt_processes"`
 	BytesReclaimed              int64            `json:"bytes_reclaimed"`
 	InodesReclaimed             int64            `json:"inodes_reclaimed"`
 	ScratchBytesReclaimed       int64            `json:"scratch_bytes_reclaimed"`
@@ -40,7 +37,10 @@ type cleanupCommandJSON struct {
 	Warnings                    []map[string]any `json:"warnings"`
 	BlockedErrors               []map[string]any `json:"blocked_errors"`
 	Observations                []map[string]any `json:"observations"`
-	Processes                   []map[string]any `json:"processes"`
+	ProcessFindingsCount        int              `json:"process_findings_count"`
+	StaleProcessGroups          int              `json:"stale_process_groups"`
+	TerminatedProcessGroups     int              `json:"terminated_process_groups"`
+	ProcessFindings             []map[string]any `json:"process_findings"`
 }
 
 func setupCleanupCommandProject(t *testing.T) (string, string) {
@@ -187,50 +187,8 @@ func TestCleanupCommand_JSONShape(t *testing.T) {
 	assert.NotEmpty(t, report.Warnings)
 	assert.NotNil(t, report.BlockedErrors)
 	assert.NotNil(t, report.Observations)
-	assert.NotNil(t, report.Processes)
 	assert.Greater(t, report.BytesReclaimed, int64(0))
 	assert.Greater(t, report.InodesReclaimed, int64(0))
-}
-
-func TestCleanupCommand_JSONIncludesProcessFindings(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("real process cwd scan is unix-oriented")
-	}
-
-	projectRoot, tempRoot := setupCleanupCommandProject(t)
-	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-process-20260608T112233-deadbeef", projectRoot, "20260608T112233-deadbeef")
-	proc := exec.Command("sh", "-c", "cd \"$1\" && sleep 30", "sh", stalePath)
-	require.NoError(t, proc.Start())
-	t.Cleanup(func() {
-		if proc.Process != nil {
-			_ = proc.Process.Kill()
-			_, _ = proc.Process.Wait()
-		}
-	})
-
-	root := NewCommandFactory(projectRoot).NewRootCommand()
-	textOut, err := executeCommand(root, "cleanup")
-	require.NoError(t, err)
-	assert.Contains(t, textOut, "cleanup: found")
-	assert.Contains(t, textOut, "stale attempt process")
-	assert.Contains(t, textOut, "process: pid=")
-	assert.Contains(t, textOut, "would_kill=true")
-
-	jsonOut, err := executeCommand(root, "cleanup", "--json")
-	require.NoError(t, err)
-	var report cleanupCommandJSON
-	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
-	assert.True(t, report.DryRun)
-	assert.GreaterOrEqual(t, report.StaleAttemptProcesses, int64(1))
-	assert.Equal(t, int64(0), report.ReapedProcessGroups)
-	require.NotEmpty(t, report.Processes)
-	found := false
-	for _, proc := range report.Processes {
-		if proc["worktree_path"] == stalePath && proc["would_kill"] == true {
-			found = true
-		}
-	}
-	assert.True(t, found, "json process findings should include stale worktree process: %s", jsonOut)
 }
 
 func TestCleanupCommand_DoesNotRemovePreservedEvidence(t *testing.T) {
@@ -368,4 +326,208 @@ func TestCleanupCommand_ReportsScratchReclamation(t *testing.T) {
 	assert.GreaterOrEqual(t, report.RemovedScratchDirs, int64(1))
 	assert.Greater(t, report.ScratchBytesReclaimed, int64(0))
 	assert.Greater(t, report.ScratchInodesReclaimed, int64(0))
+}
+
+func TestCleanupCommand_JSONPreservesExistingCleanupFields(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-fields-20260628T120000-deadbeef", projectRoot, "20260628T120000-deadbeef")
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-cleanup",
+		AttemptID:    "20260628T120000-live-other",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	// Existing fields must be preserved with correct values.
+	assert.True(t, report.DryRun)
+	assert.NotEmpty(t, report.ProjectRoot)
+	assert.NotEmpty(t, report.TempRoot)
+	assert.Equal(t, int64(1), report.RemovedUnregisteredTempDirs)
+	assert.Equal(t, int64(1), report.RemovedRunStateFiles)
+	assert.NotNil(t, report.Warnings)
+	assert.NotNil(t, report.BlockedErrors)
+	assert.NotNil(t, report.Observations)
+	assert.Equal(t, len(report.ProcessFindings), report.ProcessFindingsCount)
+	assert.GreaterOrEqual(t, report.ProcessFindingsCount, report.StaleProcessGroups)
+	assert.GreaterOrEqual(t, report.StaleProcessGroups, report.TerminatedProcessGroups)
+
+	// New process_findings field must be present (may be empty on platforms without process scanning).
+	assert.NotNil(t, report.ProcessFindings, "process_findings must be present in JSON output")
+}
+
+func TestCleanupCommand_JSONIncludesProcessFindings(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+
+	stalePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-stale-20260628T120000-deadbeef")
+	require.NoError(t, os.MkdirAll(stalePath, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(stalePath, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-stale",
+		AttemptID:    "20260628T120000-deadbeef",
+		WorktreePath: stalePath,
+	}))
+
+	// Start a real process with cwd = stalePath so the Linux /proc scanner picks it up.
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = stalePath
+	require.NoError(t, sleepCmd.Start())
+	t.Cleanup(func() { _ = sleepCmd.Process.Kill() })
+
+	// Run state points elsewhere so the stale worktree's process is classified as stale.
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-other",
+		AttemptID:    "20260628T120000-live-other",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	require.NotEmpty(t, report.ProcessFindings, "process_findings must include the stale sleep process")
+	assert.Equal(t, 1, report.ProcessFindingsCount)
+	assert.Equal(t, 1, report.StaleProcessGroups)
+	assert.Equal(t, 0, report.TerminatedProcessGroups)
+
+	// Find the finding for our stale worktree.
+	var found map[string]any
+	for _, f := range report.ProcessFindings {
+		if wt, _ := f["worktree"].(string); wt == stalePath {
+			found = f
+			break
+		}
+	}
+	require.NotNil(t, found, "stale worktree must appear in process_findings")
+
+	pid, _ := found["pid"].(float64)
+	assert.Greater(t, pid, float64(0), "pid must be present and non-zero")
+	pgid, _ := found["pgid"].(float64)
+	assert.Greater(t, pgid, float64(0), "pgid must be present and non-zero")
+	assert.NotEmpty(t, found["command"], "command must be present")
+	assert.NotEmpty(t, found["worktree"], "worktree must be present")
+	assert.NotEmpty(t, found["stale_reason"], "stale_reason must be present")
+	wouldKill, _ := found["would_kill"].(bool)
+	assert.True(t, wouldKill, "would_kill must be true for a stale process in dry-run")
+}
+
+func TestCleanupCommand_DryRunTextIncludesProcessFindingsAndCounts(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+
+	stalePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-stale-20260628T130000-deadbeef")
+	require.NoError(t, os.MkdirAll(stalePath, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(stalePath, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-stale",
+		AttemptID:    "20260628T130000-deadbeef",
+		WorktreePath: stalePath,
+	}))
+
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = stalePath
+	require.NoError(t, sleepCmd.Start())
+	t.Cleanup(func() { _ = sleepCmd.Process.Kill() })
+
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-other",
+		AttemptID:    "20260628T130000-live-other",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup")
+	require.NoError(t, err)
+
+	// Text output must include process group count.
+	assert.Contains(t, out, "stale process group", "must report stale process group count")
+	// Dry-run must use "would kill" language, not "killed".
+	assert.Contains(t, out, "would kill", "dry-run must say 'would kill'")
+	assert.NotContains(t, out, "killed:", "dry-run must not imply killing happened")
+	// Per-process detail line must appear.
+	assert.Contains(t, out, "stale process:", "must include per-process detail line")
+	// Dry-run footer must still appear.
+	assert.Contains(t, out, "run again with --apply")
+}
+
+// TestCleanupCommand_ApplyReapsReparentedAttemptDescendants proves that the
+// `ddx cleanup --apply` surface invokes the broadened cwd-based classifier from
+// ddx-54d9c455: a reparented descendant whose cwd lives under the configured
+// execution worktree root but whose leaf directory does NOT carry the
+// `.execute-bead-wt-*` suffix is still classified as DDx-owned and reaped.
+func TestCleanupCommand_ApplyReapsReparentedAttemptDescendants(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process scanning only available on Linux")
+	}
+
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+
+	// A reparented descendant whose cwd lives under tempRoot but does NOT
+	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
+	descendantCwd := filepath.Join(tempRoot, "reparented-orphan-20260628T160000-cafe1234")
+	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(descendantCwd, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-reparented",
+		AttemptID:    "20260628T160000-cafe1234",
+		WorktreePath: descendantCwd,
+	}))
+
+	// Spawn a real process in its own process group with cwd = the reparented
+	// descendant. The /proc scanner will pick this up via the broadened cwd
+	// classifier and the cleanup surface must reap it.
+	sleepCmd := exec.Command("sleep", "3600")
+	sleepCmd.Dir = descendantCwd
+	sleepCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, sleepCmd.Start())
+	pid := sleepCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_, _ = sleepCmd.Process.Wait()
+	})
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--apply", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	var found map[string]any
+	for _, f := range report.ProcessFindings {
+		if wt, _ := f["worktree"].(string); wt == descendantCwd {
+			found = f
+			break
+		}
+	}
+	require.NotNil(t, found, "reparented descendant must appear in process_findings; got: %#v", report.ProcessFindings)
+	foundPID, _ := found["pid"].(float64)
+	assert.Equal(t, float64(pid), foundPID, "process_findings pid must match spawned process")
+	terminated, _ := found["terminated"].(bool)
+	assert.True(t, terminated, "terminated must be true under --apply")
+	assert.Equal(t, 1, report.ProcessFindingsCount)
+	assert.Equal(t, 1, report.StaleProcessGroups)
+	assert.Equal(t, 1, report.TerminatedProcessGroups)
+
+	// Reap the leader zombie so the polling check sees the PID disappear.
+	go func() { _, _ = sleepCmd.Process.Wait() }()
+	require.Eventually(t, func() bool {
+		return sleepCmd.Process.Signal(syscall.Signal(0)) != nil
+	}, 3*time.Second, 20*time.Millisecond, "reparented descendant process group should be reaped by cleanup --apply")
 }

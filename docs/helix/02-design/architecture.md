@@ -67,10 +67,10 @@ All data is file-backed with optional local cache and generated artifacts.
         +-------------+-------------+-------------+-------------+
                       |                           |
                       v                           v
-               +------------------+         +------------------------+
-               |   `.ddx/`        |         | `.ddx/plugins.lock.yaml`|
-               | project artifacts |         | plugin intent/lock     |
-               +------------------+         +------------------------+
+               +------------------+         +------------------+
+               |   `.ddx/`        |         | `.ddx/lock.yaml` |
+               | project artifacts |         | integrity state  |
+               +------------------+         +------------------+
                       |
                       +------------------------> Server Adapter --> HTTP/MCP/UI
                                                 (`cli/cmd/server.go`,
@@ -201,8 +201,8 @@ Developer Laptop
 
 - `ddx` docs and beads rely on explicit frontmatter and JSONL structure.
 - Doc changes are validated against deterministic hash signatures to support drift detection.
-- Registry operations record plugin intent, cache paths, generated adapters,
-  and integrity references in `.ddx/plugins.lock.yaml`.
+- Registry operations record source, commit/tree references, and file hashes in
+  `.ddx/lock.yaml`.
 - Agent sessions, when enabled, remain append-only logs for auditability.
 - Server registry state is derived from config plus explicit project roots and never inferred from sibling project caches.
 

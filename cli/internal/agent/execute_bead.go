@@ -20,7 +20,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
-	"github.com/DocumentDrivenDX/ddx/internal/blob"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -62,9 +61,6 @@ type ExecuteBeadResult struct {
 	Outcome string `json:"outcome"`
 	Status  string `json:"status,omitempty"`
 	Detail  string `json:"detail,omitempty"`
-	// Warnings carries non-fatal attempt observations that should be durable in
-	// result.json without changing success/failure semantics.
-	Warnings []string `json:"warnings,omitempty"`
 	// OrchestratorStatus is populated after the landing/pre-merge orchestration
 	// decision so result.json can distinguish worker success from final
 	// non-landing outcomes.
@@ -93,12 +89,6 @@ type ExecuteBeadResult struct {
 	// explanation of why no commits were made, and is preserved even when a
 	// mixed commit + no_changes rationale is rejected.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
-
-	// DiscoveredSubtasks carries sub-task hints that the worker surfaced by
-	// writing discovered_subtasks.json to the execution bundle dir. FEAT-006
-	// §384-426. The supervisor or workflow tool (HELIX) decides whether to file
-	// beads from these hints; the orchestrator never creates beads automatically.
-	DiscoveredSubtasks []DiscoveredSubtask `json:"discovered_subtasks,omitempty"`
 
 	// NoEvidencePaths names worktree paths that remained dirty when the agent
 	// exited without creating a commit or no_changes_rationale.txt. It helps
@@ -147,16 +137,6 @@ type ExecuteBeadResult struct {
 
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
-}
-
-// DiscoveredSubtask is a lightweight work hint that a worker surfaces via
-// discovered_subtasks.json in the execution bundle dir. FEAT-006 §404-426.
-// The supervisor decides whether, when, and at what priority to file beads.
-type DiscoveredSubtask struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description,omitempty"`
-	Labels      []string `json:"labels,omitempty"`
-	Priority    string   `json:"priority,omitempty"`
 }
 
 // ExecutionCycleRouteFacts captures the implementer-side routing facts for
@@ -311,12 +291,6 @@ type ExecuteBeadRuntime struct {
 	// and attempt after the agent commits, writing ac-check.json to the
 	// attempt dir under wtPath. When nil, ac-check is skipped.
 	ACCheckRunner func(ctx context.Context, beadID, attemptID, wtPath string) (*accheck.Output, error)
-	// Blobs is the BlobStore used to write per-attempt execution-evidence files
-	// (prompt.md, manifest.json, result.json, usage.json) under
-	// .ddx/executions/<attempt-id>/. When nil, defaults to a LocalFSBlob
-	// rooted at <wtPath>/.ddx/. Callers may inject a MemoryBlob for tests.
-	// FEAT-028 §BlobStore.
-	Blobs blob.Store
 }
 
 type onRouteResolvedKeyType struct{}
@@ -862,55 +836,18 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		)
 	}
 
-	// Serialize the parent-repo writes in pre-dispatch under the main-git
-	// lock, but keep the tracker commit and the checkpoint sync in separate
-	// bounded windows so neither phase can monopolize the lock long enough to
-	// trip the index.lock cap boundary before the attempt workspace exists.
+	// Serialize only the parent-repo writes in pre-dispatch (tracker commit
+	// plus the caller-dirt checkpoint) under the main-git lock. Base
+	// resolution and isolated worktree creation are read-only / per-worktree
+	// operations and can proceed after the lock is released.
 	var baseRev string
 	var workspace *AttemptWorkspace
 	if err := withTrackerLock(projectRoot, "pre_dispatch_commits", func() error {
 		// Commit beads.jsonl before spawning the attempt workspace so its snapshot
 		// includes any bead metadata updates (e.g. spec-id).
-		return commitTrackerLocked(projectRoot)
-	}); err != nil {
-		// A disk/resource-exhaustion failure during the pre-dispatch sequence
-		// (most commonly `git worktree add` running out of space while checking
-		// out the isolated worktree) must surface as a resource_exhausted
-		// outcome, not a raw error. The execute-loop releases the claim for a
-		// resource_exhausted report (parity with the pre-execution resource
-		// check above); a raw error leaves the bead claimed-but-open and
-		// execution-ineligible until a manual --unclaim (ddx-f677a50b).
-		if classifyReadinessSystemReason(err.Error(), nil) == ReadinessSystemReasonResourceExhausted {
-			res := &ExecuteBeadResult{
-				BeadID:      beadID,
-				WorkerID:    runtime.WorkerID,
-				ExitCode:    1,
-				Error:       err.Error(),
-				Reason:      err.Error(),
-				Outcome:     ExecuteBeadOutcomeTaskFailed,
-				Status:      ExecuteBeadStatusResourceExhausted,
-				ProjectRoot: projectRoot,
-			}
-			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
-			return res, nil
+		if err := commitTrackerLocked(projectRoot); err != nil {
+			return err
 		}
-		if strings.Contains(err.Error(), preDispatchGitTimeoutMarker) {
-			res := &ExecuteBeadResult{
-				BeadID:      beadID,
-				WorkerID:    runtime.WorkerID,
-				ExitCode:    1,
-				Error:       err.Error(),
-				Reason:      err.Error(),
-				Outcome:     ExecuteBeadOutcomeTaskFailed,
-				Status:      ExecuteBeadStatusExecutionFailed,
-				ProjectRoot: projectRoot,
-			}
-			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
-			return res, nil
-		}
-		return nil, err
-	}
-	if err := withTrackerLock(projectRoot, "pre_dispatch_checkpoint", func() error {
 		// Checkpoint any remaining caller dirt as a real commit on the current
 		// branch (FEAT-012 §22, US-126 AC#1). Use a temp-index commit-tree path
 		// here so parent checkout hooks and runtime artifacts cannot fail the
@@ -936,20 +873,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Reason:      err.Error(),
 				Outcome:     ExecuteBeadOutcomeTaskFailed,
 				Status:      ExecuteBeadStatusResourceExhausted,
-				ProjectRoot: projectRoot,
-			}
-			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
-			return res, nil
-		}
-		if strings.Contains(err.Error(), preDispatchGitTimeoutMarker) {
-			res := &ExecuteBeadResult{
-				BeadID:      beadID,
-				WorkerID:    runtime.WorkerID,
-				ExitCode:    1,
-				Error:       err.Error(),
-				Reason:      err.Error(),
-				Outcome:     ExecuteBeadOutcomeTaskFailed,
-				Status:      ExecuteBeadStatusExecutionFailed,
 				ProjectRoot: projectRoot,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
@@ -1001,15 +924,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		return nil, fmt.Errorf("attempt backend %s did not return a workspace", attemptBackend.Name())
 	}
 	wtPath := workspace.WorkDir
-	// FEAT-028: BlobStore for per-attempt evidence writes under wtPath/.ddx/.
-	wtBlobStore := runtime.Blobs
-	if wtBlobStore == nil {
-		wtBlobStore = evidenceBlobStore(wtPath)
-	}
-	// rootBlobStore is used only for the worktree-lost recovery path, writing
-	// evidence directly under projectRoot/.ddx/ when the worktree has vanished.
-	rootBlobStore := evidenceBlobStore(projectRoot)
-	_ = rootBlobStore // consumed below only on worktree-lost recovery path
 	if err := excludeCleanupMetadataFromWorktreeGit(wtPath); err != nil {
 		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("excluding execute-bead cleanup metadata: %w", err)
@@ -1079,7 +993,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	// Repair project-local skill symlinks whose targets do not resolve inside
 	// the freshly created worktree.
-	_ = materializeWorktreeSkills(projectRoot, wtPath)
+	_ = materializeWorktreeSkills(wtPath)
 
 	// Prepare artifacts (context load, prompt generation).
 	artifacts, beadCtx, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
@@ -1102,7 +1016,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 		populateWorkerStatus(res)
-		_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res)
+		_ = writeArtifactJSON(filepath.Join(wtBundleDir, "result.json"), res)
 		// The deferred publish will copy from wtPath to projectRoot before cleanup.
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
@@ -1146,11 +1060,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Seed it with any pinned harness/model and refresh it when fizeau resolves
 	// the route, then chain to the caller-supplied OnRouteResolved callback.
 	providerGuard := newRunningProviderGuard(projectRoot, beadID, attemptID, os.Getpid())
-	providerGuard.SetScopeDir(wtPath)
-	if cwd, err := os.Getwd(); err == nil {
-		providerGuard.AddProbeScopeDir(cwd)
-	}
-	providerGuard.AddProbeScopeDir(projectRoot)
 	providerGuard.UpdateRoute(rcfg.Harness(), "", rcfg.Model())
 	baseOnRouteResolved := onRouteResolvedFromContext(ctx)
 
@@ -1189,9 +1098,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 	runRuntime.Env[DDXBeadIDEnvKey] = beadID
 	runRuntime.Env[DDXAttemptIDEnvKey] = attemptID
-	if runtime.WorkerID != "" {
-		runRuntime.Env["DDX_WORKER_ID"] = runtime.WorkerID
-	}
 
 	if runtime.AgentRunner == nil && runtime.Service == nil {
 		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" && strings.TrimSpace(rcfg.Model()) != "" {
@@ -1213,25 +1119,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
 	stopProviderGuard := providerGuard.Start(dispatchCtx)
-	backendReq := AttemptBackendRunRequest{
+	agentResult, agentErr := attemptBackend.Run(dispatchCtx, AttemptBackendRunRequest{
 		ProjectRoot: projectRoot,
 		Workspace:   workspace,
 		Service:     runtime.Service,
 		AgentRunner: runtime.AgentRunner,
 		Config:      rcfg,
 		Runtime:     runRuntime,
-	}
-	rlCfg := RateLimitRetryConfig{
-		Budget: runtime.RateLimitMaxWait,
-		OnRetry: func(ctx context.Context, info RateLimitRetryInfo) {
-			if runtime.Service != nil {
-				att := BuildRateLimitRouteAttempt(info)
-				_ = runtime.Service.RecordRouteAttempt(ctx, att)
-			}
-		},
-	}
-	agentResult, agentErr := RunWithRateLimitRetry(dispatchCtx, rlCfg, func(ctx context.Context) (*Result, error) {
-		return attemptBackend.Run(ctx, backendReq)
 	})
 	stopProviderGuard()
 	stopRunStateRefresh()
@@ -1245,7 +1139,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Attempt-end backstop: reap every remaining provider child regardless of
 	// route, then fold the running-phase guard's evidence into the final
 	// provider-children.json so mid-attempt reaps survive in the audit trail.
-	attemptEndReaped := reapAllProviderChildren(context.Background(), os.Getpid(), wtPath, time.Now().UTC())
+	attemptEndReaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC())
 	if allReaped := append(providerGuard.Reaped(), attemptEndReaped...); len(allReaped) > 0 {
 		writeProviderChildCleanupArtifact(projectRoot, attemptID, &providerChildCleanupReport{
 			AttemptID: attemptID,
@@ -1362,22 +1256,21 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.AttemptDiagnostics = buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr, gitOps)
 		}
 		populateWorkerStatus(res)
-		// Check if wtPath is gone BEFORE blobPutJSON — LocalFSBlob.Put uses
+		// Check if wtPath is gone BEFORE writeArtifactJSON — that call uses
 		// os.MkdirAll internally and would recreate the directory, making a
 		// subsequent os.Stat check fail to detect the vanished worktree.
 		_, wtStatErr := os.Stat(wtPath)
-		_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res)
+		_ = writeArtifactJSON(artifacts.ResultAbs, res)
 		// Fallback: when the worktree was gone before the write above, write
 		// evidence directly to projectRoot so the diagnostic files are recoverable.
 		if os.IsNotExist(wtStatErr) {
-			// rootBlobStore is rooted at projectRoot/.ddx/; LocalFSBlob.Put creates
-			// the parent directory, so no explicit os.MkdirAll is needed.
-			_ = blobPutJSON(ctx, rootBlobStore, evidenceKey(attemptID, "result.json"), res)
+			recoveryDir := filepath.Join(projectRoot, artifacts.DirRel)
+			_ = os.MkdirAll(recoveryDir, 0o755)
+			_ = writeArtifactJSON(filepath.Join(recoveryDir, "result.json"), res)
 			// Stubs for prompt.md and manifest.json that were lost with the worktree.
-			// Multi-blob write discipline: result first, manifest last (FEAT-028).
-			_ = blobPutBytes(ctx, rootBlobStore, evidenceKey(attemptID, "prompt.md"),
-				[]byte("# Evidence Recovery\nWorktree was lost before prompt could be preserved.\n"))
-			_ = blobPutJSON(ctx, rootBlobStore, evidenceKey(attemptID, "manifest.json"), map[string]string{
+			_ = os.WriteFile(filepath.Join(recoveryDir, "prompt.md"),
+				[]byte("# Evidence Recovery\nWorktree was lost before prompt could be preserved.\n"), 0o644)
+			_ = writeArtifactJSON(filepath.Join(recoveryDir, "manifest.json"), map[string]string{
 				"attempt_id": attemptID, "bead_id": beadID, "status": "worktree_lost",
 			})
 		}
@@ -1401,7 +1294,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			OutputTokens: outputTokens,
 			CostUSD:      costUSD,
 		}
-		if writeErr := blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "usage.json"), usage); writeErr == nil {
+		if writeErr := writeArtifactJSON(artifacts.UsageAbs, usage); writeErr == nil {
 			usageFileRel = artifacts.UsageRel
 		}
 	}
@@ -1456,7 +1349,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Outcome:                     prelimOutcome,
 			}
 			populateWorkerStatus(prelimRes)
-			_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), prelimRes)
+			_ = writeArtifactJSON(artifacts.ResultAbs, prelimRes)
 
 			// Render the commit message from the tracked artifact file.
 			commitMsg, msgErr := BuildCommitMessageFromResultFile(artifacts.ResultAbs)
@@ -1523,13 +1416,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.NoChangesRationale = rationaleText
 		}
 	}
-	subtasksFile := filepath.Join(wtPath, artifacts.DirRel, "discovered_subtasks.json")
-	if data, readErr := os.ReadFile(subtasksFile); readErr == nil {
-		var subtasks []DiscoveredSubtask
-		if jsonErr := json.Unmarshal(data, &subtasks); jsonErr == nil && len(subtasks) > 0 {
-			res.DiscoveredSubtasks = subtasks
-		}
-	}
 	mixedCommitAndRationale := resultRev != baseRev && rationaleText != ""
 	switch {
 	case mixedCommitAndRationale:
@@ -1580,7 +1466,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.FailureMode = ""
 		res.Status = ExecuteBeadStatusPreservedNeedsReview
 		res.Detail = ExecuteBeadStatusDetail(res.Status, OperatorCancelReason, "")
-		_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res)
+		_ = writeArtifactJSON(artifacts.ResultAbs, res)
 		if err := publishAttemptResult(res); err != nil {
 			return res, fmt.Errorf("publishing attempt result: %w", err)
 		}
@@ -1602,19 +1488,19 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// an implementation failure. The evidence-bundle commit (below) has not run
 	// yet, so the reflog only carries the agent's own commits.
 	if res.Outcome == ExecuteBeadOutcomeTaskSucceeded && res.ExitCode == 0 && res.ImplementationRev != "" {
-		var transcriptCommands []TranscriptCommand
-		if agentResult != nil {
-			transcriptCommands = transcriptCommandsFromToolCalls(agentResult.ToolCalls)
-		}
 		verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
-			BaseRev:            baseRev,
-			ImplementationRev:  res.ImplementationRev,
-			CommitEvents:       readWorktreeCommitEvents(wtPath),
-			DirtyPaths:         integrityDirtyPaths(wtPath),
-			CodeChanging:       true,
-			TranscriptCommands: transcriptCommands,
+			BaseRev:           baseRev,
+			ImplementationRev: res.ImplementationRev,
+			CommitEvents:      readWorktreeCommitEvents(wtPath),
+			DirtyPaths:        integrityDirtyPaths(wtPath),
+			CodeChanging:      true,
 		})
-		applyAttemptIntegrityVerdict(res, verdict)
+		if !verdict.OK {
+			res.Outcome = ExecuteBeadOutcomeTaskFailed
+			res.Reason = AttemptIntegrityPreserveReason
+			res.Error = verdict.Detail
+			res.FailureMode = FailureModeAttemptIntegrity
+		}
 	}
 
 	if err := publishAttemptResult(res); err != nil {
@@ -1645,7 +1531,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, runtime, res); err != nil {
 		return nil, fmt.Errorf("recording candidate cycle state: %w", err)
 	}
-	if err := blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res); err != nil {
+	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
 	}
 
@@ -1802,7 +1688,7 @@ func commitTrackerLocked(projectRoot string) error {
 		}
 	}
 
-	commitOut, err := runPreDispatchGitWithIndexLockRecovery(gitDir, "add", trackerPathspec)
+	commitOut, err := runGitWithIndexLockRecovery(context.Background(), gitDir, "add", trackerPathspec)
 	if err != nil {
 		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
@@ -1813,7 +1699,7 @@ func commitTrackerLocked(projectRoot string) error {
 		return nil
 	}
 	commitArgs := ddxStateCommitArgs(projectRoot, gitDir, "commit", "--no-verify", "--only", "-m", msg, "--", trackerPathspec)
-	commitOut, err = runPreDispatchGitWithIndexLockRecovery(gitDir, commitArgs...)
+	commitOut, err = runGitWithIndexLockRecovery(context.Background(), gitDir, commitArgs...)
 	if err != nil {
 		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
@@ -1845,22 +1731,11 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		return nil, nil, err
 	}
 
-	// Use the injected BlobStore when available; fall back to LocalFSBlob rooted
-	// at the worktree's .ddx/ directory. FEAT-028 §BlobStore.
-	blobs := runtime.Blobs
-	if blobs == nil {
-		blobs = evidenceBlobStore(wtPath)
-	}
-	ctx := context.Background()
-
 	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.Harness(), rcfg.ContextBudget())
 	if err != nil {
 		return nil, nil, err
 	}
-	// FEAT-028 multi-blob write discipline: non-manifest blobs are written first;
-	// manifest.json is written last so any reader that sees it can also read the
-	// blobs it references.
-	if err := blobPutBytes(ctx, blobs, evidenceKey(attemptID, "prompt.md"), promptContent); err != nil {
+	if err := os.WriteFile(artifacts.PromptAbs, promptContent, 0o644); err != nil {
 		return nil, nil, fmt.Errorf("writing execute-bead prompt artifact: %w", err)
 	}
 
@@ -1900,8 +1775,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		},
 		PromptSHA: promptSHA(promptContent),
 	}
-	// Manifest written last — FEAT-028 multi-blob write discipline.
-	if err := blobPutJSON(ctx, blobs, evidenceKey(attemptID, "manifest.json"), manifest); err != nil {
+	if err := writeArtifactJSON(artifacts.ManifestAbs, manifest); err != nil {
 		return nil, nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
 	}
 	artifacts.PromptSHA = manifest.PromptSHA
@@ -2074,7 +1948,7 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // TestPromptGuardrails_AllPresent enforce this list; add a guardrail here
 // AND to both tests when you introduce one.
 //
-// 25 guardrails (FEAT-022 cross-reference):
+// 24 guardrails (FEAT-022 cross-reference):
 //  1. AC checkbox: every AC satisfied by a specific code/test/file (anti-handwave)
 //  2. Read named files / referenced specs first, before editing
 //  3. Missing-governing fallback note (non-minimal renders only — see
@@ -2095,10 +1969,9 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // 16. Reports go under the bead metadata bundle path, never /tmp, committed
 //     alongside code
 // 17. Write no_changes_rationale.txt before exiting empty
-// 18. Step 0 size-check + decomposition (ddx bead create / dep add / close)
-// 19. Current-bead lifecycle mutations stay orchestrator-owned; Step 0
-//     decomposition may create children, wire legitimate child/sibling
-//     dependencies, and close the decomposed parent after a durable split
+// 18. Step 0 size-check + decomposition (ddx bead create / dep add / update)
+// 19. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
+//     parent-note updates may touch current-bead tracker state
 // 20. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
 // 21. Stop after the commit (Agent post-commit runaway guard)
 // 22. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
@@ -2106,8 +1979,6 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 //     plan before running expensive commands; document output path and completion criterion
 // 24. Prohibit rerunning identical long-running commands without documenting why
 //     prior output is invalid and what changed before the retry
-// 25. Background verification completion: wait for auto-backgrounded verification
-//     commands (lefthook, go test) to complete before rerunning in the same worktree
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
 // Both variants emit it verbatim; per-variant preamble runs before it.
@@ -2126,10 +1997,10 @@ Too big if any holds:
 
 If too big, decompose:
 
-1. ` + "`ddx bead create`" + ` for each child/sibling/replacement bead.
+1. ` + "`ddx bead create`" + ` for each child (copy parent's labels and spec-id).
 2. ` + "`ddx bead dep add`" + ` only for legitimate child-to-child or sibling/replacement edges; never the parent.
-3. Use ` + "`Parent=<parent-id>`" + ` as hierarchy metadata; do not add the decomposed parent as a dependency.
-4. After a lossless durable split, close the decomposed parent with ` + "`ddx bead close <bead-id>`" + ` once child/sibling/replacement beads are filed. Otherwise, write ` + "`no_changes_rationale.txt`" + ` under ` + "`bundle`" + ` with child IDs, then stop.
+3. Use ` + "`parent=<parent-id>`" + ` metadata and wire ` + "`parent -> child`" + `.
+4. Write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path with child IDs, then stop.
 
 Decomposition alone is success. Don't mix it with implementation.`
 
@@ -2191,8 +2062,7 @@ For expensive commands (benchmarks, load tests, validation > 60s per variant):
 
 - Write a matrix plan before launching expensive commands: list required configs, output paths, completion criteria.
 - Do not re-run the same long-running command unless: (1) the command fingerprint changed (args/env/config), AND (2) you document why prior output is invalid and what changed.
-- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.
-- If a verification command is auto-backgrounded by the harness, wait for its completion before rerunning the same command in the same worktree.`
+- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.`
 
 // executeBeadInstructionsClaudeText is the <instructions> body used when the
 // harness carries its own rich system prompt (claude, codex, opencode,
@@ -2212,7 +2082,7 @@ const executeBeadInstructionsClaudeText = `You are executing one bead in an isol
 - If ` + "`lefthook run pre-commit`" + ` depends on staged files, rerun it after staging the exact commit set. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
 - Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `. Stop after the commit.
 - Do not modify files outside the bead's scope.
-- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, or ` + "`ddx bead update <bead-id> --unclaim`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead close <bead-id>`" + `.
+- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit or rationale ⇒ DDx records ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
@@ -2248,7 +2118,7 @@ The bead's <description> and <acceptance> are the contract. Every AC must be sat
 - Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `.
 - Stop immediately after the commit succeeds. Do not keep reading or testing.
 - Do not modify files outside the bead's scope.
-- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, or ` + "`ddx bead update <bead-id> --unclaim`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead close <bead-id>`" + `.
+- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit or rationale ⇒ ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +

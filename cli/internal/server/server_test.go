@@ -1554,52 +1554,6 @@ func TestReady(t *testing.T) {
 	}
 }
 
-func TestReadyUsesBuiltinLibraryCacheWhenConfigHasNoPath(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg"))
-	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	configYAML := `version: "1.0"
-library:
-  repository:
-    url: "https://github.com/DocumentDrivenDX/ddx"
-    branch: "main"
-`
-	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(configYAML), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	beadOpen := `{"id":"bx-001","title":"Open bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`
-	if err := os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beadOpen+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	srv := New(":0", dir)
-
-	req := httptest.NewRequest("GET", "/api/ready", nil)
-	req.RemoteAddr = "127.0.0.1:12345"
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var result struct {
-		Status string            `json:"status"`
-		Checks map[string]string `json:"checks"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result.Status != "ready" {
-		t.Errorf("expected status=ready, got %s", result.Status)
-	}
-	if result.Checks["library"] != "ok" {
-		t.Errorf("expected library=ok, got %s", result.Checks["library"])
-	}
-}
-
 func TestAgentSessions(t *testing.T) {
 	dir := setupTestDir(t)
 
@@ -4459,64 +4413,6 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 		if posA >= 0 && posB >= 0 && posB > posA {
 			t.Errorf("expected newer worker B (pos %d) to appear before older worker A (pos %d)", posB, posA)
 		}
-	}
-}
-
-func TestAgentWorkersStatusDoesNotReconcileTerminalClaims(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
-	t.Setenv("DDX_NODE_NAME", "test-node-workers-status-readonly")
-
-	root := setupTestDir(t)
-	srv := New(":0", root)
-	store := seedClaimedBeadByOwner(t, root, "ddx-status-readonly", "worker-status-readonly")
-	writeTestWorkerRecord(t, root, "worker-status-readonly", WorkerRecord{
-		ID:          "worker-status-readonly",
-		Kind:        "work",
-		State:       "exited",
-		Status:      "exited",
-		ProjectRoot: root,
-		StartedAt:   time.Now().UTC().Add(-time.Hour),
-		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
-		PID:         9999997,
-	})
-
-	req := httptest.NewRequest("GET", "/api/agent/workers", nil)
-	req.RemoteAddr = "127.0.0.1:12345"
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-	var workers []WorkerRecord
-	if err := json.Unmarshal(w.Body.Bytes(), &workers); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	found := false
-	for _, wr := range workers {
-		if wr.ID == "worker-status-readonly" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("expected status endpoint to include existing worker record")
-	}
-
-	b, err := store.Get(context.Background(), "ddx-status-readonly")
-	if err != nil {
-		t.Fatalf("get bead: %v", err)
-	}
-	if b.Owner != "worker-status-readonly" {
-		t.Fatalf("status GET mutated bead owner: got %q", b.Owner)
-	}
-	events, err := store.EventsByKind("ddx-status-readonly", "bead.reaped")
-	if err != nil {
-		t.Fatalf("events: %v", err)
-	}
-	if len(events) != 0 {
-		t.Fatalf("status GET emitted reap events: got %d", len(events))
 	}
 }
 

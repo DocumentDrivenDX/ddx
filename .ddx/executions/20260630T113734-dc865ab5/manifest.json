@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260630T113734-dc865ab5",
+  "bead_id": "ddx-900a8d38",
+  "base_rev": "2e88fe3f09b9eb2c3eed008771a89ef11990cbdc",
+  "created_at": "2026-06-30T11:37:47.13012128Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-900a8d38",
+    "title": "WatcherHub takes a BeadReader factory at construction (interface-refactor S5 follow-up)",
+    "description": "# PROBLEM\n`*bead.WatcherHub` (`cli/internal/bead/watcher.go:36-66`) constructs its own `*Store` internally via `NewStore(projectID + \"/.ddx\")`. This bypasses any factory-level capability validation or backend selection. Today everything is JSONL so this is invisible; once AxonStore ships and `bead.backend: axon` is configured for production, the WatcherHub still polls a local JSONL file while the authoritative bead state lives in Lakebase Postgres. Result: silent stale-data bug — `beadLifecycle` GraphQL subscriptions return empty or stale events.\n\n# ROOT CAUSE (file:line)\n- `cli/internal/bead/watcher.go:54-66` — `SubscribeLifecycle` instantiates a `*Store` directly: `store := NewStore(projectID + \"/.ddx\")`. No injection point for the configured backend.\n- `cli/internal/bead/watcher.go:60-65` — `newProjectWatcher(store, h.interval)` ties the watcher to that locally-constructed Store.\n- `cli/internal/server/server.go` — constructs `*WatcherHub` and passes it to subscription resolvers. The hub is constructed once at server startup; the project Stores it creates internally are detached from any per-project factory.\n\n# PROPOSED FIX\nChange `WatcherHub` to take a `bead.BeadReader` (or `Backend`) factory function at construction:\n\n```go\ntype StoreFactory func(projectID string) (bead.BeadReader, error)\n\ntype WatcherHub struct {\n    factory  StoreFactory\n    watchers map[string]*projectWatcher\n    interval time.Duration\n    ...\n}\n\nfunc NewWatcherHub(factory StoreFactory, interval time.Duration) *WatcherHub { ... }\n\nfunc (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (\u003c-chan LifecycleEvent, func(), error) {\n    // ...\n    store, err := h.factory(projectID)\n    if err != nil { return nil, nil, err }\n    pw = newProjectWatcher(store, h.interval)\n    // ...\n}\n```\n\n`cli/internal/server/server.go` is updated to pass a factory that uses the project's configured backend (selected via the same config pathway that the rest of ddx-server uses).\n\n# NON-SCOPE\n- Native subscription transport on AxonStore (separate work — would replace the polling-based `projectWatcher` with native push when available).\n- Changing `LifecycleEvent` shape or semantics.\n- Multi-tenant identity propagation (handled separately via the `bead.WithIdentity` ctx accessor pattern).\n- Modifying callers other than `cli/internal/server/server.go` and the subscription resolver.\n\n# Acceptance criteria\n\n1. `WatcherHub` constructor signature changes to accept a `StoreFactory` parameter. Compile-time assertion `var _ LifecycleSubscriber = (*WatcherHub)(nil)` still holds.\n2. `cli/internal/bead/watcher.go` no longer contains a direct `NewStore(...)` call.\n3. `cli/internal/server/server.go` constructs `WatcherHub` with a factory that delegates to the same backend-selection path the rest of the server uses.\n4. Test `TestWatcherHub_UsesProvidedFactory` injects a fake factory, asserts the factory is invoked when SubscribeLifecycle is called, and asserts the watcher polls the injected `bead.BeadReader` rather than the filesystem.\n5. Test `TestWatcherHub_PropagatesFactoryErrors` injects a factory that returns an error and asserts SubscribeLifecycle returns the error.\n6. Existing `TestWatcherHub_*` tests in `cli/internal/bead/watcher_test.go` are updated to use the factory pattern; they continue to pass.\n7. `cd cli \u0026\u0026 go test ./internal/bead/... ./internal/server/...` is green.\n8. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:server, kind:refactor, spec:FEAT-002, spec:FEAT-004, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049 (axon backend prototype umbrella).\nDeps: ddx-c6317784 (interface refinement, which adds `BeadReader` and the LifecycleSubscriber ctx-aware signature).",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:bead",
+      "area:server",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:FEAT-002",
+      "spec:FEAT-004",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.4619311Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T113734-dc865ab5",
+    "prompt": ".ddx/executions/20260630T113734-dc865ab5/prompt.md",
+    "manifest": ".ddx/executions/20260630T113734-dc865ab5/manifest.json",
+    "result": ".ddx/executions/20260630T113734-dc865ab5/result.json",
+    "checks": ".ddx/executions/20260630T113734-dc865ab5/checks.json",
+    "usage": ".ddx/executions/20260630T113734-dc865ab5/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-900a8d38-20260630T113734-dc865ab5"
+  },
+  "prompt_sha": "75acf7eaef23893eef45eb66f3e0f625ad5151c7171c0521539a73259b74f649"
+}

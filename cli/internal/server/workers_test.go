@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,210 +28,6 @@ import (
 
 func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 	return executeloop.Duration{Duration: duration}
-}
-
-func TestPrepareExecuteLoopWorkerSpecDefaultsOpaquePassthrough(t *testing.T) {
-	root := t.TempDir()
-
-	spec, err := prepareExecuteLoopWorkerSpec(root, executeloop.ExecuteLoopSpec{
-		Profile:        "default",
-		AttemptBackend: agent.AttemptBackendInTree,
-	}, executeloop.ModeWatch)
-	require.NoError(t, err)
-	assert.Equal(t, root, spec.ProjectRoot)
-	assert.Equal(t, executeloop.ModeWatch, spec.Mode)
-	assert.True(t, spec.OpaquePassthrough)
-	assert.Equal(t, agent.AttemptBackendInTree, spec.AttemptBackend)
-}
-
-func TestWorkerManagerForProjectRootUsesTargetProject(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("DDX_NODE_NAME", "test-node-worker-manager-project-root")
-	root := t.TempDir()
-	other := t.TempDir()
-	srv := New("127.0.0.1:0", root)
-	t.Cleanup(func() { _ = srv.Shutdown() })
-	defer srv.workers.StopWatchdog()
-
-	assert.Same(t, srv.workers, srv.workerManagerForProjectRoot(root))
-
-	m := srv.workerManagerForProjectRoot(other)
-	require.NotSame(t, srv.workers, m)
-	defer m.StopWatchdog()
-	assert.Equal(t, ddxroot.JoinProject(other, "workers"), m.rootDir)
-}
-
-func TestWorkerRuntimeWiresPreClaimDeadlines(t *testing.T) {
-	src, err := os.ReadFile("workers.go")
-	require.NoError(t, err)
-	body := string(src)
-	assert.Contains(t, body, "PreClaimTimeout:")
-	assert.Contains(t, body, "spec.PreClaimTimeout.Duration")
-	assert.Contains(t, body, "RouteResolutionTimeout: spec.RouteResolutionTimeout.Duration")
-}
-
-func TestWorkerCurrentAttemptHydratesMatchingFreshRunState(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	m := NewWorkerManager(root)
-	started := time.Now().UTC().Add(-2 * time.Minute)
-	pid := os.Getpid()
-	require.NoError(t, agent.WriteRunState(root, agent.RunState{
-		BeadID:      "ddx-live",
-		AttemptID:   "attempt-live",
-		Harness:     "claude-tui",
-		Model:       "sonnet-4.6",
-		StartedAt:   started,
-		PID:         pid,
-		RefreshedAt: time.Now().UTC(),
-		ExpiresAt:   time.Now().UTC().Add(time.Minute),
-	}))
-
-	m.mu.Lock()
-	m.workers["worker-live"] = &workerHandle{
-		record: WorkerRecord{
-			ID:          "worker-live",
-			Kind:        "work",
-			State:       "running",
-			Status:      "running",
-			ProjectRoot: root,
-			Profile:     "default",
-			PID:         pid,
-			CurrentAttempt: &CurrentAttemptInfo{
-				AttemptID: "attempt-provisional",
-				BeadID:    "ddx-live",
-				Phase:     "running",
-				PhaseSeq:  2,
-				StartedAt: started.Add(-time.Minute),
-			},
-		},
-	}
-	m.mu.Unlock()
-
-	rec, err := m.Show("worker-live")
-	require.NoError(t, err)
-	require.NotNil(t, rec.CurrentAttempt)
-	assert.Equal(t, "attempt-live", rec.CurrentAttempt.AttemptID)
-	assert.Equal(t, "ddx-live", rec.CurrentAttempt.BeadID)
-	assert.Equal(t, "claude-tui", rec.CurrentAttempt.Harness)
-	assert.Equal(t, "sonnet-4.6", rec.CurrentAttempt.Model)
-	assert.Equal(t, started.Unix(), rec.CurrentAttempt.StartedAt.Unix())
-}
-
-func TestWorkerCurrentAttemptIgnoresExpiredRunState(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	m := NewWorkerManager(root)
-	pid := os.Getpid()
-	now := time.Now().UTC()
-	require.NoError(t, agent.WriteRunState(root, agent.RunState{
-		BeadID:      "ddx-old",
-		AttemptID:   "attempt-old",
-		Harness:     "claude-tui",
-		Model:       "opus-4.7",
-		StartedAt:   now.Add(-10 * time.Minute),
-		PID:         pid,
-		RefreshedAt: now.Add(-8 * time.Minute),
-		ExpiresAt:   now.Add(-7 * time.Minute),
-	}))
-
-	m.mu.Lock()
-	m.workers["worker-live"] = &workerHandle{
-		record: WorkerRecord{
-			ID:          "worker-live",
-			Kind:        "work",
-			State:       "running",
-			Status:      "running",
-			ProjectRoot: root,
-			PID:         pid,
-		},
-	}
-	m.mu.Unlock()
-
-	rec, err := m.Show("worker-live")
-	require.NoError(t, err)
-	assert.Nil(t, rec.CurrentAttempt)
-}
-
-func TestWorkerCurrentAttemptRequiresMatchingPID(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	m := NewWorkerManager(root)
-	now := time.Now().UTC()
-	require.NoError(t, agent.WriteRunState(root, agent.RunState{
-		BeadID:      "ddx-other",
-		AttemptID:   "attempt-other",
-		Harness:     "claude-tui",
-		Model:       "opus-4.7",
-		StartedAt:   now.Add(-time.Minute),
-		PID:         os.Getpid(),
-		RefreshedAt: now,
-		ExpiresAt:   now.Add(time.Minute),
-	}))
-
-	m.mu.Lock()
-	m.workers["worker-live"] = &workerHandle{
-		record: WorkerRecord{
-			ID:          "worker-live",
-			Kind:        "work",
-			State:       "running",
-			Status:      "running",
-			ProjectRoot: root,
-			PID:         os.Getpid() + 1000000,
-		},
-	}
-	m.mu.Unlock()
-
-	rec, err := m.Show("worker-live")
-	require.NoError(t, err)
-	assert.Nil(t, rec.CurrentAttempt)
-}
-
-func TestWorkerCurrentAttemptPrefersInMemoryProgress(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	m := NewWorkerManager(root)
-	pid := os.Getpid()
-
-	oldStarted := time.Now().UTC().Add(-10 * time.Minute)
-	newStarted := time.Now().UTC()
-	require.NoError(t, agent.WriteRunState(root, agent.RunState{
-		BeadID:      "ddx-other",
-		AttemptID:   "attempt-old",
-		Harness:     "claude-tui",
-		Model:       "opus-4.7",
-		StartedAt:   oldStarted,
-		PID:         pid,
-		RefreshedAt: time.Now().UTC(),
-		ExpiresAt:   time.Now().UTC().Add(time.Minute),
-	}))
-
-	m.mu.Lock()
-	m.workers["worker-live"] = &workerHandle{
-		record: WorkerRecord{
-			ID:          "worker-live",
-			Kind:        "work",
-			State:       "running",
-			Status:      "running",
-			ProjectRoot: root,
-			PID:         pid,
-			CurrentBead: "ddx-live",
-			CurrentAttempt: &CurrentAttemptInfo{
-				BeadID:    "ddx-live",
-				Phase:     "pre_claim_intake",
-				StartedAt: newStarted,
-			},
-		},
-	}
-	m.mu.Unlock()
-
-	rec, err := m.Show("worker-live")
-	require.NoError(t, err)
-	require.NotNil(t, rec.CurrentAttempt)
-	assert.Empty(t, rec.CurrentAttempt.AttemptID)
-	assert.Equal(t, "ddx-live", rec.CurrentAttempt.BeadID)
-	assert.Equal(t, "pre_claim_intake", rec.CurrentAttempt.Phase)
-	assert.Equal(t, newStarted.Unix(), rec.CurrentAttempt.StartedAt.Unix())
 }
 
 func TestWorkerManagerStartAndShow(t *testing.T) {
@@ -258,312 +52,6 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	// Wait for the worker to finish (it will fail quickly since there's no real agent)
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
 	assert.Equal(t, "exited", final.State)
-}
-
-func TestWorkerSuccessDoesNotPopulateLastError(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	initGitRepo(t, root)
-	ddxDir := ddxroot.JoinProject(root)
-	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        "ddx-success",
-		Title:     "success status hygiene",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-	}))
-
-	m := NewWorkerManager(root)
-	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
-		return &agent.ExecuteBeadWorker{
-			Store: s,
-			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-				return agent.ExecuteBeadReport{
-					BeadID:    beadID,
-					AttemptID: "attempt-success",
-					Status:    agent.ExecuteBeadStatusSuccess,
-					Detail:    "success",
-				}, nil
-			}),
-		}
-	}
-
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
-	require.NoError(t, err)
-	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
-	assert.Equal(t, "success", final.Status)
-	assert.Empty(t, final.LastError)
-	require.NotNil(t, final.LastResult)
-	assert.Equal(t, "success", final.LastResult.Detail)
-}
-
-func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	initGitRepo(t, root)
-	ddxDir := ddxroot.JoinProject(root)
-	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        "ddx-final-cleanup",
-		Title:     "final cleanup",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-	}))
-
-	calls := make(chan []string, 4)
-	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
-		copied := append([]string(nil), scopeDirs...)
-		calls <- copied
-		return 0
-	}))
-
-	m := NewWorkerManager(root)
-	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
-		return &agent.ExecuteBeadWorker{
-			Store: s,
-			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-				return agent.ExecuteBeadReport{
-					BeadID:    beadID,
-					AttemptID: "attempt-final-cleanup",
-					Status:    agent.ExecuteBeadStatusSuccess,
-					Detail:    "success",
-				}, nil
-			}),
-		}
-	}
-
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
-	require.NoError(t, err)
-	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
-	assert.Equal(t, "success", final.Status)
-
-	select {
-	case got := <-calls:
-		assert.Contains(t, got, root)
-	default:
-		t.Fatal("server-managed worker did not run provider-probe cleanup at finalization")
-	}
-}
-
-func TestCleanupCurrentProcessProviderProbesRunsFollowupSweeps(t *testing.T) {
-	root := t.TempDir()
-	calls := make(chan []string, 4)
-	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
-		calls <- append([]string(nil), scopeDirs...)
-		return 0
-	}))
-	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest([]time.Duration{5 * time.Millisecond, 10 * time.Millisecond}))
-
-	cleanupCurrentProcessProviderProbes(root)
-
-	matched := 0
-	deadline := time.After(200 * time.Millisecond)
-	for matched < 3 {
-		select {
-		case got := <-calls:
-			if testScopeContains(got, root) {
-				matched++
-			}
-		case <-deadline:
-			t.Fatalf("cleanup call %d did not run", matched+1)
-		}
-	}
-}
-
-func TestCleanupCurrentProcessProviderProbesSettledWaitsForQuietWindow(t *testing.T) {
-	root := t.TempDir()
-	calls := 0
-	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
-		if !testScopeContains(scopeDirs, root) {
-			return 0
-		}
-		calls++
-		if calls == 2 {
-			return 1
-		}
-		return 0
-	}))
-	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
-	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 200*time.Millisecond, 5*time.Millisecond))
-
-	reaped := cleanupCurrentProcessProviderProbesSettled(root)
-
-	assert.Equal(t, 1, reaped)
-	assert.GreaterOrEqual(t, calls, 5, "cleanup must keep sweeping after a delayed reap until the quiet window elapses")
-}
-
-func TestRunWorkerFinalCleanupRunsUnscopedSweepWhenLastWorker(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	initGitRepo(t, root)
-	store := bead.NewStore(ddxroot.JoinProject(root))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        "ddx-final-unscoped",
-		Title:     "final unscoped cleanup",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-	}))
-
-	var scopedCalls atomic.Int32
-	var unscopedCalls atomic.Int32
-	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
-		scopedCalls.Add(1)
-		return 0
-	}))
-	t.Cleanup(setReapCurrentProcessProviderProbesUnscopedForTest(func() int {
-		if unscopedCalls.Add(1) == 2 {
-			return 1
-		}
-		return 0
-	}))
-	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
-	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 200*time.Millisecond, 5*time.Millisecond))
-
-	m := NewWorkerManager(root)
-	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
-		return &agent.ExecuteBeadWorker{
-			Store: s,
-			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-				return agent.ExecuteBeadReport{
-					BeadID:    beadID,
-					AttemptID: "attempt-final-unscoped",
-					Status:    agent.ExecuteBeadStatusSuccess,
-					Detail:    "success",
-				}, nil
-			}),
-		}
-	}
-
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
-	require.NoError(t, err)
-	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
-	assert.Equal(t, "success", final.Status)
-	require.Eventually(t, func() bool {
-		return scopedCalls.Load() > 0 && unscopedCalls.Load() >= 5
-	}, time.Second, 5*time.Millisecond, "last-worker finalization must finish scoped and unscoped cleanup")
-	_, settleDeadline, _ := providerProbeCleanupSettleConfig()
-	time.Sleep(2 * settleDeadline)
-}
-
-func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	initGitRepo(t, root)
-	store := bead.NewStore(ddxroot.JoinProject(root))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        "ddx-final-scoped-only",
-		Title:     "final scoped-only cleanup",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-	}))
-
-	var scopedCalls atomic.Int32
-	var unscopedCalls atomic.Int32
-	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
-		scopedCalls.Add(1)
-		return 0
-	}))
-	t.Cleanup(setReapCurrentProcessProviderProbesUnscopedForTest(func() int {
-		unscopedCalls.Add(1)
-		return 0
-	}))
-	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
-	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 50*time.Millisecond, 5*time.Millisecond))
-	require.Eventually(t, func() bool {
-		before := unscopedCalls.Load()
-		time.Sleep(100 * time.Millisecond)
-		return unscopedCalls.Load() == before
-	}, 2*time.Second, 10*time.Millisecond, "prior provider-probe cleanup callbacks must settle before this assertion")
-	unscopedCalls.Store(0)
-
-	m := NewWorkerManager(root)
-	now := time.Now().UTC()
-	_, _ = newIdleHandle(t, m, "worker-still-running", "", now, now)
-	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
-		return &agent.ExecuteBeadWorker{
-			Store: s,
-			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-				return agent.ExecuteBeadReport{
-					BeadID:    beadID,
-					AttemptID: "attempt-final-scoped-only",
-					Status:    agent.ExecuteBeadStatusSuccess,
-					Detail:    "success",
-				}, nil
-			}),
-		}
-	}
-
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
-	require.NoError(t, err)
-	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
-	assert.Equal(t, "success", final.Status)
-	require.Eventually(t, func() bool {
-		return scopedCalls.Load() > 0
-	}, time.Second, 5*time.Millisecond, "finalization must still run scoped cleanup")
-	_, settleDeadline, _ := providerProbeCleanupSettleConfig()
-	unscopedBeforeSettle := unscopedCalls.Load()
-	time.Sleep(2 * settleDeadline)
-	assert.Equal(t, unscopedBeforeSettle, unscopedCalls.Load(), "unscoped cleanup must not run while another worker is live")
-}
-
-func testScopeContains(scopes []string, root string) bool {
-	for _, scope := range scopes {
-		if scope == root {
-			return true
-		}
-	}
-	return false
-}
-
-func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
-	root := t.TempDir()
-	type cleanupCall struct {
-		harness  string
-		provider string
-		model    string
-		scopes   []string
-	}
-	calls := make(chan cleanupCall, 8)
-	t.Cleanup(setReapCurrentProcessNonRouteProviderProbesForTest(func(harness, provider, model string, scopeDirs ...string) int {
-		calls <- cleanupCall{
-			harness:  harness,
-			provider: provider,
-			model:    model,
-			scopes:   append([]string(nil), scopeDirs...),
-		}
-		return 0
-	}))
-	t.Cleanup(setPreClaimProviderProbeCleanupIntervalForTest(5 * time.Millisecond))
-
-	wrapped := wrapPreClaimIntakeProviderCleanup(root, ExecuteLoopWorkerSpec{
-		Harness: "claude-tui",
-		Model:   "opus-4.7",
-	}, func(context.Context, string) (agent.PreClaimIntakeResult, error) {
-		select {
-		case <-calls:
-		case <-time.After(100 * time.Millisecond):
-			t.Fatal("initial route-aware cleanup was not invoked")
-		}
-		select {
-		case <-calls:
-		case <-time.After(100 * time.Millisecond):
-			t.Fatal("route-aware cleanup did not run while pre-claim hook was active")
-		}
-		return agent.PreClaimIntakeResult{Outcome: agent.PreClaimIntakeActionableAtomic}, nil
-	})
-
-	got, err := wrapped(context.Background(), "ddx-preclaim")
-	require.NoError(t, err)
-	assert.Equal(t, agent.PreClaimIntakeActionableAtomic, got.Outcome)
-
-	select {
-	case final := <-calls:
-		assert.Equal(t, "claude-tui", final.harness)
-		assert.Equal(t, "opus-4.7", final.model)
-		assert.Contains(t, final.scopes, root)
-	default:
-		t.Fatal("final route-aware cleanup was not invoked")
-	}
 }
 
 func TestWorkerManagerStartPluginActionPublishesTerminalProgress(t *testing.T) {
@@ -976,8 +464,7 @@ func TestDrainProgressUpdatesRecord(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	handle := &workerHandle{
-		record:       WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
-		progressDone: make(chan struct{}),
+		record: WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
 	}
 	ch := make(chan agent.ProgressEvent, 10)
 
@@ -1039,101 +526,6 @@ func TestDrainProgressUpdatesRecord(t *testing.T) {
 	assert.Equal(t, "queueing", rec.RecentPhases[0].Phase)
 	assert.Equal(t, "running", rec.RecentPhases[1].Phase)
 	assert.Equal(t, "done", rec.RecentPhases[2].Phase)
-}
-
-func TestDrainProgressResetsCurrentAttemptWhenAttemptIDChanges(t *testing.T) {
-	root := t.TempDir()
-	m := NewWorkerManager(root)
-
-	handle := &workerHandle{
-		record:       WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
-		progressDone: make(chan struct{}),
-	}
-	ch := make(chan agent.ProgressEvent, 10)
-	go m.drainProgress("w-test", handle, ch)
-
-	first := time.Now().UTC()
-	second := first.Add(30 * time.Second)
-	ch <- agent.ProgressEvent{
-		EventID: "evt-1", AttemptID: "attempt-1", WorkerID: "w-test",
-		BeadID: "ddx-1", Phase: "running", PhaseSeq: 1, Heartbeat: false,
-		TS: first,
-	}
-	ch <- agent.ProgressEvent{
-		EventID: "evt-2", AttemptID: "attempt-2", WorkerID: "w-test",
-		BeadID: "ddx-1", Phase: "running", PhaseSeq: 1, Heartbeat: false,
-		TS: second,
-	}
-
-	require.Eventually(t, func() bool {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		return handle.record.CurrentAttempt != nil &&
-			handle.record.CurrentAttempt.AttemptID == "attempt-2" &&
-			handle.record.CurrentAttempt.StartedAt.Equal(second)
-	}, 2*time.Second, 10*time.Millisecond)
-	ch <- agent.ProgressEvent{
-		EventID: "evt-3", AttemptID: "attempt-2", WorkerID: "w-test",
-		BeadID: "ddx-1", Phase: "failed", PhaseSeq: 2, Heartbeat: false,
-		TS: second.Add(time.Second), ElapsedMS: 1000,
-	}
-	close(ch)
-	<-handle.progressDone
-
-	m.mu.Lock()
-	rec := handle.record
-	m.mu.Unlock()
-	require.Nil(t, rec.CurrentAttempt)
-	require.Len(t, rec.RecentPhases, 3)
-	require.NotNil(t, rec.LastAttempt)
-	assert.Equal(t, "attempt-2", rec.LastAttempt.AttemptID)
-	assert.Equal(t, second.Unix(), rec.LastAttempt.StartedAt.Unix())
-}
-
-func TestDrainProgressPreservesCurrentBeadAcrossAnonymousRouteEvents(t *testing.T) {
-	root := t.TempDir()
-	m := NewWorkerManager(root)
-
-	handle := &workerHandle{
-		record:       WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
-		progressDone: make(chan struct{}),
-	}
-	ch := make(chan agent.ProgressEvent, 10)
-	go m.drainProgress("w-test", handle, ch)
-
-	now := time.Now().UTC()
-	ch <- agent.ProgressEvent{
-		EventID: "evt-active", WorkerID: "w-test",
-		BeadID: "ddx-active", Phase: "loop.active", Heartbeat: true,
-		TS: now,
-	}
-	ch <- agent.ProgressEvent{
-		EventID: "evt-intake", WorkerID: "w-test",
-		BeadID: "ddx-active", Phase: "pre_claim_intake", Heartbeat: true,
-		TS: now.Add(time.Second),
-	}
-	ch <- agent.ProgressEvent{
-		EventID: "evt-route", WorkerID: "w-test",
-		Phase: "queueing", PhaseSeq: 1, Heartbeat: false,
-		TS: now.Add(2 * time.Second),
-	}
-	ch <- agent.ProgressEvent{
-		EventID: "evt-running", WorkerID: "w-test",
-		Phase: "running", PhaseSeq: 2, Heartbeat: false,
-		TS: now.Add(3 * time.Second),
-	}
-
-	require.Eventually(t, func() bool {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		return handle.record.CurrentBead == "ddx-active" &&
-			handle.record.CurrentAttempt != nil &&
-			handle.record.CurrentAttempt.BeadID == "ddx-active" &&
-			handle.record.CurrentAttempt.Phase == "running"
-	}, 2*time.Second, 10*time.Millisecond)
-
-	close(ch)
-	<-handle.progressDone
 }
 
 // TestRecentPhasesCap verifies that RecentPhases is capped at 20 entries.
@@ -1409,7 +801,8 @@ func TestWorkerLiveCounters(t *testing.T) {
 		t.Skip("requires work goroutine timing; too slow for -short")
 	}
 	root := t.TempDir()
-	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
+	ddxDir := filepath.Join(root, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	// Initialise a git repo so CloseWithEvidence can write bead events.
 	initGitRepo(t, root)
@@ -1425,8 +818,6 @@ func TestWorkerLiveCounters(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	runCmd(t, root, "git", "add", filepath.Join(ddxroot.DirName, "config.yaml"), filepath.Join(ddxroot.DirName, "beads.jsonl"))
-	runCmd(t, root, "git", "commit", "-m", "seed live counter beads")
 
 	m := NewWorkerManager(root)
 
@@ -1510,8 +901,15 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	runCmd(t, root, "git", "add", "-A")
 	runCmd(t, root, "git", "commit", "-m", "init")
 
+	// Get the initial main tip for comparison later.
+	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	initialTipOut, err := initialTipCmd.Output()
+	require.NoError(t, err)
+	initialTip := strings.TrimSpace(string(initialTipOut))
+
 	// Seed the bead store with one ready bead.
-	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
+	ddxDir := filepath.Join(root, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:         "ddx-integration-01",
@@ -1521,16 +919,6 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 		IssueType:  bead.DefaultType,
 		Acceptance: "Worker lands commit via coordinator",
 	}))
-	runCmd(t, root, "git", "add", filepath.Join(ddxroot.DirName, "config.yaml"), filepath.Join(ddxroot.DirName, "beads.jsonl"))
-	runCmd(t, root, "git", "commit", "-m", "seed worker bead")
-
-	// Get the initial main tip for comparison later. This must include the
-	// seeded tracker state, otherwise the pre-claim dirty-root guard correctly
-	// refuses to claim work.
-	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
-	initialTipOut, err := initialTipCmd.Output()
-	require.NoError(t, err)
-	initialTip := strings.TrimSpace(string(initialTipOut))
 
 	m := NewWorkerManager(root)
 
@@ -1634,7 +1022,13 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	runCmd(t, root, "git", "add", "-A")
 	runCmd(t, root, "git", "commit", "-m", "init")
 
-	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
+	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	initialTipOut, err := initialTipCmd.Output()
+	require.NoError(t, err)
+	initialTip := strings.TrimSpace(string(initialTipOut))
+
+	ddxDir := filepath.Join(root, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        "ddx-evidence-integ",
@@ -1642,13 +1036,6 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 		Status:    bead.StatusOpen,
 		IssueType: bead.DefaultType,
 	}))
-	runCmd(t, root, "git", "add", filepath.Join(ddxroot.DirName, "config.yaml"), filepath.Join(ddxroot.DirName, "beads.jsonl"))
-	runCmd(t, root, "git", "commit", "-m", "seed evidence bead")
-
-	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
-	initialTipOut, err := initialTipCmd.Output()
-	require.NoError(t, err)
-	initialTip := strings.TrimSpace(string(initialTipOut))
 
 	m := NewWorkerManager(root)
 
@@ -1780,7 +1167,6 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 	setupBeadStore(t, projectB)
 
 	srv := New(":0", projectA)
-	t.Cleanup(func() { _ = srv.Shutdown() })
 	// Register project B so the server accepts it.
 	srv.state.RegisterProject(projectB)
 
@@ -1806,7 +1192,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 		assert.NotEmpty(t, rec.ID)
 
 		// Wait for the worker to finish before the test teardown.
-		_ = waitForWorkerExit(t, srv.workerManagerForProjectRoot(projectB), rec.ID, 10*time.Second)
+		_ = waitForWorkerExit(t, srv.workers, rec.ID, 10*time.Second)
 	})
 
 	t.Run("unregistered project is rejected with 422", func(t *testing.T) {
@@ -1840,7 +1226,6 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	setupBeadStore(t, projectB)
 
 	srv := New(":0", projectA)
-	t.Cleanup(func() { _ = srv.Shutdown() })
 	srv.state.RegisterProject(projectB)
 	installFastSuccessWorker(srv.workers)
 
@@ -1852,7 +1237,6 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		"provider":            "openrouter",
 		"effort":              "high",
 		"label_filter":        "phase:reliability",
-		"attempt_backend":     agent.AttemptBackendInTree,
 		"mode":                "watch",
 		"idle_interval":       "17s",
 		"no_review":           true,
@@ -1879,9 +1263,8 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	var record WorkerRecord
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &record))
 	t.Cleanup(func() {
-		targetWorkers := srv.workerManagerForProjectRoot(projectB)
-		_ = targetWorkers.Stop(record.ID)
-		_ = waitForWorkerExit(t, targetWorkers, record.ID, 5*time.Second)
+		_ = srv.workers.Stop(record.ID)
+		_ = waitForWorkerExit(t, srv.workers, record.ID, 5*time.Second)
 	})
 	assert.Equal(t, projectB, record.ProjectRoot)
 	assert.Equal(t, "fiz", record.Harness)
@@ -1890,7 +1273,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.False(t, record.Once)
 	assert.Equal(t, "17s", record.PollInterval)
 
-	data, err := os.ReadFile(filepath.Join(projectB, record.SpecPath))
+	data, err := os.ReadFile(filepath.Join(projectA, record.SpecPath))
 	require.NoError(t, err)
 	var persisted ExecuteLoopWorkerSpec
 	require.NoError(t, json.Unmarshal(data, &persisted))
@@ -1901,7 +1284,6 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, "openrouter", persisted.Provider)
 	assert.Equal(t, "high", persisted.Effort)
 	assert.Equal(t, "phase:reliability", persisted.LabelFilter)
-	assert.Equal(t, agent.AttemptBackendInTree, persisted.AttemptBackend)
 	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)
 	assert.Equal(t, 17*time.Second, persisted.IdleInterval.Duration)
 	assert.True(t, persisted.NoReview)
@@ -1917,105 +1299,9 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, executeloop.SpecCurrentVersion, persisted.SpecVersion)
 }
 
-func TestRESTWorkerReconcileQueryProjectStartsTargetProjectWorker(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
-	t.Setenv("DDX_NODE_NAME", "test-node-rest-reconcile-project")
-
-	projectA := setupTestDir(t)
-	projectB := t.TempDir()
-	setupBeadStore(t, projectB)
-
-	srv := New(":0", projectA)
-	t.Cleanup(func() { _ = srv.Shutdown() })
-	srv.state.RegisterProject(projectB)
-	installFastSuccessWorker(srv.workers)
-
-	require.NoError(t, SaveWorkerDesiredState(projectB, &WorkerDesiredState{
-		DesiredCount: 1,
-		DefaultSpec:  WorkerDefaultSpec{Mode: "once"},
-	}))
-
-	req := httptest.NewRequest(http.MethodPost,
-		"/api/agent/workers/reconcile?project="+url.QueryEscape(projectB),
-		nil)
-	req.RemoteAddr = "127.0.0.1:12345"
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
-	var result ReconcileResult
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
-	require.Len(t, result.Started, 1)
-
-	records, err := srv.workerManagerForProjectRoot(projectB).List()
-	require.NoError(t, err)
-	var got WorkerRecord
-	for _, rec := range records {
-		if rec.ID == result.Started[0] {
-			got = rec
-			break
-		}
-	}
-	require.NotEmpty(t, got.ID, "started worker record must be listed")
-	assert.Equal(t, projectB, got.ProjectRoot)
-}
-
-func TestRESTWorkerCleanupReleasesTerminalLegacyOwnerBeforeDesiredReconcile(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
-	t.Setenv("DDX_NODE_NAME", "test-node-rest-cleanup-terminal-owner")
-
-	projectRoot := setupTestDir(t)
-	ddxDir := testutils.MakeInitializedDDxRoot(t, projectRoot)
-	store := bead.NewStore(ddxDir)
-	const beadID = "ddx-rest-terminal-owner"
-	const workerID = "worker-rest-terminal-owner"
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        beadID,
-		Title:     "rest terminal owner",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-		Owner:     workerID,
-	}))
-
-	srv := New(":0", projectRoot)
-	t.Cleanup(func() { _ = srv.Shutdown() })
-	dir := filepath.Join(srv.workers.rootDir, workerID)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, srv.workers.writeRecord(dir, WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "exited",
-		Status:      "exited",
-		ProjectRoot: projectRoot,
-		StartedAt:   time.Now().UTC().Add(-time.Hour),
-		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
-		PID:         9999997,
-	}))
-
-	req := httptest.NewRequest(http.MethodPost,
-		"/api/agent/workers/cleanup?project="+url.QueryEscape(projectRoot),
-		nil)
-	req.RemoteAddr = "127.0.0.1:12345"
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
-	b, err := store.Get(context.Background(), beadID)
-	require.NoError(t, err)
-	assert.Empty(t, b.Owner)
-
-	events, err := store.EventsByKind(beadID, "bead.reaped")
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "terminal-worker-claim", events[0].Summary)
-}
-
 func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {
 	projectRoot := setupTestDir(t)
 	srv := New(":0", projectRoot)
-	t.Cleanup(func() { _ = srv.Shutdown() })
 
 	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", strings.NewReader(`{"poll_interval":"30s"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -2034,7 +1320,6 @@ func TestRESTWorkerStart_UnknownSpecVersion(t *testing.T) {
 
 	projectRoot := setupTestDir(t)
 	srv := New(":0", projectRoot)
-	t.Cleanup(func() { _ = srv.Shutdown() })
 
 	body, _ := json.Marshal(map[string]any{
 		"mode":               "once",

@@ -16,30 +16,19 @@ const (
 	PackageTypeResource     PackageType = "resource"
 )
 
-// InstallMapping describes a source→target mapping from a plugin package.
-// Marketplace installs use these mappings to select cache contents and
-// generated adapter sources; only legacy compatibility installs copy them
-// directly into a project worktree.
+// InstallMapping describes a source→target copy during installation.
 type InstallMapping struct {
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
 }
 
-// PackageInstall describes compatibility copy/link targets. Forward
-// marketplace installs should prefer PackageMaterialize for generated adapters.
+// PackageInstall describes what to copy during installation.
 type PackageInstall struct {
-	Root       *InstallMapping  `yaml:"root,omitempty"`       // package root; registry installs cache this payload, local overlays may link it
-	Skills     []InstallMapping `yaml:"skills,omitempty"`     // compatibility skill source directories
+	Root       *InstallMapping  `yaml:"root,omitempty"`       // plugin root (e.g., .ddx/plugins/helix)
+	Skills     []InstallMapping `yaml:"skills,omitempty"`     // skills directories (copied to each target)
 	Scripts    *InstallMapping  `yaml:"scripts,omitempty"`    // scripts/binaries
 	Symlinks   []SymlinkMapping `yaml:"symlinks,omitempty"`   // post-install symlinks
 	Executable []string         `yaml:"executable,omitempty"` // paths (relative to root) that must be executable
-}
-
-// PackageMaterialize describes generated project-local adapter outputs. These
-// mappings select package-cache sources for shims/links rather than payloads
-// copied into the repository.
-type PackageMaterialize struct {
-	Skills []InstallMapping `yaml:"skills,omitempty"`
 }
 
 // SymlinkMapping describes a symlink to create during installation.
@@ -50,30 +39,19 @@ type SymlinkMapping struct {
 
 // Package describes a single installable package.
 type Package struct {
-	Name        string             `yaml:"name"`
-	Version     string             `yaml:"version"`
-	Description string             `yaml:"description"`
-	Type        PackageType        `yaml:"type"`
-	Source      string             `yaml:"source"`
-	APIVersion  string             `yaml:"api_version,omitempty"`
-	Install     PackageInstall     `yaml:"install"`
-	Materialize PackageMaterialize `yaml:"materialize,omitempty"`
-	Keywords    []string           `yaml:"keywords,omitempty"`
+	Name        string         `yaml:"name"`
+	Version     string         `yaml:"version"`
+	Description string         `yaml:"description"`
+	Type        PackageType    `yaml:"type"`
+	Source      string         `yaml:"source"`
+	APIVersion  string         `yaml:"api_version,omitempty"`
+	Install     PackageInstall `yaml:"install"`
+	Keywords    []string       `yaml:"keywords,omitempty"`
 	// Extra captures top-level keys not recognized by this DDx version so
 	// newer manifests can keep their unknown fields in memory without
 	// silently dropping them. See SD-018 "Manifest Versioning". Not
 	// marshaled via `yaml:"-"` so callers must preserve it explicitly.
 	Extra map[string]any `yaml:"-"`
-}
-
-// SkillMappings returns the source mappings used to generate agent skill
-// adapters. materialize.skills is the forward schema; install.skills remains a
-// compatibility fallback for older manifests and local overlays.
-func (p Package) SkillMappings() []InstallMapping {
-	if len(p.Materialize.Skills) > 0 {
-		return p.Materialize.Skills
-	}
-	return p.Install.Skills
 }
 
 // Registry holds the list of known packages.
@@ -88,16 +66,20 @@ func BuiltinRegistry() *Registry {
 			{
 				Name:        "ddx",
 				Version:     "0.4.7",
-				Description: "DDx bootstrap skill package for offline init and worker discovery",
+				Description: "DDx default library: prompts, personas, MCP configs, environments, skills",
 				Type:        PackageTypePlugin,
 				Source:      "https://github.com/DocumentDrivenDX/ddx",
-				Materialize: PackageMaterialize{
+				Install: PackageInstall{
+					Root: &InstallMapping{
+						Source: "library",
+						Target: ".ddx/plugins/ddx",
+					},
 					Skills: []InstallMapping{
-						{Source: "skills/", Target: ".agents/skills/"},
-						{Source: "skills/", Target: ".claude/skills/"},
+						{Source: ".agents/skills/", Target: ".agents/skills/"},
+						{Source: ".agents/skills/", Target: ".claude/skills/"},
 					},
 				},
-				Keywords: []string{"bootstrap", "default", "skills", "offline"},
+				Keywords: []string{"library", "prompts", "personas", "mcp", "default", "skills"},
 			},
 			{
 				Name:        "helix",
@@ -106,17 +88,15 @@ func BuiltinRegistry() *Registry {
 				Type:        PackageTypeWorkflow,
 				Source:      "https://github.com/DocumentDrivenDX/helix",
 				Install: PackageInstall{
+					// Plugin installs are project-local (FEAT-015): the tree
+					// lives under .ddx/plugins/<name>/, never in $HOME.
 					Root: &InstallMapping{
 						Source: ".",
-						// Compatibility manifest target. Marketplace installs
-						// cache HELIX under XDG; .ddx/plugins/helix is reserved
-						// for an explicit local checkout overlay.
 						Target: ".ddx/plugins/helix",
 					},
-					// Registry installs generate project-local adapter shims
-					// from cached skill sources.
-				},
-				Materialize: PackageMaterialize{
+					// Skills installed to project-local skill directories.
+					// skills.Install copies real files into both .agents/skills/
+					// and .claude/skills/ regardless of mapping target.
 					Skills: []InstallMapping{
 						{Source: ".agents/skills/", Target: ".agents/skills/"},
 						{Source: ".agents/skills/", Target: ".claude/skills/"},

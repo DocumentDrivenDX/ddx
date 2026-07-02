@@ -121,8 +121,8 @@ func TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget(t *testin
 	got := append([]LockSample(nil), samples...)
 	mu.Unlock()
 
-	require.GreaterOrEqual(t, len(got), workerCount*rounds*3,
-		"expected lock samples from claim/event/release cycles")
+	require.GreaterOrEqual(t, len(got), workerCount*rounds*4,
+		"expected lock samples from claim/heartbeat/event/release cycles")
 
 	waitSamples := make([]float64, 0, len(got))
 	holdSamples := make([]float64, 0, len(got))
@@ -136,17 +136,15 @@ func TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget(t *testin
 	p95Hold := percentileFloat(holdSamples, 0.95)
 	p99Hold := percentileFloat(holdSamples, 0.99)
 
-	require.NotEmpty(t, got, "expected lock samples from claim/event/release cycles")
+	require.NotEmpty(t, got, "expected lock samples from claim/heartbeat/event/release cycles")
 
 	const (
-		// Heartbeat refreshes now bypass the tracker lock, so the samples here
-		// are the contended write-lock path only. Wait time includes queueing
-		// behind other writers and package-level scheduler load from `go test
-		// ./...`; hold time is the tighter critical-section budget.
-		maxP95WaitMS = 2000.0
-		maxP99WaitMS = 5000.0
+		maxP95WaitMS = 25.0
+		// Leave headroom for shared builders and concurrent package execution;
+		// the p95 budgets still catch the steady-state path.
+		maxP99WaitMS = 1500.0
 		maxP95HoldMS = 50.0
-		maxP99HoldMS = 150.0
+		maxP99HoldMS = 200.0
 	)
 
 	require.Less(t, p95Wait, maxP95WaitMS,

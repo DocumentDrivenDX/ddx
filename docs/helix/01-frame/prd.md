@@ -191,7 +191,7 @@ problems outside that mapping belong in workflow tools, not the platform.
 4. **Serve project state to agents and tools** — expose documents, artifacts,
    beads, and execution evidence via MCP endpoints and HTTP
 5. **Support cross-project reuse** — share document libraries and workflow
-   plugins through an online registry (`ddx plugin install`)
+   plugins through an online registry (`ddx install`)
 6. **Provide agent-facing skills for DDx operations** — ship interactive
    skills (slash commands) that guide agents through complex DDx CLI
    operations like bead triage, agent dispatch, and package installation

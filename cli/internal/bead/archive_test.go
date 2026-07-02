@@ -78,7 +78,7 @@ func TestArchiveMovesEligibleClosedBeads(t *testing.T) {
 
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
-	moved, err := s.Archive(context.Background(), policy)
+	moved, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"ddx-old1", "ddx-old2"}, moved)
 
@@ -119,7 +119,7 @@ func TestArchiveRespectsMinActiveCount(t *testing.T) {
 
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 100
-	moved, err := s.Archive(context.Background(), policy)
+	moved, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 	assert.Empty(t, moved, "trigger must not fire below MinActiveCount")
 
@@ -154,7 +154,7 @@ func TestArchivePreservesReferencedClosedBeads(t *testing.T) {
 
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
-	moved, err := s.Archive(context.Background(), policy)
+	moved, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 	assert.Empty(t, moved, "closed dep referenced by an open bead must stay active")
 
@@ -181,7 +181,7 @@ func TestArchiveGetWithArchiveFallsBack(t *testing.T) {
 
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
-	moved, err := s.Archive(context.Background(), policy)
+	moved, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 	require.Equal(t, []string{"ddx-archived"}, moved)
 
@@ -229,7 +229,7 @@ func testStoreGetWithArchiveForwardsCallerContext(t *testing.T) {
 
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
-	_, err := s.Archive(context.Background(), policy)
+	_, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -269,7 +269,7 @@ func TestArchiveReadyAndBlockedQueryActiveOnly(t *testing.T) {
 	}))
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
-	_, err := s.Archive(context.Background(), policy)
+	_, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 
 	// AC4: ready/blocked only consider the active collection.
@@ -292,7 +292,7 @@ func TestArchiveListWithArchiveIncludesBoth(t *testing.T) {
 	}))
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
-	_, err := s.Archive(context.Background(), policy)
+	_, err := s.Archive(testCtx(), policy)
 	require.NoError(t, err)
 
 	// AC3: default list shows active (which still includes recently closed).

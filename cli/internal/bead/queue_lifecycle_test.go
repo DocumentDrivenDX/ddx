@@ -1,7 +1,6 @@
 package bead
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -115,7 +114,7 @@ func TestQueueRank_PreservedAcrossArchive(t *testing.T) {
 	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	policy := migratePolicy() // statuses=[closed], MinAge=0, MinActiveCount=0
-	_, err := s.ArchiveWithEvents(context.Background(), policy)
+	_, err := s.ArchiveWithEvents(testCtx(), policy)
 	require.NoError(t, err)
 
 	assertQueueRankInArchive(t, s, b.ID, 5)

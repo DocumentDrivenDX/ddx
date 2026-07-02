@@ -6,10 +6,8 @@ weight: 7
 DDx ships a single built-in skill, `ddx`, that any
 [agentskills.io](https://agentskills.io)-compatible coding agent (Claude Code,
 OpenAI Codex, Gemini CLI, etc.) discovers and uses to operate the DDx surface
-correctly. `ddx init` exposes it through generated adapters under the
-project's `.agents/skills/` and `.claude/skills/` directories. The skill
-payload resolves from the XDG plugin cache, with a baked-in fallback in the
-binary, so projects do not need to check in copied DDx skill assets.
+correctly. The skill is installed automatically by `ddx init` to the project's
+`.agents/skills/` and `.claude/skills/` directories as real files.
 
 ## Structure
 
@@ -64,7 +62,6 @@ sync status, and "how am I doing" overviews.
 
 ## Creating Custom Skills
 
-Plugins can ship additional skills alongside the built-in `ddx` skill. Registry
-plugins install the same way: project lock metadata plus cache-backed generated
-adapters, not vendored payload trees. See [Creating Plugins](../plugins) for
-how to add your own skills or distribute them as a plugin.
+Plugins can ship additional skills alongside the built-in `ddx` skill. See
+[Creating Plugins](../plugins) for how to add your own skills or distribute
+them as a plugin.

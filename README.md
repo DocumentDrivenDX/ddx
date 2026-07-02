@@ -7,7 +7,7 @@
 > Documents drive the agents. DDx drives the documents.
 
 <p align="center">
-  <img src="website/static/demos/07-quickstart.gif" alt="DDx quickstart — init, install the HELIX plugin, create beads" width="700">
+  <img src="website/static/demos/07-quickstart.gif" alt="DDx quickstart — init, install helix, create beads" width="700">
 </p>
 
 **[Full Documentation →](https://DocumentDrivenDX.github.io/ddx/)**
@@ -17,7 +17,7 @@
 DDx + HELIX takes a project from zero to working software:
 
 1. `ddx init` — create a document library
-2. `ddx plugin install helix` — pin HELIX, cache it like an `npx` dependency, and generate local adapters
+2. `ddx install helix` — install the HELIX workflow plugin
 3. Agent frames the project — creates PRD, feature specs, and tracker beads
 4. Agent builds it — TDD, one commit per bead, all tests passing
 5. Agent evolves it — adds a feature, updates specs, extends code
@@ -34,19 +34,13 @@ cd your-project
 ddx init
 
 # Install HELIX workflow plugin
-ddx plugin install helix
+ddx install helix
 
 # Explore
 ddx doctor
 ddx persona list
 ddx bead list
 ```
-
-Marketplace plugins are project dependencies, not copied source assets. DDx
-records plugin intent in `.ddx/plugins.lock.yaml`, stores payloads in the shared
-XDG cache, and writes only generated adapter links under `.agents/skills/` and
-`.claude/skills/`. Those adapters are local rebuild output; `ddx plugin sync`
-recreates them from the lock and cache.
 
 ## Pre-claim Intake and Silent-Idle Diagnosis
 
@@ -62,53 +56,32 @@ verdict forms:
 See `ClassifyReadinessWithMode`
 (`cli/internal/agent/readiness_classification.go:56-115`) for the mapping from
 readiness classifications to worker behavior. The worker treats the shared
-schema as a read-only intake contract and classifies the verdict into these
-operator-visible failure classes:
+schema as a read-only intake contract and classifies the verdict into one of
+the following failure classes:
 
-| Intake classification | Worker behavior | Operator signal |
-| --- | --- | --- |
-| `ready` | claim proceeds | normal claim / attempt events |
-| `needs_refine` in warn-only mode | warn, then proceed | `pre_claim_intake.warn`; no park |
-| `needs_refine` in block/factory mode | park for operator attention | `pre_claim_intake.blocked` |
-| `operator_required` | park the bead | `pre_claim_intake.blocked` |
-| `needs_split` | decompose or park for decomposition | `pre_claim_intake.decomposed` or `pre_claim_intake.blocked` |
-| `system_unready`, `intake_error`, timeout, or schema drift | hard errors from intake; fail-open, skip claim | `pre_claim_intake.warn` / `pre_claim_intake.error`, followed by `loop.idle` if every ready bead is skipped |
+- `system_unready` / `intake_error` are hard errors from the hook, but the
+  worker fail-opens and skips the claim instead of parking the bead.
+- `needs_refine` is warn-only in warn mode and becomes operator-attention /
+  park in block mode.
+- `operator_required` parks the bead.
+- `needs_split` parks the bead for decomposition.
 
-Two escalation guards make silent-idle visible:
-
-- `preClaimIdleEscalationThreshold` is `5` consecutive `loop.idle` cycles with
-  the same pre-claim blocker detail (`ddx-df77e668`). At that point the loop
-  emits a non-terminal `loop.operator_attention` event instead of silently
-  polling forever.
-- `--preclaim-warn-threshold` defaults to `5` consecutive identical pre-claim
-  warn fingerprints across distinct bead IDs. This escalates repeated warn-only
-  intake failures to operator attention.
-
-If the worker idles on a full queue, diagnose it this way:
-
-1. Confirm the scope with `ddx work status --json` from the project root. Use
-   `--project <path>` when checking another checkout.
-2. Inspect the newest `.ddx/agent-logs/agent-loop-*.jsonl` file and filter for
-   `loop.idle`, `pre_claim_intake.warn`, `pre_claim_intake.error`, and
-   `loop.operator_attention`.
-3. Compare the `fingerprint` or blocker detail across repeated events. Rows
-   with the same fingerprint mean the same readiness blocker is recurring; a
-   changing fingerprint means the worker is reaching different blockers.
-4. Distinguish `preclaim_systemic` from `preclaim_tracker_contention`.
-   `preclaim_tracker_contention` is usually transient concurrent tracker churn;
-   `preclaim_systemic` means a real repo/config/intake problem is blocking
-   every candidate.
-5. Check `ddx bead operator-attention --json` for durable operator-attention
-   rows when the loop escalates or releases a wedged lease.
+If the worker idles on a full queue, inspect the latest
+`.ddx/agent-logs/agent-loop-*.jsonl` file and start with `loop.idle` events.
+Repeated identical blocker details are escalated after
+`preClaimIdleEscalationThreshold` cycles (`ddx-df77e668`), so a silent stall
+with the same fingerprint should eventually become a
+`loop.operator_attention` signal instead of looping forever. Track the exact
+blocker detail, and distinguish `preclaim_systemic` from
+`preclaim_tracker_contention`.
 
 For a queue that is technically moving but still claims very slowly, use the
-claim-success-rate warning knobs. `--claim-rate-window` defaults to `10` recent
-claim attempts and `--claim-rate-threshold` defaults to `0.0`, which warns once
-the full window has a 0% claim success rate. `ddx work --watch` emits the
-warning to the operator stream once the rolling success rate over a full window
-falls at or below the threshold, so a low-claim loop is visible even when the
-queue is not fully idle. Use the latest agent loop log plus `ddx work status`
-to distinguish slow progress from a silent intake failure.
+claim-success-rate warning knobs `--claim-rate-window` and
+`--claim-rate-threshold` to surface the low-claim-rate condition. `ddx work --watch`
+emits the warning to the operator stream once the rolling success rate over a
+full window falls at or below the threshold, so a low-claim loop is visible
+even when the queue is not fully idle. Use the latest agent loop log plus
+`ddx work status` to distinguish slow progress from a silent intake failure.
 
 **Related reliability context:** AR-2026-05-17 follow-up; lock handling
 (ddx-57c40485); route-resolution wedge handling (ddx-8f2e0ebf).
@@ -186,7 +159,7 @@ bound to the metric artifact.
 | Command | What it does |
 |---------|-------------|
 | `ddx init` | Initialize document library |
-| `ddx plugin install <name>` | Pin a workflow plugin, cache its payload, and generate adapters |
+| `ddx install <name>` | Install a workflow plugin |
 | `ddx doctor` | Validate installation health |
 | [Prose quality support](docs/prose-quality.md) | Guidance for `ddx doc prose --changed` and prose config |
 | `ddx bead create/list/ready` | Track work items |

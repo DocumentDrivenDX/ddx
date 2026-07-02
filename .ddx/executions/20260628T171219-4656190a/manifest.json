@@ -1,0 +1,108 @@
+{
+  "attempt_id": "20260628T171219-4656190a",
+  "bead_id": "ddx-6ee2b0c3",
+  "base_rev": "5e79f635e2b15a08324ecca3cdf02cc4c56a6c06",
+  "created_at": "2026-06-28T17:12:33.375360492Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6ee2b0c3",
+    "title": "workers: run stale attempt process cleanup before bead claim",
+    "description": "PROBLEM\nQueue-control startup and pre-claim cleanup can remove stale worker sidecar directories, but it does not run the conservative stale attempt-descendant process pass before claiming more work. A worker can therefore continue draining while orphaned DDx-owned processes from older attempts still burn CPU or hold ports.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/cmd/startup_housekeeping.go:218-267` removes stale `.ddx/workers/agent-loop-*` sidecar dirs, but it does not terminate or report the underlying stale DDx-owned process tree when a stale sidecar corresponds to an orphaned attempt descendant.\n- `cli/internal/agent/execution_cleanup.go:230-527` owns cleanup of stale DDx execution artifacts, but work startup/pre-claim cleanup does not invoke the same conservative process pass before queue claim.\n- `cli/internal/agent/orphan_harness_reaper.go:42-152` handles startup reaping for orphaned top-level harnesses only and does not cover shell, cargo, benchmark, or test-server descendants left under stale execution worktrees.\n\nPROPOSED FIX\nWire the same conservative stale attempt process cleanup pass into work startup/pre-claim cleanup before the next bead is claimed. Preserve existing cleanup lock and jitter behavior so multiple workers do not race to kill the same process group. Emit a structured cleanup observation whenever startup/pre-claim cleanup reaps, preserves, or cannot safely reap a stale process group. The startup path must use the same ownership and liveness rules as `ddx cleanup --apply`: current-project execution root, stale or missing run-state liveness, dead owner PID, no live worker sidecar, and no active registered worktree.\n\nIN-SCOPE FILES\n- `cli/cmd/startup_housekeeping.go` and existing work-startup cleanup tests.\n- `cli/internal/agent/execution_cleanup.go` only as needed to reuse the process cleanup pass.\n- `cli/internal/workerstatus/*` or `cli/internal/agent/orphan_harness_reaper*` only for reused process-scanning helpers, not broad rewrites.\n- `docs/helix/01-frame/features/FEAT-010-task-execution.md` and `docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md` only if this child changes the documented cleanup contract.\n\nNON-SCOPE\n- Do not edit Niflheim.\n- Do not duplicate `ddx-e0de6369`; that bead owns `.ddx/harness-sessions/` scratch ignore/prune behavior.\n- Do not duplicate `ddx-bbea954f`; that bead owns dirty timeout worktree edit preservation before cleanup deletion.\n- Do not replace the existing parent-death/process-group fixes from `ddx-0d7d5f0e`, `ddx-3113d524`, or `ddx-418c3849`.\n- Do not implement a general-purpose port scanner or host process manager. Port conflict recovery here comes only from safely reaping stale DDx-owned attempt process groups.\n- Do not kill processes outside the current project's DDx execution root, processes tied to live run-state/worker liveness, active registered worktrees, or non-DDx user workloads.\n\nGOVERNING ARTIFACTS\n- `spec:FEAT-010`\n- `spec:SD-025`\n\nPARENT AND DEPS\nParent: `ddx-3106674f` (multi-worker reliability and Niflheim local gates).\nDeps: none.",
+    "acceptance": "1. Add `TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim` proving work startup/pre-claim cleanup runs the conservative process pass before claiming the next bead.\n2. Add `TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation` proving live run-state, live worker sidecar, active registered worktree, other-project processes, and uncertain candidates are preserved and produce structured cleanup observations.\n3. Add `TestWorkStartupCleanup_UsesCleanupLockForProcessReaping` or an equivalent assertion proving the startup process pass keeps existing cleanup lock/jitter behavior and does not race multiple workers against the same process group.\n4. Focused cleanup tests pass: `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'WorkStartupCleanup|AttemptDescendant|Cleanup.*Process|CleanupCommand' -count=1` passes.\n5. Package-level gate passes: `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-2f8e5f26",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:cleanup",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "operator-ux",
+      "resource-exhaustion",
+      "incident:niflheim-2026-06-08",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-28T11:36:10.928160376Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260628T090211-272f4f4e\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":128,\"output_tokens\":121012,\"total_tokens\":121140,\"cost_usd\":9.714910950000002,\"duration_ms\":8109543,\"exit_code\":1}",
+          "created_at": "2026-06-28T11:36:11.000777753Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=121140 cost_usd=9.7149 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260628T090211-272f4f4e\",\"bead_id\":\"ddx-6ee2b0c3\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-28T11:36:12.884609059Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"710d6932d09b10fc34fbce6fd5ce03d3bf6bb754\",\"classification\":\"tests_red\",\"detail\":\"exit status 1\",\"rationale\":\"Implementation changes were produced at 632da5e930e2b549eb01ae2f2ce9b6179ff9d212, but verification did not pass: the attempt log shows `go test ./internal/agent/...` ending with `panic: test timed out after 5m0s` and `FAIL github.com/DocumentDrivenDX/ddx/internal/agent`. This is a failed implementation verification, not a bead-definition defect.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"632da5e930e2b549eb01ae2f2ce9b6179ff9d212\",\"session_id\":\"eb-0acc05b2\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-28T11:37:47.130250607Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "tests_red: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\npowerClass=standard\ndecision_audit={\"failure_class\":\"tests_red\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=632da5e930e2b549eb01ae2f2ce9b6179ff9d212\nbase_rev=710d6932d09b10fc34fbce6fd5ce03d3bf6bb754\noutcome_reason=tests_red",
+          "created_at": "2026-06-28T11:37:49.695042172Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-28T15:02:01.017533124Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260628T114530-9d7b60ea\",\"bead_id\":\"ddx-6ee2b0c3\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-28T15:02:02.820142809Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "context deadline exceeded\npowerClass=standard\ndecision_audit={\"failure_class\":\"timeout\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=22a8c19efc927d5653ca6534bb59b189f8ab5913\nbase_rev=22a8c19efc927d5653ca6534bb59b189f8ab5913\noutcome_reason=timeout",
+          "created_at": "2026-06-28T15:02:03.029573656Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "queue-rank": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260628T171219-4656190a",
+    "prompt": ".ddx/executions/20260628T171219-4656190a/prompt.md",
+    "manifest": ".ddx/executions/20260628T171219-4656190a/manifest.json",
+    "result": ".ddx/executions/20260628T171219-4656190a/result.json",
+    "checks": ".ddx/executions/20260628T171219-4656190a/checks.json",
+    "usage": ".ddx/executions/20260628T171219-4656190a/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6ee2b0c3-20260628T171219-4656190a"
+  },
+  "prompt_sha": "24d8219ed9317eaebd20e7b53e7674ef145318bb4b7b30ac9db29398095bd4ac"
+}

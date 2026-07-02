@@ -1,12 +1,10 @@
 <script lang="ts">
-	import { gql, type RequestDocument } from 'graphql-request';
+	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
-	import { extractGraphQLErrorMessage } from '$lib/gql/error';
 	import { invalidateAll } from '$app/navigation';
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { X, UserPlus, UserMinus, Pencil, Trash2, Copy, Check } from 'lucide-svelte';
 	import BeadForm from './BeadForm.svelte';
-	import ConfirmDialog from './ConfirmDialog.svelte';
 	import TypedConfirmDialog from './TypedConfirmDialog.svelte';
 
 	interface Dependency {
@@ -54,20 +52,6 @@
 		durationMs: number | null;
 	}
 
-	type LifecycleAction = 'approve' | 'block' | 'cancel' | 'reopen';
-
-	interface LifecycleActionConfig {
-		title: string;
-		description: string;
-		actionLabel: string;
-		destructive: boolean;
-		reasonLabel: string | null;
-		reasonPlaceholder: string | null;
-		responseField: 'beadApprove' | 'beadBlock' | 'beadCancel' | 'beadReopen';
-		query: RequestDocument;
-		variableName?: 'note' | 'reason' | 'externalBlockerReason';
-	}
-
 	let {
 		bead: initialBead,
 		onClose,
@@ -106,37 +90,10 @@
 	let actionError = $state<string | null>(null);
 	let deleteDialogOpen = $state(false);
 	let cascadeToChildren = $state(false);
-	let lifecycleDialogOpen = $state(false);
-	let lifecycleAction = $state<LifecycleAction | null>(null);
-	let lifecycleReason = $state('');
 	let deleteButton = $state<HTMLButtonElement | null>(null);
 	let idCopied = $state(false);
 	let idCopyTimer: ReturnType<typeof setTimeout> | null = null;
 	const hasChildBeads = $derived((bead.childCount ?? 0) > 0);
-
-	const MUTATION_FIELDS = `
-				id
-				title
-				status
-				priority
-				issueType
-				owner
-				createdAt
-				createdBy
-				updatedAt
-				labels
-				parent
-				description
-				acceptance
-				notes
-				dependencies {
-					issueId
-					dependsOnId
-					type
-					createdAt
-					createdBy
-				}
-	`;
 
 	async function handleCopyId() {
 		try {
@@ -148,54 +105,6 @@
 			}, 1500);
 		} catch {
 			// clipboard may be unavailable; silently fail
-		}
-	}
-
-	function openLifecycleDialog(action: LifecycleAction) {
-		lifecycleAction = action;
-		lifecycleReason = '';
-		actionError = null;
-		lifecycleDialogOpen = true;
-	}
-
-	function closeLifecycleDialog() {
-		lifecycleDialogOpen = false;
-		lifecycleAction = null;
-		lifecycleReason = '';
-		actionError = null;
-	}
-
-	async function submitLifecycleAction(): Promise<boolean> {
-		if (!lifecycleAction) return false;
-
-		const config = LIFECYCLE_ACTIONS[lifecycleAction];
-		if (config.variableName && !lifecycleReason.trim()) {
-			actionError = `${config.reasonLabel ?? 'Note'} is required`;
-			return false;
-		}
-
-		const client = createClient(undefined, projectId);
-		const variables: Record<string, string> = { id: bead.id };
-		if (config.variableName) {
-			variables[config.variableName] = lifecycleReason;
-		}
-
-		busy = true;
-		actionError = null;
-		try {
-			const result = await client.request<Record<string, Bead>>(config.query, variables);
-			const updated = result[config.responseField];
-			if (updated) {
-				bead = updated;
-				actionError = null;
-				await invalidateAll();
-			}
-			return true;
-		} catch (error) {
-			actionError = extractGraphQLErrorMessage(error);
-			return false;
-		} finally {
-			busy = false;
 		}
 	}
 
@@ -258,105 +167,45 @@
 	const CLOSE_MUTATION = gql`
 		mutation BeadClose($id: ID!, $reason: String) {
 			beadClose(id: $id, reason: $reason) {
-				${MUTATION_FIELDS}
+				id
+				title
+				status
+				priority
+				issueType
+				owner
+				createdAt
+				createdBy
+				updatedAt
+				labels
+				parent
+				description
+				acceptance
+				notes
+				dependencies {
+					issueId
+					dependsOnId
+					type
+					createdAt
+					createdBy
+				}
 			}
 		}
 	`;
-
-	const APPROVE_MUTATION = gql`
-		mutation BeadApprove($id: ID!, $note: String!) {
-			beadApprove(id: $id, note: $note) {
-				${MUTATION_FIELDS}
-			}
-		}
-	`;
-
-	const BLOCK_MUTATION = gql`
-		mutation BeadBlock($id: ID!, $externalBlockerReason: String!) {
-			beadBlock(id: $id, externalBlockerReason: $externalBlockerReason) {
-				${MUTATION_FIELDS}
-			}
-		}
-	`;
-
-	const CANCEL_MUTATION = gql`
-		mutation BeadCancel($id: ID!, $reason: String!) {
-			beadCancel(id: $id, reason: $reason) {
-				${MUTATION_FIELDS}
-			}
-		}
-	`;
-
-	const REOPEN_MUTATION = gql`
-		mutation BeadReopen($id: ID!) {
-			beadReopen(id: $id) {
-				${MUTATION_FIELDS}
-			}
-		}
-	`;
-
-	const LIFECYCLE_ACTIONS: Record<LifecycleAction, LifecycleActionConfig> = {
-		approve: {
-			title: 'Approve bead',
-			description: 'Approve this bead and record a note on the lifecycle event.',
-			actionLabel: 'Confirm',
-			destructive: false,
-			reasonLabel: 'Approval note',
-			reasonPlaceholder: 'Explain why this bead is ready',
-			responseField: 'beadApprove',
-			query: APPROVE_MUTATION,
-			variableName: 'note'
-		},
-		block: {
-			title: 'Block bead',
-			description: 'Block this bead and record the external blocker reason.',
-			actionLabel: 'Confirm',
-			destructive: true,
-			reasonLabel: 'Blocker reason',
-			reasonPlaceholder: 'Describe the blocker or dependency',
-			responseField: 'beadBlock',
-			query: BLOCK_MUTATION,
-			variableName: 'externalBlockerReason'
-		},
-		cancel: {
-			title: 'Cancel bead',
-			description: 'Cancel this bead and record why the work is no longer needed.',
-			actionLabel: 'Confirm',
-			destructive: true,
-			reasonLabel: 'Cancellation reason',
-			reasonPlaceholder: 'Describe why the bead is being cancelled',
-			responseField: 'beadCancel',
-			query: CANCEL_MUTATION,
-			variableName: 'reason'
-		},
-		reopen: {
-			title: 'Reopen bead',
-			description: 'Reopen this bead without adding a note.',
-			actionLabel: 'Confirm',
-			destructive: false,
-			reasonLabel: null,
-			reasonPlaceholder: null,
-			responseField: 'beadReopen',
-			query: REOPEN_MUTATION
-		}
-	};
-	const lifecycleConfig = $derived(lifecycleAction ? LIFECYCLE_ACTIONS[lifecycleAction] : null);
 
 	async function handleClaim() {
 		busy = true;
 		actionError = null;
 		try {
-			const client = createClient(undefined, projectId);
+			const client = createClient();
 			const assignee = nodeStore.value?.name ?? 'user';
 			const result = await client.request<{ beadClaim: Bead }>(CLAIM_MUTATION, {
 				id: bead.id,
 				assignee
 			});
 			bead = result.beadClaim;
-			actionError = null;
-			await invalidateAll();
+			invalidateAll();
 		} catch (e) {
-			actionError = extractGraphQLErrorMessage(e, 'Claim failed');
+			actionError = e instanceof Error ? e.message : 'Claim failed';
 		} finally {
 			busy = false;
 		}
@@ -366,15 +215,14 @@
 		busy = true;
 		actionError = null;
 		try {
-			const client = createClient(undefined, projectId);
+			const client = createClient();
 			const result = await client.request<{ beadUnclaim: Bead }>(UNCLAIM_MUTATION, {
 				id: bead.id
 			});
 			bead = result.beadUnclaim;
-			actionError = null;
-			await invalidateAll();
+			invalidateAll();
 		} catch (e) {
-			actionError = extractGraphQLErrorMessage(e, 'Unclaim failed');
+			actionError = e instanceof Error ? e.message : 'Unclaim failed';
 		} finally {
 			busy = false;
 		}
@@ -389,7 +237,7 @@
 		busy = true;
 		actionError = null;
 		try {
-			const client = createClient(undefined, projectId);
+			const client = createClient();
 			await client.request<{ beadClose: Bead }>(CLOSE_MUTATION, {
 				id: bead.id,
 				reason: 'deleted via UI'
@@ -397,7 +245,7 @@
 			await invalidateAll();
 			onClose();
 		} catch (e) {
-			actionError = extractGraphQLErrorMessage(e, 'Delete failed');
+			actionError = e instanceof Error ? e.message : 'Delete failed';
 		} finally {
 			busy = false;
 		}
@@ -453,12 +301,12 @@
 					<Copy class="h-3.5 w-3.5" />
 				{/if}
 			</button>
-			<span data-testid="bead-status-badge" class="shrink-0 font-medium {statusClass(bead.status)}">{bead.status}</span>
+			<span class="shrink-0 font-medium {statusClass(bead.status)}">{bead.status}</span>
 			{#if bead.owner}
 				<span class="shrink-0 truncate text-body-sm text-fg-muted dark:text-dark-fg-muted">@ {bead.owner}</span>
 			{/if}
 		</div>
-		<div class="ml-3 flex flex-wrap items-center justify-end gap-2">
+		<div class="ml-3 flex shrink-0 items-center gap-2">
 			{#if !editing}
 				{#if bead.status === 'open' || bead.status === 'blocked'}
 					<button
@@ -496,38 +344,6 @@
 					<Trash2 class="h-3.5 w-3.5" />
 					Delete
 				</button>
-				<button
-					type="button"
-					onclick={() => openLifecycleDialog('approve')}
-					disabled={busy}
-					class="rounded-none border border-border-line px-3 py-1.5 text-body-sm font-medium text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
-				>
-					Approve
-				</button>
-				<button
-					type="button"
-					onclick={() => openLifecycleDialog('block')}
-					disabled={busy}
-					class="rounded-none border border-error/30 px-3 py-1.5 text-body-sm font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-error/30 dark:text-dark-error dark:hover:bg-dark-error/10"
-				>
-					Block
-				</button>
-				<button
-					type="button"
-					onclick={() => openLifecycleDialog('cancel')}
-					disabled={busy}
-					class="rounded-none border border-error/30 px-3 py-1.5 text-body-sm font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-error/30 dark:text-dark-error dark:hover:bg-dark-error/10"
-				>
-					Cancel
-				</button>
-				<button
-					type="button"
-					onclick={() => openLifecycleDialog('reopen')}
-					disabled={busy}
-					class="rounded-none border border-border-line px-3 py-1.5 text-body-sm font-medium text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
-				>
-					Reopen
-				</button>
 			{/if}
 			<button
 				onclick={onClose}
@@ -542,8 +358,6 @@
 	<!-- Action error banner -->
 	{#if actionError}
 		<div
-			role="alert"
-			data-testid="error-message"
 			class="shrink-0 border-b border-error/30 bg-error/10 px-6 py-2 text-body-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 		>
 			{actionError}
@@ -556,7 +370,6 @@
 			{#key bead?.id}
 				<BeadForm
 					{bead}
-					{projectId}
 					onSuccess={(updated) => {
 						bead = updated;
 						editing = false;
@@ -741,49 +554,8 @@
 					<div>Updated: {new Date(bead.updatedAt).toLocaleString()}</div>
 				</div>
 			</dl>
-	{/if}
+		{/if}
 	</div>
-
-	{#if lifecycleConfig}
-		<ConfirmDialog
-			bind:open={lifecycleDialogOpen}
-			actionLabel={lifecycleConfig.actionLabel}
-			title={lifecycleConfig.title}
-			destructive={lifecycleConfig.destructive}
-			confirmDisabled={busy}
-			onConfirm={submitLifecycleAction}
-			onOpenChange={(open) => {
-				if (!open) closeLifecycleDialog();
-			}}
-		>
-			{#snippet summary()}
-				<span>
-					{lifecycleConfig.description} <span class="font-mono">{bead.id}</span>.
-				</span>
-			{/snippet}
-
-			{#if lifecycleConfig.reasonLabel}
-				<div class="space-y-2">
-					<label
-						for="bead-lifecycle-reason"
-						class="block text-sm font-medium text-fg-ink dark:text-dark-fg-ink"
-					>
-						{lifecycleConfig.reasonLabel} <span class="text-error dark:text-dark-error" aria-hidden="true">*</span>
-					</label>
-					<textarea
-						id="bead-lifecycle-reason"
-						bind:value={lifecycleReason}
-						rows={4}
-						placeholder={lifecycleConfig.reasonPlaceholder ?? ''}
-						class="w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-body-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever"
-					></textarea>
-					{#if !lifecycleReason.trim()}
-						<p data-testid="lifecycle-reason-required-hint" class="text-xs text-fg-muted dark:text-dark-fg-muted">Required</p>
-					{/if}
-				</div>
-			{/if}
-		</ConfirmDialog>
-	{/if}
 
 	<TypedConfirmDialog
 		bind:open={deleteDialogOpen}

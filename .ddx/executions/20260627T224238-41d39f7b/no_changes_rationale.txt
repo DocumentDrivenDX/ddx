@@ -1,0 +1,3 @@
+status: open
+reason: original bead exceeds the split threshold for a single execution pass; decomposed into ddx-071e9bd6, ddx-a0a13392, ddx-096129b9, ddx-cc6c974f
+orchestrator_action: decompose

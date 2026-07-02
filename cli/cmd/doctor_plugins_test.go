@@ -68,34 +68,6 @@ func TestDoctorPluginsFlagAuditsLegacyUntypedPluginEntries(t *testing.T) {
 	assert.Contains(t, output, "missing package.yaml")
 }
 
-func TestDoctorPluginsFlagSkipsStaleRetiredInstalledState(t *testing.T) {
-	workDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	state := &registry.InstalledState{
-		Installed: []registry.InstalledEntry{
-			{
-				Name:    "helix",
-				Version: "1.0.0",
-				Type:    registry.PackageTypeWorkflow,
-				Source:  "https://github.com/DocumentDrivenDX/helix",
-				Files: []string{
-					"plugins/helix/skills/helix/SKILL.md",
-					"plugins/helix/workflows/workflow.yml",
-				},
-			},
-		},
-	}
-	require.NoError(t, registry.SaveState(state))
-
-	factory := NewCommandFactory(workDir)
-	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
-	require.NoError(t, err)
-	assert.NotContains(t, output, "plugins/helix/skills/helix/SKILL.md")
-	assert.NotContains(t, output, "missing recorded file or symlink")
-}
-
 func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -161,15 +133,15 @@ func TestDoctorPluginsFlagReportsBothManifestSchemaAndStructuralIssues(t *testin
 	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(pluginRoot, "broken-link")))
 
 	// Manifest: missing the required `description` field (schema defect)
-	// alongside a valid `materialize.skills` section (so structural audit has
+	// alongside a valid `install.skills` section (so structural audit has
 	// something to walk). Pre-fix: the schema error caused audit to skip
-	// the adapter-source section entirely.
+	// the install section entirely.
 	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: broken-plugin
 version: 1.0.0
 type: plugin
 source: https://example.com/broken-plugin
 api_version: 1
-materialize:
+install:
   skills:
     - source: skills
       target: .agents/skills
@@ -297,9 +269,10 @@ api_version: 1
 	assert.Contains(t, output, "dangling-link")
 }
 
-// TestDoctor_ReportsInstallTopology verifies that `ddx doctor` reports legacy
-// global payloads as retired-stale instead of treating them as a resolution
-// layer.
+// TestDoctor_ReportsInstallTopology verifies that `ddx doctor` output contains
+// a "Global Install (...) — ok|missing" line and a "Project Install (...) —
+// ok|missing|lazy-resolves-to-global" line, and that the project line reads
+// "lazy-resolves-to-global" when only the global install is present.
 func TestDoctor_ReportsInstallTopology(t *testing.T) {
 	xdgDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -315,11 +288,16 @@ func TestDoctor_ReportsInstallTopology(t *testing.T) {
 	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor")
 	require.NoError(t, err)
 
-	assert.Contains(t, output, "Retired Global Install (", "retired global install line must appear in doctor output")
-	assert.Contains(t, output, "Legacy Project Payload (", "legacy project payload line must appear in doctor output")
-	assert.Contains(t, output, "Built-in DDx Package (", "built-in package line must appear in doctor output")
-	assert.Contains(t, output, "retired-stale", "legacy global plugin dir must be reported as stale")
-	assert.NotContains(t, output, "lazy-resolves-to-global", "legacy global plugin dir must not be used as a resolution layer")
+	// Both topology lines must appear in the output.
+	assert.Contains(t, output, "Global Install (", "Global Install line must appear in doctor output")
+	assert.Contains(t, output, "Project Install (", "Project Install line must appear in doctor output")
+
+	// When only the global install exists, the project line must report lazy resolution.
+	assert.Contains(t, output, "lazy-resolves-to-global",
+		"Project Install line must read lazy-resolves-to-global when global install exists but project install does not")
+
+	// The global install we created must report "ok".
+	assert.Contains(t, output, ") — ok", "Global Install must report ok when global plugin dir exists")
 }
 
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {

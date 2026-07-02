@@ -66,10 +66,9 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 		return r.Actions.DispatchWorker(ctx, kind, r.projectRoot(ctx, projectID), args)
 	case "realign-specs", "run-checks":
 		return &WorkerDispatchResult{
-			ID:      "queued-worker-" + slug(kind),
-			State:   queuedPlaceholderState,
-			Kind:    kind,
-			Workers: []*WorkerLifecycleResult{},
+			ID:    "queued-worker-" + slug(kind),
+			State: queuedPlaceholderState,
+			Kind:  kind,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported worker kind %q", kind)
@@ -91,22 +90,11 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	if r.Actions == nil {
 		return nil, fmt.Errorf("work worker dispatcher is not configured")
 	}
-	if target, err := r.workerForwardTargetByProjectID(input.ProjectID); err != nil {
-		return nil, err
-	} else if target != nil {
-		return r.forwardStartWorker(ctx, target, input)
-	}
 	projectRoot := r.projectRoot(ctx, input.ProjectID)
 
 	overrides := config.CLIOverrides{}
 	if input.Harness != nil {
 		overrides.Harness = strings.TrimSpace(*input.Harness)
-	}
-	if input.Provider != nil {
-		overrides.Provider = strings.TrimSpace(*input.Provider)
-	}
-	if input.Model != nil {
-		overrides.Model = strings.TrimSpace(*input.Model)
 	}
 	if input.Profile != nil {
 		overrides.Profile = strings.TrimSpace(*input.Profile)
@@ -119,12 +107,6 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	args := map[string]string{}
 	if v := rcfg.Harness(); v != "" {
 		args["harness"] = v
-	}
-	if v := rcfg.Provider(); v != "" {
-		args["provider"] = v
-	}
-	if v := rcfg.Model(); v != "" {
-		args["model"] = v
 	}
 	profile := rcfg.Profile()
 	if profile == "" {
@@ -149,15 +131,6 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	} else if mode == "watch" {
 		args["idle_interval"] = "30s"
 	}
-	if input.RequestTimeout != nil && strings.TrimSpace(*input.RequestTimeout) != "" {
-		args["request_timeout"] = strings.TrimSpace(*input.RequestTimeout)
-	}
-	if input.Count != nil {
-		if *input.Count < 1 {
-			return nil, fmt.Errorf("count must be >= 1")
-		}
-		args["count"] = fmt.Sprintf("%d", *input.Count)
-	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, err
@@ -170,11 +143,6 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 func (r *mutationResolver) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
 	if r.Actions == nil {
 		return nil, fmt.Errorf("work worker dispatcher is not configured")
-	}
-	if projectID, target, err := r.workerForwardTargetByWorkerID(id); err != nil {
-		return nil, err
-	} else if target != nil {
-		return r.forwardStopWorker(ctx, target, projectID, id)
 	}
 	return r.Actions.StopWorker(ctx, id)
 }
@@ -524,33 +492,26 @@ func DispatchPluginAction(workingDir string, name string, action string) (string
 	pluginActionMu.Lock()
 	defer pluginActionMu.Unlock()
 
-	ctx := context.Background()
-	lock, err := registry.LoadProjectPluginLock(ctx, workingDir)
+	state, err := registry.LoadState()
 	if err != nil {
-		return "", fmt.Errorf("loading project plugin lock: %w", err)
+		return "", fmt.Errorf("loading plugin state: %w", err)
 	}
 
 	switch action {
 	case "install":
-		if entry := lock.Find(name); entry != nil {
-			if synced, err := syncProjectPluginLockEntry(ctx, workingDir, entry, true); err == nil && synced {
-				if err := registry.SaveProjectPluginLock(ctx, workingDir, lock); err != nil {
-					return "", fmt.Errorf("saving project plugin lock: %w", err)
-				}
-				return "installed", nil
-			}
+		if entry := state.FindInstalled(name); entry != nil && entry.VerifyFiles() {
+			return "installed", nil
 		}
-		entry, err := installRegistryPlugin(ctx, workingDir, name)
+		entry, err := installRegistryPlugin(workingDir, state, name)
 		if err != nil {
 			return "", err
 		}
-		lock.AddOrUpdate(*entry)
-		if err := registry.SaveProjectPluginLock(ctx, workingDir, lock); err != nil {
-			return "", fmt.Errorf("saving project plugin lock: %w", err)
+		if entry != nil && entry.VerifyFiles() {
+			return "installed", nil
 		}
-		return "installed", nil
+		return "", fmt.Errorf("plugin %q install completed but recorded files are not present", name)
 	case "update":
-		installed := lock.Find(name)
+		installed := state.FindInstalled(name)
 		if installed == nil {
 			return "", fmt.Errorf("plugin %q is not installed", name)
 		}
@@ -558,34 +519,28 @@ func DispatchPluginAction(workingDir string, name string, action string) (string
 		if err != nil {
 			return "", fmt.Errorf("plugin %q is not updateable from the built-in registry", name)
 		}
-		if installed.Version == pkg.Version {
-			if synced, err := syncProjectPluginLockEntry(ctx, workingDir, installed, true); err == nil && synced {
-				if err := registry.SaveProjectPluginLock(ctx, workingDir, lock); err != nil {
-					return "", fmt.Errorf("saving project plugin lock: %w", err)
-				}
-				return "installed", nil
-			}
+		if installed.Version == pkg.Version && installed.VerifyFiles() {
+			return "installed", nil
 		}
-		entry, err := installRegistryPlugin(ctx, workingDir, name)
+		entry, err := installRegistryPlugin(workingDir, state, name)
 		if err != nil {
 			return "", err
 		}
-		lock.AddOrUpdate(*entry)
-		if err := registry.SaveProjectPluginLock(ctx, workingDir, lock); err != nil {
-			return "", fmt.Errorf("saving project plugin lock: %w", err)
+		if entry != nil && entry.VerifyFiles() {
+			return "installed", nil
 		}
-		return "installed", nil
+		return "", fmt.Errorf("plugin %q update completed but recorded files are not present", name)
 	case "uninstall":
-		entry := lock.Find(name)
+		entry := state.FindInstalled(name)
 		if entry == nil {
 			return "", fmt.Errorf("plugin %q is not installed", name)
 		}
-		if err := removeProjectPlugin(ctx, workingDir, *entry); err != nil {
+		if err := registry.UninstallPackage(entry); err != nil {
 			return "", err
 		}
-		lock.Remove(name)
-		if err := registry.SaveProjectPluginLock(ctx, workingDir, lock); err != nil {
-			return "", fmt.Errorf("saving project plugin lock: %w", err)
+		state.Remove(name)
+		if err := registry.SaveState(state); err != nil {
+			return "", fmt.Errorf("saving plugin state: %w", err)
 		}
 		return "uninstalled", nil
 	default:
@@ -593,7 +548,7 @@ func DispatchPluginAction(workingDir string, name string, action string) (string
 	}
 }
 
-func installRegistryPlugin(ctx context.Context, workingDir string, name string) (*registry.PluginLockEntry, error) {
+func installRegistryPlugin(workingDir string, state *registry.InstalledState, name string) (*registry.InstalledEntry, error) {
 	pkg, err := registry.BuiltinRegistry().Find(name)
 	if err != nil {
 		return nil, err
@@ -607,58 +562,15 @@ func installRegistryPlugin(ctx context.Context, workingDir string, name string) 
 		defer func() { _ = os.Chdir(origDir) }()
 	}
 
-	entry, err := registry.CachePackageFromRemote(pkg)
+	entry, err := registry.InstallPackage(pkg, workingDir)
 	if err != nil {
 		return nil, fmt.Errorf("installing plugin %q: %w", name, err)
 	}
-	result, err := registry.SyncProjectPlugin(ctx, workingDir, entry, true)
-	if err != nil {
-		return nil, fmt.Errorf("syncing plugin %q: %w", name, err)
+	state.AddOrUpdate(entry)
+	if err := registry.SaveState(state); err != nil {
+		return nil, fmt.Errorf("saving plugin state: %w", err)
 	}
-	entry.GeneratedFiles = result.GeneratedFiles
-	return &entry, nil
-}
-
-func syncProjectPluginLockEntry(ctx context.Context, workingDir string, entry *registry.PluginLockEntry, force bool) (bool, error) {
-	if entry == nil {
-		return false, nil
-	}
-	if projectPluginOverlayPath(ctx, workingDir, entry.Name) != "" {
-		return true, nil
-	}
-	result, err := registry.SyncProjectPlugin(ctx, workingDir, *entry, force)
-	if err != nil {
-		return false, err
-	}
-	entry.GeneratedFiles = result.GeneratedFiles
-	return true, nil
-}
-
-func removeProjectPlugin(ctx context.Context, workingDir string, entry registry.PluginLockEntry) error {
-	for _, rel := range entry.GeneratedFiles {
-		if strings.TrimSpace(rel) == "" {
-			continue
-		}
-		path := filepath.Join(workingDir, filepath.FromSlash(rel))
-		if err := os.RemoveAll(path); err != nil {
-			return fmt.Errorf("removing generated plugin adapter %s: %w", rel, err)
-		}
-	}
-	if overlay := projectPluginOverlayPath(ctx, workingDir, entry.Name); overlay != "" {
-		if err := os.RemoveAll(overlay); err != nil {
-			return fmt.Errorf("removing local plugin overlay %s: %w", overlay, err)
-		}
-	}
-	return nil
-}
-
-func projectPluginOverlayPath(ctx context.Context, workingDir, name string) string {
-	path := filepath.Join(ddxroot.Path(ctx, workingDir), "plugins", name)
-	info, err := os.Lstat(path)
-	if err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return path
-	}
-	return ""
+	return state.FindInstalled(name), nil
 }
 
 func readComparisonRecords(workingDir string) ([]comparisonDispatchRecord, error) {
@@ -731,27 +643,26 @@ func randomHex(n int) string {
 
 func pluginCatalog(workingDir string) ([]*PluginInfo, error) {
 	reg := registry.BuiltinRegistry()
-	lock, err := registry.LoadProjectPluginLock(context.Background(), workingDir)
+	state, err := registry.LoadState()
 	if err != nil {
 		return nil, err
 	}
 
 	byName := map[string]*PluginInfo{}
-	installedByName := map[string]registry.PluginLockEntry{}
-	for _, entry := range lock.Plugins {
+	installedByName := map[string]registry.InstalledEntry{}
+	for _, entry := range state.Installed {
 		installedByName[entry.Name] = entry
 	}
 
 	for _, pkg := range reg.Packages {
-		entry, installed := installedByName[pkg.Name]
-		info := pluginInfoFromPackage(pkg, workingDir, entry, installed)
+		info := pluginInfoFromPackage(pkg, workingDir, installedByName[pkg.Name])
 		byName[info.Name] = info
 	}
-	for _, entry := range lock.Plugins {
+	for _, entry := range state.Installed {
 		if _, ok := byName[entry.Name]; ok {
 			continue
 		}
-		info := pluginInfoFromLockEntry(entry, workingDir)
+		info := pluginInfoFromInstalled(entry, workingDir)
 		byName[info.Name] = info
 	}
 
@@ -763,7 +674,7 @@ func pluginCatalog(workingDir string) ([]*PluginInfo, error) {
 	return out, nil
 }
 
-func pluginInfoFromPackage(pkg registry.Package, workingDir string, installed registry.PluginLockEntry, isInstalled bool) *PluginInfo {
+func pluginInfoFromPackage(pkg registry.Package, workingDir string, installed registry.InstalledEntry) *PluginInfo {
 	info := &PluginInfo{
 		Name:           pkg.Name,
 		Version:        pkg.Version,
@@ -776,7 +687,7 @@ func pluginInfoFromPackage(pkg registry.Package, workingDir string, installed re
 		Prompts:        []string{},
 		Templates:      []string{},
 	}
-	if isInstalled {
+	if installed.Name != "" {
 		info.InstalledVersion = strPtr(installed.Version)
 		info.Status = "installed"
 		if installed.Version != "" && installed.Version != pkg.Version {
@@ -786,11 +697,11 @@ func pluginInfoFromPackage(pkg registry.Package, workingDir string, installed re
 	if manifest, err := json.Marshal(pkg); err == nil {
 		info.Manifest = strPtr(string(manifest))
 	}
-	enrichPluginInfoFromDisk(info, workingDir, pkg.Name, installed, isInstalled)
+	enrichPluginInfoFromDisk(info, workingDir, pkg.Name, installed)
 	return info
 }
 
-func pluginInfoFromLockEntry(entry registry.PluginLockEntry, workingDir string) *PluginInfo {
+func pluginInfoFromInstalled(entry registry.InstalledEntry, workingDir string) *PluginInfo {
 	info := &PluginInfo{
 		Name:             entry.Name,
 		Version:          entry.Version,
@@ -803,18 +714,15 @@ func pluginInfoFromLockEntry(entry registry.PluginLockEntry, workingDir string) 
 		Prompts:          []string{},
 		Templates:        []string{},
 	}
-	enrichPluginInfoFromDisk(info, workingDir, entry.Name, entry, true)
+	enrichPluginInfoFromDisk(info, workingDir, entry.Name, entry)
 	return info
 }
 
-func enrichPluginInfoFromDisk(info *PluginInfo, workingDir string, name string, entry registry.PluginLockEntry, installed bool) {
+func enrichPluginInfoFromDisk(info *PluginInfo, workingDir string, name string, _ registry.InstalledEntry) {
 	if workingDir == "" {
 		return
 	}
-	root := projectPluginContentRoot(context.Background(), workingDir, name, entry, installed)
-	if root == "" {
-		return
-	}
+	root := ddxroot.JoinProject(workingDir, "plugins", name)
 	if stat, err := os.Stat(root); err != nil || !stat.IsDir() {
 		return
 	}
@@ -844,20 +752,6 @@ func enrichPluginInfoFromDisk(info *PluginInfo, workingDir string, name string, 
 	info.Skills = uniqueStrings(append(info.Skills, scanNamedChildren(root, []string{"skills", ".agents/skills", ".claude/skills"}, "SKILL.md")...))
 	info.Prompts = uniqueStrings(append(info.Prompts, scanNamedChildren(root, []string{"prompts", "library/prompts"}, "")...))
 	info.Templates = uniqueStrings(append(info.Templates, scanNamedChildren(root, []string{"templates", "library/templates"}, "")...))
-}
-
-func projectPluginContentRoot(ctx context.Context, workingDir, name string, entry registry.PluginLockEntry, installed bool) string {
-	if overlay := projectPluginOverlayPath(ctx, workingDir, name); overlay != "" {
-		return overlay
-	}
-	if !installed {
-		return ""
-	}
-	cachePath := entry.CachePath
-	if cachePath == "" {
-		cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
-	}
-	return cachePath
 }
 
 func dirSize(root string) int {

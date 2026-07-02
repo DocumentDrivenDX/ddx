@@ -19,7 +19,6 @@ type DocFrontmatter struct {
 	Review     DocReview   `yaml:"review"`
 	ParkingLot bool        `yaml:"parking_lot"`
 	Exec       *DocExecDef `yaml:"execution"`
-	MediaType  string      `yaml:"media_type"`
 }
 
 // DocExecDef describes an execution definition embedded in a graph document.

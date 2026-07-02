@@ -1,0 +1,93 @@
+{
+  "attempt_id": "20260702T100313-778997c9",
+  "bead_id": "ddx-71d3a2de",
+  "base_rev": "0361ff01791693f1181e276140632c64a6e34422",
+  "created_at": "2026-07-02T10:03:24.366642335Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71d3a2de",
+    "title": "A: Archive + Interchange — add ctx, satisfy BeadArchive/InterchangeR/W; signature-only (TD-027 §6)",
+    "description": "# PROBLEM\n`*Store` exposes 6 archive/interchange methods (`Archive`, `ArchiveWithEvents`, `Migrate`, `Import`, `ExportTo`, `ExportToFile`). Per TD-027 §6 archive belongs on `BeadArchive` interface; interchange on `BeadInterchangeReader`/`BeadInterchangeWriter`. All take ctx per AC #1. These are signature-only changes — no helper migration needed; the methods stay as direct storage primitives.\n\n# ROOT CAUSE\n`cli/internal/bead/store.go`, `cli/internal/bead/archive.go`, `cli/internal/bead/import.go` define these 6 methods without ctx. Callers: `cli/cmd/bead_archive.go`, `cli/cmd/bead.go` (export/import subcommands).\n\n# PROPOSED FIX\n1. Update `*Store.Archive`, `ArchiveWithEvents`, `Migrate`, `Import`, `ExportTo`, `ExportToFile` to take `ctx context.Context` first.\n2. Compile-time assertions: `var _ BeadArchive = (*Store)(nil)`, `var _ BeadInterchangeReader = (*Store)(nil)`, `var _ BeadInterchangeWriter = (*Store)(nil)`.\n3. Thread ctx through callers (`cli/cmd/bead_archive.go`, `cli/cmd/bead.go`).\n\n# NON-SCOPE\n- Archive policy (TD-027 §16) — not modified.\n- Attachment storage layout (TD-027 §17) — not modified.\n- bd/br interchange shape (TD-027 §20) — wire format unchanged.\n- Migration tooling (`MigrateLifecycle`/`MigrateFromHelix`/etc.) — separate concern, handled in MIG bead.\n- Other concerns — separate beads.\n- Module boundary lockdown — `ddx-74452926`.\n\n# Acceptance criteria\n\n1. The 6 methods take ctx as first parameter. Compile-time assertions for `BeadArchive`, `BeadInterchangeReader`, `BeadInterchangeWriter` compile.\n2. Callers thread ctx. Existing archive/import/export tests pass.\n3. `ddx bead archive`, `ddx bead export`, `ddx bead import` CLI commands continue to work end-to-end. Test: `TestBeadArchiveCommand_RoundTrip`, `TestBeadExportImport_RoundTripsAllFields`.\n4. Schema round-trip preserved (per TD-027 §20 — bd/br interchange compatibility). Test: `TestBead_ExportImportRoundTrip_PreservesExtras`.\n5. `cd cli \u0026\u0026 go test ./...` is green.\n6. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:archive, area:interchange, kind:refactor, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: ddx-c6317784.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:archive",
+      "area:bead",
+      "area:interchange",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.448253792Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-30T14:14:02.740157986Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260630T125813-4114eb07\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":19882219,\"output_tokens\":61549,\"total_tokens\":19943768,\"cost_usd\":0,\"duration_ms\":4106031,\"exit_code\":0}",
+          "created_at": "2026-06-30T14:14:02.812966879Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=19943768 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260630T125813-4114eb07\",\"bead_id\":\"ddx-71d3a2de\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-30T14:14:05.529054685Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"54defcbea9189f6948ee5f1abf7444b2a080ef22\",\"classification\":\"tests_red\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt produced an implementation commit, targeted archive/interchange tests passed, but the required repo-wide verification gate was not green. The reported failing full-suite tests appear unrelated/performance-budget sensitive, but this is still a changed-code attempt with failed acceptance verification rather than an already-satisfied or no-change outcome.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"d32583ef8770e7ee56bd2191f82cf6b28f49c0d6\",\"session_id\":\"eb-e880f315\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-30T14:14:53.185723751Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "tests_red: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\npowerClass=standard\nrationale: status: open\nreason: repo-wide verification is blocked by unrelated performance/time budget failures under this environment. The exact `go test ./...` run fails in `internal/agent` unless the timeout is raised, and even with `GOFLAGS='-p=1 -timeout=20m'` the full sweep later trips `cli/internal/bead`'s `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` under load. The archive/interchange changes and targeted bead tests pass, but the acceptance command is not green here.\ndecision_audit={\"failure_class\":\"tests_red\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=d32583ef8770e7ee56bd2191f82cf6b28f49c0d6\nbase_rev=54defcbea9189f6948ee5f1abf7444b2a080ef22\noutcome_reason=tests_red",
+          "created_at": "2026-06-30T14:14:53.298506453Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260702T100313-778997c9",
+    "prompt": ".ddx/executions/20260702T100313-778997c9/prompt.md",
+    "manifest": ".ddx/executions/20260702T100313-778997c9/manifest.json",
+    "result": ".ddx/executions/20260702T100313-778997c9/result.json",
+    "checks": ".ddx/executions/20260702T100313-778997c9/checks.json",
+    "usage": ".ddx/executions/20260702T100313-778997c9/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-71d3a2de-20260702T100313-778997c9"
+  },
+  "prompt_sha": "89c0edd9a7c4c7d751e28b3d5c7ac9636ee93980aa2afae0f9da7f965e5593db"
+}

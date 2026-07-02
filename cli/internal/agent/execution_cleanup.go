@@ -90,21 +90,34 @@ type ExecutionCleanupObservation struct {
 	Inodes  int64  `json:"inodes,omitempty"`
 }
 
-// ExecutionCleanupProcessFinding records one stale or preserved process found
-// under a DDx execution worktree.
+// ExecutionCleanupProcessFact captures one process observed during the
+// execution cleanup census.
+type ExecutionCleanupProcessFact struct {
+	PID       int       `json:"pid"`
+	PPID      int       `json:"ppid,omitempty"`
+	PGID      int       `json:"pgid,omitempty"`
+	Command   string    `json:"command,omitempty"`
+	Cwd       string    `json:"cwd,omitempty"`
+	Worktree  string    `json:"worktree,omitempty"`
+	StartedAt time.Time `json:"started_at,omitempty"`
+}
+
+// ExecutionCleanupProcessFinding records one stale or unavailable process
+// group observed while scanning for leaked attempt descendants.
 type ExecutionCleanupProcessFinding struct {
-	PID          int    `json:"pid"`
-	PPID         int    `json:"ppid,omitempty"`
-	PGID         int    `json:"pgid,omitempty"`
-	Command      string `json:"command,omitempty"`
-	Cwd          string `json:"cwd,omitempty"`
-	WorktreePath string `json:"worktree_path,omitempty"`
-	BeadID       string `json:"bead_id,omitempty"`
-	AttemptID    string `json:"attempt_id,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-	WouldKill    bool   `json:"would_kill"`
-	Killed       bool   `json:"killed,omitempty"`
-	Preserved    bool   `json:"preserved,omitempty"`
+	PID         int                           `json:"pid,omitempty"`
+	PPID        int                           `json:"ppid,omitempty"`
+	PGID        int                           `json:"pgid,omitempty"`
+	BeadID      string                        `json:"bead_id,omitempty"`
+	AttemptID   string                        `json:"attempt_id,omitempty"`
+	Command     string                        `json:"command,omitempty"`
+	Cwd         string                        `json:"cwd,omitempty"`
+	Worktree    string                        `json:"worktree,omitempty"`
+	StartedAt   time.Time                     `json:"started_at,omitempty"`
+	StaleReason string                        `json:"stale_reason,omitempty"`
+	WouldKill   bool                          `json:"would_kill,omitempty"`
+	Terminated  bool                          `json:"terminated,omitempty"`
+	Members     []ExecutionCleanupProcessFact `json:"members,omitempty"`
 }
 
 // ExecutionCleanupWarning records a non-blocking issue encountered while the
@@ -133,16 +146,12 @@ type ExecutionCleanupSummary struct {
 	ScannedEvidenceDirs  int `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs int `json:"complete_evidence_dirs"`
 	ScannedScratchDirs   int `json:"scanned_scratch_dirs"`
-	ScannedProcesses     int `json:"scanned_processes"`
 
 	RemovedUnregisteredTempDirs int64 `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64 `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64 `json:"removed_run_state_files"`
 	RemovedScratchDirs          int64 `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
-	StaleAttemptProcesses       int64 `json:"stale_attempt_processes"`
-	ReapedProcessGroups         int64 `json:"reaped_process_groups"`
-	PreservedAttemptProcesses   int64 `json:"preserved_attempt_processes"`
 	PrunedCandidateRefs         int64 `json:"pruned_candidate_refs"`
 	RemovedEvidenceDirs         int64 `json:"removed_evidence_dirs"`
 	RemovedAgentLogs            int64 `json:"removed_agent_logs"`
@@ -153,10 +162,10 @@ type ExecutionCleanupSummary struct {
 	ScratchBytesReclaimed  int64 `json:"scratch_bytes_reclaimed"`
 	ScratchInodesReclaimed int64 `json:"scratch_inodes_reclaimed"`
 
-	Warnings     []ExecutionCleanupWarning        `json:"warnings,omitempty"`
-	Issues       []ExecutionCleanupIssue          `json:"issues,omitempty"`
-	Observations []ExecutionCleanupObservation    `json:"observations,omitempty"`
-	Processes    []ExecutionCleanupProcessFinding `json:"processes,omitempty"`
+	Warnings        []ExecutionCleanupWarning        `json:"warnings,omitempty"`
+	Issues          []ExecutionCleanupIssue          `json:"issues,omitempty"`
+	Observations    []ExecutionCleanupObservation    `json:"observations,omitempty"`
+	ProcessFindings []ExecutionCleanupProcessFinding `json:"process_findings,omitempty"`
 }
 
 // ExecutionCleanupLivenessProbe decides whether a cleanup candidate should be
@@ -206,20 +215,28 @@ func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata
 	return false, "stale liveness"
 }
 
+// DefaultExecutionCleanupLiveness applies the same conservative liveness rules
+// as the default cleanup probe. Callers that need to layer extra policy on top
+// of the stock DDx rules can use this helper as the first check in a custom
+// probe.
+func DefaultExecutionCleanupLiveness(meta ExecutionCleanupMetadata, runState *RunState, now time.Time) (bool, string) {
+	return defaultExecutionCleanupLivenessProbe{}.IsLive(meta, runState, now)
+}
+
 // ExecutionCleanupManager owns conservative reclamation of DDx temp execution
 // resources for one project.
 type ExecutionCleanupManager struct {
-	ProjectRoot     string
-	TempRoot        string
-	ScratchRoots    []string
-	ScratchPrefixes []string
-	ScratchMinAge   time.Duration
-	GitOps          GitOps
-	DryRun          bool
-	Now             func() time.Time
-	Probe           ExecutionCleanupLivenessProbe
-	ProcessScanner  ExecutionCleanupProcessScanner
-	ProcessKiller   ExecutionCleanupProcessKiller
+	ProjectRoot           string
+	TempRoot              string
+	ScratchRoots          []string
+	ScratchPrefixes       []string
+	ScratchMinAge         time.Duration
+	GitOps                GitOps
+	DryRun                bool
+	Now                   func() time.Time
+	Probe                 ExecutionCleanupLivenessProbe
+	attemptProcessScanner executionCleanupAttemptProcessScanner
+	attemptProcessKiller  executionCleanupAttemptProcessKiller
 	// RetainDays controls how many days of evidence dirs under
 	// .ddx/executions/ to retain. 0 disables the prune; default is 90.
 	RetainDays int
@@ -229,12 +246,14 @@ type ExecutionCleanupManager struct {
 // DDx temp worktree root and the default liveness probe.
 func NewExecutionCleanupManager(projectRoot string, gitOps GitOps) *ExecutionCleanupManager {
 	return &ExecutionCleanupManager{
-		ProjectRoot: projectRoot,
-		TempRoot:    executionCleanupTempRoot(projectRoot),
-		RetainDays:  executionCleanupRetainDays(projectRoot),
-		GitOps:      gitOps,
-		Now:         time.Now,
-		Probe:       defaultExecutionCleanupLivenessProbe{},
+		ProjectRoot:           projectRoot,
+		TempRoot:              executionCleanupTempRoot(projectRoot),
+		RetainDays:            executionCleanupRetainDays(projectRoot),
+		GitOps:                gitOps,
+		Now:                   time.Now,
+		Probe:                 defaultExecutionCleanupLivenessProbe{},
+		attemptProcessScanner: newExecutionCleanupAttemptProcessScanner(),
+		attemptProcessKiller:  newExecutionCleanupAttemptProcessKiller(),
 	}
 }
 
@@ -317,13 +336,9 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			return summary, err
 		}
 	}
-	if err := m.cleanupAttemptDescendantProcesses(ctx, &summary, runStates, registered, probe, now()); err != nil {
+
+	if err := m.cleanupStaleAttemptProcessGroups(ctx, &summary, runStates, registered, probe, now()); err != nil {
 		return summary, err
-	}
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return summary, err
-		}
 	}
 
 	entries, err := os.ReadDir(summary.TempRoot)
@@ -519,7 +534,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		if _, ok := liveRunStates[runStateLiveKey(state)]; ok {
 			continue
 		}
-		if RunStateStaleReason(state, now()) == "" && runStateWorktreeStillExists(state) {
+		if runStateWorktreeStillExists(state) {
 			continue
 		}
 		if removed, bytes := m.removeStaleRunState(state, &summary); removed {
@@ -556,54 +571,6 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 	m.cleanupDurableLandedCandidateRefs(&summary)
 
-	return summary, nil
-}
-
-// CleanupAttemptDescendantProcesses runs only the conservative process census
-// and reaper used by full cleanup. Work startup uses this before claiming so a
-// stale DDx-owned process tree cannot keep burning resources while the queue
-// continues.
-func (m *ExecutionCleanupManager) CleanupAttemptDescendantProcesses(ctx context.Context) (ExecutionCleanupSummary, error) {
-	summary := ExecutionCleanupSummary{
-		ProjectRoot: m.ProjectRoot,
-		TempRoot:    m.tempRoot(),
-	}
-	if summary.TempRoot == "" {
-		summary.TempRoot = executionCleanupTempRoot(m.ProjectRoot)
-	}
-	if summary.TempRoot == "" {
-		return summary, errors.New("execution cleanup: temp root is empty")
-	}
-	if m.ProjectRoot == "" {
-		return summary, errors.New("execution cleanup: project root is empty")
-	}
-	now := time.Now
-	if m.Now != nil {
-		now = m.Now
-	}
-	probe := m.Probe
-	if probe == nil {
-		probe = defaultExecutionCleanupLivenessProbe{}
-	}
-	registered := map[string]struct{}{}
-	if m.GitOps != nil {
-		if paths, err := m.GitOps.WorktreeList(m.ProjectRoot); err == nil {
-			for _, p := range paths {
-				registered[filepath.Clean(p)] = struct{}{}
-			}
-		}
-	}
-	runStates, err := ReadRunStates(m.ProjectRoot)
-	if err != nil {
-		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-			Path:    runStateDirPath(m.ProjectRoot),
-			Class:   "run_state_read",
-			Message: err.Error(),
-		})
-	}
-	if err := m.cleanupAttemptDescendantProcesses(ctx, &summary, runStates, registered, probe, now()); err != nil {
-		return summary, err
-	}
 	return summary, nil
 }
 
@@ -1280,22 +1247,6 @@ func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary
 			continue
 		}
 
-		tracked, trackErr := m.evidenceDirHasTrackedFiles(ctx, relPath)
-		if trackErr != nil {
-			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-				Path:    relPath,
-				Class:   "evidence_dir_track_check",
-				Message: trackErr.Error(),
-			})
-		}
-		if tracked {
-			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
-				Path:    relPath,
-				Class:   "preserved_tracked_evidence_dir",
-				Message: "tracked execution evidence is audit data",
-			})
-			continue
-		}
 		if !m.DryRun {
 			m.removeEvidenceDir(ctx, dirPath, summary)
 		}
@@ -1312,18 +1263,8 @@ func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary
 	}
 }
 
-func (m *ExecutionCleanupManager) evidenceDirHasTrackedFiles(ctx context.Context, relSlash string) (bool, error) {
-	if m.ProjectRoot == "" || strings.TrimSpace(relSlash) == "" {
-		return false, nil
-	}
-	lsOut, err := internalgit.Command(ctx, m.ProjectRoot, "ls-files", "--", relSlash).Output()
-	if err != nil {
-		return false, err
-	}
-	return len(strings.TrimSpace(string(lsOut))) > 0, nil
-}
-
-// removeEvidenceDir removes an old untracked evidence directory.
+// removeEvidenceDir stages tracked files for deletion via git rm, then
+// removes any remaining files with os.RemoveAll.
 func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath string, summary *ExecutionCleanupSummary) {
 	if m.ProjectRoot == "" {
 		_ = os.RemoveAll(dirPath)
@@ -1334,6 +1275,21 @@ func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath
 		_ = os.RemoveAll(dirPath)
 		return
 	}
+	relSlash := filepath.ToSlash(rel)
+
+	// Check for tracked files; if any, stage their deletion via git rm.
+	lsOut, lsErr := internalgit.Command(ctx, m.ProjectRoot, "ls-files", relSlash).Output()
+	if lsErr == nil && len(strings.TrimSpace(string(lsOut))) > 0 {
+		rmOut, rmErr := internalgit.Command(ctx, m.ProjectRoot, "rm", "-rf", relSlash).CombinedOutput()
+		if rmErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    dirPath,
+				Class:   "evidence_dir_git_rm",
+				Message: fmt.Sprintf("git rm: %s: %v", strings.TrimSpace(string(rmOut)), rmErr),
+			})
+		}
+	}
+	// Remove remaining untracked files.
 	_ = os.RemoveAll(dirPath)
 }
 

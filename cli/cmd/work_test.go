@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,7 +37,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	require.NoError(t, err, "ddx work must exist")
 	require.NotNil(t, workCmd)
 
-	for _, name := range []string{"harness", "provider", "model", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
+	for _, name := range []string{"harness", "provider", "model", "label-filter", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
@@ -132,6 +134,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("model", "sonnet")
 	setFlag("profile", "smart")
 	setFlag("provider", "anthropic")
+	setFlag("label-filter", "phase:reliability")
 	setFlag("effort", "high")
 	setFlag("ignore-cooldown", "true")
 	setFlag("reason", "operator unblock")
@@ -161,6 +164,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, "sonnet", spec.Model)
 	assert.Equal(t, "smart", spec.Profile)
 	assert.Equal(t, "anthropic", spec.Provider)
+	assert.Equal(t, "phase:reliability", spec.LabelFilter)
 	assert.Equal(t, "high", spec.Effort)
 	assert.True(t, spec.IgnoreCooldown)
 	assert.Equal(t, "operator unblock", spec.CooldownOverrideReason)
@@ -299,6 +303,132 @@ func TestWork_NetworkFreeDrain_NoFetchInLoop(t *testing.T) {
 	assert.Equal(t, []string{"ddx-network-free-drain"}, executed, "the ready bead must be claimed and executed")
 }
 
+type attemptBeadReaderFunc func(context.Context, string) (*bead.Bead, error)
+
+func (f attemptBeadReaderFunc) Get(ctx context.Context, id string) (*bead.Bead, error) {
+	return f(ctx, id)
+}
+
+func Test_WorkClaim_NotFoundRace(t *testing.T) {
+	claimed := &bead.Bead{ID: "ddx-work-race-claim", Title: "Claimed bead"}
+
+	var primaryCalls int
+	primary := attemptBeadReaderFunc(func(ctx context.Context, id string) (*bead.Bead, error) {
+		primaryCalls++
+		return nil, fmt.Errorf("bead: not found: %s", id)
+	})
+
+	var refreshCalls int
+	refreshed := attemptBeadReaderFunc(func(ctx context.Context, id string) (*bead.Bead, error) {
+		refreshCalls++
+		if id != claimed.ID {
+			return nil, fmt.Errorf("bead: not found: %s", id)
+		}
+		return claimed, nil
+	})
+
+	got, err := resolveAttemptBead(context.Background(), claimed.ID, primary, func() attemptBeadReader {
+		return refreshed
+	}, nil)
+	require.NoError(t, err)
+	require.Same(t, claimed, got)
+	assert.Equal(t, 1, primaryCalls, "primary lookup must miss once before refreshing")
+	assert.Equal(t, 1, refreshCalls, "refresh lookup must retry exactly once")
+}
+
+type staleIndexAfterClaimStore struct {
+	*bead.Store
+	targetID      string
+	claimed       int32
+	postClaimGets int32
+}
+
+func (s *staleIndexAfterClaimStore) Claim(id, assignee string) error {
+	if err := s.Store.Claim(id, assignee); err != nil {
+		return err
+	}
+	if id == s.targetID {
+		atomic.StoreInt32(&s.claimed, 1)
+	}
+	return nil
+}
+
+func (s *staleIndexAfterClaimStore) Get(ctx context.Context, id string) (*bead.Bead, error) {
+	if id == s.targetID && atomic.LoadInt32(&s.claimed) == 1 {
+		atomic.AddInt32(&s.postClaimGets, 1)
+		return nil, fmt.Errorf("bead: not found: %s", id)
+	}
+	return s.Store.Get(ctx, id)
+}
+
+func TestWork_ClaimNotFoundRace_DoesNotFailUnderBeadUpdateChurn(t *testing.T) {
+	baseStore := bead.NewStore(t.TempDir())
+	require.NoError(t, baseStore.Init(context.Background()))
+
+	targetID := "ddx-d3abb526"
+	churnID := "ddx-work-race-churn"
+	require.NoError(t, baseStore.Create(context.Background(), &bead.Bead{
+		ID:       targetID,
+		Title:    "Race target bead",
+		Priority: 0,
+	}))
+	require.NoError(t, baseStore.Create(context.Background(), &bead.Bead{
+		ID:       churnID,
+		Title:    "Concurrent churn bead",
+		Priority: 4,
+	}))
+
+	store := &staleIndexAfterClaimStore{
+		Store:    baseStore,
+		targetID: targetID,
+	}
+	require.NoError(t, store.Claim(targetID, "worker-a"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var churnWG sync.WaitGroup
+	churnWG.Add(1)
+	go func() {
+		defer churnWG.Done()
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = baseStore.Update(context.Background(), churnID, func(b *bead.Bead) {
+					if b.Notes == "" {
+						b.Notes = "churn"
+						return
+					}
+					b.Notes = b.Notes + "\nchurn"
+				})
+			}
+		}
+	}()
+
+	got, err := resolveAttemptBead(context.Background(), targetID, store, func() attemptBeadReader {
+		return bead.NewStoreWithCollection(baseStore.Dir, baseStore.Collection)
+	}, nil)
+	cancel()
+	churnWG.Wait()
+
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, targetID, got.ID)
+	assert.NotZero(t, atomic.LoadInt32(&store.postClaimGets), "the stale primary lookup path must be exercised")
+
+	gotTarget, err := baseStore.Get(context.Background(), targetID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, gotTarget.Status)
+
+	gotChurn, err := baseStore.Get(context.Background(), churnID)
+	require.NoError(t, err)
+	assert.Contains(t, gotChurn.Notes, "churn")
+}
+
 func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {
 	tests := []struct {
 		name string
@@ -338,6 +468,41 @@ func (passThroughRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
 		ExitCode: 0,
 		Output:   `{"classification":"ready","rationale":"ok","readiness_checks":[],"score":9,"suggested_fixes":[],"waivers_applied":[]}`,
 	}, nil
+}
+
+type blockingPassThroughRunner struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *blockingPassThroughRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
+	switch opts.PromptSource {
+	case "bead-lifecycle-intake":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"classification":"ready","rationale":"single-slice","readiness_checks":[]}`,
+		}, nil
+	case "bead-lifecycle-lint":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"score":9,"rationale":"ok","suggested_fixes":[],"waivers_applied":[]}`,
+		}, nil
+	case "bead-lifecycle-triage":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"classification":"transport","recommended_action":"release_claim_retry","rationale":"transient","suggested_amendments":[],"suggested_followup_beads":[]}`,
+		}, nil
+	default:
+		select {
+		case r.started <- struct{}{}:
+		default:
+		}
+		<-r.release
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"classification":"ready","rationale":"ok","readiness_checks":[],"score":9,"suggested_fixes":[],"waivers_applied":[]}`,
+		}, nil
+	}
 }
 
 func TestWork_WarnsStaleSourceBinaryButProceeds(t *testing.T) {
@@ -662,6 +827,12 @@ func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
 	}
 
 	dir := minimalProjectDir(t)
+	hermeticRoot := t.TempDir()
+	installCmdHermeticEnvAt(t, hermeticRoot, hermeticRoot, hermeticRoot)
+	assert.True(t, strings.HasPrefix(os.Getenv("PATH"), filepath.Join(hermeticRoot, "bin")+string(os.PathListSeparator)),
+		"underspecified-routing work must resolve provider CLIs from fake harness binaries")
+	assert.True(t, strings.HasPrefix(os.Getenv("FIZEAU_CACHE_DIR"), filepath.Join(hermeticRoot, ".cache")),
+		"underspecified-routing work must keep discovery cache under a temp root")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
 	require.NoError(t, exec.Command("git", "init", dir).Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())

@@ -24,7 +24,8 @@ type stubBeadLifecycleSubscriber struct {
 	sub func()
 }
 
-func (s *stubBeadLifecycleSubscriber) SubscribeLifecycle(_ context.Context, _ string) (<-chan bead.LifecycleEvent, func(), error) {
+func (s *stubBeadLifecycleSubscriber) SubscribeLifecycle(ctx context.Context, _ string) (<-chan bead.LifecycleEvent, func(), error) {
+	_ = ctx
 	return s.ch, s.sub, nil
 }
 

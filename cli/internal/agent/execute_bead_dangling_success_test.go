@@ -220,62 +220,6 @@ func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T)
 	assert.Contains(t, meta.SuggestedAction, "recover or reconstruct result_rev")
 }
 
-type closeErrorStore struct {
-	*bead.Store
-	onClose func()
-	err     error
-}
-
-func (s closeErrorStore) CloseWithEvidence(id, sessionID, commitSHA string) error {
-	if s.onClose != nil {
-		s.onClose()
-	}
-	return s.err
-}
-
-func TestExecuteBeadWorkerCancelDuringDanglingSuccessRecoveryReleasesClaim(t *testing.T) {
-	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
-	const beadID = "ddx-int-0001"
-
-	head := mustGitRevParse(t, projectRoot, "HEAD")
-	writeResultJSON(t, projectRoot, "20260616T120000-cancel", ExecuteBeadResult{
-		BeadID:    beadID,
-		AttemptID: "20260616T120000-cancel",
-		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
-		ResultRev: head,
-		BaseRev:   baseRev,
-		SessionID: "sess-cancel",
-	})
-
-	baseStore := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	ctx, cancel := context.WithCancel(context.Background())
-	store := closeErrorStore{
-		Store:   baseStore,
-		onClose: cancel,
-		err:     fmt.Errorf("close interrupted"),
-	}
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run after dangling-success recovery is canceled")
-			return ExecuteBeadReport{}, nil
-		}),
-	}
-	opts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
-
-	_, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		Once:        true,
-		ProjectRoot: projectRoot,
-	})
-	require.ErrorIs(t, err, context.Canceled)
-
-	got, err := baseStore.Get(context.Background(), beadID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Empty(t, got.Owner)
-}
-
 // ---------------------------------------------------------------------------
 // AC2: integration regression test — simulates finalize failure and asserts
 // bead closes cleanly on retry.

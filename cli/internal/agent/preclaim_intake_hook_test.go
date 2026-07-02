@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -198,44 +197,6 @@ func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *t
 	assert.False(t, svc.lastReq.RequiresTools)
 }
 
-func TestPreClaimIntakeHook_RetriesStrongestProfileWhenStandardRouteUnavailable(t *testing.T) {
-	root := newPreClaimIntakeHookTestRoot(t)
-	store, b := newPreClaimIntakeHookTestStore(t, root)
-
-	var policies []string
-	svc := &preClaimIntakeHookServiceStub{
-		listPolicies: []agentlib.PolicyInfo{
-			preClaimPolicyInfo("cheap", 5, 5),
-			preClaimPolicyInfo("default", 7, 8),
-			preClaimPolicyInfo("smart", 9, 10),
-		},
-		listModels: []agentlib.ModelInfo{
-			{ID: "cheap", Power: 5, Available: true, AutoRoutable: true},
-			{ID: "default", Power: 7, Available: true, AutoRoutable: true},
-			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
-		},
-	}
-	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
-		policies = append(policies, req.Policy)
-		if req.Policy == "default" {
-			return nil, fmt.Errorf("runner error: ResolveRoute: no live provider supports prompt of 1528 tokens with tools=false at policy default")
-		}
-		require.Equal(t, "smart", req.Policy)
-		ch := make(chan agentlib.ServiceEvent, 1)
-		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.97,\"reasoning\":\"strongest profile routed\"}"}`)}
-		close(ch)
-		return ch, nil
-	}
-
-	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
-	got, err := hook(context.Background(), b.ID)
-
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	assert.Equal(t, []string{"default", "smart"}, policies)
-	assert.Equal(t, int32(2), atomic.LoadInt32(&svc.executeCalls))
-}
-
 func TestPreClaimIntakeHookDispatchesOutsideProjectRoot(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
@@ -293,8 +254,8 @@ func TestLifecycleDispatchRejectsProjectRootMutation(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(status))
 }
 
-func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
-	root, baseStore, later := newCleanPreClaimIntakeHookGitRoot(t)
+func TestWorkReadinessRootMutationWarningsEscalateWithStableCode(t *testing.T) {
+	root, baseStore, later1 := newCleanPreClaimIntakeHookGitRoot(t)
 	parent := &bead.Bead{
 		ID:          "ddx-root-mutation-parent",
 		Title:       "Parent bead that triggers a back-edge",
@@ -306,6 +267,17 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 		Labels:      []string{"phase:2", "area:agent", "kind:feature"},
 	}
 	require.NoError(t, baseStore.Create(context.Background(), parent))
+	later2 := &bead.Bead{
+		ID:          "ddx-root-mutation-later-2",
+		Title:       "Second bead after root mutation rejection",
+		IssueType:   bead.DefaultType,
+		Status:      bead.StatusOpen,
+		Priority:    2,
+		Description: "Second later bead used to prove root-mutation warnings dedupe and escalate.",
+		Acceptance:  "1. execute after the parent back-edge is established",
+		Labels:      []string{"phase:2", "area:agent", "kind:feature"},
+	}
+	require.NoError(t, baseStore.Create(context.Background(), later2))
 
 	store := &backEdgeDecompositionStore{
 		Store:    baseStore,
@@ -346,13 +318,19 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 					WorkerID:           "worker-root-mutation-back-edge",
 					NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: split the parent",
 				}, nil
-			default:
+			case later1.ID:
 				return ExecuteBeadReport{
 					BeadID:    beadID,
 					Status:    ExecuteBeadStatusSuccess,
 					SessionID: "sess-root-mutation-back-edge",
 					ResultRev: "root-mutation-result",
 				}, nil
+			case later2.ID:
+				t.Fatalf("second later bead must not execute once repeated root-mutation warnings trip")
+				return ExecuteBeadReport{}, nil
+			default:
+				t.Fatalf("unexpected bead execution: %s", beadID)
+				return ExecuteBeadReport{}, nil
 			}
 		}),
 	}
@@ -360,10 +338,14 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", MaxDecompositionDepth: 3}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Log:                &log,
-		EventSink:          &eventSink,
-		PreClaimIntakeHook: hook,
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Log:                         &log,
+		EventSink:                   &eventSink,
+		PreClaimIntakeHook:          hook,
+		PreClaimWarnRepeatThreshold: 2,
 		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
 			require.Equal(t, parent.ID, beadID)
 			return &PreClaimDecomposition{
@@ -389,34 +371,57 @@ func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 2, result.Attempts, "the worker must process the back-edge bead and the root-mutation bead")
+	assert.Equal(t, 2, result.Attempts, "the worker must process the back-edge bead and the first root-mutation bead")
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "preclaim_warn_repeated", result.OperatorAttention.Reason)
+	assert.Equal(t, later2.ID, result.OperatorAttention.BeadID)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
 
 	events := parseLoopEvents(t, eventSink.String())
 	sawBackEdge := strings.Contains(eventSink.String(), "\"event\":\"post_attempt_decomposition.parent_back_edge\"")
-	var rootMutationError *loopEvent
-	var sawWarnForLater bool
+	var later1Warn *loopEvent
+	var later2Warn *loopEvent
 	for i := range events {
 		switch events[i].Type {
 		case "pre_claim_intake.warn":
-			if data, ok := events[i].Data["bead_id"].(string); ok && data == later.ID {
-				sawWarnForLater = true
+			if data, ok := events[i].Data["bead_id"].(string); ok {
+				switch data {
+				case later1.ID:
+					later1Warn = &events[i]
+				case later2.ID:
+					later2Warn = &events[i]
+				}
 			}
 		case "pre_claim_intake.error":
-			if data, ok := events[i].Data["bead_id"].(string); ok && data == later.ID {
-				rootMutationError = &events[i]
+			if data, ok := events[i].Data["bead_id"].(string); ok && (data == later1.ID || data == later2.ID) {
+				t.Fatalf("root-mutation rejection must emit a warning, not an error, for bead %s", data)
 			}
 		}
 	}
 	require.Truef(t, sawBackEdge, "the run must first record the parent-back-edge state; events=%s", eventSink.String())
-	require.NotNil(t, rootMutationError, "the root-mutation rejection must be surfaced as an error event")
-	assert.Equal(t, "error", rootMutationError.Data["severity"])
-	assert.Equal(t, "error", rootMutationError.Data["decision"])
-	assert.Equal(t, "error", rootMutationError.Data["policy_mode"])
-	assert.Contains(t, fmt.Sprint(rootMutationError.Data["detail"]), "project root mutation rejected for bead "+later.ID)
-	assert.Contains(t, fmt.Sprint(rootMutationError.Data["detail"]), later.ID)
-	assert.Contains(t, log.String(), "check unavailable for bead "+later.ID)
-	assert.Contains(t, log.String(), "(error)")
-	assert.False(t, sawWarnForLater, "the root-mutation rejection must not be downgraded to a warning event")
+	require.NotNil(t, later1Warn, "the first later bead must emit a root-mutation warning")
+	require.NotNil(t, later2Warn, "the second later bead must emit a root-mutation warning")
+	for beadID, ev := range map[string]*loopEvent{
+		later1.ID: later1Warn,
+		later2.ID: later2Warn,
+	} {
+		assert.Equal(t, "warn", ev.Data["decision"])
+		assert.Equal(t, "warn-only", ev.Data["policy_mode"])
+		assert.Equal(t, preClaimIntakeProjectRootMutationRejectedCode, ev.Data["code"])
+		assert.Equal(t, preClaimIntakeProjectRootMutationRejectedDetail, ev.Data["detail"])
+		assert.Contains(t, fmt.Sprint(ev.Data["error_detail"]), "project root mutation rejected for bead "+beadID)
+		assert.Contains(t, fmt.Sprint(ev.Data["error_detail"]), beadID)
+	}
+	assert.Contains(t, log.String(), "code="+preClaimIntakeProjectRootMutationRejectedCode)
+	assert.NotContains(t, log.String(), "(error)")
+
+	gotLater1, err := baseStore.Get(context.Background(), later1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotLater1.Status)
+	gotLater2, err := baseStore.Get(context.Background(), later2.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotLater2.Status)
 }
 
 func TestPreClaimIntakeHookWithLogDoesNotEmitPromptByDefault(t *testing.T) {
@@ -560,81 +565,6 @@ func TestPreClaimIntakeHook_PreservesExplicitRoutingPins(t *testing.T) {
 	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
-}
-
-func TestPreClaimIntakeHook_ReapsNonRouteProviderChildrenAfterReadinessRoute(t *testing.T) {
-	root := newPreClaimIntakeHookTestRoot(t)
-	store, b := newPreClaimIntakeHookTestStore(t, root)
-
-	const codexPID = 424201
-	const claudePID = 424202
-	rootPID := os.Getpid()
-	killedCh := make(chan int, 2)
-	var killedMu sync.Mutex
-	var killed []int
-	var lifecycleWorkDir atomic.Value
-
-	restoreScanner := providerChildScanner
-	restoreTerminate := terminateProviderChild
-	t.Cleanup(func() {
-		providerChildScanner = restoreScanner
-		terminateProviderChild = restoreTerminate
-	})
-
-	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
-		return []providerChildProcess{
-			{
-				PID:       codexPID,
-				PPID:      rootPID,
-				Provider:  "codex",
-				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
-				CWD:       root,
-				StartedAt: time.Now().Add(-time.Second),
-			},
-			{
-				PID:       claudePID,
-				PPID:      rootPID,
-				Provider:  "claude",
-				Command:   "/home/erik/.local/bin/claude --print --model sonnet",
-				CWD:       lifecycleWorkDir.Load().(string),
-				StartedAt: time.Now().Add(-time.Second),
-			},
-		}, nil
-	}
-	terminateProviderChild = func(pid int) {
-		killedMu.Lock()
-		killed = append(killed, pid)
-		killedMu.Unlock()
-		killedCh <- pid
-	}
-
-	svc := &preClaimIntakeHookServiceStub{
-		executeFunc: func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
-			lifecycleWorkDir.Store(req.WorkDir)
-			ch := make(chan agentlib.ServiceEvent, 2)
-			go func() {
-				ch <- makeRoutingDecisionEvent("claude", "anthropic", "sonnet-4.6")
-				select {
-				case <-killedCh:
-				case <-time.After(3 * time.Second):
-				}
-				text := `{"classification":"atomic","confidence":0.95,"reasoning":"provider guard covered readiness"}`
-				ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":` + fmt.Sprintf("%q", text) + `}`)}
-				close(ch)
-			}()
-			return ch, nil
-		},
-	}
-
-	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
-	got, err := hook(context.Background(), b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	killedMu.Lock()
-	killedCopy := append([]int(nil), killed...)
-	killedMu.Unlock()
-	assert.Contains(t, killedCopy, codexPID)
-	assert.NotContains(t, killedCopy, claudePID)
 }
 
 func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToFizeau(t *testing.T) {
@@ -921,44 +851,8 @@ func TestPreClaimReadiness_UnknownReasonActionableError(t *testing.T) {
 	assert.Contains(t, err.Error(), "system_unready")
 }
 
-func TestPreClaimReadiness_AcceptsRewriteAcceptanceArray(t *testing.T) {
-	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":["1. TestPreClaimReadiness_AcceptsRewriteAcceptanceArray","2. cd cli && go test ./internal/agent/... -run TestPreClaimReadiness_AcceptsRewriteAcceptanceArray -count=1","3. lefthook run pre-commit"]}}`
-
-	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableButRewritten, got.Outcome)
-	assert.Equal(t, []string{"acceptance"}, got.Rewrite.ChangedFields)
-	assert.Equal(t, strings.Join([]string{
-		"1. TestPreClaimReadiness_AcceptsRewriteAcceptanceArray",
-		"2. cd cli && go test ./internal/agent/... -run TestPreClaimReadiness_AcceptsRewriteAcceptanceArray -count=1",
-		"3. lefthook run pre-commit",
-	}, "\n"), got.Rewrite.Acceptance)
-}
-
-func TestPreClaimReadiness_RejectsInvalidRewriteAcceptanceShape(t *testing.T) {
-	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":{"criterion":"1. TestFoo"}}}`
-
-	_, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rewrite.acceptance")
-	assert.Contains(t, err.Error(), "must be a string or string array")
-}
-
 func TestPreClaimReadiness_DecodesFractionalScore(t *testing.T) {
 	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	assert.Equal(t, "single slice", got.Detail)
-}
-
-func TestPreClaimReadiness_DecodesBooleanTractability(t *testing.T) {
-	payload := `{"classification":"ready","tractability":true,"score":8,"rationale":"single slice","readiness_checks":[]}`
-
-	var out preClaimReadinessClassificationPromptResult
-	require.NoError(t, json.Unmarshal([]byte(payload), &out))
-	assert.Equal(t, "tractable", out.Tractability.String())
-
-	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)

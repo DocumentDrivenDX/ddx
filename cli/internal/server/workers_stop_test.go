@@ -7,13 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,6 +27,7 @@ func TestWorkerManagerStopSetsStoppedState(t *testing.T) {
 	setupBeadStore(t, root)
 
 	m := NewWorkerManager(root)
+	m.WatchdogKillGrace = 300 * time.Millisecond
 	defer m.StopWatchdog()
 	// Keep the worker alive long enough to observe the stop path.
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
@@ -56,6 +57,7 @@ func TestWorkerManagerStopIsIdempotent(t *testing.T) {
 	setupBeadStore(t, root)
 
 	m := NewWorkerManager(root)
+	m.WatchdogKillGrace = 300 * time.Millisecond
 	defer m.StopWatchdog()
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		Mode:         "watch",
@@ -74,6 +76,7 @@ func TestWorkerManagerStopIsIdempotent(t *testing.T) {
 func TestWorkerManagerStopUnknownWorker(t *testing.T) {
 	root := t.TempDir()
 	m := NewWorkerManager(root)
+	m.WatchdogKillGrace = 300 * time.Millisecond
 	defer m.StopWatchdog()
 
 	err := m.Stop("worker-does-not-exist")
@@ -92,16 +95,13 @@ func TestWorkerDispatchAdapterStopWorkerUsesWorkerManagerStop(t *testing.T) {
 	result, err := (&workerDispatchAdapter{manager: m}).StopWorker(t.Context(), "worker-graphql-stop")
 	require.NoError(t, err)
 	assert.Equal(t, "worker-graphql-stop", result.ID)
-	assert.Equal(t, "stopping", result.State)
+	assert.Equal(t, "stopped", result.State)
+	assert.True(t, cancelled.Load(), "GraphQL stop adapter must invoke WorkerManager.Stop cancellation")
 
-	require.Eventually(t, cancelled.Load, 2*time.Second, 25*time.Millisecond,
-		"GraphQL stop adapter must invoke WorkerManager.Stop cancellation")
-	require.Eventually(t, func() bool {
-		m.mu.Lock()
-		state := handle.record.State
-		m.mu.Unlock()
-		return state == "stopped"
-	}, 2*time.Second, 25*time.Millisecond)
+	m.mu.Lock()
+	state := handle.record.State
+	m.mu.Unlock()
+	assert.Equal(t, "stopped", state)
 }
 
 // TestWorkerManagerStopReleasesBeadClaim: when the worker has claimed a bead,
@@ -149,118 +149,6 @@ func TestWorkerManagerStopReleasesBeadClaim(t *testing.T) {
 	assert.Contains(t, events[0].Body, "runtime=")
 	assert.Contains(t, events[0].Body, "pid=")
 	assert.Contains(t, events[0].Body, "reason=stop")
-}
-
-func TestWorkerManagerManagedStopReleasesClaimWithoutCurrentBead(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBeadByOwner(t, root, "ddx-stop-owned-claim", "worker-stop-owned")
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	now := time.Now().UTC()
-	h, cancelled := newIdleHandle(t, m, "worker-stop-owned", "",
-		now.Add(-time.Second), now.Add(-time.Second))
-	m.mu.Lock()
-	h.record.CurrentAttempt = nil
-	h.record.CurrentBead = ""
-	m.mu.Unlock()
-
-	require.NoError(t, m.Stop("worker-stop-owned"))
-	assert.True(t, cancelled.Load(), "Stop must still cancel a worker without current attempt state")
-
-	b, err := store.Get(context.Background(), "ddx-stop-owned-claim")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, b.Status)
-	assert.Empty(t, b.Owner)
-
-	_, found, err := store.ClaimLease("ddx-stop-owned-claim")
-	require.NoError(t, err)
-	assert.False(t, found, "owned claim lease must be removed")
-
-	snapshot, err := activework.Collect(root, store, time.Now().UTC())
-	require.NoError(t, err)
-	assert.Zero(t, snapshot.Count, "work status active_work must be empty after stop cleanup")
-
-	events, err := store.EventsByKind("ddx-stop-owned-claim", "bead.stopped")
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Contains(t, events[0].Body, "worker=worker-stop-owned")
-	assert.Contains(t, events[0].Body, "reason=stop")
-}
-
-func TestWorkerManagerManagedStopDoesNotReleaseUnrelatedClaimWithoutCurrentBead(t *testing.T) {
-	root := t.TempDir()
-	store := seedClaimedBeadByOwner(t, root, "ddx-stop-owned-target", "worker-stop-owned-target")
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        "ddx-stop-unrelated",
-		Title:     "unrelated claim",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-	}))
-	require.NoError(t, store.Claim("ddx-stop-unrelated", "external-worker"))
-
-	m := NewWorkerManager(root)
-	defer m.StopWatchdog()
-
-	now := time.Now().UTC()
-	h, _ := newIdleHandle(t, m, "worker-stop-owned-target", "",
-		now.Add(-time.Second), now.Add(-time.Second))
-	m.mu.Lock()
-	h.record.CurrentAttempt = nil
-	h.record.CurrentBead = ""
-	m.mu.Unlock()
-
-	require.NoError(t, m.Stop("worker-stop-owned-target"))
-
-	target, err := store.Get(context.Background(), "ddx-stop-owned-target")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, target.Status)
-	assert.Empty(t, target.Owner)
-
-	unrelated, err := store.Get(context.Background(), "ddx-stop-unrelated")
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusInProgress, unrelated.Status)
-	assert.Equal(t, "external-worker", unrelated.Owner)
-
-	lease, found, err := store.ClaimLease("ddx-stop-unrelated")
-	require.NoError(t, err)
-	require.True(t, found, "unrelated claim lease must remain")
-	assert.Equal(t, "external-worker", lease.Owner)
-}
-
-func TestReleaseWorkerClaimsDoesNotClearDifferentOwnerPrimaryBead(t *testing.T) {
-	root := t.TempDir()
-	setupBeadStore(t, root)
-	store := bead.NewStore(ddxroot.JoinProject(root))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:        "ddx-stop-newer-lease",
-		Title:     "newer sidecar lease",
-		Status:    bead.StatusOpen,
-		IssueType: bead.DefaultType,
-	}))
-	require.NoError(t, store.ClaimWithOptions("ddx-stop-newer-lease", "worker-new", "attempt-new", ""))
-
-	released := releaseWorkerClaims(root, "worker-old", "ddx-stop-newer-lease", time.Now().UTC(), bead.BeadEvent{
-		Kind:    "bead.stopped",
-		Summary: "stop",
-		Actor:   "ddx-server",
-		Source:  "server-workers",
-	})
-	assert.Empty(t, released, "stale primary bead state must not authorize release of a newer worker lease")
-
-	lease, found, err := store.ClaimLease("ddx-stop-newer-lease")
-	require.NoError(t, err)
-	require.True(t, found, "newer worker lease must remain")
-	assert.Equal(t, "worker-new", lease.Owner)
-
-	ready, err := store.ReadyExecution()
-	require.NoError(t, err)
-	assert.Empty(t, ready, "leased bead must not become ready after stale worker stop")
-
-	events, err := store.EventsByKind("ddx-stop-newer-lease", "bead.stopped")
-	require.NoError(t, err)
-	assert.Empty(t, events, "stale worker stop must not emit release evidence for another worker's bead")
 }
 
 // TestWorkerManagerStopPersistsStoppedToDisk: the graceful path writes the
@@ -346,122 +234,6 @@ func TestWorkerManagerStopSIGTERMtoSIGKILL(t *testing.T) {
 	assert.Equal(t, "stopped", state)
 }
 
-func TestWorkerManagerStopPidlessWorkerReapsServerProviderDescendant(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("ps-based descendant cleanup is Unix-only")
-	}
-
-	root := t.TempDir()
-	seedClaimedBead(t, root, "ddx-stop-pidless")
-
-	fakeBin := t.TempDir()
-	fakeCodex := filepath.Join(fakeBin, "codex")
-	require.NoError(t, os.Symlink("/bin/sleep", fakeCodex))
-
-	cmd := exec.Command(fakeCodex, "60")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	require.NoError(t, cmd.Start())
-	pid := cmd.Process.Pid
-	t.Cleanup(func() {
-		if syscall.Kill(pid, 0) != syscall.ESRCH {
-			_ = cmd.Process.Kill()
-		}
-	})
-
-	m := NewWorkerManager(root)
-	m.WatchdogKillGrace = 300 * time.Millisecond
-	defer m.StopWatchdog()
-
-	now := time.Now().UTC()
-	h, _ := newIdleHandle(t, m, "worker-stop-pidless", "ddx-stop-pidless",
-		now.Add(-time.Second), now.Add(-time.Second))
-	m.mu.Lock()
-	h.record.PID = 0
-	h.record.CurrentAttempt.AttemptID = "attempt-pidless-stop"
-	m.mu.Unlock()
-
-	require.NoError(t, m.Stop("worker-stop-pidless"))
-
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if syscall.Kill(pid, 0) == syscall.ESRCH {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("pidless Stop did not reap provider descendant pid=%d", pid)
-}
-
-func TestWorkerManagerStopPidlessWorkerReapsDelayedFinalizationDescendant(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("ps-based descendant cleanup is Unix-only")
-	}
-
-	root := t.TempDir()
-	seedClaimedBead(t, root, "ddx-stop-delayed")
-
-	m := NewWorkerManager(root)
-	m.WatchdogKillGrace = 150 * time.Millisecond
-	defer m.StopWatchdog()
-
-	now := time.Now().UTC()
-	h, cancelled := newIdleHandle(t, m, "worker-stop-delayed", "ddx-stop-delayed",
-		now.Add(-time.Second), now.Add(-time.Second))
-	m.mu.Lock()
-	h.record.PID = 0
-	h.record.CurrentAttempt.AttemptID = "attempt-delayed-stop"
-	pidCh := make(chan int, 1)
-	waitCh := make(chan error, 1)
-	h.cancel = func() {
-		cancelled.Store(true)
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			cmd := exec.Command("sh", "-c", `trap '' TERM; sleep 60 # Ddx-Attempt-Id: attempt-delayed-stop`)
-			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-			if err := cmd.Start(); err != nil {
-				pidCh <- -1
-				waitCh <- err
-				return
-			}
-			pidCh <- cmd.Process.Pid
-			waitCh <- cmd.Wait()
-		}()
-	}
-	m.mu.Unlock()
-
-	require.NoError(t, m.Stop("worker-stop-delayed"))
-	assert.True(t, cancelled.Load(), "Stop must invoke cancel before waiting for delayed descendants")
-
-	var pid int
-	select {
-	case pid = <-pidCh:
-		require.Positive(t, pid, "delayed finalization subprocess failed to start")
-	case <-time.After(2 * time.Second):
-		t.Fatal("delayed finalization subprocess did not start")
-	}
-	t.Cleanup(func() {
-		if syscall.Kill(pid, 0) != syscall.ESRCH {
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-			_ = syscall.Kill(pid, syscall.SIGKILL)
-		}
-	})
-
-	select {
-	case err := <-waitCh:
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			ws, ok := exitErr.Sys().(syscall.WaitStatus)
-			require.True(t, ok, "expected syscall.WaitStatus")
-			assert.True(t, ws.Signaled(), "delayed finalization subprocess must be signaled")
-			assert.Equal(t, syscall.SIGKILL, ws.Signal())
-		} else if err != nil {
-			t.Fatalf("unexpected wait error: %v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("pidless Stop did not reap delayed finalization descendant pid=%d", pid)
-	}
-}
-
 // TestRunWorkerPreservesStoppedState: when runWorker finishes after Stop()
 // has already flipped state=stopped, its final record write must keep the
 // terminal state rather than overwriting it with "exited" or "failed".
@@ -487,4 +259,308 @@ func TestRunWorkerPreservesStoppedState(t *testing.T) {
 	// "failed"; with the fix, it remains "stopped".
 	assert.Equal(t, "stopped", final.State,
 		"runWorker must preserve 'stopped' state when Stop has already terminalized the record")
+}
+
+func TestManagedWorkerStopKillsClaudeCodexDescendants(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group cleanup is covered by Unix implementation")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh not available: %v", err)
+	}
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skipf("setsid not available: %v", err)
+	}
+
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := seedClaimedBead(t, root, "ddx-stop-tree")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-stop-tree"
+	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, workerID), 0o755))
+
+	pidDir := t.TempDir()
+	binDir := t.TempDir()
+	writeFakeProviderBinary(t, binDir, "claude", true)
+	writeFakeProviderBinary(t, binDir, "codex", true)
+
+	cmd := exec.Command("sh", "-c", "claude & codex & wait")
+	cmd.Env = envWithOverrides(map[string]string{
+		"PATH":    binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"PID_DIR": pidDir,
+	})
+	rootPID := startProcessGroup(t, cmd)
+
+	now := time.Now().UTC()
+	handle, cancelled := newIdleHandle(t, m, workerID, "ddx-stop-tree", now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	handle.record.PID = rootPID
+	m.mu.Unlock()
+
+	claudePID := waitForPIDFile(t, filepath.Join(pidDir, "claude.pid"))
+	claudeSleepPID := waitForPIDFile(t, filepath.Join(pidDir, "claude.sleep.pid"))
+	codexPID := waitForPIDFile(t, filepath.Join(pidDir, "codex.pid"))
+	codexSleepPID := waitForPIDFile(t, filepath.Join(pidDir, "codex.sleep.pid"))
+	t.Cleanup(func() {
+		_ = syscall.Kill(-claudePID, syscall.SIGKILL)
+		_ = syscall.Kill(-codexPID, syscall.SIGKILL)
+		_ = syscall.Kill(claudeSleepPID, syscall.SIGKILL)
+		_ = syscall.Kill(codexSleepPID, syscall.SIGKILL)
+	})
+
+	require.NoError(t, m.Stop(workerID))
+
+	assert.True(t, cancelled.Load(), "Stop must cancel the worker goroutine")
+	waitForProcessGone(t, rootPID)
+	waitForProcessGone(t, claudePID)
+	waitForProcessGone(t, claudeSleepPID)
+	waitForProcessGone(t, codexPID)
+	waitForProcessGone(t, codexSleepPID)
+
+	b, err := store.Get(context.Background(), "ddx-stop-tree")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status, "Stop must release the bead claim")
+
+	events, err := store.EventsByKind("ddx-stop-tree", "bead.stopped")
+	require.NoError(t, err)
+	require.Len(t, events, 1, "Stop must emit one bead.stopped event")
+	assert.Contains(t, events[0].Body, "reason=stop")
+
+	rec, err := m.readRecord(filepath.Join(m.rootDir, workerID))
+	require.NoError(t, err)
+	require.Len(t, rec.Lifecycle, 1)
+	assert.Equal(t, "stop", rec.Lifecycle[0].Action)
+	assert.Contains(t, rec.Lifecycle[0].Detail, "cleanup=")
+}
+
+func TestManagedWorkerStopIsIdempotent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group cleanup is covered by Unix implementation")
+	}
+
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := seedClaimedBead(t, root, "ddx-stop-idem")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-stop-idem"
+	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, workerID), 0o755))
+
+	cmd := exec.Command("sh", "-c", "sleep 600")
+	rootPID := startProcessGroup(t, cmd)
+
+	now := time.Now().UTC()
+	handle, cancelled := newIdleHandle(t, m, workerID, "ddx-stop-idem", now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	handle.record.PID = rootPID
+	m.mu.Unlock()
+
+	require.NoError(t, m.Stop(workerID))
+	require.NoError(t, m.Stop(workerID))
+
+	assert.True(t, cancelled.Load(), "Stop must cancel the worker goroutine")
+	waitForProcessGone(t, rootPID)
+
+	b, err := store.Get(context.Background(), "ddx-stop-idem")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status, "bead claim must release exactly once")
+
+	events, err := store.EventsByKind("ddx-stop-idem", "bead.stopped")
+	require.NoError(t, err)
+	require.Len(t, events, 1, "second Stop must not duplicate bead.stopped")
+
+	rec, err := m.readRecord(filepath.Join(m.rootDir, workerID))
+	require.NoError(t, err)
+	require.Len(t, rec.Lifecycle, 1, "second Stop must not add another lifecycle entry")
+	assert.Equal(t, "stop", rec.Lifecycle[0].Action)
+	assert.Equal(t, "stopped", rec.State)
+	assert.Equal(t, "stopped", rec.Status)
+}
+
+func TestManagedWorkerStopSkipsExternalReportedWorkers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group cleanup is covered by Unix implementation")
+	}
+
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := seedClaimedBead(t, root, "ddx-stop-skips")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-stop-skips"
+	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, workerID), 0o755))
+
+	managedCmd := exec.Command("sh", "-c", "sleep 600")
+	managedPID := startProcessGroup(t, managedCmd)
+
+	now := time.Now().UTC()
+	handle, _ := newIdleHandle(t, m, workerID, "ddx-stop-skips", now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	handle.record.PID = managedPID
+	m.mu.Unlock()
+
+	binDir := t.TempDir()
+	writeFakeProviderBinary(t, binDir, "claude", false)
+	writeFakeProviderBinary(t, binDir, "codex", false)
+
+	reportedCmd := exec.Command(filepath.Join(binDir, "claude"))
+	reportedCmd.Env = envWithOverrides(map[string]string{
+		"PATH": binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	reportedPID := startProcessGroup(t, reportedCmd)
+
+	reg := newWorkerIngestRegistry(root)
+	rec := reg.register(workerIdentity{
+		ProjectRoot:  root,
+		Harness:      "claude",
+		ExecutorPID:  reportedPID,
+		ExecutorHost: "localhost",
+		StartedAt:    now,
+	})
+	require.NotEmpty(t, rec.WorkerID)
+
+	interactiveCmd := exec.Command(filepath.Join(binDir, "codex"))
+	interactiveCmd.Env = envWithOverrides(map[string]string{
+		"PATH": binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	interactivePID := startProcessGroup(t, interactiveCmd)
+
+	unrelatedCmd := exec.Command("sh", "-c", "sleep 600")
+	unrelatedPID := startProcessGroup(t, unrelatedCmd)
+
+	require.NoError(t, m.Stop(workerID))
+
+	waitForProcessGone(t, managedPID)
+	if !testProcessAlive(reportedPID) {
+		t.Fatalf("Stop killed external reported worker pid %d", reportedPID)
+	}
+	if !testProcessAlive(interactivePID) {
+		t.Fatalf("Stop killed interactive Claude/Codex session pid %d", interactivePID)
+	}
+	if !testProcessAlive(unrelatedPID) {
+		t.Fatalf("Stop killed unrelated process pid %d", unrelatedPID)
+	}
+
+	b, err := store.Get(context.Background(), "ddx-stop-skips")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+
+	events, err := store.EventsByKind("ddx-stop-skips", "bead.stopped")
+	require.NoError(t, err)
+	require.Len(t, events, 1, "managed worker stop should emit one bead.stopped event")
+}
+
+func startProcessGroup(t *testing.T, cmd *exec.Cmd) int {
+	t.Helper()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start %s: %v", cmd.String(), err)
+	}
+	pid := cmd.Process.Pid
+	go func() { _, _ = cmd.Process.Wait() }()
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+	})
+	return pid
+}
+
+func envWithOverrides(overrides map[string]string) []string {
+	env := os.Environ()
+	for key, value := range overrides {
+		env = setEnvValue(env, key, value)
+	}
+	return env
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
+}
+
+func writeFakeProviderBinary(t *testing.T, dir, name string, spawnChildGroup bool) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	script := `#!/bin/sh
+set -eu
+pid_dir="${PID_DIR:-}"
+name="` + name + `"
+`
+	if spawnChildGroup {
+		if _, err := exec.LookPath("setsid"); err != nil {
+			t.Skipf("setsid not available: %v", err)
+		}
+		script += `
+printf '%s\n' "$$" > "$pid_dir/` + name + `.pid"
+exec setsid sh -c '
+  set -eu
+  pid_dir=$1
+  name=$2
+  printf "%s\n" "$$" > "$pid_dir/${name}.group.pid"
+  sleep 600 &
+  sleep_pid=$!
+  printf "%s\n" "$sleep_pid" > "$pid_dir/${name}.sleep.pid"
+  trap "kill \"$sleep_pid\" 2>/dev/null || true; wait \"$sleep_pid\" 2>/dev/null || true; exit 0" TERM INT
+  wait "$sleep_pid"
+' sh "$pid_dir" "$name"
+`
+	} else {
+		script += `
+sleep 600
+`
+	}
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(script, "\r\n", "\n")), 0o755); err != nil {
+		t.Fatalf("write fake provider %s: %v", name, err)
+	}
+	return path
+}
+
+func waitForPIDFile(t *testing.T, path string) int {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(data))); convErr == nil && pid > 0 {
+				return pid
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("pid file %s was not written", path)
+	return 0
+}
+
+func testProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	return syscall.Kill(pid, 0) == nil
+}
+
+func waitForProcessGone(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if !testProcessAlive(pid) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("process pid %d still alive after cleanup", pid)
 }

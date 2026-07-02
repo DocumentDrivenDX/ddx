@@ -1,0 +1,91 @@
+# SQLite MCP Server Definition
+name: sqlite
+description: "SQLite database interaction and management"
+category: database
+author: jparkerweb
+version: 1.0.7
+tags: [database, sql, sqlite, lightweight, local, crud]
+
+command:
+  executable: npx
+  args: ["-y", "mcp-sqlite", "$DATABASE_PATH"]
+  # $DATABASE_PATH will be replaced with the SQLite database file path
+
+environment:
+  - name: DATABASE_PATH
+    description: "Path to SQLite database file (will be created if doesn't exist)"
+    required: true
+    sensitive: false
+    validation: "^[^<>:\"|?*]+\\.db$"
+    example: "./data/app.db"
+    default: "./database.db"
+
+documentation:
+  setup: |
+    1. Specify the path to your SQLite database file
+    2. Database will be created if it doesn't exist
+    3. Supports all standard SQLite operations
+    4. Perfect for lightweight, local database needs
+    5. No server setup required - file-based database
+  features:
+    - "Complete CRUD operations (Create, Read, Update, Delete)"
+    - "Database schema inspection and table listing"
+    - "Custom SQL query execution"
+    - "Database information retrieval"
+    - "Automatic database creation"
+    - "Transaction support"
+  examples:
+    - "Create a new table for storing user data"
+    - "Query all records from the products table"
+    - "Update customer information in the database"
+    - "Analyze sales data with aggregate queries"
+    - "Export table schema and data"
+  security_notes: |
+    - Local file-based database - no network exposure
+    - Ensure database file permissions are properly set
+    - Regular backups recommended for important data
+    - Consider encryption for sensitive data
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+  sqlite_version: ">=3.0.0"
+
+security:
+  sandbox: low
+  network_access: none
+  file_access: required
+  data_handling: "Direct file system access to SQLite database file"
+  warnings:
+    - "Requires file system access to database location"
+    - "Can modify/delete database contents"
+  recommendations:
+    - "Use dedicated database directory with proper permissions"
+    - "Regular database backups"
+    - "Monitor database file size growth"
+
+verification:
+  test_command: "Query SQLite version and database info"
+  expected_response: "Database connection successful"
+
+configuration_example: |
+  {
+    "mcpServers": {
+      "sqlite": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-sqlite",
+          "./data/app.db"
+        ]
+      }
+    }
+  }
+
+links:
+  homepage: https://github.com/jparkerweb/mcp-sqlite
+  documentation: https://www.npmjs.com/package/mcp-sqlite
+  sqlite_docs: https://www.sqlite.org/docs.html
+  issues: https://github.com/jparkerweb/mcp-sqlite/issues

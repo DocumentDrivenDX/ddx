@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260629T111036-3759f345",
+  "bead_id": "ddx-29491a0e",
+  "base_rev": "6375c78abf32d01b479579a7b322559f68d4ff30",
+  "created_at": "2026-06-29T11:11:10.50716922Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-29491a0e",
+    "title": "execute-bead: cluster of 'transport: exit status 1' under high system load wastes attempts without progress",
+    "description": "PROBLEM\nObserved on 2026-06-29 in this repo while draining the queue. Worker pid 4014720 hit 4 consecutive 'transport: exit status 1' outcomes within ~2h on different beads (ddx-9aa2151d, ddx-95d80f7e, ddx-1c865bdb, ddx-aef568e7) without any successful merge. Load average was 38-52 throughout (8-core host). After each transport failure the worker advances to the next ready bead and the cycle repeats; closed counter unchanged across the period.\n\nSpecific log signature:\n  do response complete in \u003cN\u003em\n  tracker_lock section=durable_audit wait=1ms hold=\u003cseconds\u003e\n  ✗ ddx-\u003cid\u003e → transport: exit status 1\n\nSome attempts had very short responses (1m37s) suggesting codex died early; others completed long (32m+) then died at durable_audit. Common factor: the provider subprocess exits status 1, which DDx classifies as 'transport' (not tests_red, not no_changes, not timeout).\n\nROOT CAUSE WITH FILE:LINE\n- The outcome classifier maps any non-zero provider exit (codex/claude/etc.) to 'transport: exit status 1' regardless of cause (OOM, kill, network error mid-stream). Inspect cli/internal/agent/execute_bead_loop.go around the outcome-mapping path for the codex/provider exit code (search 'transport: exit status'). The classifier does not distinguish 'load-killed' from 'genuine bug' from 'provider API error'.\n- Under high system load (load avg \u003e ~3-5x CPU count), the provider subprocess gets starved during the durable_audit / land phase (which is git+disk heavy), bumps into kernel OOM-killer or hits its own internal heartbeat/timeout, and exits non-zero. DDx then walks the queue trying the next bead which also dies, burning context+tokens with zero forward progress.\n- There is no backoff/cooldown when transport failures cluster (e.g., 3+ in N minutes).\n\nPROPOSED FIX\n1. Add load-pressure detection: before each claim, sample /proc/loadavg and compare to runtime.NumCPU(); if 5-min loadavg \u003e k * cores (k=2-3 reasonable), emit a structured backoff observation and sleep proportional to overload before claiming.\n2. Add transport-failure cooldown: when N (≥3) 'transport: exit status 1' outcomes occur within the last M minutes, the worker should pause for a longer interval (e.g., 5-15 min) before next claim instead of immediately consuming another bead.\n3. Capture and surface the provider subprocess's exit reason where possible: check WaitStatus for signal-killed (SIGKILL → OOM-likely, SIGTERM → graceful), and distinguish in the outcome string (e.g., 'transport: provider killed by SIGKILL (likely OOM)').\n\nIN-SCOPE FILES\n- cli/internal/agent/execute_bead_loop.go (outcome classifier + claim-loop pacing)\n- cli/cmd/work.go (worker pacing/backoff)\n- cli/internal/workerstatus/ (if load sampling needs a place)\n\nOUT-OF-SCOPE\n- Do not change the queue ordering.\n- Do not change the durable_audit commit flow itself.\n- Do not implement a general-purpose host load manager.\n\nAC\n1. New helper LoadPressureSnapshot() in cli/internal/workerstatus or cli/internal/agent returning normalized loadavg/cores; unit test covers \u003ethreshold and \u003cthreshold paths.\n2. Worker pre-claim path checks the snapshot; when pressure exceeds k (default 2.5), logs a structured 'load_pressure_backoff' observation and sleeps before claim. Unit test asserts the path is invoked with k configurable.\n3. Worker tracks last N (≥3) 'transport: exit status 1' outcomes by wall-clock timestamp; when 3 occur within 10m, the next claim is delayed by an extended cooldown (\u003e=5m). Unit test simulates 3 failures within window and asserts the delay.\n4. Outcome classifier distinguishes signal-killed (SIGKILL/SIGTERM) provider exits in the outcome string. Unit test asserts the distinct outcomes.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/workerstatus/... -count=1 green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:iterate",
+      "area:execute-bead",
+      "area:agent",
+      "kind:bug",
+      "kind:reliability",
+      "resource-exhaustion",
+      "load-pressure"
+    ],
+    "metadata": {
+      "queue-rank": 0
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260629T111036-3759f345",
+    "prompt": ".ddx/executions/20260629T111036-3759f345/prompt.md",
+    "manifest": ".ddx/executions/20260629T111036-3759f345/manifest.json",
+    "result": ".ddx/executions/20260629T111036-3759f345/result.json",
+    "checks": ".ddx/executions/20260629T111036-3759f345/checks.json",
+    "usage": ".ddx/executions/20260629T111036-3759f345/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-29491a0e-20260629T111036-3759f345"
+  },
+  "prompt_sha": "31489d4033bd8e2f724fea39f231071934a99cbf97431a80af5cb1f2aedecf1d"
+}

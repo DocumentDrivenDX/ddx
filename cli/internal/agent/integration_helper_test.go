@@ -2,7 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+	"github.com/stretchr/testify/require"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,11 +16,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/testutils"
-	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -194,6 +194,9 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 			AgentRunner: runner,
 		}, gitOps)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return ExecuteBeadReport{}, err
+			}
 			if res != nil {
 				return executeBeadResultToReport(res), nil
 			}
@@ -202,6 +205,9 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 				Status: ExecuteBeadStatusExecutionFailed,
 				Detail: err.Error(),
 			}, nil
+		}
+		if ctx != nil && ctx.Err() != nil {
+			return ExecuteBeadReport{}, ctx.Err()
 		}
 
 		landFromRev := runGitInteg(t, projectRoot, "rev-parse", "HEAD")

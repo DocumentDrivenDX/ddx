@@ -59,7 +59,7 @@ func TestProseQualityStylePack_PackagedPathsExist(t *testing.T) {
 	}
 
 	for _, rule := range settings.StylePack.Rules {
-		path := filepath.Join(root, "cli", "internal", "docprose", "assets", "prose-quality", "styles", filepath.FromSlash(rule.File))
+		path := filepath.Join(root, "library", "checks", "prose-quality", "styles", filepath.FromSlash(rule.File))
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("expected packaged style file %s: %v", path, err)
@@ -83,15 +83,15 @@ func TestProseQualityStylePack_PackagedPathsExist(t *testing.T) {
 	}
 }
 
-func TestProseQualityStylePack_IsInternalRuntimeAsset(t *testing.T) {
+func TestProseQualityStylePack_ShipsThroughDefaultLibrary(t *testing.T) {
 	root := repoRootForProseQualityTest(t)
 
 	builtin, err := registry.BuiltinRegistry().Find("ddx")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if builtin.Install.Root != nil {
-		t.Fatalf("built-in ddx package must not advertise a project payload root: %+v", builtin.Install.Root)
+	if builtin.Install.Root == nil || builtin.Install.Root.Source != "library" || builtin.Install.Root.Target != ".ddx/plugins/ddx" {
+		t.Fatalf("built-in ddx package does not ship the library root: %+v", builtin.Install.Root)
 	}
 
 	manifest, issues, err := registry.LoadPackageManifest(filepath.Join(root, "library"))
@@ -101,11 +101,11 @@ func TestProseQualityStylePack_IsInternalRuntimeAsset(t *testing.T) {
 	if len(issues) > 0 {
 		t.Fatalf("library manifest validation issues: %+v", issues)
 	}
-	if manifest.Install.Root != nil {
-		t.Fatalf("library manifest must not advertise a project payload root: %+v", manifest.Install.Root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "library", "checks", "prose-quality")); !os.IsNotExist(err) {
-		t.Fatalf("prose-quality pack must not live in the ddx plugin source library: %v", err)
+	// The canonical library/package.yaml is package-rooted: install.root.source
+	// is "." relative to the library/ package root. Resolving the rule paths
+	// therefore goes through library/<source>.
+	if manifest.Install.Root == nil || manifest.Install.Root.Source != "." || manifest.Install.Root.Target != ".ddx/plugins/ddx" {
+		t.Fatalf("library manifest does not ship the package root: %+v", manifest.Install.Root)
 	}
 
 	settings, err := docprose.DefaultSettings()
@@ -113,9 +113,9 @@ func TestProseQualityStylePack_IsInternalRuntimeAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, rule := range settings.StylePack.Rules {
-		path := filepath.Join(root, "cli", "internal", "docprose", "assets", "prose-quality", "styles", filepath.FromSlash(rule.File))
+		path := filepath.Join(root, "library", manifest.Install.Root.Source, "checks", "prose-quality", "styles", filepath.FromSlash(rule.File))
 		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("style file %s is missing from the internal docprose asset root: %v", path, err)
+			t.Fatalf("style file %s is outside the default library install root: %v", path, err)
 		}
 	}
 }

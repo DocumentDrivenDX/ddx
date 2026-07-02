@@ -1,0 +1,41 @@
+{
+  "ran": true,
+  "changed_docs": [
+    "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+    "docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md"
+  ],
+  "findings": [
+    {
+      "file": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "line": 890,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    },
+    {
+      "file": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "line": 903,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    },
+    {
+      "file": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "line": 1262,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    },
+    {
+      "file": "docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md",
+      "line": 373,
+      "rule_id": "prose.specificity.actor_action",
+      "severity": "advisory",
+      "rationale": "The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.",
+      "suggested_edit": "Name the actor, action, artifact, or boundary that makes the statement concrete."
+    }
+  ]
+}

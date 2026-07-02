@@ -1,342 +1,96 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
+	"os"
 	"testing"
-	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
+// TestWorkerCmd_SetPersistsDesiredState proves `ddx worker set` writes a
+// valid .ddx/workers/desired.json that the server-side supervisor can
+// load without further intervention. This closes the CLI → filesystem →
+// supervisor loop that Phase 1 of ddx-9d1af129 introduces.
+func TestWorkerCmd_SetPersistsDesiredState(t *testing.T) {
 	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
 
-	// Track which endpoints were called.
-	var restartCalled bool
-	var desiredRequests, reconcileRequests int
-	var setPayload map[string]interface{}
-	var desiredCounts []float64
-	var reconcileProjects []string
-
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/agent/workers":
-			// status subcommand
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-				{"id": "worker-test-001", "state": "running", "project_root": projectRoot, "started_at": "2026-01-01T00:00:00Z"},
-			})
-
-		case r.Method == http.MethodPut && r.URL.Path == "/api/agent/workers/desired":
-			// set/start subcommands
-			desiredRequests++
-			_ = json.NewDecoder(r.Body).Decode(&setPayload)
-			desiredCounts = append(desiredCounts, setPayload["desired_count"].(float64))
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"project_root":    projectRoot,
-				"desired_count":   setPayload["desired_count"],
-				"restart_enabled": true,
-				"status":          "saved",
-			})
-
-		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/worker-test-001/restart":
-			// restart subcommand
-			restartCalled = true
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"id":     "worker-test-002",
-				"old_id": "worker-test-001",
-				"status": "running",
-			})
-
-		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/reconcile":
-			// set/start/reconcile subcommands
-			reconcileRequests++
-			reconcileProjects = append(reconcileProjects, r.URL.Query().Get("project"))
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"started":   []string{"worker-test-003"},
-				"stopped":   nil,
-				"restarted": nil,
-			})
-
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("DDX_SERVER_URL", srv.URL)
-
-	factory := NewCommandFactory(projectRoot)
-	root := factory.NewRootCommand()
-
-	// Test: status
-	out, err := executeCommand(root, "worker", "status")
-	require.NoError(t, err)
-	assert.Contains(t, out, "worker-test-001")
-
-	// Test: set
-	out, err = executeCommand(root, "worker", "set", "--project", projectRoot, "--count", "2", "--restart")
-	require.NoError(t, err)
-	assert.Equal(t, 1, desiredRequests, "expected PUT /api/agent/workers/desired to be called")
-	assert.Equal(t, 1, reconcileRequests, "worker set must reconcile after saving desired state")
-	assert.Equal(t, []float64{2}, desiredCounts)
-	assert.Equal(t, []string{projectRoot}, reconcileProjects)
-	assert.Contains(t, out, "saved")
-	assert.Contains(t, out, "worker-test-003")
-
-	// Test: start
-	out, err = executeCommand(root, "worker", "start", "--project", projectRoot)
-	require.NoError(t, err)
-	assert.Equal(t, 2, desiredRequests, "expected start to save desired state")
-	assert.Equal(t, 2, reconcileRequests, "worker start must reconcile after saving desired state")
-	assert.Equal(t, []float64{2, 1}, desiredCounts)
-	assert.Equal(t, []string{projectRoot, projectRoot}, reconcileProjects)
-	assert.Contains(t, out, "saved")
-	assert.Contains(t, out, "worker-test-003")
-
-	// Test: restart
-	out, err = executeCommand(root, "worker", "restart", "worker-test-001")
-	require.NoError(t, err)
-	assert.True(t, restartCalled, "expected POST /api/agent/workers/worker-test-001/restart to be called")
-	assert.Contains(t, out, "worker-test-002")
-
-	// Test: reconcile
-	out, err = executeCommand(root, "worker", "reconcile", "--project", projectRoot)
-	require.NoError(t, err)
-	assert.Equal(t, 3, reconcileRequests, "expected POST /api/agent/workers/reconcile to be called")
-	assert.Contains(t, out, "worker-test-003")
-}
-
-func TestWorkerCLISetStartSuppressEmptyReconcileOutput(t *testing.T) {
-	projectRoot := t.TempDir()
-
-	var desiredRequests, reconcileRequests int
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPut && r.URL.Path == "/api/agent/workers/desired":
-			desiredRequests++
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"project_root":    projectRoot,
-				"desired_count":   1,
-				"restart_enabled": true,
-				"status":          "saved",
-			})
-		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/reconcile":
-			reconcileRequests++
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("{}\n"))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("DDX_SERVER_URL", srv.URL)
-
-	factory := NewCommandFactory(projectRoot)
-
-	out, err := executeCommand(factory.NewRootCommand(), "worker", "set", "--project", projectRoot, "--count", "1", "--restart")
-	require.NoError(t, err)
-	assert.Contains(t, out, "saved")
-	assert.NotContains(t, out, "\n{}\n")
-
-	out, err = executeCommand(factory.NewRootCommand(), "worker", "start", "--project", projectRoot)
-	require.NoError(t, err)
-	assert.Contains(t, out, "saved")
-	assert.NotContains(t, out, "\n{}\n")
-
-	assert.Equal(t, 2, desiredRequests)
-	assert.Equal(t, 2, reconcileRequests)
-}
-
-func TestWorkerSet_RetriesDuringRestartListenerReadiness(t *testing.T) {
-	projectRoot := t.TempDir()
-	addr := reserveLocalTCPAddr(t)
-	t.Setenv("DDX_SERVER_URL", "https://"+addr)
-	withWorkerReadinessRetryTiming(t, 2*time.Second, 10*time.Millisecond)
-
-	var desiredRequests, reconcileRequests int
-	serverStarted := make(chan *httptest.Server, 1)
-	serverErr := make(chan error, 1)
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPut && r.URL.Path == "/api/agent/workers/desired":
-			desiredRequests++
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"project_root":    projectRoot,
-				"desired_count":   1,
-				"restart_enabled": true,
-				"status":          "saved",
-			})
-		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/reconcile":
-			reconcileRequests++
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("{}\n"))
-		default:
-			http.NotFound(w, r)
-		}
+	f := &CommandFactory{WorkingDir: projectRoot}
+	cmd := f.newWorkerSetCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{
+		"--project", projectRoot,
+		"--count", "2",
+		"--harness", "fiz",
+		"--model", "haiku",
+		"--restart-enabled=true",
 	})
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		ln, err := net.Listen("tcp", addr)
-		if err != nil {
-			serverErr <- err
-			return
-		}
-		srv := httptest.NewUnstartedServer(handler)
-		srv.Listener = ln
-		srv.StartTLS()
-		serverStarted <- srv
-	}()
-	t.Cleanup(func() {
-		select {
-		case srv := <-serverStarted:
-			srv.Close()
-		case <-time.After(time.Second):
-		}
-	})
+	require.NoError(t, cmd.Execute())
 
-	factory := NewCommandFactory(projectRoot)
-	out, err := executeCommand(factory.NewRootCommand(), "worker", "set", "--project", projectRoot, "--count", "1", "--restart")
+	desiredPath := ddxroot.JoinProject(projectRoot, "workers", "desired.json")
+	raw, err := os.ReadFile(desiredPath)
+	require.NoError(t, err, "worker set must write desired.json at the supervisor-canonical path")
+
+	var state server.WorkerDesiredState
+	require.NoError(t, json.Unmarshal(raw, &state))
+	assert.Equal(t, 2, state.DesiredCount)
+	assert.Equal(t, "fiz", state.DefaultSpec.Harness)
+	assert.Equal(t, "haiku", state.DefaultSpec.Model)
+	assert.True(t, state.Restart.Enabled)
+
+	// Round-trip through the supervisor: prove the file is not just
+	// syntactically valid JSON but also passes the supervisor's
+	// Validate + ApplyDefaults gate.
+	sup, err := workerNewSupervisor(projectRoot)
 	require.NoError(t, err)
-	assert.Contains(t, out, "saved")
-	assert.Equal(t, 1, desiredRequests)
-	assert.Equal(t, 1, reconcileRequests)
-	select {
-	case err := <-serverErr:
-		require.NoError(t, err)
-	default:
-	}
+	loaded, err := sup.LoadDesiredState()
+	require.NoError(t, err)
+	assert.Equal(t, 2, loaded.DesiredCount)
+	assert.Equal(t, "fiz", loaded.DefaultSpec.Harness)
+	assert.True(t, loaded.Restart.Enabled)
 }
 
-func TestWorkerSet_ReadinessRetryBudgetExpires(t *testing.T) {
+// TestWorkerCmd_EnableIsShortcut proves `ddx worker enable` is equivalent
+// to `set --count 1 --restart-enabled=true`, honoring the operator UX
+// promise that enabling supervision is a one-liner.
+func TestWorkerCmd_EnableIsShortcut(t *testing.T) {
 	projectRoot := t.TempDir()
-	addr := reserveLocalTCPAddr(t)
-	t.Setenv("DDX_SERVER_URL", "https://"+addr)
-	withWorkerReadinessRetryTiming(t, 40*time.Millisecond, 5*time.Millisecond)
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
 
-	factory := NewCommandFactory(projectRoot)
-	out, err := executeCommand(factory.NewRootCommand(), "worker", "set", "--project", projectRoot, "--count", "1", "--restart")
-	require.Error(t, err, out)
-	assert.Contains(t, err.Error(), "local server readiness timeout after")
-	assert.Contains(t, err.Error(), "connection refused")
+	f := &CommandFactory{WorkingDir: projectRoot}
+	cmd := f.newWorkerEnableCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--project", projectRoot})
+	require.NoError(t, cmd.Execute())
+
+	sup, err := workerNewSupervisor(projectRoot)
+	require.NoError(t, err)
+	loaded, err := sup.LoadDesiredState()
+	require.NoError(t, err)
+	assert.Equal(t, 1, loaded.DesiredCount)
+	assert.True(t, loaded.Restart.Enabled)
 }
 
-func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
-	projectA := t.TempDir()
-	projectB := t.TempDir()
-
-	var globalCalled bool
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/api/agent/workers", r.URL.Path)
-		globalCalled = true
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-			{"id": "worker-project-a", "state": "running", "project_root": projectA, "started_at": "2026-01-01T00:00:00Z"},
-			{"id": "worker-project-b", "state": "running", "project_root": projectB, "started_at": "2026-01-01T00:00:00Z"},
-		})
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("DDX_SERVER_URL", srv.URL)
-
-	factory := NewCommandFactory(projectA)
-	out, err := executeCommand(factory.NewRootCommand(), "worker", "status", "--project", projectA, "--json")
-	require.NoError(t, err)
-	var workers []workerRecord
-	require.NoError(t, json.Unmarshal([]byte(out), &workers))
-	require.Len(t, workers, 1)
-	assert.Equal(t, "worker-project-a", workers[0].ID)
-	assert.Equal(t, projectA, workers[0].ProjectRoot)
-	assert.NotContains(t, out, "worker-project-b")
-	assert.NotContains(t, out, projectB)
-	assert.True(t, globalCalled, "status should use the global aggregate endpoint and filter client-side")
-
-	textOut, err := executeCommand(factory.NewRootCommand(), "worker", "status", "--project", projectA)
-	require.NoError(t, err)
-	assert.Contains(t, textOut, "worker-project-a")
-	assert.NotContains(t, textOut, "worker-project-b")
-	assert.NotContains(t, textOut, projectB)
-}
-
-func TestWorkerStatusJSON_ExcludesStaleStartupReconcileProjects(t *testing.T) {
+// TestWorkerCmd_StatusReportsAbsent proves `ddx worker status` gracefully
+// reports the "not yet configured" state instead of erroring out, so
+// operators can query freshly-cloned projects without pre-arming.
+func TestWorkerCmd_StatusReportsAbsent(t *testing.T) {
 	projectRoot := t.TempDir()
-	stalePQueue := filepath.Join(t.TempDir(), "pqueue")
-	staleTablespec := filepath.Join(t.TempDir(), "tablespec")
 
-	var globalCalled bool
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/api/agent/workers", r.URL.Path)
-		globalCalled = true
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-			{
-				"id":           "worker-stale-pqueue",
-				"state":        "exited",
-				"project_root": stalePQueue,
-				"started_at":   "2026-01-01T00:00:00Z",
-			},
-			{
-				"id":           "worker-stale-tablespec",
-				"state":        "exited",
-				"project_root": staleTablespec,
-				"started_at":   "2026-01-01T00:00:00Z",
-			},
-			{
-				"id":           "worker-active",
-				"state":        "running",
-				"project_root": projectRoot,
-				"started_at":   "2026-01-01T00:00:00Z",
-			},
-		})
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("DDX_SERVER_URL", srv.URL)
+	f := &CommandFactory{WorkingDir: projectRoot}
+	cmd := f.newWorkerStatusCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--project", projectRoot})
+	require.NoError(t, cmd.Execute())
 
-	factory := NewCommandFactory(projectRoot)
-	root := factory.NewRootCommand()
-
-	out, err := executeCommand(root, "worker", "status", "--project", projectRoot, "--json")
-	require.NoError(t, err)
-
-	var workers []workerRecord
-	require.NoError(t, json.Unmarshal([]byte(out), &workers))
-	require.Len(t, workers, 1)
-	assert.Equal(t, "worker-active", workers[0].ID)
-	assert.Equal(t, projectRoot, workers[0].ProjectRoot)
-	assert.NotContains(t, out, "worker-stale-pqueue")
-	assert.NotContains(t, out, "worker-stale-tablespec")
-	assert.NotContains(t, out, stalePQueue)
-	assert.NotContains(t, out, staleTablespec)
-	assert.True(t, globalCalled, "status should use the global aggregate endpoint and filter client-side")
-}
-
-func reserveLocalTCPAddr(t *testing.T) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := ln.Addr().String()
-	require.NoError(t, ln.Close())
-	return addr
-}
-
-func withWorkerReadinessRetryTiming(t *testing.T, budget, delay time.Duration) {
-	t.Helper()
-	oldBudget := workerServerReadinessRetryBudget
-	oldDelay := workerServerReadinessRetryDelay
-	workerServerReadinessRetryBudget = budget
-	workerServerReadinessRetryDelay = delay
-	t.Cleanup(func() {
-		workerServerReadinessRetryBudget = oldBudget
-		workerServerReadinessRetryDelay = oldDelay
-	})
+	assert.Contains(t, stdout.String(), "no desired state persisted",
+		"status must gracefully report the absent-configuration case, not error")
 }

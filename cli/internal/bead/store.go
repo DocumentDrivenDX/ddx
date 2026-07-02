@@ -32,7 +32,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/blob"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 )
@@ -46,10 +45,6 @@ type Store struct {
 	LockDir    string
 	LockWait   time.Duration
 	backend    RawBackend // nil means use built-in JSONL
-	// Blobs is the store used for byte-blob sidecar writes (e.g.
-	// externalized bead events under attachments/). Defaults to a
-	// LocalFSBlob rooted at Dir, set by NewStore. FEAT-028 §BlobStore.
-	Blobs blob.Store
 }
 
 // Compile-time check: *Store satisfies the high-level Backend interface
@@ -61,7 +56,7 @@ var _ Backend = (*Store)(nil)
 var _ BeadDependencyReader = (*Store)(nil)
 var _ BeadDependencyWriter = (*Store)(nil)
 
-// Compile-time checks: *Store satisfies the TD-027 archive and interchange sub-interfaces.
+// Compile-time checks: *Store satisfies the TD-027 archive/interchange sub-interfaces.
 var _ BeadArchive = (*Store)(nil)
 var _ BeadInterchangeReader = (*Store)(nil)
 var _ BeadInterchangeWriter = (*Store)(nil)
@@ -113,7 +108,6 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 		Dir:        dir,
 		Prefix:     prefix,
 		LockWait:   parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),
-		Blobs:      blob.NewLocalFS(dir),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -992,20 +986,25 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 //
 // Deprecated: use TouchClaimHeartbeat.
 func (s *Store) Heartbeat(id string) error {
-	beads, err := s.ReadAll(context.Background())
-	if err != nil {
+	if err := s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		for _, b := range beads {
+			if b.ID != id {
+				continue
+			}
+			if b.Status != StatusInProgress {
+				return fmt.Errorf("bead: cannot heartbeat %s from status %s", id, b.Status)
+			}
+			return s.TouchClaimHeartbeat(id)
+		}
+		return fmt.Errorf("bead: not found: %s", id)
+	}); err != nil {
 		return err
 	}
-	for _, b := range beads {
-		if b.ID != id {
-			continue
-		}
-		if b.Status != StatusInProgress {
-			return fmt.Errorf("bead: cannot heartbeat %s from status %s", id, b.Status)
-		}
-		return s.TouchClaimHeartbeat(id)
-	}
-	return fmt.Errorf("bead: not found: %s", id)
+	return nil
 }
 
 // claimLeaseIsStale returns true if the external claim lease is absent or
@@ -1104,7 +1103,6 @@ func (s *Store) Release(id, assignee, targetStatus string) error {
 	if strings.TrimSpace(targetStatus) == "" {
 		targetStatus = StatusOpen
 	}
-	assignee = strings.TrimSpace(assignee)
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
@@ -1113,30 +1111,6 @@ func (s *Store) Release(id, assignee, targetStatus string) error {
 		for i := range beads {
 			if beads[i].ID != id {
 				continue
-			}
-			if assignee != "" {
-				trackerOwner := strings.TrimSpace(beads[i].Owner)
-				if trackerOwner != "" && trackerOwner != assignee {
-					return nil
-				}
-				leaseFound := false
-				if trackerOwner == "" {
-					lease, found, leaseErr := s.readClaimHeartbeat(id)
-					if leaseErr != nil {
-						return leaseErr
-					}
-					leaseFound = found
-					leaseOwner := ""
-					if leaseFound {
-						leaseOwner = strings.TrimSpace(lease.Owner)
-					}
-					if leaseOwner != "" && leaseOwner != assignee {
-						return nil
-					}
-				}
-				if trackerOwner == "" && !leaseFound && beads[i].Status != StatusInProgress {
-					return nil
-				}
 			}
 			if beads[i].Status == StatusInProgress {
 				if err := transitionLifecycleInPlace(&beads[i], targetStatus, LifecycleTransitionOptions{
@@ -1795,53 +1769,6 @@ func (s *Store) cascadeCloseSuperseeded(closedID string) error {
 		_ = s.RemoveClaimHeartbeat(x.ID)
 	}
 	return nil
-}
-
-// RunSupersededCascade runs the same scope-checked cascade-close that
-// Store.Close performs, but out of band: given a superseder bead Y that is
-// already closed, it closes every still-open bead X that is superseded by Y
-// and passes every cascade scope guard. It returns the number of beads closed.
-// Used by the idle-path auto-remediation pass when Diagnose reports
-// superseded_pending_close for an X whose superseder Y closed without the
-// cascade having run (FEAT-010 §Idle-Path Diagnosis and Auto-Remediation).
-// Idempotent: re-running closes nothing new.
-func (s *Store) RunSupersededCascade(supersederID string) (int, error) {
-	if strings.TrimSpace(supersederID) == "" {
-		return 0, fmt.Errorf("bead: RunSupersededCascade requires a superseder id")
-	}
-	all, err := s.ReadAll(context.Background())
-	if err != nil {
-		return 0, err
-	}
-	closed := 0
-	visited := map[string]bool{supersederID: true}
-	for _, x := range all {
-		if visited[x.ID] {
-			continue
-		}
-		if !s.canCascadeCloseSuperseeded(&x, supersederID, all) {
-			continue
-		}
-		visited[x.ID] = true
-		if err := s.SetLifecycleStatus(x.ID, StatusClosed, LifecycleTransitionOptions{
-			ManualClose: true,
-			Reason:      fmt.Sprintf("cascade-close superseded by %s", supersederID),
-			Source:      "Store.RunSupersededCascade",
-		}); err != nil {
-			continue
-		}
-		_ = s.externalizeEvents(x.ID)
-		_ = s.AppendEvent(x.ID, BeadEvent{
-			Kind:      "superseded_close",
-			Summary:   fmt.Sprintf("closed as superseded via %s", supersederID),
-			Body:      fmt.Sprintf("closed_by_cascade_of: %s\nreason: closed_as_superseded_via:%s", supersederID, supersederID),
-			Source:    "Store.RunSupersededCascade",
-			CreatedAt: time.Now().UTC(),
-		})
-		_ = s.RemoveClaimHeartbeat(x.ID)
-		closed++
-	}
-	return closed, nil
 }
 
 // canCascadeCloseSuperseeded checks all scope guards before cascade-closing X.
@@ -3180,36 +3107,18 @@ func detectPrefix(workingDir string) string {
 	cmd := gitpkg.Command(context.Background(), workingDir, "rev-parse", "--show-toplevel")
 	if out, err := cmd.Output(); err == nil {
 		root := strings.TrimSpace(string(out))
-		if prefix := validateIDPrefix(filepath.Base(root)); prefix != "" {
-			return prefix
+		if root != "" {
+			return filepath.Base(root)
 		}
 	}
 	// Fall back to the provided working dir, then cwd.
 	if workingDir != "" {
-		if prefix := validateIDPrefix(filepath.Base(workingDir)); prefix != "" {
-			return prefix
-		}
-		return DefaultPrefix
+		return filepath.Base(workingDir)
 	}
 	if wd, err := os.Getwd(); err == nil {
-		if prefix := validateIDPrefix(filepath.Base(wd)); prefix != "" {
-			return prefix
-		}
+		return filepath.Base(wd)
 	}
 	return DefaultPrefix
-}
-
-// validateIDPrefix returns a prefix that can be safely combined with the
-// generator's default hex suffix and still pass ValidateID. Invalid candidates
-// fall back to the empty string so callers can keep searching.
-func validateIDPrefix(prefix string) string {
-	if prefix == "" || strings.ContainsAny(prefix, "./") {
-		return ""
-	}
-	if err := ValidateID(prefix + strings.Repeat("0", 8)); err != nil {
-		return ""
-	}
-	return prefix
 }
 
 // workingDir returns the project root for git operations. When Dir is the

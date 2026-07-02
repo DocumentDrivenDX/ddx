@@ -69,11 +69,19 @@
 
 	function handleNodeClick(node: { path: string; mediaType?: string; id: string }) {
 		const p = $page.params as Record<string, string>;
-		goto(
-			resolve(
-				`/nodes/${p['nodeId']}/projects/${p['projectId']}/artifacts/${encodeURIComponent('doc:' + node.id)}`
-			)
-		);
+		if (node.mediaType === 'text/markdown' || !node.mediaType) {
+			goto(
+				resolve(
+					`/nodes/${p['nodeId']}/projects/${p['projectId']}/documents/${node.path.split('/').map(encodeURIComponent).join('/')}`
+				)
+			);
+		} else {
+			goto(
+				resolve(
+					`/nodes/${p['nodeId']}/projects/${p['projectId']}/artifacts/${encodeURIComponent('doc:' + node.id)}`
+				)
+			);
+		}
 	}
 
 	function handleTransformChange(t: { x: number; y: number; k: number }) {
@@ -112,12 +120,10 @@
 		</div>
 		<div class="flex items-center gap-4">
 			<a
-				href={resolve(
-					`/nodes/${$page.params['nodeId']}/projects/${$page.params['projectId']}/artifacts?mediaType=text%2Fmarkdown`
-				)}
-				class="text-accent-lever dark:text-dark-accent-lever text-sm hover:underline"
+				href={`/nodes/${$page.params['nodeId']}/projects/${$page.params['projectId']}/artifacts?mediaType=text%2Fmarkdown`}
+				class="text-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
 			>
-				Back to artifacts
+				Back to documents
 			</a>
 			<span class="text-sm text-gray-700 dark:text-gray-300">
 				{visibleNodes.length} nodes &middot; {visibleLinks.length} edges
@@ -127,27 +133,27 @@
 
 	<!-- Filter chips -->
 	<div class="flex shrink-0 flex-wrap gap-2">
-		<span class="text-fg-muted dark:text-dark-fg-muted self-center text-xs">Type:</span>
+		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Type:</span>
 		{#each MEDIA_TYPE_CHIPS as chip}
 			{@const active = activeMediaTypes.includes(chip.value)}
 			<button
 				onclick={() => toggleMediaType(chip.value)}
 				data-testid={`filter-mediatype-${chip.value.replace(/[^a-z]/gi, '-')}`}
-				class="font-label-caps text-label-caps rounded-full px-3 py-0.5 uppercase transition-colors {active
-					? 'bg-accent-lever dark:bg-dark-accent-lever text-white'
+				class="rounded-full px-3 py-0.5 font-label-caps text-label-caps uppercase transition-colors {active
+					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
 					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
 			>
 				{chip.label}
 			</button>
 		{/each}
-		<span class="text-fg-muted dark:text-dark-fg-muted self-center text-xs">Staleness:</span>
+		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Staleness:</span>
 		{#each STALENESS_CHIPS as chip}
 			{@const active = activeStaleness.includes(chip.value)}
 			<button
 				onclick={() => toggleStaleness(chip.value)}
 				data-testid={`filter-staleness-${chip.value}`}
-				class="font-label-caps text-label-caps rounded-full px-3 py-0.5 uppercase transition-colors {active
-					? 'bg-accent-lever dark:bg-dark-accent-lever text-white'
+				class="rounded-full px-3 py-0.5 font-label-caps text-label-caps uppercase transition-colors {active
+					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
 					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
 			>
 				{chip.label}
@@ -164,9 +170,7 @@
 			No documents in graph.
 		</div>
 	{:else}
-		<div
-			class="min-h-0 flex-1 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
-		>
+		<div class="min-h-0 flex-1 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
 			<D3Graph
 				nodes={visibleNodes}
 				links={visibleLinks}

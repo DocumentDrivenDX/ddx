@@ -1,0 +1,81 @@
+# PostgreSQL MCP Server Definition
+name: postgres
+description: "PostgreSQL database integration for SQL queries and management"
+category: database
+author: modelcontextprotocol
+version: 2.1.0
+tags: [database, sql, postgresql, rdbms, data]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-postgres"]
+  
+environment:
+  - name: POSTGRES_CONNECTION_STRING
+    description: "PostgreSQL connection string with credentials"
+    required: true
+    sensitive: true
+    validation: "^postgres(ql)?://[^:]+:[^@]+@[^:]+:[0-9]+/.+$"
+    example: "postgresql://user:password@localhost:5432/dbname"
+    
+  - name: POSTGRES_POOL_SIZE
+    description: "Maximum number of connections in the pool"
+    required: false
+    sensitive: false
+    default: "10"
+    validation: "^[1-9][0-9]?$"
+    
+  - name: POSTGRES_TIMEOUT
+    description: "Query timeout in milliseconds"
+    required: false
+    sensitive: false
+    default: "30000"
+    validation: "^[0-9]+$"
+    
+documentation:
+  setup: |
+    1. Ensure PostgreSQL is running and accessible
+    2. Create a database user with appropriate permissions
+    3. Construct connection string:
+       postgresql://username:password@host:port/database
+    4. Test connection with psql or pgAdmin first
+  permissions:
+    - SELECT (required)
+    - INSERT, UPDATE, DELETE (for write operations)
+    - CREATE, DROP (for schema management)
+  examples:
+    - "Show all tables in the database"
+    - "Run SELECT * FROM users LIMIT 10"
+    - "Describe the schema of the orders table"
+    - "Execute a complex JOIN query"
+    
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+  postgres_versions: ["12", "13", "14", "15", "16"]
+  
+security:
+  sandbox: required
+  network_access: required
+  file_access: none
+  data_handling: |
+    - Connection strings should use SSL when possible
+    - Use read-only users for query-only access
+    - Never expose production credentials
+    - Consider using connection pooling
+  warnings:
+    - "Allows direct SQL execution - use read-only access when possible"
+    - "Connection string contains credentials - handle securely"
+    
+verification:
+  test_command: "Show PostgreSQL version"
+  expected_response: "PostgreSQL version information"
+  connection_test: "SELECT 1"
+  
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://github.com/modelcontextprotocol/servers/tree/main/src/postgres
+  postgres_docs: https://www.postgresql.org/docs/
+  issues: https://github.com/modelcontextprotocol/servers/issues

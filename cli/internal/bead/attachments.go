@@ -3,16 +3,12 @@ package bead
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/DocumentDrivenDX/ddx/internal/blob"
 )
 
 // EventsAttachmentExtraKey is the Extra map key under which a closed/archived
@@ -55,22 +51,17 @@ func hasEventsAttachment(b *Bead) bool {
 	return ok && strings.TrimSpace(v) != ""
 }
 
-// readEventsAttachment loads a bead's externalized events via the blob store.
-// Missing key is treated as an empty event log so a half-written close does
-// not crash the read path; it returns ([]BeadEvent{}, nil) in that case.
+// readEventsAttachment loads a bead's externalized events from disk. Missing
+// file is treated as an empty event log so a half-written close does not
+// crash the read path; it returns ([]BeadEvent{}, nil) in that case.
 func (s *Store) readEventsAttachment(beadID string) ([]BeadEvent, error) {
-	key := attachmentKey(beadID)
-	rc, err := s.Blobs.Get(context.Background(), key)
-	if err != nil {
-		if errors.Is(err, blob.ErrNotFound) {
-			return []BeadEvent{}, nil
-		}
-		return nil, fmt.Errorf("bead: read events attachment %s: %w", key, err)
+	path := s.eventsAttachmentPath(beadID)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return []BeadEvent{}, nil
 	}
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("bead: read events attachment %s: %w", key, err)
+		return nil, fmt.Errorf("bead: read events attachment %s: %w", path, err)
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
@@ -82,12 +73,12 @@ func (s *Store) readEventsAttachment(beadID string) ([]BeadEvent, error) {
 		}
 		var m map[string]any
 		if err := json.Unmarshal(line, &m); err != nil {
-			return nil, fmt.Errorf("bead: parse events attachment %s: %w", key, err)
+			return nil, fmt.Errorf("bead: parse events attachment %s: %w", path, err)
 		}
 		out = append(out, beadEventFromMap(m))
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("bead: scan events attachment %s: %w", key, err)
+		return nil, fmt.Errorf("bead: scan events attachment %s: %w", path, err)
 	}
 	if out == nil {
 		out = []BeadEvent{}
@@ -95,13 +86,18 @@ func (s *Store) readEventsAttachment(beadID string) ([]BeadEvent, error) {
 	return out, nil
 }
 
-// writeEventsAttachment writes the given events through the blob store.
-// An empty slice removes the sidecar. Atomicity and durability are
-// provided by BlobStore.Put (FEAT-028 §BlobStore Interface crash-safety).
+// writeEventsAttachment writes the given events to the bead's sidecar file
+// atomically (temp + rename) and creates the parent directory. An empty
+// slice removes the sidecar.
 func (s *Store) writeEventsAttachment(beadID string, events []BeadEvent) error {
-	key := attachmentKey(beadID)
+	dir := s.attachmentDir(beadID)
+	path := s.eventsAttachmentPath(beadID)
 	if len(events) == 0 {
-		return s.Blobs.Delete(context.Background(), key)
+		_ = os.Remove(path)
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("bead: mkdir attachments: %w", err)
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -119,15 +115,7 @@ func (s *Store) writeEventsAttachment(beadID string, events []BeadEvent) error {
 			return fmt.Errorf("bead: encode events attachment: %w", err)
 		}
 	}
-	return s.Blobs.Put(context.Background(), key, &buf)
-}
-
-// attachmentKey returns the blob.Key for a bead's externalized events sidecar.
-// Key convention (FEAT-028): "attachments/<bead-id>/events.jsonl"
-// With LocalFSBlob rooted at Store.Dir this maps to the same on-disk path
-// as the legacy eventsAttachmentPath helper.
-func attachmentKey(beadID string) blob.Key {
-	return blob.Key("attachments/" + beadID + "/" + EventsAttachmentFileName)
+	return writeAtomicFile(path, buf.Bytes())
 }
 
 // eventsForBead returns the bead's events from whichever physical store

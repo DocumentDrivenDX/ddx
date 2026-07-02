@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260630T091356-a8fc2217",
+  "bead_id": "ddx-4cb7fd2b",
+  "base_rev": "6419464da5ab6e08439a4830a438fba617febd5d",
+  "created_at": "2026-06-30T09:14:07.240769602Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4cb7fd2b",
+    "title": "server: shut down all server-owned managed worker process trees",
+    "description": "PROBLEM\nServer shutdown must clean every server-owned managed worker process tree, not only background hubs and land coordinators. A graceful server shutdown can currently leave ddx work or harness descendants running.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/server.go:269-283 documents Shutdown as closing background services, then calls s.beadHub.Close and s.workers.LandCoordinators.StopAll. It does not stop WorkerManager work workers. cli/internal/server/workers.go:218-220 stores live worker handles, but there is no manager shutdown pass that iterates those handles and applies the Stop/reap process-tree cleanup path.\n\nPROPOSED FIX\nAdd an idempotent WorkerManager shutdown method that snapshots server-owned managed work handles and on-disk running server-owned records, invokes the shared managed process-tree cleanup path, releases any claimed bead for those workers, and persists terminal stopped status. Call it from Server.Shutdown before or alongside LandCoordinators.StopAll so server shutdown cleans all managed worker process groups.\n\nNON-SCOPE\nDo not kill external reported workers or interactive Claude/Codex sessions. Do not change bead claim semantics except releasing claims for the stopped/reaped managed worker. Do not implement UI controls.\n\nGOVERNING ARTIFACT AND RELATIONSHIP\nParent bead: ddx-9d1af129. Governing artifact reference: plan:server-managed-workers. No explicit dependency IDs were provided by the parent bead.",
+    "acceptance": "1. TestWorkerManagerShutdownStopsManagedProcessTrees proves manager shutdown cleans all server-owned managed worker process groups and leaves no ddx work, claude, codex, shell, or sleep descendants behind.\n2. TestServerShutdownCallsWorkerManagerShutdown proves Server.Shutdown invokes the worker-manager shutdown path and persists terminal worker status.\n3. TestWorkerManagerShutdownSkipsExternalReportedWorkers proves shutdown does not kill external reported workers, interactive Claude/Codex sessions, or unrelated process groups.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestWorkerManagerShutdownStopsManagedProcessTrees|TestServerShutdownCallsWorkerManagerShutdown|TestWorkerManagerShutdownSkipsExternalReportedWorkers' passes.\n5. make install is run after the code change lands.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-24a3da84",
+    "labels": [
+      "area:server",
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260630T091356-a8fc2217",
+    "prompt": ".ddx/executions/20260630T091356-a8fc2217/prompt.md",
+    "manifest": ".ddx/executions/20260630T091356-a8fc2217/manifest.json",
+    "result": ".ddx/executions/20260630T091356-a8fc2217/result.json",
+    "checks": ".ddx/executions/20260630T091356-a8fc2217/checks.json",
+    "usage": ".ddx/executions/20260630T091356-a8fc2217/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-4cb7fd2b-20260630T091356-a8fc2217"
+  },
+  "prompt_sha": "2f4f823fa24d03d5786f67a4083f633fb96e6e4735d7552f6364ca2c6327347e"
+}

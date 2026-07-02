@@ -1,0 +1,2 @@
+status: blocked
+reason: lefthook run pre-commit fails in unrelated race-sensitive tests under `go test -short -race -timeout 30m ./internal/agent`: `TestRunningProviderGuardReapsNonRouteProviderChildren` and `TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam`. The bead's targeted tests passed, but the required repo gate is still red outside the in-scope file.

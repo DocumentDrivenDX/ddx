@@ -60,8 +60,7 @@ bun run test
 The default Playwright config (`playwright.config.ts`) boots a real `ddx server`
 against a self-contained fixture workspace, so backend-dependent specs hit live
 API endpoints without reading `$HOME`, `~/.config/ddx`, or the repository's live
-`.ddx/` state. The fixture exercises the same cache/defaultplugin resolution and
-generated-adapter surfaces that normal installs use.
+`.ddx/` state.
 
 What `bun run test:e2e` does on each run:
 
@@ -85,14 +84,11 @@ Override the port with `DDX_E2E_PORT` if 4174 is taken.
 
 The fixture lives at `cli/internal/server/frontend/e2e/fixtures/` and contains:
 
-- `.ddx/config.yaml` — minimal DDx config for the copied fixture workspace.
+- `.ddx/config.yaml` — minimal DDx config pointing at the local plugin library.
 - `.ddx/beads.jsonl` — open, closed, and blocked beads so bead endpoints return
   non-empty data.
-- `.ddx/plugins/ddx/` — fixture-only local overlay source used for
-  local overlay and legacy compatibility coverage. Normal marketplace plugin
-  installs write `.ddx/plugins.lock.yaml`, cache payloads under XDG, and expose
-  skills through generated adapters under `.agents/skills/` and
-  `.claude/skills/`.
+- `.ddx/plugins/ddx/` — minimal personas, prompts, and templates so document
+  and persona endpoints have something to list.
 - `docs/` — small docs library for the document graph endpoint.
 
 The fixture is treated as read-only: the harness copies it before boot, so test
@@ -105,10 +101,8 @@ When a new spec needs additional backend data, add it under
 the repository's own `.ddx/`. Typical extensions:
 
 - More beads → append JSONL records to `.ddx/beads.jsonl`.
-- New personas, prompts, or templates → prefer generated adapter fixture data
-  under `.agents/skills/` or `.claude/skills/`. Add files under
-  `.ddx/plugins/ddx/{personas,prompts,templates}/` only for local overlay or
-  legacy compatibility coverage when a spec needs it.
+- New personas, prompts, or templates → add files under
+  `.ddx/plugins/ddx/{personas,prompts,templates}/`.
 - New docs for the document graph → add Markdown under `docs/`.
 
 Keep additions minimal and self-contained; the fixture is the only supported

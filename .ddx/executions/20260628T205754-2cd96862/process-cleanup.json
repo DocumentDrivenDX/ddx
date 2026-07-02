@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260628T205754-2cd96862",
+  "bead_id": "ddx-9aa2151d",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862",
+  "trigger": "agent: provider process exited without emitting a final event",
+  "started_at": "2026-06-29T00:02:39.004122405Z",
+  "finished_at": "2026-06-29T00:02:39.302799033Z",
+  "scanned": 1061,
+  "candidates": [
+    {
+      "pid": 4188758,
+      "ppid": 4187887,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1311757224/b001/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build1311757224/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 4187887,
+      "ppid": 4187682,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli",
+      "command": "go test -short -race -timeout 30m ./cmd"
+    },
+    {
+      "pid": 4187682,
+      "ppid": 4187634,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/active_work.go ./cmd/try_test.go ./cmd/work_status.go ./cmd/work_status_test.go ./cmd/work_test.go ./internal/activework/activework.go ./internal/agent/execute_bead_dangling_success.go ./internal/agent/execute_bead_dangling_success_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_loop_test.go ./internal/agent/gitops_real.go ./internal/agent/preclaim_intake_hook_test.go ./internal/agent/provider_children_test.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    },
+    {
+      "pid": 4187634,
+      "ppid": 1,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/active_work.go ./cmd/try_test.go ./cmd/work_status.go ./cmd/work_status_test.go ./cmd/work_test.go ./internal/activework/activework.go ./internal/agent/execute_bead_dangling_success.go ./internal/agent/execute_bead_dangling_success_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_loop_test.go ./internal/agent/gitops_real.go ./internal/agent/preclaim_intake_hook_test.go ./internal/agent/provider_children_test.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 4188758,
+      "ppid": 4187887,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go-build1311757224/b001/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build1311757224/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 4187887,
+      "ppid": 4187682,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli",
+      "command": "go test -short -race -timeout 30m ./cmd"
+    },
+    {
+      "pid": 4187682,
+      "ppid": 4187634,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/active_work.go ./cmd/try_test.go ./cmd/work_status.go ./cmd/work_status_test.go ./cmd/work_test.go ./internal/activework/activework.go ./internal/agent/execute_bead_dangling_success.go ./internal/agent/execute_bead_dangling_success_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_loop_test.go ./internal/agent/gitops_real.go ./internal/agent/preclaim_intake_hook_test.go ./internal/agent/provider_children_test.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    },
+    {
+      "pid": 4187634,
+      "ppid": 1,
+      "pgid": 4187634,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9aa2151d-20260628T205754-2cd96862/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/active_work.go ./cmd/try_test.go ./cmd/work_status.go ./cmd/work_status_test.go ./cmd/work_test.go ./internal/activework/activework.go ./internal/agent/execute_bead_dangling_success.go ./internal/agent/execute_bead_dangling_success_test.go ./internal/agent/execute_bead_loop.go ./internal/agent/execute_bead_loop_test.go ./internal/agent/gitops_real.go ./internal/agent/preclaim_intake_hook_test.go ./internal/agent/provider_children_test.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    }
+  ]
+}

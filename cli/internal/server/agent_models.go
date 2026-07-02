@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -41,7 +40,6 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	defer cleanupCurrentProcessProviderProbes()
 
 	providers, err := svc.ListProviders(ctx)
 	if err != nil {
@@ -108,7 +106,7 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAgentCapabilities serves GET /api/agent/capabilities.
-// Query param: harness (optional; defaults to the preferred available harness).
+// Query param: harness (optional; defaults to configured default harness).
 func (s *Server) handleAgentCapabilities(w http.ResponseWriter, r *http.Request) {
 	workDir := s.workingDirForRequest(r)
 	harness := r.URL.Query().Get("harness")
@@ -117,12 +115,8 @@ func (s *Server) handleAgentCapabilities(w http.ResponseWriter, r *http.Request)
 	defer cancel()
 
 	if harness == "" {
-		var err error
-		harness, err = defaultCapabilitiesHarness(ctx, workDir)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-			return
-		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harness required: no harness specified and no available harness found"})
+		return
 	}
 
 	caps, err := agent.CapabilitiesViaService(ctx, workDir, harness)
@@ -145,7 +139,6 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
-	defer cleanupCurrentProcessProviderProbes()
 
 	providers, err := svc.ListProviders(ctx)
 	if err != nil {
@@ -304,12 +297,7 @@ func (s *Server) mcpAgentCapabilities(workingDir, harness string) mcpToolResult 
 	defer cancel()
 
 	if harness == "" {
-		var err error
-		harness, err = defaultCapabilitiesHarness(ctx, workingDir)
-		if err != nil {
-			body, _ := json.Marshal(map[string]string{"error": err.Error()})
-			return mcpToolResult{Content: []mcpContent{mcpText(string(body))}, IsError: true}
-		}
+		return mcpToolResult{Content: []mcpContent{mcpText(`{"error":"harness required: no harness specified and no available harness found"}`)}, IsError: true}
 	}
 
 	caps, err := agent.CapabilitiesViaService(ctx, workingDir, harness)
@@ -321,34 +309,4 @@ func (s *Server) mcpAgentCapabilities(workingDir, harness string) mcpToolResult 
 		return mcpToolResult{Content: []mcpContent{mcpText(`{"error":"marshal failed"}`)}, IsError: true}
 	}
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
-}
-
-func defaultCapabilitiesHarness(ctx context.Context, workDir string) (string, error) {
-	infos, err := listHarnessInfos(ctx, workDir)
-	if err != nil {
-		return "", fmt.Errorf("harness required: %w", err)
-	}
-	if name := chooseCapabilitiesHarness(infos); name != "" {
-		return name, nil
-	}
-	return "", fmt.Errorf("harness required: no harness specified and no available harness found")
-}
-
-func chooseCapabilitiesHarness(infos []agentlib.HarnessInfo) string {
-	for _, preferred := range []string{"claude-tui", "claude", "codex"} {
-		for _, info := range infos {
-			if info.Name == preferred && info.Available {
-				return info.Name
-			}
-		}
-	}
-	for _, info := range infos {
-		if info.Available {
-			return info.Name
-		}
-	}
-	if len(infos) > 0 {
-		return infos[0].Name
-	}
-	return ""
 }

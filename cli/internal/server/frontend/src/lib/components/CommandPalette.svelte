@@ -359,9 +359,7 @@
 				kind: 'document',
 				label: documentResult.title,
 				detail: documentResult.path,
-				route: projectRoute(
-					`/artifacts?mediaType=text%2Fmarkdown&q=${encodeURIComponent(documentResult.path)}`
-				),
+				route: projectRoute(`/documents/${documentPath(documentResult.path)}`),
 				Icon: FileText
 			});
 		}
@@ -400,6 +398,14 @@
 		}
 
 		return entries;
+	}
+
+	function documentPath(path: string) {
+		return path
+			.split('/')
+			.filter(Boolean)
+			.map((segment) => encodeURIComponent(segment))
+			.join('/');
 	}
 
 	function projectRoute(suffix: string): string | undefined {
@@ -479,7 +485,7 @@
 <dialog
 	bind:this={dialogElement}
 	aria-label="Command palette"
-	class="border-border-line bg-bg-elevated shadow-fg-ink/20 backdrop:bg-fg-ink/45 dark:border-dark-border-line dark:bg-dark-bg-elevated m-auto w-[min(680px,calc(100vw-2rem))] overflow-hidden rounded-none border p-0 shadow-2xl dark:shadow-black/50"
+	class="m-auto w-[min(680px,calc(100vw-2rem))] overflow-hidden rounded-none border border-border-line bg-bg-elevated p-0 shadow-2xl shadow-fg-ink/20 backdrop:bg-fg-ink/45 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:shadow-black/50"
 	onclose={handleDialogClose}
 	oncancel={handleDialogCancel}
 >
@@ -489,20 +495,18 @@
 		label="Command palette"
 		class="flex max-h-[min(720px,calc(100vh-4rem))] flex-col"
 	>
-		<div
-			class="border-border-line dark:border-dark-border-line flex items-center gap-3 border-b px-4 py-3"
-		>
-			<Search class="text-fg-muted dark:text-dark-fg-muted h-4 w-4 shrink-0" />
+		<div class="flex items-center gap-3 border-b border-border-line px-4 py-3 dark:border-dark-border-line">
+			<Search class="h-4 w-4 shrink-0 text-fg-muted dark:text-dark-fg-muted" />
 			<input
 				bind:value={query}
 				bind:this={inputElement}
 				role="searchbox"
 				aria-label="Command palette"
-				class="text-fg-ink placeholder:text-fg-muted focus:ring-accent-lever dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted dark:focus:ring-dark-accent-lever min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 py-1 text-sm outline-none focus:ring-1"
+				class="min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 py-1 text-sm text-fg-ink outline-none placeholder:text-fg-muted focus:ring-1 focus:ring-accent-lever dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted dark:focus:ring-dark-accent-lever"
 				placeholder="Search beads, docs, actions..."
 			/>
 			<kbd
-				class="border-border-line bg-bg-surface text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted rounded-none border px-1.5 py-0.5 text-[11px] font-medium"
+				class="rounded-none border border-border-line bg-bg-surface px-1.5 py-0.5 text-[11px] font-medium text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted"
 				>Esc</kbd
 			>
 		</div>
@@ -514,16 +518,14 @@
 		>
 			<Command.Viewport>
 				{#if errorMessage}
-					<div class="text-error dark:text-dark-error flex items-center gap-2 px-3 py-4 text-sm">
+					<div class="flex items-center gap-2 px-3 py-4 text-sm text-error dark:text-dark-error">
 						<XCircle class="h-4 w-4 shrink-0" />
 						{errorMessage}
 					</div>
 				{:else if loading && allEntries.length === 0}
-					<div class="text-fg-muted dark:text-dark-fg-muted px-3 py-4 text-sm">Searching...</div>
+					<div class="px-3 py-4 text-sm text-fg-muted dark:text-dark-fg-muted">Searching...</div>
 				{:else if allEntries.length === 0}
-					<div class="text-fg-muted dark:text-dark-fg-muted px-3 py-4 text-sm">
-						No commands found.
-					</div>
+					<div class="px-3 py-4 text-sm text-fg-muted dark:text-dark-fg-muted">No commands found.</div>
 				{:else}
 					<Command.Group>
 						<Command.GroupItems class="py-2">
@@ -535,14 +537,14 @@
 									value={entry.id}
 									onSelect={() => void activateEntry(entry)}
 									onclick={() => void activateEntry(entry)}
-									class="hover:bg-bg-canvas data-[selected]:bg-bg-canvas data-[selected]:text-fg-ink dark:hover:bg-dark-bg-canvas dark:data-[selected]:bg-dark-bg-canvas dark:data-[selected]:text-dark-fg-ink flex min-h-11 cursor-pointer items-center gap-3 rounded-none px-3 py-2 text-left text-sm outline-none select-none"
+									class="flex min-h-11 cursor-pointer items-center gap-3 rounded-none px-3 py-2 text-left text-sm outline-none select-none hover:bg-bg-canvas data-[selected]:bg-bg-canvas data-[selected]:text-fg-ink dark:hover:bg-dark-bg-canvas dark:data-[selected]:bg-dark-bg-canvas dark:data-[selected]:text-dark-fg-ink"
 								>
-									<entry.Icon class="text-fg-muted dark:text-dark-fg-muted h-4 w-4 shrink-0" />
+									<entry.Icon class="h-4 w-4 shrink-0 text-fg-muted dark:text-dark-fg-muted" />
 									<span class="min-w-0 flex-1">
-										<span class="text-fg-ink dark:text-dark-fg-ink block truncate font-medium"
+										<span class="block truncate font-medium text-fg-ink dark:text-dark-fg-ink"
 											>{entry.label}</span
 										>
-										<span class="text-fg-muted dark:text-dark-fg-muted block truncate text-xs"
+										<span class="block truncate text-xs text-fg-muted dark:text-dark-fg-muted"
 											>{entry.detail}</span
 										>
 									</span>

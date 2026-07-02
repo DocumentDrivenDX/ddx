@@ -35,7 +35,7 @@ api_version: 2
 `), 0o644))
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(output, "validating package manifest") || strings.Contains(err.Error(), "api_version"))
 }
@@ -63,7 +63,7 @@ install:
 	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, "skills", "bad-skill"), 0o755))
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing SKILL.md")
 	assert.False(t, strings.Contains(output, "Installed sample-plugin"), "install should stop before writing state")
@@ -100,7 +100,7 @@ install:
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(manifest), 0o644))
 
 	factory := NewCommandFactory(workDir)
-	_, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin)
+	_, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.Error(t, err, "home-rooted Root.Target must be rejected (FEAT-015)")
 	assert.Contains(t, err.Error(), "FEAT-015")
 	assert.Contains(t, err.Error(), "project-relative")
@@ -108,25 +108,6 @@ install:
 	globalPluginDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Lstat(globalPluginDir)
 	assert.True(t, os.IsNotExist(statErr), "no plugin tree should be written under $HOME on rejection")
-}
-
-func TestInstallResourcePathIsRetired(t *testing.T) {
-	workDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	factory := NewCommandFactory(workDir)
-	_, err := executeCommand(factory.NewRootCommand(), "install", "persona/strict-code-reviewer")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ddx install has been retired")
-
-	_, err = executeCommand(factory.NewRootCommand(), "plugin", "install", "persona/strict-code-reviewer")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "individual resource installs are retired")
-
-	legacyPayloadDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
-	_, statErr := os.Stat(legacyPayloadDir)
-	assert.True(t, os.IsNotExist(statErr), "resource install must not recreate the legacy ddx project payload")
 }
 
 func TestInstallLocalPreservesExistingProjectPluginDirUnlessForced(t *testing.T) {
@@ -170,7 +151,7 @@ Sample skill body.
 	require.NoError(t, os.WriteFile(sentinel, []byte("keep me"), 0o644))
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.Error(t, err, output)
 	assert.Contains(t, err.Error(), "already exists")
 
@@ -186,7 +167,7 @@ Sample skill body.
 	require.NoError(t, err)
 	assert.Equal(t, "keep me", string(sentinelBytes))
 
-	forceOut, forceErr := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin, "--force")
+	forceOut, forceErr := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin, "--force")
 	require.NoError(t, forceErr, forceOut)
 
 	// After --force, the project-local plugin dir is a developer symlink to
@@ -198,9 +179,9 @@ Sample skill body.
 	require.NoError(t, err)
 	assert.Equal(t, localPlugin, linkTarget)
 
-	// Plugin file is visible through the local-overlay symlinked project path.
+	// Plugin file is visible through the symlinked project path.
 	_, statErr = os.Stat(filepath.Join(projectPluginDir, "skills", "sample-skill", "SKILL.md"))
-	assert.NoError(t, statErr, "plugin tree must be visible through the local overlay")
+	assert.NoError(t, statErr, "plugin tree must be copied under project")
 
 	_, statErr = os.Lstat(homePluginDir)
 	assert.True(t, os.IsNotExist(statErr), "FEAT-015: no $HOME write even on --force")
@@ -732,7 +713,7 @@ Sample body.
 `), 0o644))
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.NoError(t, err, output)
 
 	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin"), localPlugin)
@@ -746,7 +727,7 @@ Sample body.
 }
 
 // TestInstallLocalSkipsBrokenSymlinksUnderGitignoredPaths reproduces ddx-686564bf:
-// `ddx plugin install --local` validated every symlink in the source tree, including
+// `ddx install --local` validated every symlink in the source tree, including
 // broken ones under gitignored scratch/tmp directories (e.g.
 // doctor/home/.codex/tmp/) that were never meant to ship. The install must
 // succeed because the offending path is gitignored in the source repo.
@@ -795,7 +776,7 @@ Sample body.
 	}
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin"), localPlugin)

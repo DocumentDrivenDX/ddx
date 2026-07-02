@@ -26,8 +26,8 @@ import (
 //  1. runner (test injection seam) — used directly via runner.Run after
 //     applying any AgentRunRuntime overrides.
 //  2. svc (pre-built service) — used via executeOnService.
-//  3. Fallback: construct the same short-lived preflight service used by
-//     RunWithConfigViaService and dispatch via executeOnService.
+//  3. Fallback: construct a fresh service via NewServiceFromWorkDir(projectRoot)
+//     and dispatch via executeOnService.
 //
 // Override fields on runtime (HarnessOverride, ModelOverride,
 // PermissionsOverride, SessionLogDirOverride) take precedence over the
@@ -54,12 +54,15 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 		return r.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
 	if svc == nil {
-		built, err := ResolvePreflightServiceFromWorkDir(projectRoot)
+		factory := serviceRunFactory
+		if factory == nil {
+			factory = NewServiceFromWorkDir
+		}
+		built, err := factory(projectRoot)
 		if err != nil {
 			return nil, fmt.Errorf("agent: build service: %w", err)
 		}
 		svc = built
-		defer cleanupCurrentProcessProviderProbes(ctx, projectRoot)
 	}
 	return executeOnService(ctx, svc, projectRoot, rcfg, runtime)
 }
@@ -117,15 +120,12 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.Correlation = runtime.Correlation
 	opts.Role = runtime.Role
 	opts.CorrelationID = runtime.CorrelationID
-	opts.Env = scrubbedExecutionEnvOverrides(runtime.Env)
+	opts.Env = runtime.Env
 	opts.Model = model
 	opts.Provider = provider
 	opts.Effort = rcfg.Effort()
 	opts.Timeout = rcfg.Timeout()
 	opts.WallClock = rcfg.WallClock()
-	if runtime.RequestTimeoutOverride > 0 {
-		opts.WallClock = runtime.RequestTimeoutOverride
-	}
 	opts.WorkDir = runtime.WorkDir
 	opts.Permissions = permissions
 	opts.SessionLogDir = sessionLogDir

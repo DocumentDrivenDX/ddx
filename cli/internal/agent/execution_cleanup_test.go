@@ -99,144 +99,11 @@ func writeExecutionCleanupCandidateWithoutMetadata(t *testing.T, dir string, fil
 	}
 }
 
-type executionCleanupFakeProcessScanner struct {
-	processes []ExecutionCleanupProcessInfo
-	err       error
-}
-
-func (s executionCleanupFakeProcessScanner) ScanExecutionProcesses(context.Context) ([]ExecutionCleanupProcessInfo, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-	return append([]ExecutionCleanupProcessInfo(nil), s.processes...), nil
-}
-
-type executionCleanupFakeProcessKiller struct {
-	groups []int
-	err    error
-}
-
-func (k *executionCleanupFakeProcessKiller) KillExecutionProcessGroup(_ context.Context, groupID int) error {
-	k.groups = append(k.groups, groupID)
-	return k.err
-}
-
 func setupExecutionCleanupProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	testutils.MakeInitializedDDxRoot(t, root)
 	return root
-}
-
-func TestExecutionCleanupManager_DryRunReportsStaleAttemptDescendantProcesses(t *testing.T) {
-	projectRoot := setupExecutionCleanupProjectRoot(t)
-	tempRoot := t.TempDir()
-	worktreePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-process-20260608T112233-deadbeef")
-	writeExecutionCleanupCandidate(t, worktreePath, ExecutionCleanupMetadata{
-		ProjectRoot:  projectRoot,
-		BeadID:       "ddx-process",
-		AttemptID:    "20260608T112233-deadbeef",
-		WorktreePath: worktreePath,
-	}, map[string]string{"scratch.txt": "stale\n"})
-	killer := &executionCleanupFakeProcessKiller{}
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
-	mgr.DryRun = true
-	mgr.ProcessScanner = executionCleanupFakeProcessScanner{processes: []ExecutionCleanupProcessInfo{{
-		PID:     1234,
-		PPID:    1,
-		PGID:    1234,
-		Cwd:     worktreePath,
-		Command: "sh -c cargo test",
-	}}}
-	mgr.ProcessKiller = killer
-
-	summary, err := mgr.CleanupAttemptDescendantProcesses(context.Background())
-	require.NoError(t, err)
-
-	assert.Equal(t, 1, summary.ScannedProcesses)
-	assert.Equal(t, int64(1), summary.StaleAttemptProcesses)
-	assert.Equal(t, int64(0), summary.ReapedProcessGroups)
-	require.Len(t, summary.Processes, 1)
-	finding := summary.Processes[0]
-	assert.Equal(t, 1234, finding.PID)
-	assert.Equal(t, 1234, finding.PGID)
-	assert.Equal(t, "sh -c cargo test", finding.Command)
-	assert.Equal(t, worktreePath, finding.WorktreePath)
-	assert.Equal(t, "ddx-process", finding.BeadID)
-	assert.Equal(t, "20260608T112233-deadbeef", finding.AttemptID)
-	assert.True(t, finding.WouldKill)
-	assert.False(t, finding.Killed)
-	assert.Empty(t, killer.groups, "dry-run must not kill process groups")
-}
-
-func TestExecutionCleanupManager_ApplyReapsOnlyStaleAttemptProcessGroups(t *testing.T) {
-	projectRoot := setupExecutionCleanupProjectRoot(t)
-	otherProject := setupExecutionCleanupProjectRoot(t)
-	tempRoot := t.TempDir()
-	now := time.Now().UTC()
-	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-process-20260608T112233-deadbeef")
-	livePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-live-process-20260608T112233-feedface")
-	registeredPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-registered-process-20260608T112233-cafebabe")
-	otherPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-other-process-20260608T112233-badf00d")
-	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
-		ProjectRoot:  projectRoot,
-		BeadID:       "ddx-stale-process",
-		AttemptID:    "20260608T112233-deadbeef",
-		WorktreePath: stalePath,
-	}, map[string]string{"scratch.txt": "stale\n"})
-	writeExecutionCleanupCandidate(t, livePath, ExecutionCleanupMetadata{
-		ProjectRoot:  projectRoot,
-		BeadID:       "ddx-live-process",
-		AttemptID:    "20260608T112233-feedface",
-		WorktreePath: livePath,
-	}, map[string]string{"scratch.txt": "live\n"})
-	writeExecutionCleanupCandidate(t, registeredPath, ExecutionCleanupMetadata{
-		ProjectRoot:  projectRoot,
-		BeadID:       "ddx-registered-process",
-		AttemptID:    "20260608T112233-cafebabe",
-		WorktreePath: registeredPath,
-	}, map[string]string{"scratch.txt": "registered\n"})
-	writeExecutionCleanupCandidate(t, otherPath, ExecutionCleanupMetadata{
-		ProjectRoot:  otherProject,
-		BeadID:       "ddx-other-process",
-		AttemptID:    "20260608T112233-badf00d",
-		WorktreePath: otherPath,
-	}, map[string]string{"scratch.txt": "other\n"})
-	require.NoError(t, WriteRunState(projectRoot, RunState{
-		BeadID:       "ddx-live-process",
-		AttemptID:    "20260608T112233-feedface",
-		StartedAt:    now,
-		WorktreePath: livePath,
-		RefreshedAt:  now,
-		ExpiresAt:    now.Add(time.Minute),
-	}))
-	killer := &executionCleanupFakeProcessKiller{}
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{worktrees: []string{registeredPath}})
-	mgr.TempRoot = tempRoot
-	mgr.ProcessScanner = executionCleanupFakeProcessScanner{processes: []ExecutionCleanupProcessInfo{
-		{PID: 2001, PPID: 1, PGID: 2000, Cwd: stalePath, Command: "sh -c cargo test"},
-		{PID: 2002, PPID: 2001, PGID: 2000, Cwd: filepath.Join(stalePath, "subdir"), Command: "cargo test"},
-		{PID: 3001, PPID: 1, PGID: 3000, Cwd: livePath, Command: "sh -c sleep 30"},
-		{PID: 4001, PPID: 1, PGID: 4000, Cwd: registeredPath, Command: "tiny-server"},
-		{PID: 5001, PPID: 1, PGID: 5000, Cwd: otherPath, Command: "other-project"},
-	}}
-	mgr.ProcessKiller = killer
-
-	summary, err := mgr.CleanupAttemptDescendantProcesses(context.Background())
-	require.NoError(t, err)
-
-	assert.Equal(t, []int{2000}, killer.groups)
-	assert.Equal(t, int64(1), summary.StaleAttemptProcesses)
-	assert.Equal(t, int64(1), summary.ReapedProcessGroups)
-	assert.Equal(t, int64(2), summary.PreservedAttemptProcesses)
-	assert.Len(t, summary.Processes, 3, "one stale group plus live and registered preserved processes")
-	assert.True(t, hasProcessFinding(summary.Processes, stalePath, true, true, false))
-	assert.True(t, hasProcessFinding(summary.Processes, livePath, false, false, true))
-	assert.True(t, hasProcessFinding(summary.Processes, registeredPath, false, false, true))
-	for _, finding := range summary.Processes {
-		assert.NotEqual(t, otherPath, finding.WorktreePath)
-	}
 }
 
 func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {
@@ -1070,35 +937,6 @@ func TestExecutionCleanup_DeletesOldDirs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "removed_evidence_dir"))
 }
 
-func TestExecutionCleanup_PreservesTrackedOldEvidenceDirs(t *testing.T) {
-	projectRoot := setupExecutionCleanupProjectRoot(t)
-	tempRoot := t.TempDir()
-
-	oldTime := time.Now().AddDate(0, 0, -10)
-	attemptID := "20260101T000000-tracked"
-	oldDir := setupEvidenceDir(t, projectRoot, attemptID, oldTime)
-	trackedRel := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID, "result.json"))
-
-	runGitInteg(t, projectRoot, "init", "-b", "main")
-	runGitInteg(t, projectRoot, "config", "user.email", "test@ddx.test")
-	runGitInteg(t, projectRoot, "config", "user.name", "DDx Test")
-	runGitInteg(t, projectRoot, "add", trackedRel)
-	runGitInteg(t, projectRoot, "commit", "-m", "test: track execution evidence")
-	require.NoError(t, os.Chtimes(oldDir, oldTime, oldTime))
-
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
-	mgr.RetainDays = 7
-
-	summary, err := mgr.Cleanup(context.Background())
-	require.NoError(t, err)
-
-	assert.DirExists(t, oldDir)
-	assert.Equal(t, int64(0), summary.RemovedEvidenceDirs)
-	assert.True(t, hasObservationClass(summary.Observations, "preserved_tracked_evidence_dir"))
-	assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(ExecuteBeadArtifactDir)))
-}
-
 func TestExecutionCleanup_PreservesActiveDirs(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
@@ -1354,18 +1192,6 @@ func TestExecutionCleanup_RecordsCounts(t *testing.T) {
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {
-			return true
-		}
-	}
-	return false
-}
-
-func hasProcessFinding(findings []ExecutionCleanupProcessFinding, worktreePath string, wouldKill, killed, preserved bool) bool {
-	for _, finding := range findings {
-		if filepath.Clean(finding.WorktreePath) == filepath.Clean(worktreePath) &&
-			finding.WouldKill == wouldKill &&
-			finding.Killed == killed &&
-			finding.Preserved == preserved {
 			return true
 		}
 	}
