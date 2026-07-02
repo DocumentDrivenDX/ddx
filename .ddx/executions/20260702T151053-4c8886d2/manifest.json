@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260702T151053-4c8886d2",
+  "bead_id": "ddx-a1bf2229",
+  "base_rev": "82478afdb81e1f020373815e6c694c501dac337f",
+  "created_at": "2026-07-02T15:11:03.196248089Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a1bf2229",
+    "title": "Add .gitattributes union merge driver for append-only DDx tracker files",
+    "description": "PROBLEM\nConcurrent ddx workers/syncs pushing to the same branch hit merge conflicts on the append-only tracker files (.ddx/beads.jsonl, .ddx/metrics/locks.jsonl). The operator had to hand-resolve them (git 2.54 lacks -X union on these paths; manual `awk '!seen[$0]++'` dedupe was used). The repo currently has NO .gitattributes file at all, so no merge driver is configured.\n\nROOT CAUSE WITH FILE:LINE\n- No .gitattributes exists at the ddx repo root. Append-only JSONL tracker files therefore use git's default 3-way text merge, which conflicts on near-simultaneous appends.\n\nPROPOSED FIX\n- Add a repo-root .gitattributes assigning a union merge to the append-only tracker files:\n    .ddx/beads.jsonl merge=union\n    .ddx/metrics/locks.jsonl merge=union\n- Confirm union is the correct semantic for these files (order-independent line set). If a record can legitimately change in place (not pure append), a custom dedupe driver may be needed instead — document the choice in the commit message.\n\nNON-SCOPE\n- Do not change how beads.jsonl is written or the tracker-lock serialization in cli/internal/agent/tracker_lock.go.\n- Do not add merge drivers for non-tracker files.\n\nPROVENANCE\nDerived from a session-harvest of local Claude/Codex operator prompts (2026-06-27), classified into deficiency-papering vs intent, then put through two adversarial-review rounds that dropped every item already shipped. This item survived as a verified, non-redundant gap. See docs/session-harvest-playbook.md.",
+    "acceptance": "1. A repo-root .gitattributes exists with union (or documented custom) merge for .ddx/beads.jsonl and .ddx/metrics/locks.jsonl. 2. A test or scripted repro that creates two divergent branches each appending a distinct line to .ddx/beads.jsonl merges them with 'git merge' WITHOUT a conflict and retains both lines. 3. cd cli \u0026\u0026 go build ./... succeeds.",
+    "labels": [
+      "area:tracker",
+      "kind:reliability",
+      "source:session-harvest-2026-06-27"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260702T151053-4c8886d2",
+    "prompt": ".ddx/executions/20260702T151053-4c8886d2/prompt.md",
+    "manifest": ".ddx/executions/20260702T151053-4c8886d2/manifest.json",
+    "result": ".ddx/executions/20260702T151053-4c8886d2/result.json",
+    "checks": ".ddx/executions/20260702T151053-4c8886d2/checks.json",
+    "usage": ".ddx/executions/20260702T151053-4c8886d2/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T151053-4c8886d2"
+  },
+  "prompt_sha": "a7f082375824529cf0e83cb94e2b51869a6aefe856e14deca3902766fd81264c"
+}
