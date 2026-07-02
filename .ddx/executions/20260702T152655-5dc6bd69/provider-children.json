@@ -3,7 +3,7 @@
   "bead_id": "ddx-6dcb5798",
   "trigger": "running_phase_non_route_provider_child",
   "active_route": "codex",
-  "scanned_at": "2026-07-02T15:50:00.941945909Z",
+  "scanned_at": "2026-07-02T15:50:36.941945992Z",
   "reaped": [
     {
       "pid": 727790,
@@ -95,6 +95,14 @@
     },
     {
       "pid": 1269286,
+      "provider": "opencode",
+      "command": "opencode models",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1286661,
       "provider": "opencode",
       "command": "opencode models",
       "age_seconds": 0,
