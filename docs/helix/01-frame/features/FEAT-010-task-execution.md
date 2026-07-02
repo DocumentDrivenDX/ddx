@@ -834,9 +834,10 @@ path or ref.
 
 DDx-owned cleanup scope includes execution workspaces, helper scratch roots
 created beside the configured execution root, legacy `$TMPDIR/ddx-exec-wt`
-resources, DDx-created test and e2e scratch roots, generated test binaries, and
-run-state or liveness files. The cleanup manager may delete only DDx-owned
-paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
+resources, DDx-created test and e2e scratch roots, generated test binaries,
+run-state or liveness files, and stale attempt-descendant process groups whose
+owning attempt has reached a terminal state or whose process-group heartbeat
+has expired. The cleanup manager may delete only DDx-owned paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
 `ddx-test-bin-`, `ddx-test-binary-`, `ddx-lifecycle-`,
 `ddx-agent-support-keepalive`, `ddx-config-anchor-`, `ddx-exec-keepalive`,
 `ddx-metric-keepalive`, `ddx-metaprompt-keepalive`,
@@ -852,13 +853,18 @@ Deletion is permitted only when all of the following hold:
   the owning attempt has reached a terminal state.
 - **Metadata-less recognized-prefix paths**: the directory's mtime is at least
   **6 hours** old and no live PID or active session is attached.
+- **Attempt-descendant process groups**: the owning attempt is terminal, or the
+  process group leader no longer matches the recorded attempt PID, or no live
+  heartbeat confirms the group is still executing bead work.
 
 The manager must preserve published evidence, active workspaces, and anything
 outside DDx-owned roots.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
-- once at startup, before the first queue claim
+- once at startup, before the first queue claim; this pass includes a
+  process-group census to reap any stale attempt-descendant groups left by
+  prior runs
 - before the next claim after any setup/finalization failure
 - periodically while a long-lived poll worker remains active
 - during graceful signal shutdown before exit
@@ -881,9 +887,16 @@ summary such as `cleanup: removed 37 stale ddx worktrees, freed 14210 inodes`.
 Resource exhaustion after cleanup is a hard visible stop message and a layer-3
 `resource_exhausted` disposition.
 
+Cleanup supports a **dry-run** mode that reports what would be removed or reaped
+without taking action, and an **apply** mode that performs the removal and
+reports results. Both modes emit operator-visible process findings separately
+from filesystem reclamation: discovered stale process groups, reaped PIDs, and
+any groups that could not be reaped are included in the summary so operators
+can see what process cleanup found and what it did.
+
 Cleanup reporting includes scratch roots removed, bytes and inodes reclaimed,
-preserved paths, and blocked warnings so operators can see why cleanup stopped
-short.
+preserved paths, process groups reaped, and blocked warnings so operators can
+see why cleanup stopped short.
 
 ### `ddx work` Run Modes
 
@@ -1242,8 +1255,12 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     `.ddx/config.yaml`.
 14. **Execution cleanup** — `ddx try` and `ddx work` remove stale DDx-owned
     execution worktrees, DDx-created test/e2e scratch roots, generated test
-    binaries, and liveness files through inline, loop, and background cleanup
-    paths without deleting preserved attempts or published evidence.
+    binaries, liveness files, and stale attempt-descendant process groups
+    through inline, loop, and background cleanup paths without deleting
+    preserved attempts or published evidence. The startup pre-claim pass
+    includes a process-group census to reap stale descendants from prior runs.
+    Cleanup supports dry-run and apply modes; both report operator-visible
+    process findings separately from filesystem reclamation.
 15. **Resource preflight** — `ddx try` validates writable execution roots and
     free bytes/inodes before claim; failed validation may trigger one cleanup
     retry, and `ddx work` / server-managed workers run cleanup before claim
