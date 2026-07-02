@@ -149,6 +149,19 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		})
 	}
 
+	// Install the provider-launch PATH shim before constructing the Fizeau
+	// service so that when fizeau LookPaths codex/claude/etc it finds our
+	// wrapper, which sets PR_SET_PDEATHSIG=SIGKILL before execve'ing the real
+	// binary. Without this, provider children survive worker SIGKILL/OOM as
+	// ppid=1 orphans (bead ddx-f2b413ea). The pattern mirrors the legacy
+	// runAgentViaService path so both entry points install the shim; the
+	// helper is idempotent (sync.Mutex + early-return once installed).
+	if ddxBinary, execErr := os.Executable(); execErr == nil {
+		if _, _, shimErr := EnsureProviderShimOnPATH(ddxBinary); shimErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
+		}
+	}
+
 	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
