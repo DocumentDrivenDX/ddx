@@ -1,0 +1,3 @@
+# Append-only DDx tracker files should merge concurrent line appends by concatenation.
+.ddx/beads.jsonl merge=union
+.ddx/metrics/locks.jsonl merge=union
