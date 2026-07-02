@@ -1,0 +1,14 @@
+internal/agent/agent_runner_service.go 30 36
+internal/agent/agent_runner_service.go 379 383
+internal/agent/agent_runner_service.go 386 387
+internal/agent/execute_bead.go 1119 1125
+internal/agent/provider_children.go 27 34
+internal/agent/provider_children.go 226 237
+internal/agent/provider_children.go 273 337
+internal/agent/provider_children.go 376 377
+internal/agent/provider_children_test.go 291 365
+internal/agent/provider_children_unix.go 162 171
+internal/agent/provider_children_unix.go 173 174
+internal/agent/route_harness_liveness_test.go 1 159
+internal/agent/route_harness_liveness_unix_test.go 1 120
+internal/agent/service_run.go 325 330
