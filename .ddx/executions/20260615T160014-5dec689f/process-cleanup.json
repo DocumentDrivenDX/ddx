@@ -1,9 +1,0 @@
-{
-  "attempt_id": "20260615T160014-5dec689f",
-  "bead_id": "ddx-24a3da84",
-  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-24a3da84-20260615T160014-5dec689f",
-  "trigger": "agent: provider process exited without emitting a final event",
-  "started_at": "2026-06-15T16:25:33.397393474Z",
-  "finished_at": "2026-06-15T16:25:33.404210264Z",
-  "scanned": 83
-}

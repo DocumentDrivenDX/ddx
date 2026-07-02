@@ -1,2 +1,0 @@
-status: open
-reason: repository pre-commit baseline failures unrelated to this bead; targeted agent tests pass, but lefthook run pre-commit fails in existing tests (attempt_backend_unix_test.go Docker cancellation and bead_lifecycle_skill_contract_test.go missing .agents/skills/ddx/bead-lifecycle/SKILL.md)

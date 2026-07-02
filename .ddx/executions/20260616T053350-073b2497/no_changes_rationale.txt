@@ -1,2 +1,0 @@
-status: blocked
-reason: repo-local pre-commit go-test fails on unrelated baseline issues outside this bead, including missing generated bead-lifecycle skill adapters and pre-existing TestDockerCloneBackendTerminatesContainerOnWorkerCancellation / TestWorkerFailurePathsReleaseClaimAtomically failures.

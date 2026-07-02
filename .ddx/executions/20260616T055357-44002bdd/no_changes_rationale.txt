@@ -1,2 +1,0 @@
-status: open
-reason: retryable external blocker in full-suite verification; `go test ./internal/agent/... ./cmd/... -count=1` still fails in `TestWorkerFailurePathsReleaseClaimAtomically` at `cli/internal/agent/execute_bead_loop_test.go:3068` with `chmod ... no such file or directory` on a claim-heartbeat temp path.

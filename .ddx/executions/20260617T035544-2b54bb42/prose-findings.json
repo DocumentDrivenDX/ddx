@@ -1,8 +1,0 @@
-{
-  "ran": true,
-  "changed_docs": [
-    "docs/helix/01-frame/features/FEAT-011-skills.md",
-    "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
-    "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md"
-  ]
-}
