@@ -5,6 +5,8 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -157,10 +159,45 @@ func terminateProviderChildImpl(pid int) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	signalProviderChildGroup(pid, syscall.SIGKILL)
+	if err := waitForProviderChildReap(pid, 10*time.Second); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ERROR: agent: failed to reap provider child %d after running-phase guard: %v\n", pid, err)
+	}
 }
 
 func signalProviderChildGroup(pid int, sig syscall.Signal) {
-	if err := syscall.Kill(-pid, sig); err != nil && err != syscall.ESRCH {
-		_ = syscall.Kill(pid, sig)
+	if pid <= 0 {
+		return
+	}
+	if pgid, err := syscall.Getpgid(pid); err == nil && pgid > 0 {
+		if err := syscall.Kill(-pgid, sig); err == nil || err == syscall.ESRCH {
+			return
+		}
+	}
+	_ = syscall.Kill(pid, sig)
+}
+
+func waitForProviderChildReap(pid int, timeout time.Duration) error {
+	if pid <= 0 {
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, waitErr := proc.Wait()
+		done <- waitErr
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case waitErr := <-done:
+		if errors.Is(waitErr, syscall.ECHILD) {
+			return nil
+		}
+		return waitErr
+	case <-timer.C:
+		return fmt.Errorf("timeout waiting for provider child %d to exit", pid)
 	}
 }
