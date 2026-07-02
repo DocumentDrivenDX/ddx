@@ -1,0 +1,4 @@
+# Append-only DDx tracker files should merge by union to keep concurrent
+# line-level appends conflict-free.
+.ddx/beads.jsonl merge=union
+.ddx/metrics/locks.jsonl merge=union
