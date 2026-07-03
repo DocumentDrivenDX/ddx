@@ -1,0 +1,2 @@
+status: proposed
+reason: operator needed: the bead has no description or acceptance criteria, so there is no executable scope to implement or verify.

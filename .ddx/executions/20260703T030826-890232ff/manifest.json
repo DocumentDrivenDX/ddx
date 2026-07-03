@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T030826-890232ff",
+  "bead_id": "ddx-73bc9281",
+  "base_rev": "91b8b589e901245033f4583cf37a82bb9e25ab21",
+  "created_at": "2026-07-03T03:08:38.506841885Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-73bc9281",
+    "title": "Evidence protection"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T030826-890232ff",
+    "prompt": ".ddx/executions/20260703T030826-890232ff/prompt.md",
+    "manifest": ".ddx/executions/20260703T030826-890232ff/manifest.json",
+    "result": ".ddx/executions/20260703T030826-890232ff/result.json",
+    "checks": ".ddx/executions/20260703T030826-890232ff/checks.json",
+    "usage": ".ddx/executions/20260703T030826-890232ff/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-73bc9281-20260703T030826-890232ff"
+  },
+  "prompt_sha": "11f067ebc653ecab5b43e1dafb948a66d4b9b5a20aa1eeca397c68a38688c60c"
+}
