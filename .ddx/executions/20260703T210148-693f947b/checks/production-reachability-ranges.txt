@@ -1,0 +1,7 @@
+internal/agent/provider_children_test.go 291 296
+internal/agent/provider_children_test.go 301 301
+internal/agent/route_harness_liveness_test.go 32 42
+internal/agent/test_mode_matrix_test.go 16 17
+internal/agent/test_mode_matrix_test.go 20 20
+internal/agent/test_mode_matrix_test.go 105 108
+internal/agent/test_mode_matrix_test.go 482 552

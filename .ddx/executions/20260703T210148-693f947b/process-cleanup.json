@@ -1,0 +1,599 @@
+{
+  "attempt_id": "20260703T210148-693f947b",
+  "bead_id": "ddx-6dcb5798",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b",
+  "trigger": "",
+  "started_at": "2026-07-03T22:08:45.590374898Z",
+  "finished_at": "2026-07-03T22:08:45.7316137Z",
+  "scanned": 159,
+  "candidates": [
+    {
+      "pid": 3944656,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b110/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b110=\u003e -p crypto/ecdsa -lang=go1.26 -std -complete -buildid Xbdl3SgJp1rjMuvtxpbm/Xbdl3SgJp1rjMuvtxpbm -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b110/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/ecdsa/ecdsa.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/ecdsa/ecdsa_legacy.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/ecdsa/notboring.go"
+    },
+    {
+      "pid": 3944646,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b357/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b357=\u003e -p github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe -lang=go1.26 -complete -buildid vuq7pJRR7ees8TUato5x/vuq7pJRR7ees8TUato5x -goversion go1.26.4 -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b357/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/workerprobe/probe.go"
+    },
+    {
+      "pid": 3944638,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b176/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b176=\u003e -p github.com/DocumentDrivenDX/ddx/internal/ddxroot -lang=go1.26 -complete -buildid jOurg5ILq2XhO5ldxj8M/jOurg5ILq2XhO5ldxj8M -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b176/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/ddxroot/ddxroot.go"
+    },
+    {
+      "pid": 3944621,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b292/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b292=\u003e -p net/http/httputil -lang=go1.26 -std -complete -buildid kEnsQGnSg24HLIg7ocpM/kEnsQGnSg24HLIg7ocpM -goversion go1.26.4 -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b292/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/dump.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/httputil.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/persist.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/reverseproxy.go"
+    },
+    {
+      "pid": 3944619,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b195/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b195=\u003e -p github.com/DocumentDrivenDX/ddx/internal/ratelimitpolicy -lang=go1.26 -complete -buildid kW4lT-Nb_f6BnS_uQuBt/kW4lT-Nb_f6BnS_uQuBt -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b195/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/ratelimitpolicy/ratelimitpolicy.go"
+    },
+    {
+      "pid": 3944594,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b197/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b197=\u003e -p compress/flate -lang=go1.26 -std -complete -buildid xo7ZcV3dHGnNmBB6HjSK/xo7ZcV3dHGnNmBB6HjSK -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b197/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflatefast.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/dict_decoder.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_bit_writer.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_code.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/inflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/token.go"
+    },
+    {
+      "pid": 3944588,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b364/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b364=\u003e -p github.com/DocumentDrivenDX/ddx/internal/registry -lang=go1.26 -complete -buildid zEOSRxKIsFoJIYDM6eYi/zEOSRxKIsFoJIYDM6eYi -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b364/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/audit.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/installer.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/manifest.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/registry.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/resolve.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/state.go"
+    },
+    {
+      "pid": 3944576,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b194/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b194=\u003e -p github.com/DocumentDrivenDX/ddx/internal/agent/try -lang=go1.26 -complete -buildid B0PmDbiRO9uH8atFNYCg/B0PmDbiRO9uH8atFNYCg -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b194/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/attempt.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/conflict_recovery.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/no_changes.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/verification_command_unix.go"
+    },
+    {
+      "pid": 3944573,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b204/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b204=\u003e -p vendor/golang.org/x/text/unicode/bidi -lang=go1.26 -std -complete -buildid ve_DokJnUWG2h1z3cyiH/ve_DokJnUWG2h1z3cyiH -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b204/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bidi.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bracket.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/core.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/prop.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/tables15.0.0.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/trieval.go"
+    },
+    {
+      "pid": 3944551,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b865/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b865=\u003e -p golang.org/x/text/cases -lang=go1.24 -complete -buildid bi8O2XM7z_DTtfeeWlv9/bi8O2XM7z_DTtfeeWlv9 -goversion go1.26.4 -c=8 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b865/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/cases.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/context.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/fold.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/info.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/map.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/tables15.0.0.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/trieval.go"
+    },
+    {
+      "pid": 3944550,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b228/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b228=\u003e -p github.com/easel/fizeau/internal/modelcatalog -lang=go1.26 -complete -buildid JOmMglxIzWOQnxeLGmX_/JOmMglxIzWOQnxeLGmX_ -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b228/importcfg -embedcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b228/embedcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/billing.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/catalog.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/manifest.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/openrouter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/power.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/tiers.go"
+    },
+    {
+      "pid": 3944526,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b357/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b357=\u003e -p github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe -lang=go1.26 -complete -buildid vuq7pJRR7ees8TUato5x/vuq7pJRR7ees8TUato5x -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b357/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/workerprobe/probe.go"
+    },
+    {
+      "pid": 3944496,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b193/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b193=\u003e -p runtime/debug -lang=go1.26 -std -buildid mmgmkOPSuQQtXGDDGbqg/mmgmkOPSuQQtXGDDGbqg -goversion go1.26.4 -symabis /home/erik/.cache/fleet-tmp/go-build1238551628/b193/symabis -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b193/importcfg -pack -asmhdr /home/erik/.cache/fleet-tmp/go-build1238551628/b193/go_asm.h /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/garbage.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/mod.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stack.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stubs.go"
+    },
+    {
+      "pid": 3944455,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b131/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b131=\u003e -p crypto/hpke -lang=go1.26 -std -complete -buildid XEF0Fq61L0-as36W3Z7u/XEF0Fq61L0-as36W3Z7u -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b131/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/aead.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/aead_fips140v1.26.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/hpke.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/kdf.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/kem.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/pq.go"
+    },
+    {
+      "pid": 3944432,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b741/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b741=\u003e -p gvisor.dev/gvisor/pkg/tcpip/header -lang=go1.25 -complete -buildid a8MRSAWWtLZxTQ4Z8Xi6/a8MRSAWWtLZxTQ4Z8Xi6 -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b741/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/arp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/checksum.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/datagram.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/eth.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/gue.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/header_state_autogen.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/icmpv4.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/icmpv6.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/igmp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/igmpv3.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/interfaces.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv4.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv6.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv6_extension_headers.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv6_fragment.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/mld.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/mldv2.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/mldv2_igmpv3_common.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_neighbor_advert.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_neighbor_solicit.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_options.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_router_advert.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_router_solicit.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndpoptionidentifier_string.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/tcp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/udp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/virtionet.go"
+    },
+    {
+      "pid": 3944431,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b812/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b812=\u003e -p gvisor.dev/gvisor/pkg/tcpip/internal/tcp -lang=go1.25 -complete -buildid K3x7RLpHB56-h-oI0ERc/K3x7RLpHB56-h-oI0ERc -goversion go1.26.4 -c=8 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b812/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/internal/tcp/tcp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/internal/tcp/tcp_state_autogen.go"
+    },
+    {
+      "pid": 3944374,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b190/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b190=\u003e -p gopkg.in/yaml.v3 -lang=go1.16 -complete -buildid EkIpxefnK_ouqQQqG-KB/EkIpxefnK_ouqQQqG-KB -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b190/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/apic.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/decode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/emitterc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/encode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/parserc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/readerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/resolve.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/scannerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/sorter.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/writerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yaml.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlh.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlprivateh.go"
+    },
+    {
+      "pid": 3944373,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b292/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b292=\u003e -p net/http/httputil -lang=go1.26 -std -complete -buildid kEnsQGnSg24HLIg7ocpM/kEnsQGnSg24HLIg7ocpM -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b292/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/dump.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/httputil.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/persist.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/reverseproxy.go"
+    },
+    {
+      "pid": 3944367,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b228/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b228=\u003e -p github.com/easel/fizeau/internal/modelcatalog -lang=go1.26 -complete -buildid JOmMglxIzWOQnxeLGmX_/JOmMglxIzWOQnxeLGmX_ -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b228/importcfg -embedcfg /home/erik/.cache/fleet-tmp/go-build751493643/b228/embedcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/billing.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/catalog.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/manifest.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/openrouter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/power.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/tiers.go"
+    },
+    {
+      "pid": 3944342,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b204/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b204=\u003e -p vendor/golang.org/x/text/unicode/bidi -lang=go1.26 -std -complete -buildid ve_DokJnUWG2h1z3cyiH/ve_DokJnUWG2h1z3cyiH -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b204/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bidi.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bracket.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/core.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/prop.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/tables15.0.0.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/trieval.go"
+    },
+    {
+      "pid": 3944332,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b193/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b193=\u003e -p runtime/debug -lang=go1.26 -std -buildid mmgmkOPSuQQtXGDDGbqg/mmgmkOPSuQQtXGDDGbqg -goversion go1.26.4 -symabis /home/erik/.cache/fleet-tmp/go-build798835735/b193/symabis -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b193/importcfg -pack -asmhdr /home/erik/.cache/fleet-tmp/go-build798835735/b193/go_asm.h /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/garbage.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/mod.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stack.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stubs.go"
+    },
+    {
+      "pid": 3944331,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b197/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b197=\u003e -p compress/flate -lang=go1.26 -std -complete -buildid xo7ZcV3dHGnNmBB6HjSK/xo7ZcV3dHGnNmBB6HjSK -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b197/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflatefast.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/dict_decoder.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_bit_writer.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_code.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/inflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/token.go"
+    },
+    {
+      "pid": 3944282,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b190/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b190=\u003e -p gopkg.in/yaml.v3 -lang=go1.16 -complete -buildid EkIpxefnK_ouqQQqG-KB/EkIpxefnK_ouqQQqG-KB -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b190/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/apic.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/decode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/emitterc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/encode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/parserc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/readerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/resolve.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/scannerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/sorter.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/writerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yaml.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlh.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlprivateh.go"
+    },
+    {
+      "pid": 3944258,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b166/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b166=\u003e -p encoding/json -lang=go1.26 -std -complete -buildid M2QIZfHl92rW_qHuoi-6/M2QIZfHl92rW_qHuoi-6 -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b166/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/decode.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/encode.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/fold.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/indent.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/scanner.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/stream.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/tables.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/tags.go"
+    },
+    {
+      "pid": 3944244,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b170/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b170=\u003e -p encoding/xml -lang=go1.26 -std -complete -buildid 2xWkGBFu974HgXkJU8s_/2xWkGBFu974HgXkJU8s_ -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b170/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/marshal.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/read.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/typeinfo.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/xml.go"
+    },
+    {
+      "pid": 3944241,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b186/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b186=\u003e -p mime -lang=go1.26 -std -complete -buildid uRbJGbL4bUAtqArY5DRH/uRbJGbL4bUAtqArY5DRH -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b186/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/encodedword.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/grammar.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/mediatype.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/type.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/type_unix.go"
+    },
+    {
+      "pid": 3944158,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b867/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b867=\u003e -p golang.org/x/text/language -lang=go1.24 -complete -buildid z3Fn0ucQa7WUzE43Fu8w/z3Fn0ucQa7WUzE43Fu8w -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b867/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/coverage.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/doc.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/language.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/match.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/parse.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/tables.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/tags.go"
+    },
+    {
+      "pid": 3944131,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b857/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b857=\u003e -p github.com/pelletier/go-toml/v2 -lang=go1.21 -complete -buildid tdoiRfMzNMKHuKi4FD0S/tdoiRfMzNMKHuKi4FD0S -goversion go1.26.4 -c=8 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b857/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/decode.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/doc.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/errors.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/localtime.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/marshaler.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/strict.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/types.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/unmarshaler.go"
+    },
+    {
+      "pid": 3943987,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b833/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b833=\u003e -p github.com/spf13/cobra -lang=go1.15 -complete -buildid wYWdhEB_OawYXPmAEfcW/wYWdhEB_OawYXPmAEfcW -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b833/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/active_help.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/args.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/bash_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/bash_completionsV2.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/cobra.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command_notwin.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/fish_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/flag_groups.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/powershell_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/shell_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/zsh_completions.go"
+    },
+    {
+      "pid": 3943772,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b355/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b355=\u003e -p golang.org/x/sys/unix -lang=go1.25 -buildid ZltrxcA5LLQcF6aHpnjx/ZltrxcA5LLQcF6aHpnjx -goversion go1.26.4 -symabis /home/erik/.cache/fleet-tmp/go-build1238551628/b355/symabis -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b355/importcfg -pack -asmhdr /home/erik/.cache/fleet-tmp/go-build1238551628/b355/go_asm.h /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/affinity_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/aliases.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/auxv.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/bluetooth_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/constants.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/dev_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/dirent.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/endian_little.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/env_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/fcntl.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/fdset.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ifreq_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ioctl_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ioctl_unsigned.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/mremap.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/pagesize_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/race0.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/readdirent_getdents.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sockcmsg_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sockcmsg_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sockcmsg_unix_other.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_linux_gc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_unix_gc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sysvshm_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sysvshm_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/timestruct.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/vgetrandom_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zerrors_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zerrors_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zptrace_armnn_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zptrace_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zsyscall_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zsyscall_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zsysnum_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ztypes_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ztypes_linux_arm64.go"
+    },
+    {
+      "pid": 3943392,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b831/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b831=\u003e -p github.com/itchyny/gojq -lang=go1.24 -complete -buildid msEjJdT8cSDHfo7i8qQz/msEjJdT8cSDHfo7i8qQz -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b831/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/builtin.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/code.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compare.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compiler.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/encoder.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/env.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/error.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/execute.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/func.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/gojq.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/iter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/lexer.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/module_loader.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/operator.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/option.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/parser.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/preview.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/query.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/release.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/scope_stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/term_type.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/type.go"
+    },
+    {
+      "pid": 3943287,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b831/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b831=\u003e -p github.com/itchyny/gojq -lang=go1.24 -complete -buildid msEjJdT8cSDHfo7i8qQz/msEjJdT8cSDHfo7i8qQz -goversion go1.26.4 -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b831/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/builtin.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/code.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compare.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compiler.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/encoder.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/env.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/error.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/execute.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/func.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/gojq.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/iter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/lexer.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/module_loader.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/operator.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/option.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/parser.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/preview.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/query.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/release.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/scope_stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/term_type.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/type.go"
+    },
+    {
+      "pid": 3942670,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b506/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b506=\u003e -p tailscale.com/types/netmap -lang=go1.26 -complete -buildid 7GkgWZhuMNUO-uCxp93-/7GkgWZhuMNUO-uCxp93- -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b506/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/netmap.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/nodemut.go"
+    },
+    {
+      "pid": 3942503,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b506/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b506=\u003e -p tailscale.com/types/netmap -lang=go1.26 -complete -buildid 7GkgWZhuMNUO-uCxp93-/7GkgWZhuMNUO-uCxp93- -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b506/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/netmap.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/nodemut.go"
+    },
+    {
+      "pid": 3930061,
+      "ppid": 3901694,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-1005030374/ddx ."
+    },
+    {
+      "pid": 3929750,
+      "ppid": 3901695,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-2811574929/ddx ."
+    },
+    {
+      "pid": 3929649,
+      "ppid": 3901460,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-1466611402/ddx ."
+    },
+    {
+      "pid": 3929467,
+      "ppid": 3901461,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-3195615255/ddx ."
+    },
+    {
+      "pid": 3901695,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/erik/.opencode/bin/opencode models"
+    },
+    {
+      "pid": 3901694,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/linuxbrew/.linuxbrew/bin/pi --list-models"
+    },
+    {
+      "pid": 3901461,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/erik/.opencode/bin/opencode models"
+    },
+    {
+      "pid": 3901460,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/linuxbrew/.linuxbrew/bin/pi --list-models"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3944656,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b110/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b110=\u003e -p crypto/ecdsa -lang=go1.26 -std -complete -buildid Xbdl3SgJp1rjMuvtxpbm/Xbdl3SgJp1rjMuvtxpbm -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b110/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/ecdsa/ecdsa.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/ecdsa/ecdsa_legacy.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/ecdsa/notboring.go"
+    },
+    {
+      "pid": 3944646,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b357/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b357=\u003e -p github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe -lang=go1.26 -complete -buildid vuq7pJRR7ees8TUato5x/vuq7pJRR7ees8TUato5x -goversion go1.26.4 -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b357/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/workerprobe/probe.go"
+    },
+    {
+      "pid": 3944638,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b176/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b176=\u003e -p github.com/DocumentDrivenDX/ddx/internal/ddxroot -lang=go1.26 -complete -buildid jOurg5ILq2XhO5ldxj8M/jOurg5ILq2XhO5ldxj8M -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b176/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/ddxroot/ddxroot.go"
+    },
+    {
+      "pid": 3944621,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b292/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b292=\u003e -p net/http/httputil -lang=go1.26 -std -complete -buildid kEnsQGnSg24HLIg7ocpM/kEnsQGnSg24HLIg7ocpM -goversion go1.26.4 -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b292/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/dump.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/httputil.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/persist.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/reverseproxy.go"
+    },
+    {
+      "pid": 3944619,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b195/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b195=\u003e -p github.com/DocumentDrivenDX/ddx/internal/ratelimitpolicy -lang=go1.26 -complete -buildid kW4lT-Nb_f6BnS_uQuBt/kW4lT-Nb_f6BnS_uQuBt -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b195/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/ratelimitpolicy/ratelimitpolicy.go"
+    },
+    {
+      "pid": 3944594,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b197/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b197=\u003e -p compress/flate -lang=go1.26 -std -complete -buildid xo7ZcV3dHGnNmBB6HjSK/xo7ZcV3dHGnNmBB6HjSK -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b197/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflatefast.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/dict_decoder.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_bit_writer.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_code.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/inflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/token.go"
+    },
+    {
+      "pid": 3944588,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b364/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b364=\u003e -p github.com/DocumentDrivenDX/ddx/internal/registry -lang=go1.26 -complete -buildid zEOSRxKIsFoJIYDM6eYi/zEOSRxKIsFoJIYDM6eYi -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b364/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/audit.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/installer.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/manifest.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/registry.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/resolve.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/registry/state.go"
+    },
+    {
+      "pid": 3944576,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b194/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b194=\u003e -p github.com/DocumentDrivenDX/ddx/internal/agent/try -lang=go1.26 -complete -buildid B0PmDbiRO9uH8atFNYCg/B0PmDbiRO9uH8atFNYCg -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b194/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/attempt.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/conflict_recovery.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/no_changes.go /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/try/verification_command_unix.go"
+    },
+    {
+      "pid": 3944573,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b204/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b204=\u003e -p vendor/golang.org/x/text/unicode/bidi -lang=go1.26 -std -complete -buildid ve_DokJnUWG2h1z3cyiH/ve_DokJnUWG2h1z3cyiH -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b204/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bidi.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bracket.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/core.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/prop.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/tables15.0.0.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/trieval.go"
+    },
+    {
+      "pid": 3944551,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b865/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b865=\u003e -p golang.org/x/text/cases -lang=go1.24 -complete -buildid bi8O2XM7z_DTtfeeWlv9/bi8O2XM7z_DTtfeeWlv9 -goversion go1.26.4 -c=8 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b865/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/cases.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/context.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/fold.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/info.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/map.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/tables15.0.0.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/cases/trieval.go"
+    },
+    {
+      "pid": 3944550,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b228/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b228=\u003e -p github.com/easel/fizeau/internal/modelcatalog -lang=go1.26 -complete -buildid JOmMglxIzWOQnxeLGmX_/JOmMglxIzWOQnxeLGmX_ -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b228/importcfg -embedcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b228/embedcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/billing.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/catalog.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/manifest.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/openrouter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/power.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/tiers.go"
+    },
+    {
+      "pid": 3944526,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b357/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b357=\u003e -p github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe -lang=go1.26 -complete -buildid vuq7pJRR7ees8TUato5x/vuq7pJRR7ees8TUato5x -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b357/importcfg -pack /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent/workerprobe/probe.go"
+    },
+    {
+      "pid": 3944496,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b193/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b193=\u003e -p runtime/debug -lang=go1.26 -std -buildid mmgmkOPSuQQtXGDDGbqg/mmgmkOPSuQQtXGDDGbqg -goversion go1.26.4 -symabis /home/erik/.cache/fleet-tmp/go-build1238551628/b193/symabis -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b193/importcfg -pack -asmhdr /home/erik/.cache/fleet-tmp/go-build1238551628/b193/go_asm.h /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/garbage.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/mod.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stack.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stubs.go"
+    },
+    {
+      "pid": 3944455,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b131/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b131=\u003e -p crypto/hpke -lang=go1.26 -std -complete -buildid XEF0Fq61L0-as36W3Z7u/XEF0Fq61L0-as36W3Z7u -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b131/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/aead.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/aead_fips140v1.26.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/hpke.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/kdf.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/kem.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/crypto/hpke/pq.go"
+    },
+    {
+      "pid": 3944432,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b741/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b741=\u003e -p gvisor.dev/gvisor/pkg/tcpip/header -lang=go1.25 -complete -buildid a8MRSAWWtLZxTQ4Z8Xi6/a8MRSAWWtLZxTQ4Z8Xi6 -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b741/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/arp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/checksum.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/datagram.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/eth.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/gue.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/header_state_autogen.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/icmpv4.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/icmpv6.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/igmp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/igmpv3.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/interfaces.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv4.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv6.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv6_extension_headers.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ipv6_fragment.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/mld.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/mldv2.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/mldv2_igmpv3_common.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_neighbor_advert.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_neighbor_solicit.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_options.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_router_advert.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndp_router_solicit.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/ndpoptionidentifier_string.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/tcp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/udp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/header/virtionet.go"
+    },
+    {
+      "pid": 3944431,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b812/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b812=\u003e -p gvisor.dev/gvisor/pkg/tcpip/internal/tcp -lang=go1.25 -complete -buildid K3x7RLpHB56-h-oI0ERc/K3x7RLpHB56-h-oI0ERc -goversion go1.26.4 -c=8 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b812/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/internal/tcp/tcp.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/internal/tcp/tcp_state_autogen.go"
+    },
+    {
+      "pid": 3944374,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b190/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b190=\u003e -p gopkg.in/yaml.v3 -lang=go1.16 -complete -buildid EkIpxefnK_ouqQQqG-KB/EkIpxefnK_ouqQQqG-KB -goversion go1.26.4 -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b190/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/apic.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/decode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/emitterc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/encode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/parserc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/readerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/resolve.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/scannerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/sorter.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/writerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yaml.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlh.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlprivateh.go"
+    },
+    {
+      "pid": 3944373,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b292/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b292=\u003e -p net/http/httputil -lang=go1.26 -std -complete -buildid kEnsQGnSg24HLIg7ocpM/kEnsQGnSg24HLIg7ocpM -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b292/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/dump.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/httputil.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/persist.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/net/http/httputil/reverseproxy.go"
+    },
+    {
+      "pid": 3944367,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b228/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b228=\u003e -p github.com/easel/fizeau/internal/modelcatalog -lang=go1.26 -complete -buildid JOmMglxIzWOQnxeLGmX_/JOmMglxIzWOQnxeLGmX_ -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b228/importcfg -embedcfg /home/erik/.cache/fleet-tmp/go-build751493643/b228/embedcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/billing.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/catalog.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/manifest.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/openrouter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/power.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/modelcatalog/tiers.go"
+    },
+    {
+      "pid": 3944342,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b204/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b204=\u003e -p vendor/golang.org/x/text/unicode/bidi -lang=go1.26 -std -complete -buildid ve_DokJnUWG2h1z3cyiH/ve_DokJnUWG2h1z3cyiH -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b204/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bidi.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/bracket.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/core.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/prop.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/tables15.0.0.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/vendor/golang.org/x/text/unicode/bidi/trieval.go"
+    },
+    {
+      "pid": 3944332,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b193/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b193=\u003e -p runtime/debug -lang=go1.26 -std -buildid mmgmkOPSuQQtXGDDGbqg/mmgmkOPSuQQtXGDDGbqg -goversion go1.26.4 -symabis /home/erik/.cache/fleet-tmp/go-build798835735/b193/symabis -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b193/importcfg -pack -asmhdr /home/erik/.cache/fleet-tmp/go-build798835735/b193/go_asm.h /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/garbage.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/mod.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stack.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/runtime/debug/stubs.go"
+    },
+    {
+      "pid": 3944331,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b197/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b197=\u003e -p compress/flate -lang=go1.26 -std -complete -buildid xo7ZcV3dHGnNmBB6HjSK/xo7ZcV3dHGnNmBB6HjSK -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b197/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/deflatefast.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/dict_decoder.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_bit_writer.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/huffman_code.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/inflate.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/compress/flate/token.go"
+    },
+    {
+      "pid": 3944282,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b190/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b190=\u003e -p gopkg.in/yaml.v3 -lang=go1.16 -complete -buildid EkIpxefnK_ouqQQqG-KB/EkIpxefnK_ouqQQqG-KB -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b190/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/apic.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/decode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/emitterc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/encode.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/parserc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/readerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/resolve.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/scannerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/sorter.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/writerc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yaml.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlh.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yamlprivateh.go"
+    },
+    {
+      "pid": 3944258,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b166/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b166=\u003e -p encoding/json -lang=go1.26 -std -complete -buildid M2QIZfHl92rW_qHuoi-6/M2QIZfHl92rW_qHuoi-6 -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b166/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/decode.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/encode.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/fold.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/indent.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/scanner.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/stream.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/tables.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/json/tags.go"
+    },
+    {
+      "pid": 3944244,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b170/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b170=\u003e -p encoding/xml -lang=go1.26 -std -complete -buildid 2xWkGBFu974HgXkJU8s_/2xWkGBFu974HgXkJU8s_ -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b170/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/marshal.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/read.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/typeinfo.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/encoding/xml/xml.go"
+    },
+    {
+      "pid": 3944241,
+      "ppid": 3929750,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build798835735/b186/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build798835735/b186=\u003e -p mime -lang=go1.26 -std -complete -buildid uRbJGbL4bUAtqArY5DRH/uRbJGbL4bUAtqArY5DRH -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build798835735/b186/importcfg -pack /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/encodedword.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/grammar.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/mediatype.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/type.go /home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/src/mime/type_unix.go"
+    },
+    {
+      "pid": 3944158,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b867/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b867=\u003e -p golang.org/x/text/language -lang=go1.24 -complete -buildid z3Fn0ucQa7WUzE43Fu8w/z3Fn0ucQa7WUzE43Fu8w -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b867/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/coverage.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/doc.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/language.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/match.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/parse.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/tables.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/golang.org/x/text@v0.34.0/language/tags.go"
+    },
+    {
+      "pid": 3944131,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b857/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b857=\u003e -p github.com/pelletier/go-toml/v2 -lang=go1.21 -complete -buildid tdoiRfMzNMKHuKi4FD0S/tdoiRfMzNMKHuKi4FD0S -goversion go1.26.4 -c=8 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b857/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/decode.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/doc.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/errors.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/localtime.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/marshaler.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/strict.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/types.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/pelletier/go-toml/v2@v2.2.4/unmarshaler.go"
+    },
+    {
+      "pid": 3943987,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b833/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b833=\u003e -p github.com/spf13/cobra -lang=go1.15 -complete -buildid wYWdhEB_OawYXPmAEfcW/wYWdhEB_OawYXPmAEfcW -goversion go1.26.4 -c=6 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b833/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/active_help.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/args.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/bash_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/bash_completionsV2.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/cobra.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command_notwin.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/fish_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/flag_groups.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/powershell_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/shell_completions.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/spf13/cobra@v1.10.2/zsh_completions.go"
+    },
+    {
+      "pid": 3943772,
+      "ppid": 3930061,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build1238551628/b355/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build1238551628/b355=\u003e -p golang.org/x/sys/unix -lang=go1.25 -buildid ZltrxcA5LLQcF6aHpnjx/ZltrxcA5LLQcF6aHpnjx -goversion go1.26.4 -symabis /home/erik/.cache/fleet-tmp/go-build1238551628/b355/symabis -c=7 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build1238551628/b355/importcfg -pack -asmhdr /home/erik/.cache/fleet-tmp/go-build1238551628/b355/go_asm.h /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/affinity_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/aliases.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/auxv.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/bluetooth_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/constants.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/dev_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/dirent.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/endian_little.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/env_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/fcntl.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/fdset.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ifreq_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ioctl_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ioctl_unsigned.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/mremap.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/pagesize_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/race0.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/readdirent_getdents.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sockcmsg_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sockcmsg_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sockcmsg_unix_other.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_linux_gc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/syscall_unix_gc.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sysvshm_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/sysvshm_unix.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/timestruct.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/vgetrandom_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zerrors_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zerrors_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zptrace_armnn_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zptrace_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zsyscall_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zsyscall_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/zsysnum_linux_arm64.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ztypes_linux.go /home/erik/.cache/fleet-tmp/ddx-home-231922210/go/pkg/mod/golang.org/x/sys@v0.42.0/unix/ztypes_linux_arm64.go"
+    },
+    {
+      "pid": 3943392,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b831/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b831=\u003e -p github.com/itchyny/gojq -lang=go1.24 -complete -buildid msEjJdT8cSDHfo7i8qQz/msEjJdT8cSDHfo7i8qQz -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b831/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/builtin.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/code.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compare.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compiler.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/encoder.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/env.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/error.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/execute.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/func.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/gojq.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/iter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/lexer.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/module_loader.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/operator.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/option.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/parser.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/preview.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/query.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/release.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/scope_stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/term_type.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/type.go"
+    },
+    {
+      "pid": 3943287,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b831/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b831=\u003e -p github.com/itchyny/gojq -lang=go1.24 -complete -buildid msEjJdT8cSDHfo7i8qQz/msEjJdT8cSDHfo7i8qQz -goversion go1.26.4 -c=4 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b831/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/builtin.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/code.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compare.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/compiler.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/encoder.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/env.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/error.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/execute.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/func.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/gojq.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/iter.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/lexer.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/module_loader.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/operator.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/option.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/parser.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/preview.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/query.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/release.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/scope_stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/stack.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/term_type.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/github.com/itchyny/gojq@v0.12.19/type.go"
+    },
+    {
+      "pid": 3942670,
+      "ppid": 3929649,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build3631015001/b506/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build3631015001/b506=\u003e -p tailscale.com/types/netmap -lang=go1.26 -complete -buildid 7GkgWZhuMNUO-uCxp93-/7GkgWZhuMNUO-uCxp93- -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build3631015001/b506/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/netmap.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/nodemut.go"
+    },
+    {
+      "pid": 3942503,
+      "ppid": 3929467,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "/home/linuxbrew/.linuxbrew/Cellar/go/1.26.4/libexec/pkg/tool/linux_arm64/compile -o /home/erik/.cache/fleet-tmp/go-build751493643/b506/_pkg_.a -trimpath /home/erik/.cache/fleet-tmp/go-build751493643/b506=\u003e -p tailscale.com/types/netmap -lang=go1.26 -complete -buildid 7GkgWZhuMNUO-uCxp93-/7GkgWZhuMNUO-uCxp93- -goversion go1.26.4 -c=5 -nolocalimports -importcfg /home/erik/.cache/fleet-tmp/go-build751493643/b506/importcfg -pack /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/netmap.go /home/erik/.cache/fleet-tmp/ddx-home-2723910398/go/pkg/mod/tailscale.com@v1.96.5/types/netmap/nodemut.go"
+    },
+    {
+      "pid": 3930061,
+      "ppid": 3901694,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-1005030374/ddx ."
+    },
+    {
+      "pid": 3929750,
+      "ppid": 3901695,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-2811574929/ddx ."
+    },
+    {
+      "pid": 3929649,
+      "ppid": 3901460,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-1466611402/ddx ."
+    },
+    {
+      "pid": 3929467,
+      "ppid": 3901461,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-fixture-bin-3195615255/ddx ."
+    },
+    {
+      "pid": 3901695,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/erik/.opencode/bin/opencode models"
+    },
+    {
+      "pid": 3901694,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/linuxbrew/.linuxbrew/bin/pi --list-models"
+    },
+    {
+      "pid": 3901461,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/erik/.opencode/bin/opencode models"
+    },
+    {
+      "pid": 3901460,
+      "ppid": 636,
+      "pgid": 3534105,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6dcb5798-20260703T210148-693f947b/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3225246691/b001/agent.test __provider-launch /home/linuxbrew/.linuxbrew/bin/pi --list-models"
+    }
+  ]
+}

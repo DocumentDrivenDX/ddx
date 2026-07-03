@@ -1,0 +1,58 @@
+{
+  "bead_id": "ddx-6dcb5798",
+  "attempt_id": "20260703T210148-693f947b",
+  "base_rev": "69926fe97c2dfd20543799006f6a0007d905be2a",
+  "result_rev": "c164af705811ac0e119bd4c5fc5f5bd3d9369aa3",
+  "implementation_rev": "c164af705811ac0e119bd4c5fc5f5bd3d9369aa3",
+  "landed_rev": "c164af705811ac0e119bd4c5fc5f5bd3d9369aa3",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260703T210148-693f947b/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260703T210148-693f947b",
+      "result_rev": "c164af705811ac0e119bd4c5fc5f5bd3d9369aa3",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-673a02e4",
+  "duration_ms": 4007045,
+  "tokens": 65004,
+  "cost_usd": 7.106274050000002,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260703T210148-693f947b",
+  "prompt_file": ".ddx/executions/20260703T210148-693f947b/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T210148-693f947b/manifest.json",
+  "result_file": ".ddx/executions/20260703T210148-693f947b/result.json",
+  "usage_file": ".ddx/executions/20260703T210148-693f947b/usage.json",
+  "started_at": "2026-07-03T21:01:58.708426588Z",
+  "finished_at": "2026-07-03T22:08:45.754267024Z"
+}
