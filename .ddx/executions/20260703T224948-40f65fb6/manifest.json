@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260703T224948-40f65fb6",
+  "bead_id": "ddx-8d3af2ed",
+  "base_rev": "d303a6a87c21614a0c81354d489e6df56608e263",
+  "created_at": "2026-07-03T22:50:11.616255464Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8d3af2ed",
+    "title": "federation: reconcile the stale GraphQL federation bead",
+    "description": "PROBLEM\n`ddx-0793ac75` is stale. The current read-federation coverage in `cli/internal/server/graphql/resolver_federation_test.go:77-80,315-320,474-487` and `cli/internal/server/frontend/e2e/federation-2node.spec.ts:219-307` already proves the hub/spoke read path, but `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327-350` still leaves owner-targeted writes planned. The bead still points at cancelled `ddx-387a0178`, so the queue treats it as dependency-waiting instead of narrowing it to the remaining write-routing gap.\n\nROOT CAUSE\n`TP-002-server-web-ui.md:327-350` splits the work into TC-017 worker control and TC-018 bead writes, while the current test tree already covers the read side (`resolver_federation_test.go:77-80,315-320,474-487` and `federation-2node.spec.ts:219-307`). The stale dependency edge to cancelled `ddx-387a0178` keeps the bead parked on work that can no longer execute.\n\nPROPOSED FIX\n- Reconcile `ddx-0793ac75` against current coverage and either close/supersede it or rewrite it so it names only the missing owner-write coverage.\n- Remove the blocking dependency on cancelled `ddx-387a0178` unless a note proves it is still load-bearing.\n- Preserve the FEAT-026 / Story 14 references and explicitly cite the current read coverage in `resolver_federation_test.go` and `federation-2node.spec.ts`.\n\nNON-SCOPE\n- Do not implement new federation code.\n- Do not hand-edit `.ddx/beads.jsonl`.\n- Do not rewrite execution-audit commits.\n- Do not change the live read-federation behavior.\n\nPARENT + DEPS\nParent: `ddx-a038a090`. Dependency to reconcile: `ddx-387a0178`.",
+    "acceptance": "1. `ddx bead show ddx-0793ac75` shows closed, superseded, or narrowed AC that names only missing owner-write coverage.\n2. `ddx bead dep tree ddx-0793ac75` no longer shows cancelled `ddx-387a0178` as a blocking dependency, or the bead note explicitly explains why it remains load-bearing.\n3. The bead text cites `TestFederation_QueryShape_TwoHealthySpokes`, `TestFederation_PartialResult_OneSpokeOffline`, and `TestFederation_VersionSkew_RendersAndSkips` as the live read coverage anchors.\n4. `ddx bead ready --execution` surfaces the next actionable federation bead after this stale dependency is removed or annotated.\n5. `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-b303cf96",
+    "labels": [
+      "phase:2",
+      "area:federation",
+      "area:beads",
+      "kind:chore",
+      "story:14",
+      "spec:FEAT-026",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: The bead has enough concrete context to act on, but its acceptance mixes tracker reconciliation with the follow-on owner-write work and allows multiple end states. A narrow rewrite can make the claim outcome single-valued without changing intent.\",\"fingerprint\":\"16f24bca81d1f026dd9001c7c451fc21b6acaf750f609b029370db0450dfab26\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"16f24bca81d1f026dd9001c7c451fc21b6acaf750f609b029370db0450dfab26\"}",
+          "created_at": "2026-07-03T22:49:37.405346733Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T224948-40f65fb6",
+    "prompt": ".ddx/executions/20260703T224948-40f65fb6/prompt.md",
+    "manifest": ".ddx/executions/20260703T224948-40f65fb6/manifest.json",
+    "result": ".ddx/executions/20260703T224948-40f65fb6/result.json",
+    "checks": ".ddx/executions/20260703T224948-40f65fb6/checks.json",
+    "usage": ".ddx/executions/20260703T224948-40f65fb6/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8d3af2ed-20260703T224948-40f65fb6"
+  },
+  "prompt_sha": "385624eb692a1478064130022712e9fa4b732340751bb9ac22f63f8661a2baf9"
+}
