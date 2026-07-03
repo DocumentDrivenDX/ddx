@@ -1,0 +1,68 @@
+{
+  "attempt_id": "20260703T105830-aaffea74",
+  "bead_id": "ddx-264e76f0",
+  "base_rev": "19315d81073bf75c1c0caf71c519b2563860c08d",
+  "created_at": "2026-07-03T10:58:43.440054021Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-264e76f0",
+    "title": "Replay provenance",
+    "metadata": {
+      "closing_commit_sha": "9653820049db7edebe0374431544b1b8a8dbae88",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T02:38:19.379985537Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260703T022230-96dad5dc\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":468070,\"output_tokens\":12746,\"total_tokens\":480816,\"cost_usd\":0,\"duration_ms\":934536,\"exit_code\":0}",
+          "created_at": "2026-07-03T02:38:20.696276938Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=480816 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260703T022230-96dad5dc\",\"bead_id\":\"ddx-264e76f0\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-03T02:38:24.327412371Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"3f1a40cbe0cb08b750a18c361bb7f614cfff8eeb\",\"classification\":\"recoverable\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt failed because the executor saw an inconsistent result: implementation_rev/result_rev differ from base_rev while the harness also returned a no_changes_rationale. The no-change rationale only cites a commit-existence/show command for closing_commit_sha and does not prove the bead acceptance criteria, so this is an attempt/reporting failure rather than satisfied work.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"fc47e860e255bc0f700dc89deb1f71d7787d3012\",\"session_id\":\"eb-0bed43fb\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-07-03T02:51:05.982465883Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\nrationale: verification_command: git cat-file -e 9653820049db7edebe0374431544b1b8a8dbae88^{commit} \u0026\u0026 git show --stat --summary --oneline --decorate=short 9653820049db7edebe0374431544b1b8a8dbae88 --\ndecision_audit={\"failure_class\":\"recoverable\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=fc47e860e255bc0f700dc89deb1f71d7787d3012\nbase_rev=3f1a40cbe0cb08b750a18c361bb7f614cfff8eeb\noutcome_reason=recoverable",
+          "created_at": "2026-07-03T02:51:06.772727026Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T105830-aaffea74",
+    "prompt": ".ddx/executions/20260703T105830-aaffea74/prompt.md",
+    "manifest": ".ddx/executions/20260703T105830-aaffea74/manifest.json",
+    "result": ".ddx/executions/20260703T105830-aaffea74/result.json",
+    "checks": ".ddx/executions/20260703T105830-aaffea74/checks.json",
+    "usage": ".ddx/executions/20260703T105830-aaffea74/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-264e76f0-20260703T105830-aaffea74"
+  },
+  "prompt_sha": "9fa9b2796843f05714f9d53b848e38300623e3109ddf71ede8135ce052ef65a1"
+}
