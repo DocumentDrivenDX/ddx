@@ -1,0 +1,4 @@
+status: proposed
+reason: operator needed
+This bead has no executable implementation contract: the description and acceptance fields are empty.
+No repository changes were made because there was nothing concrete to implement or verify.
