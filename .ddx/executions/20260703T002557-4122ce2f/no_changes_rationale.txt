@@ -1,0 +1,2 @@
+verification_command: git diff --exit-code cdc6ea3c7f7f6a0820894912ab84a56e8edb092a HEAD -- . ':(exclude).ddx/executions/20260703T002557-4122ce2f'
+reason: The bead record is empty (no description, acceptance criteria, labels, or spec-id), and no repository file is named in scope. There is no defensible implementation target to modify without guessing.

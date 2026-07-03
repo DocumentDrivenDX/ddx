@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T002557-4122ce2f",
+  "bead_id": "ddx-b6bb2845",
+  "base_rev": "cdc6ea3c7f7f6a0820894912ab84a56e8edb092a",
+  "created_at": "2026-07-03T00:26:12.247114841Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b6bb2845",
+    "title": "Transition target"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T002557-4122ce2f",
+    "prompt": ".ddx/executions/20260703T002557-4122ce2f/prompt.md",
+    "manifest": ".ddx/executions/20260703T002557-4122ce2f/manifest.json",
+    "result": ".ddx/executions/20260703T002557-4122ce2f/result.json",
+    "checks": ".ddx/executions/20260703T002557-4122ce2f/checks.json",
+    "usage": ".ddx/executions/20260703T002557-4122ce2f/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-b6bb2845-20260703T002557-4122ce2f"
+  },
+  "prompt_sha": "911062c94bbe48d4860acf1ccb26945b5086c84df95d09a8e3b518997a6336e6"
+}
