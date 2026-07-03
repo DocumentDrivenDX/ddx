@@ -1,0 +1,3 @@
+verification_command: test -z "$(git status --short)"
+This bead has no description or acceptance criteria, so there is no executable implementation contract.
+The worktree is clean; no repository changes were required for this attempt.
