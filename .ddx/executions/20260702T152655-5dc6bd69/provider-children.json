@@ -1,9 +1,8 @@
 {
   "attempt_id": "20260702T152655-5dc6bd69",
   "bead_id": "ddx-6dcb5798",
-  "trigger": "running_phase_non_route_provider_child",
-  "active_route": "codex",
-  "scanned_at": "2026-07-02T15:50:36.941945992Z",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-02T15:56:33.96487323Z",
   "reaped": [
     {
       "pid": 727790,
@@ -105,6 +104,62 @@
       "pid": 1286661,
       "provider": "opencode",
       "command": "opencode models",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1351514,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2156335654/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1352396,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2685512641/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1353611,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s734347879/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1353845,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2089460923/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1353461,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s395851498/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1455484,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1455485,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
       "age_seconds": 0,
       "action": "terminated",
       "reason": "running_phase_non_route_provider_child"
