@@ -29,6 +29,14 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
+	if homeDir, err := os.MkdirTemp("", "ddx-bead-home-*"); err == nil {
+		_ = os.Setenv("HOME", homeDir)
+		defer os.RemoveAll(homeDir)
+	}
+	if xdgDir, err := os.MkdirTemp("", "ddx-bead-xdg-*"); err == nil {
+		_ = os.Setenv("XDG_DATA_HOME", xdgDir)
+		defer os.RemoveAll(xdgDir)
+	}
 	os.Exit(m.Run())
 }
 
@@ -139,11 +147,15 @@ func TestStoreClose_RejectsCanceledContext(t *testing.T) {
 }
 
 func TestNewStore_DefaultsToJSONL(t *testing.T) {
+	t.Setenv("DDX_BEAD_BACKEND", "")
+	t.Setenv("DDX_AXON_EXPERIMENTAL", "")
 	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
 	assert.Nil(t, s.backend)
 }
 
 func TestNewStore_SelectsAxonFromConfig(t *testing.T) {
+	t.Setenv("DDX_BEAD_BACKEND", "")
+	t.Setenv("DDX_AXON_EXPERIMENTAL", "")
 	tempDir := t.TempDir()
 	writeStoreConfig(t, tempDir, BackendAxon)
 
@@ -186,6 +198,8 @@ func TestExternalBackendCarriesLogicalCollectionName(t *testing.T) {
 }
 
 func TestNewStore_PreservesExternalBackends(t *testing.T) {
+	t.Setenv("DDX_BEAD_BACKEND", "")
+	t.Setenv("DDX_AXON_EXPERIMENTAL", "")
 	toolDir := t.TempDir()
 	writeFakeBackendTool(t, toolDir, "bd")
 	writeFakeBackendTool(t, toolDir, "br")
