@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260703T114957-f2421872",
+  "bead_id": "ddx-ee0c42b1",
+  "base_rev": "eb9d2b984b8904cd99a86b4cf011d2d2913d8a2d",
+  "created_at": "2026-07-03T11:50:10.639709078Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ee0c42b1",
+    "title": "Test combined surfacing",
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T07:59:47.871545748Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260703T075136-3cddfb5c\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":2305298,\"output_tokens\":18850,\"total_tokens\":2324148,\"cost_usd\":0,\"duration_ms\":476665,\"exit_code\":0}",
+          "created_at": "2026-07-03T07:59:47.907544239Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=2324148 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260703T075136-3cddfb5c\",\"bead_id\":\"ddx-ee0c42b1\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-03T07:59:52.701361176Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"1b98cbe888780f777010a9dc275f2dfd781d80d4\",\"classification\":\"recoverable\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt produced an implementation revision different from the base revision but was marked failed because the executor also recorded a no_changes_rationale, yielding the internal mixed_commit_and_no_changes_rationale state. This is an attempt bookkeeping/output-contract failure, not evidence of bead scope, red tests, or an external blocker.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"68c18cf0a3d634beb2d02e131c9859e5581b6b45\",\"session_id\":\"eb-96dfd1af\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-07-03T08:00:39.565267043Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\nrationale: verification_command: cd cli \u0026\u0026 go test ./cmd -run 'TestBeadShowSurfacesFingerprintAndOverride' -count=1\ndecision_audit={\"failure_class\":\"recoverable\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=68c18cf0a3d634beb2d02e131c9859e5581b6b45\nbase_rev=1b98cbe888780f777010a9dc275f2dfd781d80d4\noutcome_reason=recoverable",
+          "created_at": "2026-07-03T08:00:39.639344711Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T114957-f2421872",
+    "prompt": ".ddx/executions/20260703T114957-f2421872/prompt.md",
+    "manifest": ".ddx/executions/20260703T114957-f2421872/manifest.json",
+    "result": ".ddx/executions/20260703T114957-f2421872/result.json",
+    "checks": ".ddx/executions/20260703T114957-f2421872/checks.json",
+    "usage": ".ddx/executions/20260703T114957-f2421872/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-ee0c42b1-20260703T114957-f2421872"
+  },
+  "prompt_sha": "13aa31e76cb3efa12ed38ea50ed1717b2a8dedb8f2bc98157ff544737ae7e272"
+}
