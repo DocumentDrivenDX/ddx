@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T014905-874c91ae",
+  "bead_id": "ddx-d02171d2",
+  "base_rev": "8054f5967e5a481fce1bc0a3a21892919c2cec3a",
+  "created_at": "2026-07-03T01:49:21.645859685Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d02171d2",
+    "title": "Claim me too"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T014905-874c91ae",
+    "prompt": ".ddx/executions/20260703T014905-874c91ae/prompt.md",
+    "manifest": ".ddx/executions/20260703T014905-874c91ae/manifest.json",
+    "result": ".ddx/executions/20260703T014905-874c91ae/result.json",
+    "checks": ".ddx/executions/20260703T014905-874c91ae/checks.json",
+    "usage": ".ddx/executions/20260703T014905-874c91ae/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-d02171d2-20260703T014905-874c91ae"
+  },
+  "prompt_sha": "103665123d4a28c0825871b7c55029eec6dee3832e0029fca1030957a8ee73b8"
+}

@@ -1,0 +1,3 @@
+status: proposed
+reason: The bead record is empty: no description, no acceptance criteria, no governing artifact, and no named files or tests to implement. An operator needs to author a real contract before execution can proceed.
+suggested_action: Add a concrete bead description and acceptance criteria, or cancel this placeholder bead.
