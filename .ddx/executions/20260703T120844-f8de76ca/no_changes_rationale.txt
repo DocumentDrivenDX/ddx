@@ -1,0 +1,4 @@
+verification_command: git diff --quiet --exit-code && git diff --cached --quiet --exit-code
+done: inspected the bead record, execution prompt, manifest, and current worktree state; the bead contract is empty, so there is no implementation scope to apply.
+blocking: none.
+follow_up: none unless the bead is rewritten with a concrete description or acceptance criteria.
