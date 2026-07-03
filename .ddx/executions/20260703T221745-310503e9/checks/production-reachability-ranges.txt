@@ -1,0 +1,4 @@
+internal/bead/store_test.go 32 39
+internal/bead/store_test.go 150 151
+internal/bead/store_test.go 157 158
+internal/bead/store_test.go 201 202

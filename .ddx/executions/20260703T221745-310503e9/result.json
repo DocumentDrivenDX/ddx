@@ -1,0 +1,57 @@
+{
+  "bead_id": "ddx-29f02cf4",
+  "attempt_id": "20260703T221745-310503e9",
+  "base_rev": "c9a07ed648ca355720cca5b9b0d8fdb57f875b82",
+  "result_rev": "8a5668f5623b9f65ed951e21d950c44293335eba",
+  "implementation_rev": "8a5668f5623b9f65ed951e21d950c44293335eba",
+  "landed_rev": "8a5668f5623b9f65ed951e21d950c44293335eba",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260703T221745-310503e9/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260703T221745-310503e9",
+      "result_rev": "8a5668f5623b9f65ed951e21d950c44293335eba",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-695e871b",
+  "duration_ms": 1071267,
+  "tokens": 5515843,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260703T221745-310503e9",
+  "prompt_file": ".ddx/executions/20260703T221745-310503e9/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T221745-310503e9/manifest.json",
+  "result_file": ".ddx/executions/20260703T221745-310503e9/result.json",
+  "usage_file": ".ddx/executions/20260703T221745-310503e9/usage.json",
+  "started_at": "2026-07-03T22:17:58.524220509Z",
+  "finished_at": "2026-07-03T22:35:49.791300884Z"
+}
