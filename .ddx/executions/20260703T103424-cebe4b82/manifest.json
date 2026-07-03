@@ -1,0 +1,213 @@
+{
+  "attempt_id": "20260703T103424-cebe4b82",
+  "bead_id": "ddx-9c5bca8f",
+  "base_rev": "83e800863dd04cd8ef2be5d3cb8c92d9d7322ce3",
+  "created_at": "2026-07-03T10:34:37.372533183Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9c5bca8f",
+    "title": "bead/axon: implement backend operations with generated GraphQL client",
+    "description": "PROBLEM\nThe current Axon backend does not talk to Axon at all; it rewrites local JSONL snapshots under \u003cdir\u003e/axon/ instead of using the GraphQL entity store described by TD-030. That is visible in cli/internal/bead/axon_backend.go:59-215, where AxonBackend stores beads/events as local files and serializes them with writeAtomicFile instead of remote operations.\n\nROOT CAUSE\ncli/internal/bead/axon_backend.go:59-215 implements the backend as file-backed emulation, not a GraphQL-backed store. This bypasses the typed client, bypasses optimistic concurrency against Axon, and makes the backend selectable only in a fake local mode.\n\nPROPOSED FIX\n- Replace local snapshot writes with real GraphQL CRUD, dependency, and event mutations using cli/internal/bead/axon/.\n- Preserve the two-collection model from TD-030: ddx_beads and ddx_bead_events, with event_of links.\n- Keep the existing backend interface surface working for Create, Get, Update, Claim, Close, DepAdd, DepRemove, AppendEvent, ExportTo, and Import.\n- Preserve jsonl as the default backend path so day-1 behavior does not change.\n\nNON-SCOPE\n- Backend selection config plumbing.\n- Package test matrix broadening.\n- WebSocket subscription smoke tests.",
+    "acceptance": "1. TestAxonBackend_CreateAndGet, TestAxonBackend_UpdateMutatesAndPersists, TestAxonBackend_ClaimAndUnclaim, TestAxonBackend_DepAddRemoveAndTree, TestAxonBackend_AppendEventSplitsIntoEventsCollection, and TestAxonBackend_JSONLImportExportRoundTrip pass against the real Axon-backed implementation.\n2. backend_axon.go no longer uses local JSONL snapshots as the primary storage path.\n3. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "axon",
+      "decomposed",
+      "from-upstream:axon-05c1019d",
+      "from-upstream:axon-82b6f7b2",
+      "kind:feature",
+      "phase:2",
+      "reconciled:no-changes-state"
+    ],
+    "metadata": {
+      "closing_commit_sha": "c65e7355d9aab3ffec15416eb76dfb4c730e9505",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T164659-abc25e07\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":285426,\"output_tokens\":2755,\"total_tokens\":288181,\"cost_usd\":0,\"duration_ms\":34343,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=288181 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The bead is too large for this execution depth and cannot be cleanly split further here. Completing it would require coordinated changes across cli/internal/bead/axon_backend.go, cli/internal/bead/axon/*, store/backend plumbing, and the axon-backed test matrix, while the bead is already at the depth cap. The requested real Axon GraphQL path is also still blocked on the upstream dependencies noted in the bead metadata (axon-05c1019d and axon-82b6f7b2), so I am not making speculative partial changes.",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent work",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: The bead is too large for this execution depth and cannot be cleanly split further here. Completing it would require coordinated changes across cli/internal/bead/axon_backend.go, cli/internal/bead/axon/*, store/backend plumbing, and the axon-backed test matrix, while the bead is already at the depth cap. The requested real Axon GraphQL path is also still blocked on the upstream dependencies noted in the bead metadata (axon-05c1019d and axon-82b6f7b2), so I am not making speculative partial changes.\nresult_rev=40b88396d4c0b4bee441f16ef5e9e577fa311d89\nbase_rev=40b88396d4c0b4bee441f16ef5e9e577fa311d89\nretry_after=2026-05-05T22:47:38Z",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T184514-4f2b5b8d\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":156340,\"output_tokens\":2876,\"total_tokens\":159216,\"cost_usd\":0,\"duration_ms\":28728,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=159216 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "This bead is still too large to complete safely at the current execution depth. The current backend is file-backed in cli/internal/bead/axon_backend.go:15-223, while the requested fix spans the generated GraphQL client path in cli/internal/bead/axon/, backend CRUD/dependency/event mutations, and the axon-backed tests in cli/internal/bead/axon_backend_test.go:18-413. The bead metadata also carries upstream blockers axon-05c1019d and axon-82b6f7b2, so I am not making a speculative partial implementation.",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent work",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: This bead is still too large to complete safely at the current execution depth. The current backend is file-backed in cli/internal/bead/axon_backend.go:15-223, while the requested fix spans the generated GraphQL client path in cli/internal/bead/axon/, backend CRUD/dependency/event mutations, and the axon-backed tests in cli/internal/bead/axon_backend_test.go:18-413. The bead metadata also carries upstream blockers axon-05c1019d and axon-82b6f7b2, so I am not making a speculative partial implementation.\nresult_rev=3722099191ce9c4d89e327c7045522c9227221cb\nbase_rev=3722099191ce9c4d89e327c7045522c9227221cb\nretry_after=2026-05-06T00:45:47Z",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T092126-fa2440e8\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":232409,\"output_tokens\":3243,\"total_tokens\":235652,\"cost_usd\":0,\"duration_ms\":38250,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=235652 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "verification_command=cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestAxonBackend_CreateAndGet|TestAxonBackend_UpdateMutatesAndPersists|TestAxonBackend_ClaimAndUnclaim|TestAxonBackend_DepAddRemoveAndTree|TestAxonBackend_AppendEventSplitsIntoEventsCollection|TestAxonBackend_JSONLImportExportRoundTrip|TestAxonBackend_GraphQLClientBoundary|TestAxonBackend_GraphQLMapping_BeadsAndEvents' -count=1 \u0026\u0026 lefthook run pre-commit\nexit_code=0\noutput:\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/bead\t0.042s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/bead/axon\t0.004s [no tests to run]\n╭──────────────────────────────────────╮\n│ 🥊 lefthook v2.1.6  hook: pre-commit │\n╰──────────────────────────────────────╯\n│  Skipping hook sync: core.hooksPath is set locally to '/Users/erik/Projects/ddx/.git/hooks'            \n│                                                                                                        \n│  hint: Unset it:                                                                                       \n│  hint:   git config --unset-all --local core.hooksPath                                                 \n│  hint:                                                                                                 \n│  hint: Run 'lefthook install --reset-hooks-path' to automatically unset it.                            \n│  hint:                                                                                                 \n│  hint: Run 'lefthook install --force' to install hooks anyway in '/Users/erik/Projects/ddx/.git/hooks'.\n│  test-engineer-persona-drift (skip) no matching staged files\n│  conflicts (skip) no matching staged files\n│  ddx-validate (skip) no matching staged files\n│  debug-python (skip) no files for inspection\n│  design-md-lint (skip) no matching staged files\n│  large-files (skip) no files for inspection\n│  go-test (skip) by condition\n│  secrets (skip) no files for inspection\n│  evidence-lint (skip) no matching staged files\n│  go-fmt (skip) no files for inspection\n│  go-build (skip) no matching staged files\n│  sync-embedded-skills (skip) no matching staged files\n│  skill-schema (skip) no matching staged files\n│  go-lint (skip) no files for inspection\n│  runtime-lint (skip) no matching staged files\n                                      \n  ────────────────────────────────────\nsummary: (done in 0.01 seconds)       \n",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "no_changes_verified",
+          "source": "ddx agent work",
+          "summary": "no_changes_verified"
+        },
+        {
+          "actor": "erik",
+          "body": "verification_command passed: cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestAxonBackend_CreateAndGet|TestAxonBackend_UpdateMutatesAndPersists|TestAxonBackend_ClaimAndUnclaim|TestAxonBackend_DepAddRemoveAndTree|TestAxonBackend_AppendEventSplitsIntoEventsCollection|TestAxonBackend_JSONLImportExportRoundTrip|TestAxonBackend_GraphQLClientBoundary|TestAxonBackend_GraphQLMapping_BeadsAndEvents' -count=1 \u0026\u0026 lefthook run pre-commit\nrationale: status: no_changes\nreason: The Axon backend boundary, GraphQL-backed read/write path, and conformance tests required by this bead are already present in the current worktree, and the targeted verification passed without any code edits.\nverification_command: cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestAxonBackend_CreateAndGet|TestAxonBackend_UpdateMutatesAndPersists|TestAxonBackend_ClaimAndUnclaim|TestAxonBackend_DepAddRemoveAndTree|TestAxonBackend_AppendEventSplitsIntoEventsCollection|TestAxonBackend_JSONLImportExportRoundTrip|TestAxonBackend_GraphQLClientBoundary|TestAxonBackend_GraphQLMapping_BeadsAndEvents' -count=1 \u0026\u0026 lefthook run pre-commit\nresult_rev=c65e7355d9aab3ffec15416eb76dfb4c730e9505\nbase_rev=c65e7355d9aab3ffec15416eb76dfb4c730e9505",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "already_satisfied"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-11T17:48:35.731203013Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "Design convergence on bead backend interfaces (commit 05d13d2f8); rescope under new gating bead ddx-c6317784."
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.464088929Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9c5bca8f)\",\"fingerprint\":\"c71d54bf44dc3093e38acf28a2ebe4a5097e53331564eb3ff3bc1e711f9b33e1\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"c71d54bf44dc3093e38acf28a2ebe4a5097e53331564eb3ff3bc1e711f9b33e1\"}",
+          "created_at": "2026-07-02T23:28:46.20192683Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T00:08:19.821383606Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260702T234153-e271edd7\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":5078769,\"output_tokens\":34488,\"total_tokens\":5113257,\"cost_usd\":0,\"duration_ms\":1569681,\"exit_code\":0}",
+          "created_at": "2026-07-03T00:08:20.626220568Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=5113257 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260702T234153-e271edd7\",\"bead_id\":\"ddx-9c5bca8f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-03T00:08:24.680592521Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=retryable package-level performance regression in cli/internal/bead/store_perf_test.go; go test ./internal/bead/... fails on TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget with lock timeout / p99 wait over budget, even when run in isolation. The Axon-specific targeted verification and lefthook run pre-commit were green.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-07-03T00:08:25.777609727Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: retryable package-level performance regression in cli/internal/bead/store_perf_test.go; go test ./internal/bead/... fails on TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget with lock timeout / p99 wait over budget, even when run in isolation. The Axon-specific targeted verification and lefthook run pre-commit were green.\ndecision_audit={\"failure_class\":\"no_changes\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=27cc9c9dd7ec75e3ef8f8eb00c70c957919d5de4\nbase_rev=27cc9c9dd7ec75e3ef8f8eb00c70c957919d5de4\nretry_after=2026-07-03T00:13:27Z\noutcome_reason=no_changes",
+          "created_at": "2026-07-03T00:08:28.678019367Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9c5bca8f)\",\"fingerprint\":\"c71d54bf44dc3093e38acf28a2ebe4a5097e53331564eb3ff3bc1e711f9b33e1\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"c71d54bf44dc3093e38acf28a2ebe4a5097e53331564eb3ff3bc1e711f9b33e1\"}",
+          "created_at": "2026-07-03T10:34:19.731169832Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "queue-rank": 290,
+      "session_id": "eb-4cea0e5c",
+      "work-last-detail": "retryable package-level performance regression in cli/internal/bead/store_perf_test.go; go test ./internal/bead/... fails on TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget with lock timeout / p99 wait over budget, even when run in isolation. The Axon-specific targeted verification and lefthook run pre-commit were green.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-07-03T00:13:27Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "retryable package-level performance regression in cli/internal/bead/store_perf_test.go; go test ./internal/bead/... fails on TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget with lock timeout / p99 wait over budget, even when run in isolation. The Axon-specific targeted verification and lefthook run pre-commit were green.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T103424-cebe4b82",
+    "prompt": ".ddx/executions/20260703T103424-cebe4b82/prompt.md",
+    "manifest": ".ddx/executions/20260703T103424-cebe4b82/manifest.json",
+    "result": ".ddx/executions/20260703T103424-cebe4b82/result.json",
+    "checks": ".ddx/executions/20260703T103424-cebe4b82/checks.json",
+    "usage": ".ddx/executions/20260703T103424-cebe4b82/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9c5bca8f-20260703T103424-cebe4b82"
+  },
+  "prompt_sha": "279b79213f4b0070b25f0633d6f8aaa71a92dd20eb21c6ef56dcdb3754df14d6"
+}
