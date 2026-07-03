@@ -1,0 +1,714 @@
+--- FAIL: TestReplay_OverridesAppliedToDispatch (0.07s)
+    bead_replay_test.go:133: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/bead_replay_test.go:133
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T130000-ccdd3344: open /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/executions/20260501T130000-ccdd3344/manifest.json: no such file or directory
+        	Test:       	TestReplay_OverridesAppliedToDispatch
+--- FAIL: TestReplay_DoesNotCountTowardBeadAttemptHistory (0.04s)
+    bead_replay_test.go:172: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/bead_replay_test.go:172
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T140000-eeff5566: open /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/executions/20260501T140000-eeff5566/manifest.json: no such file or directory
+        	Test:       	TestReplay_DoesNotCountTowardBeadAttemptHistory
+--- FAIL: TestReplay_AppendsMetricsRowWithReplayOf (0.04s)
+    bead_replay_test.go:225: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/bead_replay_test.go:225
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T150000-aabbccdd: open /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/executions/20260501T150000-aabbccdd/manifest.json: no such file or directory
+        	Test:       	TestReplay_AppendsMetricsRowWithReplayOf
+--- FAIL: TestReplay_PrintsComparison (0.04s)
+    bead_replay_test.go:282: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/bead_replay_test.go:282
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T160000-11223344: open /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/executions/20260501T160000-11223344/manifest.json: no such file or directory
+        	Test:       	TestReplay_PrintsComparison
+--- FAIL: TestReplayBench_MultipleVariantsInParallel (0.30s)
+    bead_replay_test.go:346: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/bead_replay_test.go:346
+        	Error:      	Received unexpected error:
+        	            	no executions found for bead bench-bead
+        	Test:       	TestReplayBench_MultipleVariantsInParallel
+--- FAIL: TestCleanupCommand_DryRunReportsWithoutDeleting (2.11s)
+    cleanup_test.go:95: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:95
+        	Error:      	"cleanup: would remove 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: would remove 4563 byte(s), 3 inode(s)\ncleanup: preserved 285 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupCommand_DryRunReportsWithoutDeleting2395477266/001 (foreign_git_worktree_list): git worktree list: exit status 128\nrun again with --apply to remove these resources\n" does not contain "cleanup: would remove 1 stale temp dir(s), 0 registered worktree(s), 1 run-state file(s)"
+        	Test:       	TestCleanupCommand_DryRunReportsWithoutDeleting
+--- FAIL: TestCleanupCommand_ApplyRemovesStaleDDxResources (0.53s)
+    cleanup_test.go:120: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:120
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 4562 byte(s), 3 inode(s)\ncleanup: preserved 285 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupCommand_ApplyRemovesStaleDDxResources770474578/001 (foreign_git_worktree_list): git worktree list: exit status 128\n" does not contain "cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 1 run-state file(s)"
+        	Test:       	TestCleanupCommand_ApplyRemovesStaleDDxResources
+    cleanup_test.go:122: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:122
+        	Error:      	file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupCommand_ApplyRemovesStaleDDxResources770474578/001/.ddx/run-state.json" exists
+        	Test:       	TestCleanupCommand_ApplyRemovesStaleDDxResources
+--- FAIL: TestCleanupRunStateDoesNotDirtyTrackedRepo (0.59s)
+    cleanup_test.go:160: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:160
+        	Error:      	"cleanup: removed 0 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: preserved 285 complete evidence bundle(s)\n" does not contain "cleanup: removed 0 stale temp dir(s), 0 registered worktree(s), 2 run-state file(s), 0 scratch dir(s)"
+        	Test:       	TestCleanupRunStateDoesNotDirtyTrackedRepo
+    cleanup_test.go:161: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:161
+        	Error:      	file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupRunStateDoesNotDirtyTrackedRepo1777302706/001/.ddx/run-state.json" exists
+        	Test:       	TestCleanupRunStateDoesNotDirtyTrackedRepo
+    cleanup_test.go:162: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:162
+        	Error:      	file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupRunStateDoesNotDirtyTrackedRepo1777302706/001/.ddx/run-state/20260506T154739-live-cafebabe.json" exists
+        	Test:       	TestCleanupRunStateDoesNotDirtyTrackedRepo
+--- FAIL: TestCleanupCommand_JSONShape (0.56s)
+    cleanup_test.go:186: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:186
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestCleanupCommand_JSONShape
+--- FAIL: TestCleanupCommand_DoesNotRemovePreservedEvidence (0.88s)
+    cleanup_test.go:218: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:218
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 4570 byte(s), 3 inode(s)\ncleanup: preserved 285 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupCommand_DoesNotRemovePreservedEvidence3427690818/001 (foreign_git_worktree_list): git worktree list: exit status 128\n" does not contain "cleanup: preserved 2 complete evidence bundle(s)"
+        	Test:       	TestCleanupCommand_DoesNotRemovePreservedEvidence
+--- FAIL: TestCleanupEndToEnd_PreservesPublishedEvidence (0.54s)
+    cleanup_test.go:252: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:252
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 4564 byte(s), 3 inode(s)\ncleanup: preserved 285 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestCleanupEndToEnd_PreservesPublishedEvidence3095289737/001 (foreign_git_worktree_list): git worktree list: exit status 128\n" does not contain "cleanup: preserved 2 complete evidence bundle(s)"
+        	Test:       	TestCleanupEndToEnd_PreservesPublishedEvidence
+--- FAIL: TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees (0.58s)
+    cleanup_test.go:293: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:293
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 4603 byte(s), 3 inode(s)\ncleanup: preserved 285 complete evidence bundle(s)\n" does not contain "cleanup: removed 1 stale temp dir(s), 1 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)"
+        	Test:       	TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees
+    cleanup_test.go:299: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:299
+        	Error:      	"worktree /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork1761178624/001\nHEAD ccbddce08a30cb3f551b051588b527fed6115470\nbranch refs/heads/main\n\nworktree /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork1761178624/002/ddx-exec-wt/.execute-bead-wt-ddx-cleanup-active-20260508T120000-feedface\nHEAD ccbddce08a30cb3f551b051588b527fed6115470\ndetached\n\nworktree /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork1761178624/002/ddx-exec-wt/.execute-bead-wt-ddx-cleanup-registered-20260508T120000-deadbeef\nHEAD ccbddce08a30cb3f551b051588b527fed6115470\ndetached" should not contain "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork1761178624/002/ddx-exec-wt/.execute-bead-wt-ddx-cleanup-registered-20260508T120000-deadbeef"
+        	Test:       	TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees
+--- FAIL: TestCleanupCommand_JSONPreservesExistingCleanupFields (0.55s)
+    cleanup_test.go:353: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/cleanup_test.go:353
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestCleanupCommand_JSONPreservesExistingCleanupFields
+--- FAIL: TestDoctor_ReportsAndAppliesHousekeepingCounts (0.81s)
+    doctor_housekeeping_test.go:52: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/doctor_housekeeping_test.go:52
+        	Error:      	"🩺 DDx Installation Diagnostics\n=====================================\n\n✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)\n   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin/ddx)\n   💡 Re-run install.sh to reinstall to the canonical location\n   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin is earlier in your PATH\n   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx\n   💡 Or re-run install.sh to update all copies\n✓ Checking PATH Configuration... ✅ PATH Configuration\n✓ Checking Configuration... ✅ Configuration Valid\n✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file\n✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported\n   ⚠️  Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n   💡 Ensure the pinned vale binary is available on PATH\n✓ Checking Git... ✅ Git Available\n✓ Checking Git Repo Health... ✅ Git Repo Clean\n✓ Checking Worktrees Registry... ✅ Worktrees Registry\n✓ Checking Network... ✅ Network Connectivity\n✓ Checking Permissions... ✅ File Permissions\n✓ Checking Library Path... ⚠️  Library Path Issues (optional)\n✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync\n✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/.local/share/ddx/global/plugins/ddx) — missing\n   Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — missing\n✓ Checking Sync Status... ✅ Sync Status\n✓ Checking Execution Housekeeping... ⚠️  stale worktrees=1, stale worker dirs=0, stale execution dirs=0\n✓ Checking package.json locations... ✅ Node dependencies up to date\n\n⚠️  Some non-critical issues detected. DDX is functional but may have limitations.\n💡 Run 'ddx doctor --help' for troubleshooting tips.\n\n📊 DETAILED DIAGNOSTIC REPORT\n========================================\n\n🛠️  DETECTED ISSUES (4):\n\nIssue #1: binary_not_canonical\n  Description: Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin/ddx)\n  Remediation Steps:\n    1. Re-run install.sh to reinstall to the canonical location\n    2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin is earlier in your PATH\n\nIssue #2: binary_sha_mismatch\n  Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n  Remediation Steps:\n    1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx\n    2. Or re-run install.sh to update all copies\n\nIssue #3: prose_checker\n  Description: Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n  Remediation Steps:\n    1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n    2. Ensure the pinned vale binary is available on PATH\n\nIssue #4: execution_housekeeping\n  Description: Stale execution state detected (1 worktrees, 0 worker dirs, 0 execution dirs)\n  Remediation Steps:\n    1. Run 'ddx doctor --apply' to reap stale worktrees, worker dirs, and execution evidence\n    2. Adjust DDX_WORKTREE_REAP_MAX_AGE or DDX_EXECUTION_RETAIN_DAYS if the retention window is too aggressive\n\n" does not contain "stale worktrees=1, stale worker dirs=1, stale execution dirs=1"
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:59: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/doctor_housekeeping_test.go:59
+        	Error:      	"🩺 DDx Installation Diagnostics\n=====================================\n\n✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)\n   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin/ddx)\n   💡 Re-run install.sh to reinstall to the canonical location\n   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin is earlier in your PATH\n   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx\n   💡 Or re-run install.sh to update all copies\n✓ Checking PATH Configuration... ✅ PATH Configuration\n✓ Checking Configuration... ✅ Configuration Valid\n✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file\n✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported\n   ⚠️  Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n   💡 Ensure the pinned vale binary is available on PATH\n✓ Checking Git... ✅ Git Available\n✓ Checking Git Repo Health... ✅ Git Repo Clean\n✓ Checking Worktrees Registry... ✅ Worktrees Registry\n✓ Checking Network... ✅ Network Connectivity\n✓ Checking Permissions... ✅ File Permissions\n✓ Checking Library Path... ⚠️  Library Path Issues (optional)\n✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync\n✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/.local/share/ddx/global/plugins/ddx) — missing\n   Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — missing\n✓ Checking Sync Status... ✅ Sync Status\n✓ Checking Execution Housekeeping... ✅ stale worktrees=1, stale worker dirs=0, stale execution dirs=0 (applied)\n✓ Checking package.json locations... ✅ Node dependencies up to date\n\n⚠️  Some non-critical issues detected. DDX is functional but may have limitations.\n💡 Run 'ddx doctor --help' for troubleshooting tips.\n\n📊 DETAILED DIAGNOSTIC REPORT\n========================================\n\n🛠️  DETECTED ISSUES (3):\n\nIssue #1: binary_not_canonical\n  Description: Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin/ddx)\n  Remediation Steps:\n    1. Re-run install.sh to reinstall to the canonical location\n    2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin is earlier in your PATH\n\nIssue #2: binary_sha_mismatch\n  Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n  Remediation Steps:\n    1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx\n    2. Or re-run install.sh to update all copies\n\nIssue #3: prose_checker\n  Description: Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n  Remediation Steps:\n    1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n    2. Ensure the pinned vale binary is available on PATH\n\n" does not contain "stale worktrees=1, stale worker dirs=1, stale execution dirs=1 (applied)"
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:61: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/doctor_housekeeping_test.go:61
+        	Error:      	directory "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsAndAppliesHousekeepingCounts2133844640/001/.ddx/workers/agent-loop-doctor-stale" exists
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:62: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/doctor_housekeeping_test.go:62
+        	Error:      	directory "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsAndAppliesHousekeepingCounts2133844640/001/.ddx/executions/20260101T000000-feedface" exists
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:63: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/doctor_housekeeping_test.go:63
+        	Error:      	unable to find file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsAndAppliesHousekeepingCounts2133844640/001/.ddx/executions-archive/2026/01/20260101T000000-feedface"
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+🩺 DDx Installation Diagnostics
+=====================================
+
+✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)
+   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin/ddx)
+   💡 Re-run install.sh to reinstall to the canonical location
+   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin is earlier in your PATH
+   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+   💡 Or re-run install.sh to update all copies
+✓ Checking PATH Configuration... ✅ PATH Configuration
+✓ Checking Configuration... ✅ Configuration Valid
+✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+   ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+   💡 Ensure the pinned vale binary is available on PATH
+✓ Checking Git... ✅ Git Available
+✓ Checking Git Repo Health... ✅ Git Repo Clean
+✓ Checking Worktrees Registry... ✅ Worktrees Registry
+✓ Checking Network... ✅ Network Connectivity
+✓ Checking Permissions... ✅ File Permissions
+✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/.local/share/ddx/global/plugins/ddx) — missing
+   Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — missing
+✓ Checking Sync Status... ✅ Sync Status
+✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+✓ Checking package.json locations... ✅ Node dependencies up to date
+DDx skill symlink detected under .agents/skills; pre-migration DDx skill install detected
+run: ddx update --force
+Error: legacy DDx skill symlinks detected
+Usage:
+  ddx doctor [flags]
+
+Flags:
+      --apply          Apply stale worktree/worker/execution housekeeping while running diagnostics
+      --fix            Automatically remediate detected git-repo corruption (core.bare/core.worktree/core.hooksPath)
+  -h, --help           help for doctor
+      --paths string   Space-separated staged file paths; when set, only runs checks relevant to those paths (used by the ddx-validate pre-commit hook)
+      --plugins        Audit installed plugins for manifest and skill issues
+  -v, --verbose        Show detailed diagnostic output
+
+Global Flags:
+      --config string              config file (default is $HOME/.ddx.yml)
+      --library-base-path string   override path for DDx library location
+      --no-update-check            Disable the automatic update check (network call) on each command
+
+🩺 DDx Installation Diagnostics
+=====================================
+
+✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)
+   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin/ddx)
+   💡 Re-run install.sh to reinstall to the canonical location
+   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/home/.local/bin is earlier in your PATH
+   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+   💡 Or re-run install.sh to update all copies
+✓ Checking PATH Configuration... ✅ PATH Configuration
+✓ Checking Configuration... ✅ Configuration Valid
+✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+   ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+   💡 Ensure the pinned vale binary is available on PATH
+✓ Checking Git... ✅ Git Available
+✓ Checking Git Repo Health... ✅ Git Repo Clean
+✓ Checking Worktrees Registry... ✅ Worktrees Registry
+✓ Checking Network... ✅ Network Connectivity
+✓ Checking Permissions... ✅ File Permissions
+✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/.local/share/ddx/global/plugins/ddx) — missing
+   Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — missing
+✓ Checking Sync Status... ✅ Sync Status
+✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+✓ Checking package.json locations... ✅ Node dependencies up to date
+--- FAIL: TestDoctor_ReportsBothInstallLayers (1.63s)
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/project_install_present (0.39s)
+        doctor_test.go:327: output missing project install status "ok":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_present703226714/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_present703226714/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ✅ Worktrees Registry
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ✅ Library Path Accessible
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_present703226714/002/xdg/ddx/global/plugins/ddx) — missing
+               Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — missing
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (3):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_present703226714/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_present703226714/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/project_falls_through_to_global (0.41s)
+        doctor_test.go:327: output missing project install status "lazy-resolves-to-global":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo2563031362/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo2563031362/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ✅ Worktrees Registry
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo2563031362/002/xdg/ddx/global/plugins/ddx) — ok
+               Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — lazy-resolves-to-global
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (3):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo2563031362/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo2563031362/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/project_install_missing (0.40s)
+        doctor_test.go:327: output missing project install status "missing":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_missing1097869397/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_missing1097869397/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ✅ Worktrees Registry
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_missing1097869397/002/xdg/ddx/global/plugins/ddx) — missing
+               Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — missing
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (3):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_missing1097869397/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersproject_install_missing1097869397/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/both_project_and_global_present (0.43s)
+        doctor_test.go:327: output missing project install status "ok":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres561752898/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres561752898/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ✅ Worktrees Registry
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ✅ Library Path Accessible
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres561752898/002/xdg/ddx/global/plugins/ddx) — ok
+               Project Install (/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/.ddx/plugins/ddx) — lazy-resolves-to-global
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (3):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres561752898/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres561752898/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go-build403564732/b001/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+--- FAIL: TestStaleWorktreeMasterDiagnosticReportsMissingExecuteBeadPath (0.00s)
+    doctor_test.go:550: expected stale master issue, got nil
+--- FAIL: TestWorkPreflight_WarnsOnceForMissingLifecycleSkill (2.28s)
+    project_runtime_preflight_test.go:66: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:66
+        	Error:      	"operator attention: project root has uncommitted tracked changes (cli/internal/agent/evidence_telemetry_test.go); resolve before resuming autonomous work\n\nproject: /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c\nworker exited: operator attention required\nattempts: 0  |  closed: 0  |  changed: 0  |  already-satisfied: 0  |  preserved: 0  |  failures: 0\n\noperator attention:\n  project root has uncommitted tracked changes (cli/internal/agent/evidence_telemetry_test.go); resolve before resuming autonomous work\n  project root: /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c\n  dirty paths: cli/internal/agent/evidence_telemetry_test.go\n" does not contain "preflight warning:"
+        	Test:       	TestWorkPreflight_WarnsOnceForMissingLifecycleSkill
+        	Messages:   	first invocation must emit the preflight warning
+    project_runtime_preflight_test.go:67: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:67
+        	Error:      	"operator attention: project root has uncommitted tracked changes (cli/internal/agent/evidence_telemetry_test.go); resolve before resuming autonomous work\n\nproject: /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c\nworker exited: operator attention required\nattempts: 0  |  closed: 0  |  changed: 0  |  already-satisfied: 0  |  preserved: 0  |  failures: 0\n\noperator attention:\n  project root has uncommitted tracked changes (cli/internal/agent/evidence_telemetry_test.go); resolve before resuming autonomous work\n  project root: /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c\n  dirty paths: cli/internal/agent/evidence_telemetry_test.go\n" does not contain "ddx update --force"
+        	Test:       	TestWorkPreflight_WarnsOnceForMissingLifecycleSkill
+--- FAIL: TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill (0.47s)
+    project_runtime_preflight_test.go:112: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:112
+        	Error:      	"bead not found: ddx-preflight-try\nError: \n" does not contain "preflight warning:"
+        	Test:       	TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill
+        	Messages:   	preflight warning must appear in output
+    project_runtime_preflight_test.go:113: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:113
+        	Error:      	"bead not found: ddx-preflight-try\nError: \n" does not contain "ddx update --force"
+        	Test:       	TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill
+        	Messages:   	remediation must include ddx update --force
+    project_runtime_preflight_test.go:114: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:114
+        	Error:      	"bead not found: ddx-preflight-try\nError: \n" does not contain "ddx doctor"
+        	Test:       	TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill
+        	Messages:   	remediation must include ddx doctor
+--- FAIL: TestServerPreflight_MissingLifecycleSkillStartsDegraded (0.74s)
+    project_runtime_preflight_test.go:149: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:149
+        	Error:      	"DDx server listening on https://127.0.0.1:7743\n" does not contain "bead-lifecycle"
+        	Test:       	TestServerPreflight_MissingLifecycleSkillStartsDegraded
+        	Messages:   	degraded diagnostics must mention bead-lifecycle
+    project_runtime_preflight_test.go:150: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_runtime_preflight_test.go:150
+        	Error:      	"DDx server listening on https://127.0.0.1:7743\n" does not contain "ddx update --force"
+        	Test:       	TestServerPreflight_MissingLifecycleSkillStartsDegraded
+        	Messages:   	degraded diagnostics must include primary remediation
+--- FAIL: TestWorktreeRegistry_OperatorRePin (0.09s)
+    project_worktree_test.go:37: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/project_worktree_test.go:37
+        	Error:      	Not equal: 
+        	            	expected: "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorktreeRegistry_OperatorRePin1471546984/002/demo-project-b"
+        	            	actual  : "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorktreeRegistry_OperatorRePin1471546984/001/demo-project-a"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorktreeRegistry_OperatorRePin1471546984/002/demo-project-b
+        	            	+/home/erik/.cache/fleet-tmp/ddx-cmd-tests-2671333720/TestWorktreeRegistry_OperatorRePin1471546984/001/demo-project-a
+        	Test:       	TestWorktreeRegistry_OperatorRePin
+DDx dev (commit: unknown, built: unknown)
+--- FAIL: TestTryResourcePreflight_FailsBeforeClaim (0.51s)
+    resource_preflight_test.go:78: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/resource_preflight_test.go:78
+        	Error:      	"bead not found: ddx-resource-try\nError: \n" does not contain "resource_exhausted"
+        	Test:       	TestTryResourcePreflight_FailsBeforeClaim
+    resource_preflight_test.go:79: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/resource_preflight_test.go:79
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestTryResourcePreflight_FailsBeforeClaim
+--- FAIL: TestTryResourceExhaustionEndToEnd_Reclaimable (0.54s)
+    resource_preflight_test.go:147: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/resource_preflight_test.go:147
+        	Error:      	"bead not found: ddx-resource-try-reclaimable\nError: \n" does not contain "resource_exhausted"
+        	Test:       	TestTryResourceExhaustionEndToEnd_Reclaimable
+    resource_preflight_test.go:148: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/resource_preflight_test.go:148
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestTryResourceExhaustionEndToEnd_Reclaimable
+--- FAIL: TestRunPersonaInjectsBodyIntoPrompt (0.08s)
+    run_cmd_test.go:210: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/run_cmd_test.go:210
+        	Error:      	Received unexpected error:
+        	            	persona "test-reviewer": persona 'test-reviewer' not found
+        	Test:       	TestRunPersonaInjectsBodyIntoPrompt
+DDx dev (commit: unknown, built: unknown)
+--- FAIL: TestExecuteLoopLanding_StagesAttachmentDir (0.52s)
+    try_attachment_commit_test.go:42: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_attachment_commit_test.go:42
+        	Error:      	Received unexpected error:
+        	Test:       	TestExecuteLoopLanding_StagesAttachmentDir
+--- FAIL: TestExecuteLoopLanding_AttachmentsCommittedUnderIndexLockContention (0.54s)
+    try_attachment_commit_test.go:78: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_attachment_commit_test.go:78
+        	Error:      	Received unexpected error:
+        	Test:       	TestExecuteLoopLanding_AttachmentsCommittedUnderIndexLockContention
+--- FAIL: TestTryDocsChanged_AttachesProseEvidence (0.51s)
+    try_prose_test.go:77: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_prose_test.go:77
+        	Error:      	Received unexpected error:
+        	Test:       	TestTryDocsChanged_AttachesProseEvidence
+        	Messages:   	ddx try must succeed: bead not found: docs-bead-001
+        	            	Error: 
+--- FAIL: TestTryNoDocsChanged_SkipsProseCheck (0.64s)
+    try_prose_test.go:121: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_prose_test.go:121
+        	Error:      	Received unexpected error:
+        	Test:       	TestTryNoDocsChanged_SkipsProseCheck
+        	Messages:   	ddx try must succeed: bead not found: nodocs-bead-001
+        	            	Error: 
+--- FAIL: TestTryProseFindings_AdvisoryByDefault (0.50s)
+    try_prose_test.go:153: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_prose_test.go:153
+        	Error:      	Received unexpected error:
+        	Test:       	TestTryProseFindings_AdvisoryByDefault
+        	Messages:   	ddx try with advisory prose findings must still exit zero: bead not found: advisory-bead-001
+        	            	Error: 
+--- FAIL: TestTryProseFindings_FedBackBeforeFinalization (0.52s)
+    try_prose_test.go:190: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_prose_test.go:190
+        	Error:      	Received unexpected error:
+        	Test:       	TestTryProseFindings_FedBackBeforeFinalization
+        	Messages:   	ddx try must succeed: bead not found: timing-bead-001
+        	            	Error: 
+--- FAIL: TestTry_BeadClosed (0.76s)
+    try_test.go:197: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:197
+        	Error:      	"bead not found: closed-bead-001\nError: \n" does not contain "bead is not claimable (status=closed)"
+        	Test:       	TestTry_BeadClosed
+        	Messages:   	stderr must name the closed status
+--- FAIL: TestTry_BeadCancelledNotClaimable (0.48s)
+    try_test.go:216: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:216
+        	Error:      	"bead not found: cancelled-bead-001\nError: \n" does not contain "bead is not claimable (status=cancelled)"
+        	Test:       	TestTry_BeadCancelledNotClaimable
+        	Messages:   	stderr must name the cancelled status
+--- FAIL: TestTry_BeadUnmetDeps (0.55s)
+    try_test.go:242: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:242
+        	Error:      	"bead not found: target-bead-001\nError: \n" does not contain "bead has unmet dependencies"
+        	Test:       	TestTry_BeadUnmetDeps
+        	Messages:   	stderr must describe the unmet dep condition
+    try_test.go:244: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:244
+        	Error:      	"bead not found: target-bead-001\nError: \n" does not contain "dep-bead-001"
+        	Test:       	TestTry_BeadUnmetDeps
+        	Messages:   	stderr must name the blocking dep ID
+--- FAIL: TestTry_HappyPath_ClaimsAndExecutes (0.52s)
+    try_test.go:319: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:319
+        	Error:      	Received unexpected error:
+        	Test:       	TestTry_HappyPath_ClaimsAndExecutes
+        	Messages:   	ddx try with a successful stub executor must exit zero: bead not found: happy-bead-001
+        	            	Error: 
+--- FAIL: TestTryUsesSameStoreAsBeadShowInLinkedWorktree (0.70s)
+    try_test.go:351: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:351
+        	Error:      	Received unexpected error:
+        	Test:       	TestTryUsesSameStoreAsBeadShowInLinkedWorktree
+        	Messages:   	try must use the same canonical store as bead show; output=bead not found: ddx-try-linked-store
+        	            	Error: 
+--- FAIL: TestTry_ForceClaimBypassesCooldown (1.21s)
+    try_test.go:395: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:395
+        	Error:      	"bead not found: cooldown-bead-001\nError: \n" does not contain "retry cooldown"
+        	Test:       	TestTry_ForceClaimBypassesCooldown
+    try_test.go:406: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:406
+        	Error:      	Received unexpected error:
+        	Test:       	TestTry_ForceClaimBypassesCooldown
+        	Messages:   	ddx try --force-claim must execute cooled bead: bead not found: cooldown-bead-001
+        	            	Error: 
+--- FAIL: TestTry_ForceClaimEmitsAuditEvent (0.51s)
+    try_test.go:468: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:468
+        	Error:      	Received unexpected error:
+        	Test:       	TestTry_ForceClaimEmitsAuditEvent
+        	Messages:   	bead not found: cooldown-bead-audit
+        	            	Error: 
+--- FAIL: TestTryRecordsExecutionRoutingIntent (0.52s)
+    try_test.go:575: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:575
+        	Error:      	Received unexpected error:
+        	Test:       	TestTryRecordsExecutionRoutingIntent
+        	Messages:   	ddx try with a hard bead hint must succeed: bead not found: hint-bead-001
+        	            	Error: 
+--- FAIL: TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower (0.52s)
+    try_test.go:636: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:636
+        	Error:      	Should be true
+        	Test:       	TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower
+        	Messages:   	ddx try must invoke the implementation dispatch; output="bead not found: ddx-zero-config-try-powerClass-standard\nError: \n" err=
+--- FAIL: TestTryZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor (0.44s)
+    try_test.go:693: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:693
+        	Error:      	"[]" should have 2 item(s), but has 0
+        	Test:       	TestTryZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor
+        	Messages:   	ddx try should use the shared try-loop retry state machine; output="bead not found: ddx-zero-config-try-provider-connectivity-retry\nError: \n" err=
+--- FAIL: TestTryZeroConfigCheapHintSkipsRequirementProfile (1.47s)
+    try_test.go:735: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:735
+        	Error:      	Should be true
+        	Test:       	TestTryZeroConfigCheapHintSkipsRequirementProfile
+        	Messages:   	ddx try must invoke the implementation dispatch; output="bead not found: ddx-zero-config-try-powerClass-cheap\nError: \n" err=
+--- FAIL: TestTryIgnoresNumericLegacyRetryFloor (0.43s)
+    try_test.go:777: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:777
+        	Error:      	Should be true
+        	Test:       	TestTryIgnoresNumericLegacyRetryFloor
+        	Messages:   	ddx try must invoke implementation dispatch; output="bead not found: ddx-zero-config-ignore-numeric-hint\nError: \n" err=
+--- FAIL: TestTryInterrupt_InFlightAttemptUnclaimsTarget (5.17s)
+    try_test.go:786: try executor did not start
+--- FAIL: TestTryInterrupt_DoesNotReportOperatorCancel (5.19s)
+    try_test.go:807: try executor did not start
+--- FAIL: TestTry_FlagsPlumbThrough (0.76s)
+    try_test.go:855: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:855
+        	Error:      	Received unexpected error:
+        	Test:       	TestTry_FlagsPlumbThrough
+        	Messages:   	ddx try with routing flags must not fail on flag parsing: bead not found: flag-bead-001
+        	            	Error: 
+--- FAIL: TestTry_HooksWired (0.48s)
+    try_test.go:914: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:914
+        	Error:      	"bead not found: hook-bead-001\nError: \n" does not contain "bead:"
+        	Test:       	TestTry_HooksWired
+        	Messages:   	try command should still render the terminal report
+    try_test.go:916: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:916
+        	Error:      	Not equal: 
+        	            	expected: []string{"bead-lifecycle-lint"}
+        	            	actual  : []string(nil)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,4 +1,2 @@
+        	            	-([]string) (len=1) {
+        	            	- (string) (len=19) "bead-lifecycle-lint"
+        	            	-}
+        	            	+([]string) <nil>
+        	            	 
+        	Test:       	TestTry_HooksWired
+    try_test.go:929: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:929
+        	Error:      	Should be true
+        	Test:       	TestTry_HooksWired
+        	Messages:   	try must emit the lint event when the hook is wired
+    try_test.go:930: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:930
+        	Error:      	Should be true
+        	Test:       	TestTry_HooksWired
+        	Messages:   	try must emit the reviewer-skipped-empty-diff event for empty-diff no_changes
+--- FAIL: TestTry_RecoversOrphanedWorktreesBeforeSpawn (0.52s)
+    try_test.go:1003: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/try_test.go:1003
+        	Error:      	Received unexpected error:
+        	Test:       	TestTry_RecoversOrphanedWorktreesBeforeSpawn
+=== RUN   TestWork_WatchKillingWorkerReapsProviderChildWithin5s
+--- FAIL: TestWork_CtrlC_ExitsCleanlyNoUsageNoRawError (5.20s)
+    work_test.go:96: work executor did not start
+--- FAIL: TestWork_IgnoreCooldownDrainsCooledQueue (1.07s)
+    work_test.go:234: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/work_test.go:234
+        	Error:      	Not equal: 
+        	            	expected: []string{"cool-0", "cool-1", "cool-2", "cool-3", "cool-4"}
+        	            	actual  : []string(nil)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,8 +1,2 @@
+        	            	-([]string) (len=5) {
+        	            	- (string) (len=6) "cool-0",
+        	            	- (string) (len=6) "cool-1",
+        	            	- (string) (len=6) "cool-2",
+        	            	- (string) (len=6) "cool-3",
+        	            	- (string) (len=6) "cool-4"
+        	            	-}
+        	            	+([]string) <nil>
+        	            	 
+        	Test:       	TestWork_IgnoreCooldownDrainsCooledQueue
+--- FAIL: TestWorkPassthroughNotValidated (0.77s)
+    work_test.go:1351: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/work_test.go:1351
+        	Error:      	Should be true
+        	Test:       	TestWorkPassthroughNotValidated
+        	Messages:   	ddx work with no ready beads must report no_ready_work=true
+--- FAIL: TestWorkDefaultDrainModeExitsOnEmptyQueue (1.57s)
+    work_test.go:1378: 
+        	Error Trace:	/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c/cli/cmd/work_test.go:1378
+        	Error:      	Should be true
+        	Test:       	TestWorkDefaultDrainModeExitsOnEmptyQueue
+FAIL
+FAIL	github.com/DocumentDrivenDX/ddx/cmd	281.219s
+FAIL

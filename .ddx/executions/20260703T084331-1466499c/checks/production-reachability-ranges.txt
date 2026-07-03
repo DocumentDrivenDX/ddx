@@ -1,0 +1,5 @@
+cmd/testutils_test.go 27 27
+cmd/testutils_test.go 43 43
+cmd/testutils_test.go 56 56
+cmd/testutils_test.go 131 135
+cmd/wire_telemetry_test.go 1 144

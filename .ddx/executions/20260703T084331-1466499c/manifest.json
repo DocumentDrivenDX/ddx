@@ -1,0 +1,24 @@
+{
+  "attempt_id": "20260703T084331-1466499c",
+  "bead_id": "ddx-7d9d4853",
+  "base_rev": "916bba86f59481dd1595c2e8b1f53610c34d5fb0",
+  "created_at": "2026-07-03T08:43:48.01650365Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7d9d4853",
+    "title": "Wire telemetry",
+    "acceptance": "1. TestWireTelemetry passes\n2. cd cli \u0026\u0026 go test ./cmd/... green\n"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T084331-1466499c",
+    "prompt": ".ddx/executions/20260703T084331-1466499c/prompt.md",
+    "manifest": ".ddx/executions/20260703T084331-1466499c/manifest.json",
+    "result": ".ddx/executions/20260703T084331-1466499c/result.json",
+    "checks": ".ddx/executions/20260703T084331-1466499c/checks.json",
+    "usage": ".ddx/executions/20260703T084331-1466499c/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7d9d4853-20260703T084331-1466499c"
+  },
+  "prompt_sha": "0f807f2d27a2dbd47d4b9f1e469853d278143f506ddf6e05bb8a4133346693af"
+}
