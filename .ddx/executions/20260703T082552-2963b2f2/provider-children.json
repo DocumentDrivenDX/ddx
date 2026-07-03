@@ -1,0 +1,216 @@
+{
+  "attempt_id": "20260703T082552-2963b2f2",
+  "bead_id": "ddx-63e028a2",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-03T08:29:26.259011753Z",
+  "reaped": [
+    {
+      "pid": 2448024,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2449129,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2449177,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2452034,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2452008,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2452558,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2455312,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2458185,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2458689,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2458690,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2459387,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2459419,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2462025,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2462050,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2465519,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2465550,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2466680,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2466708,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2470701,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2470734,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2471881,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2471909,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2473513,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2473900,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "attempt_ended"
+    },
+    {
+      "pid": 2473933,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "attempt_ended"
+    },
+    {
+      "pid": 2413871,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 399,
+      "action": "terminated",
+      "reason": "attempt_ended"
+    }
+  ]
+}
