@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260703T014456-853b9f55",
+  "bead_id": "ddx-523a31da",
+  "base_rev": "f002765f19837792851a7b052b942a8529faa2a5",
+  "created_at": "2026-07-03T01:45:05.633852692Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-523a31da",
+    "title": "Cite ddxroot resolution in the operator-surface specs",
+    "description": "PROBLEM\nThe operator-surface design set describes project-scoped storage for runs, attachments, and sessions, but the local paragraphs that introduce those paths need an explicit `ddx-06cbaa90` citation so the DDx root contract is visible at the point of use.\n\nROOT CAUSE\nThe relevant paragraphs in `docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md:147-153`, `docs/helix/02-design/workers-sessions-operator-surface.md:43-49,67`, and `docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md:152-153,230` already describe the path model, but the governing DDx root reference is not consistently attached there.\n\nPROPOSED FIX\nUpdate those three docs to add the `ddx-06cbaa90` citation in the local project-state paragraphs, and add `cli/internal/agent/operator_surface_docs_test.go` with a focused citation guard for those files. Keep the edits strictly to the operator-surface and run-architecture wording.\n\nNON-SCOPE\n- No changes to bead semantics.\n- No install-topology edits.\n- No migration tooling for existing in-tree repos.\n\nGoverning deps: `ddx-06cbaa90`.\nIn-scope files: `docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md`, `docs/helix/02-design/workers-sessions-operator-surface.md`, `docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md`, `cli/internal/agent/operator_surface_docs_test.go`.",
+    "acceptance": "1. `TestOperatorSurfaceDocs_CiteDdxRootResolution` exists and verifies `ADR-021`, `workers-sessions-operator-surface.md`, and `plan-2026-04-29-artifact-and-run-architecture.md` each cite `ddx-06cbaa90` in the project-state paragraph.\n2. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/...` passes.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "area:docs",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-03T01:42:34.530233824Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T014456-853b9f55",
+    "prompt": ".ddx/executions/20260703T014456-853b9f55/prompt.md",
+    "manifest": ".ddx/executions/20260703T014456-853b9f55/manifest.json",
+    "result": ".ddx/executions/20260703T014456-853b9f55/result.json",
+    "checks": ".ddx/executions/20260703T014456-853b9f55/checks.json",
+    "usage": ".ddx/executions/20260703T014456-853b9f55/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-523a31da-20260703T014456-853b9f55"
+  },
+  "prompt_sha": "9b7426a1407dfb3d738a2fc3dfd16c0c3544c7e38c395c5f8a75875e14be8f29"
+}

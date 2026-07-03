@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260703T015435-00d162fc",
+  "bead_id": "ddx-95a98a32",
+  "base_rev": "a0869e2775f410b06130eddecf9cf6de4d705a4c",
+  "created_at": "2026-07-03T01:54:56.185453109Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-95a98a32",
+    "title": "Cite ddxroot resolution in the helix state-path specs",
+    "description": "PROBLEM\nThe helix artifacts that define project-state paths need their local path-contract paragraphs to cite `ddx-06cbaa90` directly, so readers can see the governing DDx root rule where `ddxroot.Path()` is introduced instead of only finding it in trailing notes.\n\nROOT CAUSE\nThe current text already describes the state-path model in `docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:333-384`, `docs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md:65-78`, and `docs/helix/02-design/solution-designs/SD-020-multi-machine-coordinator-topology.md:88-98`, but the citation is not attached to the paragraphs that actually define the contract.\n\nPROPOSED FIX\nUpdate those three docs so the path-contract paragraphs explicitly cite `ddx-06cbaa90`, and add `cli/internal/agent/helix_docs_test.go` with a focused citation guard that scans those files for the required reference. Keep the changes textual and local to the cited path paragraphs.\n\nNON-SCOPE\n- No behavior changes in CLI or storage code.\n- No install-topology edits.\n- No migration tooling for existing in-tree repos.\n\nGoverning deps: `ddx-06cbaa90`.\nIn-scope files: `docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md`, `docs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md`, `docs/helix/02-design/solution-designs/SD-020-multi-machine-coordinator-topology.md`, `cli/internal/agent/helix_docs_test.go`.",
+    "acceptance": "1. `TestHelixDocs_CiteDdxRootResolution` exists and verifies `TD-031`, `SD-019`, and `SD-020` each cite `ddx-06cbaa90` next to the local project-state path paragraph.\n2. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/...` passes.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "area:docs",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-03T01:44:47.836900832Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: no JSON object found\",\"fingerprint\":\"f17bbe0a46eb1dadb59187515ce25b8441bd48f2bbd8ec18a73190b3438d356b\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"f17bbe0a46eb1dadb59187515ce25b8441bd48f2bbd8ec18a73190b3438d356b\"}",
+          "created_at": "2026-07-03T01:52:34.583130392Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-03T01:54:16.160777067Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T015435-00d162fc",
+    "prompt": ".ddx/executions/20260703T015435-00d162fc/prompt.md",
+    "manifest": ".ddx/executions/20260703T015435-00d162fc/manifest.json",
+    "result": ".ddx/executions/20260703T015435-00d162fc/result.json",
+    "checks": ".ddx/executions/20260703T015435-00d162fc/checks.json",
+    "usage": ".ddx/executions/20260703T015435-00d162fc/usage.json",
+    "worktree": "home/erik/.cache/fleet-tmp/ddx-cmd-tests-3058339142/.cache/ddx/exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T015435-00d162fc"
+  },
+  "prompt_sha": "64550057d19622ca187cd03a1cf1151d9aafa9111838f3d47db7119cba561553"
+}

@@ -1,0 +1,2 @@
+status: blocked
+reason: cli/cmd acceptance test slice fails in existing suite code, not in the docs change set; reruns after clearing generated package-local .ddx state still hit bead-not-found assertions in try tests and a 10m timeout in TestRunPassthroughMinMaxPowerToExecute

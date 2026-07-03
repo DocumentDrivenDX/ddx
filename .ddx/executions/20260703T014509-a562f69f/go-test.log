@@ -1,0 +1,1299 @@
+agent: idle timeout (60ms without meaningful event): cancelling
+agent: loop detected (command="Bash" repeated ≥4 times): cancelling
+agent: tool call timeout (60ms, tool="Bash"): cancelling
+agent: effort "turbo" is not a known reasoning level for harness "codex"; available levels: low, medium, high
+panic: test timed out after 10m0s
+	running tests:
+		TestExecuteBead_ConcurrentWorkers_NoHEADRefRace (8m42s)
+
+goroutine 13118 [running]:
+testing.(*M).startAlarm.func1()
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2802 +0x2cc
+created by time.goFunc
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/time/sleep.go:215 +0x38
+
+goroutine 1 [chan receive, 8 minutes]:
+testing.(*T).Run(0x74cdd21f2d88, {0xc361aa?, 0x23?}, 0xcaf5e0)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2109 +0x3bc
+testing.runTests.func1(0x74cdd21f2d88)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2585 +0x40
+testing.tRunner(0x74cdd21f2d88, 0x74cdd2093be8)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2036 +0xc4
+testing.runTests({0xc124ba, 0x1f}, {0xc34068, 0x2e}, 0x74cdd1f72738, {0x1573140, 0x50f, 0x50f}, {0xffff86764108?, 0x7?, ...})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2583 +0x3f0
+testing.(*M).Run(0x74cdd22a8820)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2443 +0x578
+github.com/DocumentDrivenDX/ddx/internal/agent.TestMain(0x74cdd22a8820)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/agent_test.go:29 +0xb8
+main.main()
+	_testmain.go:2640 +0x88
+
+goroutine 9163 [select, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func5()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:256 +0xc8
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8648
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:253 +0x4c4
+
+goroutine 8333 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:621 +0x198
+created by github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh in goroutine 8645
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:616 +0x14c
+
+goroutine 8645 [chan receive, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir(0xcd71d0?, {0xcd71d0?, 0x74cdd29302a0?}, {0xbe1861, 0x5}, {0x74cdd2932000, 0x8, 0x8}, {0x0, 0x0}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:297 +0x5ec
+github.com/DocumentDrivenDX/ddx/internal/agent.(*Runner).Run(_, {{0xcd7208, 0x74cdd25a2050}, {0x0, 0x0}, {0x0, 0x0}, {0x74cdd279bd40, 0xcf}, {0x0, ...}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/runner.go:173 +0xa58
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchViaResolvedConfig({_, _}, {_, _}, {_, _}, {_, _}, {0x1, {0x0, ...}, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/dispatch.go:41 +0x578
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchAgentRun(...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1591
+github.com/DocumentDrivenDX/ddx/internal/agent.WorktreeAttemptBackend.Run({}, {_, _}, {{0x74cdd22250e0, 0x59}, 0x74cdd2034210, {0x0, 0x0}, {0xccaee0, 0x74cdd226ac80}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/attempt_backend.go:126 +0x114
+github.com/DocumentDrivenDX/ddx/internal/agent.ExecuteBeadWithConfig({_, _}, {_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1129 +0x2770
+github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:79 +0x1f0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace in goroutine 8586
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:76 +0x534
+
+goroutine 9187 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start.func2()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:361 +0xe4
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start in goroutine 8648
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:357 +0xb0
+
+goroutine 8896 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func3()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:220 +0xd0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8647
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:216 +0x3c4
+
+goroutine 8922 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:621 +0x198
+created by github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh in goroutine 8646
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:616 +0x14c
+
+goroutine 8914 [IO wait]:
+internal/poll.runtime_pollWait(0xffff3faec600, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd293a1e0?, 0x74cdd23ee000?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd293a1e0, {0x74cdd23ee000, 0x8000, 0x8000})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd20c2000, {0x74cdd23ee000?, 0x31d?, 0xdc858?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+io.copyBuffer({0xccb9c0, 0x74cdd2604040}, {0xccacb8, 0x74cdd20c2000}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:429 +0x18c
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+os.genericWriteTo(0x74cdd20c2000?, {0xccb9c0?, 0x74cdd2604040?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:295 +0x44
+os.(*File).WriteTo(0x74cdd20c2000, {0xccb9c0, 0x74cdd2604040})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:273 +0x9c
+io.copyBuffer({0xccb9c0, 0x74cdd2604040}, {0xccad38, 0x74cdd20c2000}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:411 +0x98
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func6()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:272 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8647
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:270 +0x540
+
+goroutine 8860 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:621 +0x198
+created by github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh in goroutine 8649
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:616 +0x14c
+
+goroutine 8646 [chan receive, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir(0xcd71d0?, {0xcd71d0?, 0x74cdd29300f0?}, {0xbe1861, 0x5}, {0x74cdd2284780, 0x8, 0x8}, {0x0, 0x0}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:297 +0x5ec
+github.com/DocumentDrivenDX/ddx/internal/agent.(*Runner).Run(_, {{0xcd7208, 0x74cdd20680f0}, {0x0, 0x0}, {0x0, 0x0}, {0x74cdd2cc5ba0, 0xcf}, {0x0, ...}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/runner.go:173 +0xa58
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchViaResolvedConfig({_, _}, {_, _}, {_, _}, {_, _}, {0x1, {0x0, ...}, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/dispatch.go:41 +0x578
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchAgentRun(...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1591
+github.com/DocumentDrivenDX/ddx/internal/agent.WorktreeAttemptBackend.Run({}, {_, _}, {{0x74cdd22250e0, 0x59}, 0x74cdd2646000, {0x0, 0x0}, {0xccaee0, 0x74cdd226adc0}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/attempt_backend.go:126 +0x114
+github.com/DocumentDrivenDX/ddx/internal/agent.ExecuteBeadWithConfig({_, _}, {_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1129 +0x2770
+github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:79 +0x1f0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace in goroutine 8586
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:76 +0x534
+
+goroutine 8911 [IO wait]:
+internal/poll.runtime_pollWait(0xffff3f993800, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd2a26060?, 0x74cdd24e4000?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd2a26060, {0x74cdd24e4000, 0x8000, 0x8000})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd2542020, {0x74cdd24e4000?, 0x1eb?, 0xdc858?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+io.copyBuffer({0xccb9c0, 0x74cdd26a8080}, {0xccacb8, 0x74cdd2542020}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:429 +0x18c
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+os.genericWriteTo(0x74cdd2542020?, {0xccb9c0?, 0x74cdd26a8080?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:295 +0x44
+os.(*File).WriteTo(0x74cdd2542020, {0xccb9c0, 0x74cdd26a8080})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:273 +0x9c
+io.copyBuffer({0xccb9c0, 0x74cdd26a8080}, {0xccad38, 0x74cdd2542020}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:411 +0x98
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func6()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:272 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8646
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:270 +0x540
+
+goroutine 8866 [IO wait, 8 minutes]:
+internal/poll.runtime_pollWait(0xffff3f994200, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd293a120?, 0x74cdd23d412d?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd293a120, {0x74cdd23d412d, 0xed3, 0xed3})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd20820e8, {0x74cdd23d412d?, 0x74cdd20e0e38?, 0x15a5300?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+bufio.(*Scanner).Scan(0x74cdd20e0f20)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/bufio/scan.go:219 +0x3d8
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func7()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:280 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8649
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:277 +0x5e0
+
+goroutine 8649 [chan receive, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir(0xcd71d0?, {0xcd71d0?, 0x74cdd24901e0?}, {0xbe1861, 0x5}, {0x74cdd2aa6100, 0x8, 0x8}, {0x0, 0x0}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:297 +0x5ec
+github.com/DocumentDrivenDX/ddx/internal/agent.(*Runner).Run(_, {{0xcd7208, 0x74cdd21aa2d0}, {0x0, 0x0}, {0x0, 0x0}, {0x74cdd2cc56c0, 0xcf}, {0x0, ...}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/runner.go:173 +0xa58
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchViaResolvedConfig({_, _}, {_, _}, {_, _}, {_, _}, {0x1, {0x0, ...}, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/dispatch.go:41 +0x578
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchAgentRun(...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1591
+github.com/DocumentDrivenDX/ddx/internal/agent.WorktreeAttemptBackend.Run({}, {_, _}, {{0x74cdd22250e0, 0x59}, 0x74cdd20342c0, {0x0, 0x0}, {0xccaee0, 0x74cdd226b2c0}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/attempt_backend.go:126 +0x114
+github.com/DocumentDrivenDX/ddx/internal/agent.ExecuteBeadWithConfig({_, _}, {_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1129 +0x2770
+github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:79 +0x1f0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace in goroutine 8586
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:76 +0x534
+
+goroutine 8912 [IO wait, 8 minutes]:
+internal/poll.runtime_pollWait(0xffff3faec000, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd2a26120?, 0x74cdd22b912d?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd2a26120, {0x74cdd22b912d, 0xed3, 0xed3})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd2542030, {0x74cdd22b912d?, 0x74cdd235fe38?, 0x15a5300?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+bufio.(*Scanner).Scan(0x74cdd235ff20)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/bufio/scan.go:219 +0x3d8
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func7()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:280 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8646
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:277 +0x5e0
+
+goroutine 8895 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start.func2()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:361 +0xe4
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start in goroutine 8647
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:357 +0xb0
+
+goroutine 9186 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:621 +0x198
+created by github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh in goroutine 8648
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:616 +0x14c
+
+goroutine 8923 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start.func2()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:361 +0xe4
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start in goroutine 8646
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:357 +0xb0
+
+goroutine 8799 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func3()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:220 +0xd0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8649
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:216 +0x3c4
+
+goroutine 8315 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func3()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:220 +0xd0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8645
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:216 +0x3c4
+
+goroutine 8462 [IO wait]:
+internal/poll.runtime_pollWait(0xffff3faec800, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd1fb22a0?, 0x74cdd2534000?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd1fb22a0, {0x74cdd2534000, 0x8000, 0x8000})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd2542040, {0x74cdd2534000?, 0x314?, 0xdc858?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+io.copyBuffer({0xccb9c0, 0x74cdd1fa8020}, {0xccacb8, 0x74cdd2542040}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:429 +0x18c
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+os.genericWriteTo(0x74cdd2542040?, {0xccb9c0?, 0x74cdd1fa8020?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:295 +0x44
+os.(*File).WriteTo(0x74cdd2542040, {0xccb9c0, 0x74cdd1fa8020})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:273 +0x9c
+io.copyBuffer({0xccb9c0, 0x74cdd1fa8020}, {0xccad38, 0x74cdd2542040}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:411 +0x98
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func6()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:272 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8645
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:270 +0x540
+
+goroutine 9165 [IO wait, 8 minutes]:
+internal/poll.runtime_pollWait(0xffff3faeca00, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd2bcb560?, 0x74cdd2a4e12d?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd2bcb560, {0x74cdd2a4e12d, 0xed3, 0xed3})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd20c2048, {0x74cdd2a4e12d?, 0x74cdd237ee38?, 0x15a5300?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+bufio.(*Scanner).Scan(0x74cdd237ef20)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/bufio/scan.go:219 +0x3d8
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func7()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:280 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8648
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:277 +0x5e0
+
+goroutine 8334 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start.func2()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:361 +0xe4
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start in goroutine 8645
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:357 +0xb0
+
+goroutine 8647 [chan receive, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir(0xcd71d0?, {0xcd71d0?, 0x74cdd23dc090?}, {0xbe1861, 0x5}, {0x74cdd2932000, 0x8, 0x8}, {0x0, 0x0}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:297 +0x5ec
+github.com/DocumentDrivenDX/ddx/internal/agent.(*Runner).Run(_, {{0xcd7208, 0x74cdd20681e0}, {0x0, 0x0}, {0x0, 0x0}, {0x74cdd274c340, 0xcf}, {0x0, ...}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/runner.go:173 +0xa58
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchViaResolvedConfig({_, _}, {_, _}, {_, _}, {_, _}, {0x1, {0x0, ...}, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/dispatch.go:41 +0x578
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchAgentRun(...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1591
+github.com/DocumentDrivenDX/ddx/internal/agent.WorktreeAttemptBackend.Run({}, {_, _}, {{0x74cdd22250e0, 0x59}, 0x74cdd26460b0, {0x0, 0x0}, {0xccaee0, 0x74cdd226af00}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/attempt_backend.go:126 +0x114
+github.com/DocumentDrivenDX/ddx/internal/agent.ExecuteBeadWithConfig({_, _}, {_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1129 +0x2770
+github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:79 +0x1f0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace in goroutine 8586
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:76 +0x534
+
+goroutine 8800 [select, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func5()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:256 +0xc8
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8649
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:253 +0x4c4
+
+goroutine 8648 [chan receive, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir(0xcd71d0?, {0xcd71d0?, 0x74cdd2c0ed20?}, {0xbe1861, 0x5}, {0x74cdd2932000, 0x8, 0x8}, {0x0, 0x0}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:297 +0x5ec
+github.com/DocumentDrivenDX/ddx/internal/agent.(*Runner).Run(_, {{0xcd7208, 0x74cdd2cbf680}, {0x0, 0x0}, {0x0, 0x0}, {0x74cdd2cc40d0, 0xcf}, {0x0, ...}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/runner.go:173 +0xa58
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchViaResolvedConfig({_, _}, {_, _}, {_, _}, {_, _}, {0x1, {0x0, ...}, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/dispatch.go:41 +0x578
+github.com/DocumentDrivenDX/ddx/internal/agent.dispatchAgentRun(...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1591
+github.com/DocumentDrivenDX/ddx/internal/agent.WorktreeAttemptBackend.Run({}, {_, _}, {{0x74cdd22250e0, 0x59}, 0x74cdd20344d0, {0x0, 0x0}, {0xccaee0, 0x74cdd226b040}, ...})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/attempt_backend.go:126 +0x114
+github.com/DocumentDrivenDX/ddx/internal/agent.ExecuteBeadWithConfig({_, _}, {_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:1129 +0x2770
+github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:79 +0x1f0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace in goroutine 8586
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:76 +0x534
+
+goroutine 8913 [select, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func5()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:256 +0xc8
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8647
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:253 +0x4c4
+
+goroutine 8861 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start.func2()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:361 +0xe4
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*runningProviderGuard).Start in goroutine 8649
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/provider_children.go:357 +0xb0
+
+goroutine 8909 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func3()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:220 +0xd0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8646
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:216 +0x3c4
+
+goroutine 8586 [sync.WaitGroup.Wait, 8 minutes]:
+sync.runtime_SemacquireWaitGroup(0x679f0?, 0x40?)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/sema.go:114 +0x38
+sync.(*WaitGroup).Wait(0x74cdd22cf160)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/sync/waitgroup.go:206 +0xa8
+github.com/DocumentDrivenDX/ddx/internal/agent.TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(0x74cdd21f2248)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead_concurrent_predispatch_test.go:89 +0x5f8
+testing.tRunner(0x74cdd21f2248, 0xcaf5e0)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2101 +0x3a8
+
+goroutine 8894 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh.func1()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:621 +0x198
+created by github.com/DocumentDrivenDX/ddx/internal/agent.startRunStateRefresh in goroutine 8647
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/execute_bead.go:616 +0x14c
+
+goroutine 8463 [IO wait, 8 minutes]:
+internal/poll.runtime_pollWait(0xffff3faec200, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd1fb23c0?, 0x74cdd23d512d?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd1fb23c0, {0x74cdd23d512d, 0xed3, 0xed3})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd2542058, {0x74cdd23d512d?, 0x74cdd2013e38?, 0x15a5300?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+bufio.(*Scanner).Scan(0x74cdd2013f20)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/bufio/scan.go:219 +0x3d8
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func7()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:280 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8645
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:277 +0x5e0
+
+goroutine 8915 [IO wait, 8 minutes]:
+internal/poll.runtime_pollWait(0xffff3f993400, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd293a2a0?, 0x74cdd22de12d?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd293a2a0, {0x74cdd22de12d, 0xed3, 0xed3})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd20c2020, {0x74cdd22de12d?, 0x74cdd23b5e38?, 0x15a5300?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+bufio.(*Scanner).Scan(0x74cdd23b5f20)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/bufio/scan.go:219 +0x3d8
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func7()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:280 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8647
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:277 +0x5e0
+
+goroutine 9164 [IO wait]:
+internal/poll.runtime_pollWait(0xffff3faece00, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd2bcb4a0?, 0x74cdd2a50000?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd2bcb4a0, {0x74cdd2a50000, 0x8000, 0x8000})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd20c2030, {0x74cdd2a50000?, 0x5e7?, 0xdc858?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+io.copyBuffer({0xccb9c0, 0x74cdd2440030}, {0xccacb8, 0x74cdd20c2030}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:429 +0x18c
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+os.genericWriteTo(0x74cdd20c2030?, {0xccb9c0?, 0x74cdd2440030?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:295 +0x44
+os.(*File).WriteTo(0x74cdd20c2030, {0xccb9c0, 0x74cdd2440030})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:273 +0x9c
+io.copyBuffer({0xccb9c0, 0x74cdd2440030}, {0xccad38, 0x74cdd20c2030}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:411 +0x98
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func6()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:272 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8648
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:270 +0x540
+
+goroutine 9162 [select]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func3()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:220 +0xd0
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8648
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:216 +0x3c4
+
+goroutine 8865 [IO wait]:
+internal/poll.runtime_pollWait(0xffff3f993a00, 0x72)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/netpoll.go:351 +0xa0
+internal/poll.(*pollDesc).wait(0x74cdd293a060?, 0x74cdd2428000?, 0x1)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x74cdd293a060, {0x74cdd2428000, 0x8000, 0x8000})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/internal/poll/fd_unix.go:165 +0x234
+os.(*File).read(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file_posix.go:29
+os.(*File).Read(0x74cdd20820d8, {0x74cdd2428000?, 0x314?, 0xdc858?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:144 +0x68
+io.copyBuffer({0xccb9c0, 0x74cdd232e080}, {0xccacb8, 0x74cdd20820d8}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:429 +0x18c
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+os.genericWriteTo(0x74cdd20820d8?, {0xccb9c0?, 0x74cdd232e080?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:295 +0x44
+os.(*File).WriteTo(0x74cdd20820d8, {0xccb9c0, 0x74cdd232e080})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/os/file.go:273 +0x9c
+io.copyBuffer({0xccb9c0, 0x74cdd232e080}, {0xccad38, 0x74cdd20820d8}, {0x0, 0x0, 0x0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:411 +0x98
+io.Copy(...)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/io/io.go:388
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func6()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:272 +0xdc
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8649
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:270 +0x540
+
+goroutine 8461 [select, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func5()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:256 +0xc8
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8645
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:253 +0x4c4
+
+goroutine 8910 [select, 8 minutes]:
+github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir.func5()
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:256 +0xc8
+created by github.com/DocumentDrivenDX/ddx/internal/agent.(*OSExecutor).ExecuteInDir in goroutine 8646
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/executor.go:253 +0x4c4
+FAIL	github.com/DocumentDrivenDX/ddx/internal/agent	600.022s
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent/escalation	(cached)
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent/executeloop	(cached)
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent/failclass	(cached)
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent/try	(cached)
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent/work	(cached)
+ok  	github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe	(cached)
+--- FAIL: TestReplay_OverridesAppliedToDispatch (0.04s)
+    bead_replay_test.go:133: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/bead_replay_test.go:133
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T130000-ccdd3344: open /Users/erik/Projects/ddx/.ddx/executions/20260501T130000-ccdd3344/manifest.json: no such file or directory
+        	Test:       	TestReplay_OverridesAppliedToDispatch
+--- FAIL: TestReplay_DoesNotCountTowardBeadAttemptHistory (0.03s)
+    bead_replay_test.go:172: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/bead_replay_test.go:172
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T140000-eeff5566: open /Users/erik/Projects/ddx/.ddx/executions/20260501T140000-eeff5566/manifest.json: no such file or directory
+        	Test:       	TestReplay_DoesNotCountTowardBeadAttemptHistory
+--- FAIL: TestReplay_AppendsMetricsRowWithReplayOf (0.02s)
+    bead_replay_test.go:225: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/bead_replay_test.go:225
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T150000-aabbccdd: open /Users/erik/Projects/ddx/.ddx/executions/20260501T150000-aabbccdd/manifest.json: no such file or directory
+        	Test:       	TestReplay_AppendsMetricsRowWithReplayOf
+--- FAIL: TestReplay_PrintsComparison (0.02s)
+    bead_replay_test.go:282: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/bead_replay_test.go:282
+        	Error:      	Received unexpected error:
+        	            	load manifest for attempt 20260501T160000-11223344: open /Users/erik/Projects/ddx/.ddx/executions/20260501T160000-11223344/manifest.json: no such file or directory
+        	Test:       	TestReplay_PrintsComparison
+--- FAIL: TestReplayBench_MultipleVariantsInParallel (0.12s)
+    bead_replay_test.go:346: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/bead_replay_test.go:346
+        	Error:      	Received unexpected error:
+        	            	no executions found for bead bench-bead
+        	Test:       	TestReplayBench_MultipleVariantsInParallel
+--- FAIL: TestCleanupCommand_DryRunReportsWithoutDeleting (1.65s)
+    cleanup_test.go:95: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:95
+        	Error:      	"cleanup: would remove 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: would remove 513 byte(s), 3 inode(s)\ncleanup: preserved 139 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupCommand_DryRunReportsWithoutDeleting1461471737/001 (foreign_git_worktree_list): git worktree list: exit status 128\nrun again with --apply to remove these resources\n" does not contain "cleanup: would remove 1 stale temp dir(s), 0 registered worktree(s), 1 run-state file(s)"
+        	Test:       	TestCleanupCommand_DryRunReportsWithoutDeleting
+--- FAIL: TestCleanupCommand_ApplyRemovesStaleDDxResources (1.07s)
+    cleanup_test.go:120: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:120
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 512 byte(s), 3 inode(s)\ncleanup: preserved 139 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupCommand_ApplyRemovesStaleDDxResources199126084/001 (foreign_git_worktree_list): git worktree list: exit status 128\n" does not contain "cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 1 run-state file(s)"
+        	Test:       	TestCleanupCommand_ApplyRemovesStaleDDxResources
+    cleanup_test.go:122: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:122
+        	Error:      	file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupCommand_ApplyRemovesStaleDDxResources199126084/001/.ddx/run-state.json" exists
+        	Test:       	TestCleanupCommand_ApplyRemovesStaleDDxResources
+--- FAIL: TestCleanupRunStateDoesNotDirtyTrackedRepo (1.12s)
+    cleanup_test.go:160: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:160
+        	Error:      	"cleanup: removed 0 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: preserved 139 complete evidence bundle(s)\n" does not contain "cleanup: removed 0 stale temp dir(s), 0 registered worktree(s), 2 run-state file(s), 0 scratch dir(s)"
+        	Test:       	TestCleanupRunStateDoesNotDirtyTrackedRepo
+    cleanup_test.go:161: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:161
+        	Error:      	file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupRunStateDoesNotDirtyTrackedRepo549629598/001/.ddx/run-state.json" exists
+        	Test:       	TestCleanupRunStateDoesNotDirtyTrackedRepo
+    cleanup_test.go:162: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:162
+        	Error:      	file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupRunStateDoesNotDirtyTrackedRepo549629598/001/.ddx/run-state/20260506T154739-live-cafebabe.json" exists
+        	Test:       	TestCleanupRunStateDoesNotDirtyTrackedRepo
+--- FAIL: TestCleanupCommand_JSONShape (1.00s)
+    cleanup_test.go:186: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:186
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestCleanupCommand_JSONShape
+--- FAIL: TestCleanupCommand_DoesNotRemovePreservedEvidence (1.25s)
+    cleanup_test.go:218: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:218
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 520 byte(s), 3 inode(s)\ncleanup: preserved 139 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupCommand_DoesNotRemovePreservedEvidence3911357412/001 (foreign_git_worktree_list): git worktree list: exit status 128\n" does not contain "cleanup: preserved 2 complete evidence bundle(s)"
+        	Test:       	TestCleanupCommand_DoesNotRemovePreservedEvidence
+--- FAIL: TestCleanupEndToEnd_PreservesPublishedEvidence (1.06s)
+    cleanup_test.go:252: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:252
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 512 byte(s), 3 inode(s)\ncleanup: preserved 139 complete evidence bundle(s)\nwarning: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestCleanupEndToEnd_PreservesPublishedEvidence949355288/001 (foreign_git_worktree_list): git worktree list: exit status 128\n" does not contain "cleanup: preserved 2 complete evidence bundle(s)"
+        	Test:       	TestCleanupEndToEnd_PreservesPublishedEvidence
+--- FAIL: TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees (1.23s)
+    cleanup_test.go:293: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:293
+        	Error:      	"cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)\ncleanup: removed 551 byte(s), 3 inode(s)\ncleanup: preserved 139 complete evidence bundle(s)\n" does not contain "cleanup: removed 1 stale temp dir(s), 1 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)"
+        	Test:       	TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees
+    cleanup_test.go:299: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:299
+        	Error:      	"worktree /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork639710339/001\nHEAD 320e72dfeba44fd10e4e507fc9e181eaff4cec6d\nbranch refs/heads/main\n\nworktree /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork639710339/002/ddx-exec-wt/.execute-bead-wt-ddx-cleanup-active-20260508T120000-feedface\nHEAD 320e72dfeba44fd10e4e507fc9e181eaff4cec6d\ndetached\n\nworktree /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork639710339/002/ddx-exec-wt/.execute-bead-wt-ddx-cleanup-registered-20260508T120000-deadbeef\nHEAD 320e72dfeba44fd10e4e507fc9e181eaff4cec6d\ndetached" should not contain "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWork639710339/002/ddx-exec-wt/.execute-bead-wt-ddx-cleanup-registered-20260508T120000-deadbeef"
+        	Test:       	TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees
+--- FAIL: TestCleanupCommand_JSONPreservesExistingCleanupFields (1.04s)
+    cleanup_test.go:353: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/cleanup_test.go:353
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestCleanupCommand_JSONPreservesExistingCleanupFields
+--- FAIL: TestDoctor_ReportsAndAppliesHousekeepingCounts (1.07s)
+    doctor_housekeeping_test.go:52: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/doctor_housekeeping_test.go:52
+        	Error:      	"🩺 DDx Installation Diagnostics\n=====================================\n\n✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)\n   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin/ddx)\n   💡 Re-run install.sh to reinstall to the canonical location\n   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin is earlier in your PATH\n   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx\n   💡 Or re-run install.sh to update all copies\n✓ Checking PATH Configuration... ✅ PATH Configuration\n✓ Checking Configuration... ✅ Configuration Valid\n✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file\n✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported\n   ⚠️  Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n   💡 Ensure the pinned vale binary is available on PATH\n✓ Checking Git... ✅ Git Available\n✓ Checking Git Repo Health... ✅ Git Repo Clean\n✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer\n   ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b\n   💡 Run 'ddx project worktree master <correct-path>' to update the master pointer\n   💡 Or remove the stale master entry from .ddx/worktrees.json manually\n✓ Checking Network... ✅ Network Connectivity\n✓ Checking Permissions... ✅ File Permissions\n✓ Checking Library Path... ⚠️  Library Path Issues (optional)\n✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync\n✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/.local/share/ddx/global/plugins/ddx) — missing\n   Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — missing\n✓ Checking Sync Status... ✅ Sync Status\n✓ Checking Execution Housekeeping... ⚠️  stale worktrees=1, stale worker dirs=2, stale execution dirs=50\n✓ Checking package.json locations... ✅ Node dependencies up to date\n\n⚠️  Some non-critical issues detected. DDX is functional but may have limitations.\n💡 Run 'ddx doctor --help' for troubleshooting tips.\n\n📊 DETAILED DIAGNOSTIC REPORT\n========================================\n\n🛠️  DETECTED ISSUES (5):\n\nIssue #1: binary_not_canonical\n  Description: Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin/ddx)\n  Remediation Steps:\n    1. Re-run install.sh to reinstall to the canonical location\n    2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin is earlier in your PATH\n\nIssue #2: binary_sha_mismatch\n  Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n  Remediation Steps:\n    1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx\n    2. Or re-run install.sh to update all copies\n\nIssue #3: prose_checker\n  Description: Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n  Remediation Steps:\n    1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n    2. Ensure the pinned vale binary is available on PATH\n\nIssue #4: stale_worktrees_master\n  Description: worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b\n  Remediation Steps:\n    1. Run 'ddx project worktree master <correct-path>' to update the master pointer\n    2. Or remove the stale master entry from .ddx/worktrees.json manually\n\nIssue #5: execution_housekeeping\n  Description: Stale execution state detected (1 worktrees, 2 worker dirs, 50 execution dirs)\n  Remediation Steps:\n    1. Run 'ddx doctor --apply' to reap stale worktrees, worker dirs, and execution evidence\n    2. Adjust DDX_WORKTREE_REAP_MAX_AGE or DDX_EXECUTION_RETAIN_DAYS if the retention window is too aggressive\n\n" does not contain "stale worktrees=1, stale worker dirs=1, stale execution dirs=1"
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:59: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/doctor_housekeeping_test.go:59
+        	Error:      	"🩺 DDx Installation Diagnostics\n=====================================\n\n✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)\n   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin/ddx)\n   💡 Re-run install.sh to reinstall to the canonical location\n   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin is earlier in your PATH\n   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx\n   💡 Or re-run install.sh to update all copies\n✓ Checking PATH Configuration... ✅ PATH Configuration\n✓ Checking Configuration... ✅ Configuration Valid\n✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file\n✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported\n   ⚠️  Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n   💡 Ensure the pinned vale binary is available on PATH\n✓ Checking Git... ✅ Git Available\n✓ Checking Git Repo Health... ✅ Git Repo Clean\n✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer\n   ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b\n   💡 Run 'ddx project worktree master <correct-path>' to update the master pointer\n   💡 Or remove the stale master entry from .ddx/worktrees.json manually\n✓ Checking Network... ✅ Network Connectivity\n✓ Checking Permissions... ✅ File Permissions\n✓ Checking Library Path... ⚠️  Library Path Issues (optional)\n✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync\n✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/.local/share/ddx/global/plugins/ddx) — missing\n   Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — missing\n✓ Checking Sync Status... ✅ Sync Status\n✓ Checking Execution Housekeeping... ✅ stale worktrees=1, stale worker dirs=2, stale execution dirs=50 (applied)\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T050144-45f2bf32 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T050144-45f2bf32\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T052202-d65fd266 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T052202-d65fd266\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T053132-d91d0409 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T053132-d91d0409\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T053832-6168c428 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T053832-6168c428\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T060843-78da853b (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T060843-78da853b\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T061637-3f9b3179 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T061637-3f9b3179\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T062336-897bbe9e (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T062336-897bbe9e\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T062957-7b49d53c (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T062957-7b49d53c\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T064814-7fbb7d25 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T064814-7fbb7d25\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T070618-88afb385 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T070618-88afb385\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T072418-8ed95ea2 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T072418-8ed95ea2\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T073247-2dc7846c (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T073247-2dc7846c\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T073645-60121f42 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T073645-60121f42\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T074536-1658c0d3 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T074536-1658c0d3\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T075107-a5eed2c2 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T075107-a5eed2c2\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T082717-1f73f650 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T082717-1f73f650\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T083254-41e6091f (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T083254-41e6091f\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T083507-14e8c77e (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T083507-14e8c77e\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T084726-bbbbd382 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T084726-bbbbd382\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T090140-9f2f1dd4 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T090140-9f2f1dd4\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T090419-32327d4d (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T090419-32327d4d\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T090957-6dc15b61 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T090957-6dc15b61\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T091138-9ee4ddcc (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T091138-9ee4ddcc\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T091542-c0bf7a7d (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T091542-c0bf7a7d\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T092302-49e5ffa5 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T092302-49e5ffa5\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T094004-eba71116 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T094004-eba71116\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T094346-ef89a756 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T094346-ef89a756\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T094703-9b760d54 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T094703-9b760d54\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T100237-50f70148 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T100237-50f70148\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T100822-174f32ac (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T100822-174f32ac\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T100916-8a64ccec (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T100916-8a64ccec\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T102602-bddb96b0 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T102602-bddb96b0\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T102640-9b3e7335 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T102640-9b3e7335\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T102938-c19d2d4d (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T102938-c19d2d4d\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T103203-3687dc30 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T103203-3687dc30\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T105336-094bd9cb (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T105336-094bd9cb\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T111525-fada8140 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T111525-fada8140\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T112033-271336dd (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T112033-271336dd\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T113136-f9d2da5b (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T113136-f9d2da5b\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T113151-f1778ab3 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T113151-f1778ab3\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T113331-1ca6ebec (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T113331-1ca6ebec\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T115750-df0e26ed (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T115750-df0e26ed\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T122502-5fa43fb0 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T122502-5fa43fb0\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T122717-74f51b7a (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T122717-74f51b7a\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T123454-0d2d3ec0 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T123454-0d2d3ec0\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T124436-041ede00 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T124436-041ede00\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T124948-998dabf6 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T124948-998dabf6\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T125715-8c3777c0 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T125715-8c3777c0\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T130908-76812e43 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T130908-76812e43\n   ⚠️  /Users/erik/Projects/ddx/.ddx/executions/20260608T132855-60bbf806 (execution_dir_archive): archive destination already exists: /Users/erik/Projects/ddx/.ddx/executions-archive/2026/06/20260608T132855-60bbf806\n✓ Checking package.json locations... ✅ Node dependencies up to date\n\n⚠️  Some non-critical issues detected. DDX is functional but may have limitations.\n💡 Run 'ddx doctor --help' for troubleshooting tips.\n\n📊 DETAILED DIAGNOSTIC REPORT\n========================================\n\n🛠️  DETECTED ISSUES (4):\n\nIssue #1: binary_not_canonical\n  Description: Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin/ddx)\n  Remediation Steps:\n    1. Re-run install.sh to reinstall to the canonical location\n    2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin is earlier in your PATH\n\nIssue #2: binary_sha_mismatch\n  Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)\n  Remediation Steps:\n    1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx\n    2. Or re-run install.sh to update all copies\n\nIssue #3: prose_checker\n  Description: Unsupported Vale prose checker version \"vale version 3.15.1\"; expected \"vale version 3.13.0\"\n  Remediation Steps:\n    1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0\n    2. Ensure the pinned vale binary is available on PATH\n\nIssue #4: stale_worktrees_master\n  Description: worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b\n  Remediation Steps:\n    1. Run 'ddx project worktree master <correct-path>' to update the master pointer\n    2. Or remove the stale master entry from .ddx/worktrees.json manually\n\n" does not contain "stale worktrees=1, stale worker dirs=1, stale execution dirs=1 (applied)"
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:61: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/doctor_housekeeping_test.go:61
+        	Error:      	directory "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsAndAppliesHousekeepingCounts1457303597/001/.ddx/workers/agent-loop-doctor-stale" exists
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:62: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/doctor_housekeeping_test.go:62
+        	Error:      	directory "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsAndAppliesHousekeepingCounts1457303597/001/.ddx/executions/20260101T000000-feedface" exists
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+    doctor_housekeeping_test.go:63: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/doctor_housekeeping_test.go:63
+        	Error:      	unable to find file "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsAndAppliesHousekeepingCounts1457303597/001/.ddx/executions-archive/2026/01/20260101T000000-feedface"
+        	Test:       	TestDoctor_ReportsAndAppliesHousekeepingCounts
+🩺 DDx Installation Diagnostics
+=====================================
+
+✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)
+   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin/ddx)
+   💡 Re-run install.sh to reinstall to the canonical location
+   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin is earlier in your PATH
+   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+   💡 Or re-run install.sh to update all copies
+✓ Checking PATH Configuration... ✅ PATH Configuration
+✓ Checking Configuration... ✅ Configuration Valid
+✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+   ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+   💡 Ensure the pinned vale binary is available on PATH
+✓ Checking Git... ✅ Git Available
+✓ Checking Git Repo Health... ✅ Git Repo Clean
+✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer
+   ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+   💡 Run 'ddx project worktree master <correct-path>' to update the master pointer
+   💡 Or remove the stale master entry from .ddx/worktrees.json manually
+✓ Checking Network... ✅ Network Connectivity
+✓ Checking Permissions... ✅ File Permissions
+✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/.local/share/ddx/global/plugins/ddx) — missing
+   Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — missing
+✓ Checking Sync Status... ✅ Sync Status
+✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+✓ Checking package.json locations... ✅ Node dependencies up to date
+DDx skill symlink detected under .agents/skills; pre-migration DDx skill install detected
+run: ddx update --force
+Error: legacy DDx skill symlinks detected
+Usage:
+  ddx doctor [flags]
+
+Flags:
+      --apply          Apply stale worktree/worker/execution housekeeping while running diagnostics
+      --fix            Automatically remediate detected git-repo corruption (core.bare/core.worktree/core.hooksPath)
+  -h, --help           help for doctor
+      --paths string   Space-separated staged file paths; when set, only runs checks relevant to those paths (used by the ddx-validate pre-commit hook)
+      --plugins        Audit installed plugins for manifest and skill issues
+  -v, --verbose        Show detailed diagnostic output
+
+Global Flags:
+      --config string              config file (default is $HOME/.ddx.yml)
+      --library-base-path string   override path for DDx library location
+      --no-update-check            Disable the automatic update check (network call) on each command
+
+🩺 DDx Installation Diagnostics
+=====================================
+
+✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)
+   ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin/ddx)
+   💡 Re-run install.sh to reinstall to the canonical location
+   💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/home/.local/bin is earlier in your PATH
+   ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+   💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+   💡 Or re-run install.sh to update all copies
+✓ Checking PATH Configuration... ✅ PATH Configuration
+✓ Checking Configuration... ✅ Configuration Valid
+✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+   ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+   💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+   💡 Ensure the pinned vale binary is available on PATH
+✓ Checking Git... ✅ Git Available
+✓ Checking Git Repo Health... ✅ Git Repo Clean
+✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer
+   ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+   💡 Run 'ddx project worktree master <correct-path>' to update the master pointer
+   💡 Or remove the stale master entry from .ddx/worktrees.json manually
+✓ Checking Network... ✅ Network Connectivity
+✓ Checking Permissions... ✅ File Permissions
+✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/.local/share/ddx/global/plugins/ddx) — missing
+   Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — missing
+✓ Checking Sync Status... ✅ Sync Status
+✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+✓ Checking package.json locations... ✅ Node dependencies up to date
+--- FAIL: TestDoctor_ReportsBothInstallLayers (2.11s)
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/project_install_present (0.46s)
+        doctor_test.go:327: output missing project install status "ok":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_present3789460149/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_present3789460149/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer
+               ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+               💡 Run 'ddx project worktree master <correct-path>' to update the master pointer
+               💡 Or remove the stale master entry from .ddx/worktrees.json manually
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ✅ Library Path Accessible
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_present3789460149/002/xdg/ddx/global/plugins/ddx) — missing
+               Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — missing
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (4):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_present3789460149/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_present3789460149/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+            Issue #4: stale_worktrees_master
+              Description: worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+              Remediation Steps:
+                1. Run 'ddx project worktree master <correct-path>' to update the master pointer
+                2. Or remove the stale master entry from .ddx/worktrees.json manually
+            
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/project_falls_through_to_global (0.74s)
+        doctor_test.go:327: output missing project install status "lazy-resolves-to-global":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo3393542979/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo3393542979/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer
+               ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+               💡 Run 'ddx project worktree master <correct-path>' to update the master pointer
+               💡 Or remove the stale master entry from .ddx/worktrees.json manually
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo3393542979/002/xdg/ddx/global/plugins/ddx) — ok
+               Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — lazy-resolves-to-global
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (4):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo3393542979/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_falls_through_to_glo3393542979/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+            Issue #4: stale_worktrees_master
+              Description: worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+              Remediation Steps:
+                1. Run 'ddx project worktree master <correct-path>' to update the master pointer
+                2. Or remove the stale master entry from .ddx/worktrees.json manually
+            
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/project_install_missing (0.44s)
+        doctor_test.go:327: output missing project install status "missing":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_missing1181877204/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_missing1181877204/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer
+               ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+               💡 Run 'ddx project worktree master <correct-path>' to update the master pointer
+               💡 Or remove the stale master entry from .ddx/worktrees.json manually
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ⚠️  Library Path Issues (optional)
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_missing1181877204/002/xdg/ddx/global/plugins/ddx) — missing
+               Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — missing
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (4):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_missing1181877204/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersproject_install_missing1181877204/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+            Issue #4: stale_worktrees_master
+              Description: worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+              Remediation Steps:
+                1. Run 'ddx project worktree master <correct-path>' to update the master pointer
+                2. Or remove the stale master entry from .ddx/worktrees.json manually
+            
+    --- FAIL: TestDoctor_ReportsBothInstallLayers/both_project_and_global_present (0.48s)
+        doctor_test.go:327: output missing project install status "ok":
+            🩺 DDx Installation Diagnostics
+            =====================================
+            
+            ✓ Checking DDX Binary... ✅ DDX Binary Executable (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test)
+               ⚠️  Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres544120395/002/.local/bin/ddx)
+               💡 Re-run install.sh to reinstall to the canonical location
+               💡 Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres544120395/002/.local/bin is earlier in your PATH
+               ⚠️  Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+               💡 rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+               💡 Or re-run install.sh to update all copies
+            ✓ Checking PATH Configuration... ✅ PATH Configuration
+            ✓ Checking Configuration... ✅ Configuration Valid
+            ✓ Checking Legacy Model Catalog... ✅ No legacy DDx-side model catalog file
+            ✓ Checking Prose Checker... ⚠️  Vale prose checker unavailable or unsupported
+               ⚠️  Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+               💡 Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+               💡 Ensure the pinned vale binary is available on PATH
+            ✓ Checking Git... ✅ Git Available
+            ✓ Checking Git Repo Health... ✅ Git Repo Clean
+            ✓ Checking Worktrees Registry... ⚠️  Stale worktrees.json master pointer
+               ⚠️  worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+               💡 Run 'ddx project worktree master <correct-path>' to update the master pointer
+               💡 Or remove the stale master entry from .ddx/worktrees.json manually
+            ✓ Checking Network... ✅ Network Connectivity
+            ✓ Checking Permissions... ✅ File Permissions
+            ✓ Checking Library Path... ✅ Library Path Accessible
+            ✓ Checking Meta-Prompt Sync... ✅ Meta-Prompt In Sync
+            ✓ Checking Skill Install Topology...    Global Install (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres544120395/002/xdg/ddx/global/plugins/ddx) — ok
+               Project Install (/Users/erik/Projects/ddx/.ddx/plugins/ddx) — lazy-resolves-to-global
+            ✓ Checking Sync Status... ✅ Sync Status
+            ✓ Checking Execution Housekeeping... ✅ No stale worktrees, worker dirs, or execution dirs
+            ✓ Checking package.json locations... ✅ Node dependencies up to date
+            
+            ⚠️  Some non-critical issues detected. DDX is functional but may have limitations.
+            💡 Run 'ddx doctor --help' for troubleshooting tips.
+            
+            📊 DETAILED DIAGNOSTIC REPORT
+            ========================================
+            
+            🛠️  DETECTED ISSUES (4):
+            
+            Issue #1: binary_not_canonical
+              Description: Running binary (/home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test) is not at canonical install location (/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres544120395/002/.local/bin/ddx)
+              Remediation Steps:
+                1. Re-run install.sh to reinstall to the canonical location
+                2. Or ensure /home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestDoctor_ReportsBothInstallLayersboth_project_and_global_pres544120395/002/.local/bin is earlier in your PATH
+            
+            Issue #2: binary_sha_mismatch
+              Description: Stale ddx copy on PATH: /home/erik/.local/bin/ddx (SHA-256 differs from running binary)
+              Remediation Steps:
+                1. rm /home/erik/.local/bin/ddx && cp /home/erik/.cache/fleet-tmp/go/go-build4248012322/b848/cmd.test /home/erik/.local/bin/ddx
+                2. Or re-run install.sh to update all copies
+            
+            Issue #3: prose_checker
+              Description: Unsupported Vale prose checker version "vale version 3.15.1"; expected "vale version 3.13.0"
+              Remediation Steps:
+                1. Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0
+                2. Ensure the pinned vale binary is available on PATH
+            
+            Issue #4: stale_worktrees_master
+              Description: worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b
+              Remediation Steps:
+                1. Run 'ddx project worktree master <correct-path>' to update the master pointer
+                2. Or remove the stale master entry from .ddx/worktrees.json manually
+            
+--- FAIL: TestStaleWorktreeMasterDiagnosticReportsMissingExecuteBeadPath (0.01s)
+    doctor_test.go:556: expected description to mention execute-bead-wt path, got: "worktrees.json master path does not exist: /home/erik/.cache/fleet-tmp/ddx-cmd-tests-1814827350/TestWorktreeRegistry_OperatorRePin770344975/002/demo-project-b"
+--- FAIL: TestWorkPreflight_WarnsOnceForMissingLifecycleSkill (320.91s)
+    project_runtime_preflight_test.go:66: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:66
+        	Error:      	"\n▶ ddx-523a31da: Cite ddxroot resolution in the operator-surface specs\n21:58:50 readiness check: starting\n01:59:26 readiness route codex/gpt-5.4-mini reason=policy=default; score=116.2\n01:59:26 readiness ddx-523a31da route codex/gpt-5.4-mini power=8 cost=0.0075 cost_source=subscri...\n01:59:26 readiness thinking ...\n01:59:26 readiness response complete 1 tok in 105ms, 9.5 tok/s\n21:59:28 readiness check unavailable: readiness route unavailable: no JSON object found (continuing)\ntracker_lock section=pre_dispatch_commits wait=1ms hold=1.286s retries=0\noperator attention: project worktree /Users/erik/Projects/ddx has uncommitted implementation changes; released ddx-523a31da. commit or clean the listed implementation files before restarting ddx work: .ddx/worktrees.json\n\nproject: /Users/erik/Projects/ddx\nworker exited: operator attention required\nattempts: 0  |  closed: 0  |  changed: 0  |  already-satisfied: 0  |  preserved: 0  |  failures: 0\n\noperator attention:\n  released bead: ddx-523a31da\n  commit or clean the listed implementation files before restarting ddx work: .ddx/worktrees.json\n  project root: /Users/erik/Projects/ddx\n  dirty paths: .ddx/worktrees.json\n" does not contain "preflight warning:"
+        	Test:       	TestWorkPreflight_WarnsOnceForMissingLifecycleSkill
+        	Messages:   	first invocation must emit the preflight warning
+    project_runtime_preflight_test.go:67: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:67
+        	Error:      	"\n▶ ddx-523a31da: Cite ddxroot resolution in the operator-surface specs\n21:58:50 readiness check: starting\n01:59:26 readiness route codex/gpt-5.4-mini reason=policy=default; score=116.2\n01:59:26 readiness ddx-523a31da route codex/gpt-5.4-mini power=8 cost=0.0075 cost_source=subscri...\n01:59:26 readiness thinking ...\n01:59:26 readiness response complete 1 tok in 105ms, 9.5 tok/s\n21:59:28 readiness check unavailable: readiness route unavailable: no JSON object found (continuing)\ntracker_lock section=pre_dispatch_commits wait=1ms hold=1.286s retries=0\noperator attention: project worktree /Users/erik/Projects/ddx has uncommitted implementation changes; released ddx-523a31da. commit or clean the listed implementation files before restarting ddx work: .ddx/worktrees.json\n\nproject: /Users/erik/Projects/ddx\nworker exited: operator attention required\nattempts: 0  |  closed: 0  |  changed: 0  |  already-satisfied: 0  |  preserved: 0  |  failures: 0\n\noperator attention:\n  released bead: ddx-523a31da\n  commit or clean the listed implementation files before restarting ddx work: .ddx/worktrees.json\n  project root: /Users/erik/Projects/ddx\n  dirty paths: .ddx/worktrees.json\n" does not contain "ddx update --force"
+        	Test:       	TestWorkPreflight_WarnsOnceForMissingLifecycleSkill
+--- FAIL: TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill (1.41s)
+    project_runtime_preflight_test.go:112: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:112
+        	Error:      	"bead not found: ddx-preflight-try\nError: \n" does not contain "preflight warning:"
+        	Test:       	TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill
+        	Messages:   	preflight warning must appear in output
+    project_runtime_preflight_test.go:113: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:113
+        	Error:      	"bead not found: ddx-preflight-try\nError: \n" does not contain "ddx update --force"
+        	Test:       	TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill
+        	Messages:   	remediation must include ddx update --force
+    project_runtime_preflight_test.go:114: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:114
+        	Error:      	"bead not found: ddx-preflight-try\nError: \n" does not contain "ddx doctor"
+        	Test:       	TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill
+        	Messages:   	remediation must include ddx doctor
+--- FAIL: TestServerPreflight_MissingLifecycleSkillStartsDegraded (2.48s)
+    project_runtime_preflight_test.go:149: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:149
+        	Error:      	"DDx server listening on https://127.0.0.1:7743\n" does not contain "bead-lifecycle"
+        	Test:       	TestServerPreflight_MissingLifecycleSkillStartsDegraded
+        	Messages:   	degraded diagnostics must mention bead-lifecycle
+    project_runtime_preflight_test.go:150: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_runtime_preflight_test.go:150
+        	Error:      	"DDx server listening on https://127.0.0.1:7743\n" does not contain "ddx update --force"
+        	Test:       	TestServerPreflight_MissingLifecycleSkillStartsDegraded
+        	Messages:   	degraded diagnostics must include primary remediation
+--- FAIL: TestWorktreeRegistry_OperatorRePin (0.52s)
+    project_worktree_test.go:37: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/project_worktree_test.go:37
+        	Error:      	Not equal: 
+        	            	expected: "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorktreeRegistry_OperatorRePin840433607/002/demo-project-b"
+        	            	actual  : "/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorktreeRegistry_OperatorRePin840433607/001/demo-project-a"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorktreeRegistry_OperatorRePin840433607/002/demo-project-b
+        	            	+/home/erik/.cache/fleet-tmp/ddx-cmd-tests-4083066298/TestWorktreeRegistry_OperatorRePin840433607/001/demo-project-a
+        	Test:       	TestWorktreeRegistry_OperatorRePin
+DDx dev (commit: unknown, built: unknown)
+--- FAIL: TestTryResourcePreflight_FailsBeforeClaim (0.32s)
+    resource_preflight_test.go:78: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/resource_preflight_test.go:78
+        	Error:      	"bead not found: ddx-resource-try\nError: \n" does not contain "resource_exhausted"
+        	Test:       	TestTryResourcePreflight_FailsBeforeClaim
+    resource_preflight_test.go:79: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/resource_preflight_test.go:79
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestTryResourcePreflight_FailsBeforeClaim
+--- FAIL: TestTryResourceExhaustionEndToEnd_Reclaimable (0.35s)
+    resource_preflight_test.go:147: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/resource_preflight_test.go:147
+        	Error:      	"bead not found: ddx-resource-try-reclaimable\nError: \n" does not contain "resource_exhausted"
+        	Test:       	TestTryResourceExhaustionEndToEnd_Reclaimable
+    resource_preflight_test.go:148: 
+        	Error Trace:	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/resource_preflight_test.go:148
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestTryResourceExhaustionEndToEnd_Reclaimable
+panic: test timed out after 10m0s
+	running tests:
+		TestRunPassthroughMinMaxPowerToExecute (18s)
+
+goroutine 42746 [running]:
+testing.(*M).startAlarm.func1()
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2802 +0x2cc
+created by time.goFunc
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/time/sleep.go:215 +0x38
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x6743c7e26008, {0x20515d7?, 0x280f020500167830?}, 0x215dcb0)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2109 +0x3bc
+testing.runTests.func1(0x6743c7e26008)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2585 +0x40
+testing.tRunner(0x6743c7e26008, 0x6743c7d93ba8)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2036 +0xc4
+testing.runTests({0x20348ef, 0x1f}, {0x2045c45, 0x23}, 0x6743c82aa5b8, {0x3a4b0e0, 0x285, 0x285}, {0xffffa5e323e0?, 0xc0?, ...})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2583 +0x3f0
+testing.(*M).Run(0x6743c80d2960)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2443 +0x578
+github.com/DocumentDrivenDX/ddx/cmd.TestMain(0x6743c80d2960)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/testutils_test.go:55 +0x248
+main.main()
+	_testmain.go:1336 +0x88
+
+goroutine 39606 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 39525 [select, 4 minutes]:
+github.com/easel/fizeau.quotaRecoverySleep({0x21b1510, 0x3a83a00}, 0x6743c8302c98?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:143 +0xb0
+github.com/easel/fizeau.runQuotaRecoveryProbeLoop({0x21b1510, 0x3a83a00}, 0x6743c8302c98, 0x6743c7fb46c0, 0x0?, 0x9e914?, 0x20646e6f79656220?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:62 +0x114
+created by github.com/easel/fizeau.(*service).startQuotaRecoveryProbeLoop in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_routing.go:1277 +0x130
+
+goroutine 38927 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38867 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 38795 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 39456 [select, 4 minutes]:
+github.com/easel/fizeau.quotaRecoverySleep({0x21b1510, 0x3a83a00}, 0x6743c81823c8?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:143 +0xb0
+github.com/easel/fizeau.runQuotaRecoveryProbeLoop({0x21b1510, 0x3a83a00}, 0x6743c81823c8, 0x6743c9107bd8, 0x0?, 0x9e914?, 0x6743c7f00340?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:62 +0x114
+created by github.com/easel/fizeau.(*service).startQuotaRecoveryProbeLoop in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_routing.go:1277 +0x130
+
+goroutine 38865 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38797 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38929 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38931 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 39612 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 38793 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 39602 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38925 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 39608 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 39604 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 39533 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 42730 [runnable]:
+encoding/json.(*decodeState).scanWhile(0x6743c8db6480, 0x9)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/encoding/json/decode.go:298 +0xd8
+encoding/json.(*decodeState).object(0x6743c8db6480, {0x1a2b9a0?, 0x6743c81836b0?, 0x1b6ea8?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/encoding/json/decode.go:668 +0x5b8
+encoding/json.(*decodeState).value(0x6743c8db6480, {0x1a2b9a0?, 0x6743c81836b0?, 0x1b4efc?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/encoding/json/decode.go:380 +0x40
+encoding/json.(*decodeState).unmarshal(0x6743c8db6480, {0x1a2b9a0?, 0x6743c81836b0?})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/encoding/json/decode.go:183 +0x104
+encoding/json.Unmarshal({0x6743c8d3b400, 0xaee, 0xc00}, {0x1a2b9a0, 0x6743c81836b0})
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/encoding/json/decode.go:113 +0xdc
+github.com/DocumentDrivenDX/ddx/internal/bead.unmarshalBead({_, _, _})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/bead/marshal.go:22 +0x80
+github.com/DocumentDrivenDX/ddx/internal/bead.parseBeadJSONL({0x6743c9f62000, 0x2876b8, 0x2876b9})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/bead/store.go:306 +0x1e0
+github.com/DocumentDrivenDX/ddx/internal/bead.(*Store).readAllRaw(0x6743c903a000?)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/bead/store.go:282 +0x100
+github.com/DocumentDrivenDX/ddx/internal/bead.(*Store).ReadAll(0x6743c7e80f50, {0x21b1510?, 0x3a83a00?})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/bead/store.go:192 +0x88
+github.com/DocumentDrivenDX/ddx/internal/bead.(*Store).Get(0x6743c7e80f50, {0x21b1510, 0x3a83a00}, {0x6743c8c7ac30, 0xc})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/bead/store.go:601 +0xb8
+github.com/DocumentDrivenDX/ddx/internal/bead.(*Store).Events(0x6743c7e80f50, {0x6743c8c7ac30?, 0x0?})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/bead/store.go:1389 +0x3c
+github.com/DocumentDrivenDX/ddx/internal/agent.seedRecentRouteAttemptsFromTracker({0x21b1510, 0x3a83a00}, {0x21d0b08, 0x6743c9020010}, {0x6743c7d04011, 0x18}, {0xd?, 0x3?, 0x0?})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/service_run.go:601 +0x410
+github.com/DocumentDrivenDX/ddx/internal/agent.executeOnService({_, _}, {_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/service_run.go:289 +0xdd8
+github.com/DocumentDrivenDX/ddx/internal/agent.RunWithConfigViaService({_, _}, {_, _}, {0x1, {0x0, 0x0}, 0x3, 0x13a52453c000, 0x1a3185c5000, ...}, ...)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/internal/agent/service_run.go:169 +0x9c4
+github.com/DocumentDrivenDX/ddx/cmd.(*CommandFactory).runRun(0x6743c8068000, 0x6743c87c5808, {0x6743c8553910?, 0x0?, 0x0?})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/run.go:164 +0xb78
+github.com/spf13/cobra.(*Command).execute(0x6743c87c5808, {0x6743c893e900, 0x8, 0x8})
+	/home/erik/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command.go:1015 +0x814
+github.com/spf13/cobra.(*Command).ExecuteC(0x6743c7f2ec08)
+	/home/erik/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command.go:1148 +0x350
+github.com/spf13/cobra.(*Command).Execute(...)
+	/home/erik/go/pkg/mod/github.com/spf13/cobra@v1.10.2/command.go:1071
+github.com/DocumentDrivenDX/ddx/cmd.executeCommand(0x6743c7f2ec08, {0x6743c86c6480, 0x9, 0x9})
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/testutils_test.go:744 +0xd0
+github.com/DocumentDrivenDX/ddx/cmd.TestRunPassthroughMinMaxPowerToExecute(0x6743c97f86c8)
+	/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-95a98a32-20260703T014509-a562f69f/cli/cmd/run_cmd_test.go:109 +0x1c8
+testing.tRunner(0x6743c97f86c8, 0x215dcb0)
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/home/linuxbrew/.linuxbrew/opt/go/libexec/src/testing/testing.go:2101 +0x3a8
+
+goroutine 38921 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38919 [select, 2 minutes]:
+github.com/easel/fizeau.quotaRecoverySleep({0x21b1510, 0x3a83a00}, 0x6743c8382120?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:143 +0xb0
+github.com/easel/fizeau.runQuotaRecoveryProbeLoop({0x21b1510, 0x3a83a00}, 0x6743c8382120, 0x6743c7fb4300, 0x0?, 0x9e914?, 0x0?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:62 +0x114
+created by github.com/easel/fizeau.(*service).startQuotaRecoveryProbeLoop in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_routing.go:1277 +0x130
+
+goroutine 39531 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 39535 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38791 [select, 2 minutes]:
+github.com/easel/fizeau.quotaRecoverySleep({0x21b1510, 0x3a83a00}, 0x6743cf578350?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:143 +0xb0
+github.com/easel/fizeau.runQuotaRecoveryProbeLoop({0x21b1510, 0x3a83a00}, 0x6743cf578350, 0x6743c7fb4828, 0x6365722068746977?, 0x3a64656c69636e6f?, 0x676e6168632d6f6e?)
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_probe.go:62 +0x114
+created by github.com/easel/fizeau.(*service).startQuotaRecoveryProbeLoop in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/service_routing.go:1277 +0x130
+
+goroutine 38923 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 39553 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 39529 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:181 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startAccountTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:177 +0x1f4
+
+goroutine 39610 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 39527 [select, 4 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 39507
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+
+goroutine 38799 [select, 7 minutes]:
+github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker.func2()
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:134 +0x110
+created by github.com/easel/fizeau/internal/routehealth.(*RefreshScheduler).startQuotaTicker in goroutine 38782
+	/home/erik/go/pkg/mod/github.com/easel/fizeau@v0.14.50/internal/routehealth/refresh_scheduler.go:130 +0x254
+FAIL	github.com/DocumentDrivenDX/ddx/cmd	600.066s
+ok  	github.com/DocumentDrivenDX/ddx/internal/config	(cached)
+ok  	github.com/DocumentDrivenDX/ddx/internal/registry	(cached)
+?   	github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin	[no test files]
+FAIL

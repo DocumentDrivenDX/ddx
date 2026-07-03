@@ -1,0 +1,2 @@
+status: open
+reason: pre-commit gate failed outside the new matrix test: lefthook go-test ran go test -short -race -timeout 30m ./internal/agent and failed in existing TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s (kill fake claude subprocess: no such process). Focused TestModeMatrix tests pass, but required AC4/AC5 are not green.
