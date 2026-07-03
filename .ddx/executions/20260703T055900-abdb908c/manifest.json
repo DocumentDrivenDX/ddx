@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T055900-abdb908c",
+  "bead_id": "ddx-4a2f1cbf",
+  "base_rev": "6cbd31a38c82823e0ceae5bed667366330e50c14",
+  "created_at": "2026-07-03T05:59:13.085749028Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4a2f1cbf",
+    "title": "Reopen me"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T055900-abdb908c",
+    "prompt": ".ddx/executions/20260703T055900-abdb908c/prompt.md",
+    "manifest": ".ddx/executions/20260703T055900-abdb908c/manifest.json",
+    "result": ".ddx/executions/20260703T055900-abdb908c/result.json",
+    "checks": ".ddx/executions/20260703T055900-abdb908c/checks.json",
+    "usage": ".ddx/executions/20260703T055900-abdb908c/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-4a2f1cbf-20260703T055900-abdb908c"
+  },
+  "prompt_sha": "4ac0342c7bae342a4ed747efcb27f0cdda4cad8cecfb0eba14510ac426a356cb"
+}
