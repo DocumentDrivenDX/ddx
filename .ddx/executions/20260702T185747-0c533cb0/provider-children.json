@@ -1,0 +1,216 @@
+{
+  "attempt_id": "20260702T185747-0c533cb0",
+  "bead_id": "ddx-0944ed97",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-02T20:08:55.918998744Z",
+  "reaped": [
+    {
+      "pid": 1498862,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1719054,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1902204,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped374516705/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2012615,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestBackgroundMonitorCleanupDoesNotKillProviderProcess4003218599/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2066420,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup2493315821/001/gemini -c \"$1\" 120 \u0026 echo $! \u003e \"$2\"; wait gemini /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup2493315821/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup2493315821/001/node.pid",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2069161,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndCleanupStillReapsAllProviderChildren1344950570/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2069132,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndCleanupStillReapsAllProviderChildren2622248121/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2071664,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildreninterrupt2324951432/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2071798,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildreninterrupt4003287024/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2071779,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildreninterrupt2221560698/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2317268,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2398476,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestBackgroundMonitorCleanupDoesNotKillProviderProcess1939355998/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2398497,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestBackgroundMonitorCleanupDoesNotKillProviderProcess2136406234/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2447397,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildrensuccess3343005716/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2448735,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildrenfailure3148641000/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2450322,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup830260326/001/gemini -c \"$1\" 120 \u0026 echo $! \u003e \"$2\"; wait gemini /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup830260326/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup830260326/001/node.pid",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2450356,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3321523589/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3321523589/001/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2451390,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren1095252473/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2451389,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren1095252473/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2452721,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped1749345830/001/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2452944,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildrensuccess2339350591/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2452722,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped1749345830/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2453668,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3738060225/001/gemini -c \"$1\" 120 \u0026 echo $! \u003e \"$2\"; wait gemini /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3738060225/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3738060225/001/node.pid",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2454884,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup1196246779/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup1196246779/001/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2456263,
+      "provider": "codex",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptEndReapsAllProviderChildreninterrupt2957574148/002/codex 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3028271,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}

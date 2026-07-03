@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260703T113935-3e66e491",
+  "bead_id": "ddx-c5669572",
+  "base_rev": "b5311931e2b2ff65402fff9917505640616fd714",
+  "created_at": "2026-07-03T11:39:47.627210529Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c5669572",
+    "title": "Test fingerprint rendering",
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T07:36:19.972860485Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260703T073115-822d9851\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":968969,\"output_tokens\":14293,\"total_tokens\":983262,\"cost_usd\":0,\"duration_ms\":286447,\"exit_code\":0}",
+          "created_at": "2026-07-03T07:36:20.033947039Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=983262 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260703T073115-822d9851\",\"bead_id\":\"ddx-c5669572\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-03T07:36:22.274301007Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"197c0d5cdbfc1f0b5b173d4f52a71f75c48a4d5e\",\"classification\":\"recoverable\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"attempt failed in lifecycle validation with mixed_commit_and_no_changes_rationale: result_rev differs from base_rev, but the agent also emitted a no_changes_rationale. This is an inconsistent attempt outcome rather than evidence that the bead is blocked, superseded, or failing tests; retrying the same bead can produce a clean commit-or-no-change result.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"023234cde8363e7c5e97d7ccd2f46fce5d902a24\",\"session_id\":\"eb-d6d94a58\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-07-03T07:36:57.056470828Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\nrationale: verification_command: cd cli \u0026\u0026 go test ./cmd -run 'TestBeadShowSurfacesFingerprint|TestBeadShowSurfacesFingerprintAndOverride' \u0026\u0026 go test ./internal/agent -run TestWorkLogRenderer\ndecision_audit={\"failure_class\":\"recoverable\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=023234cde8363e7c5e97d7ccd2f46fce5d902a24\nbase_rev=197c0d5cdbfc1f0b5b173d4f52a71f75c48a4d5e\noutcome_reason=recoverable",
+          "created_at": "2026-07-03T07:36:57.252429282Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T113935-3e66e491",
+    "prompt": ".ddx/executions/20260703T113935-3e66e491/prompt.md",
+    "manifest": ".ddx/executions/20260703T113935-3e66e491/manifest.json",
+    "result": ".ddx/executions/20260703T113935-3e66e491/result.json",
+    "checks": ".ddx/executions/20260703T113935-3e66e491/checks.json",
+    "usage": ".ddx/executions/20260703T113935-3e66e491/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-c5669572-20260703T113935-3e66e491"
+  },
+  "prompt_sha": "27283a2c7d0011ac1e2265b5f345cfc350b6176f0c149730ec5bb7ea9d169fa0"
+}

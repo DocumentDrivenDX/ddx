@@ -164,15 +164,14 @@ type Server struct {
 	// every /graphql request shares one instance.
 	reportedWorkers *reportedWorkersAdapter
 
-	// supervisor drives the desired-state reconcile loop that keeps
-	// server-managed workers running per `.ddx/workers/desired.json` (Phase 1
-	// of ddx-9d1af129). The goroutine is started by ListenAndServe/TLS via
-	// StartSupervisor and torn down by Shutdown. Constructed unconditionally
-	// so tests that build a Server directly can call StartSupervisor
-	// explicitly.
-	supervisor       *WorkerSupervisor
-	supervisorCancel context.CancelFunc
-	supervisorDone   chan struct{}
+	// supervisor remains the workingDir supervisor for direct tests and
+	// backwards-compatibility. The background reconcile goroutine now walks
+	// supervisorRegistry so additional registered projects are included too.
+	supervisor *WorkerSupervisor
+
+	supervisorRegistry *SupervisorRegistry
+	supervisorCancel   context.CancelFunc
+	supervisorDone     chan struct{}
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -208,11 +207,25 @@ func New(addr, workingDir string) *Server {
 		workerIngest:                       newWorkerIngestRegistry(workingDir),
 	}
 	s.reportedWorkers = newReportedWorkersAdapterWithWorkingDir(s.workerIngest, workingDir)
-	s.supervisor = NewWorkerSupervisor(workers)
 	state.coordinatorReg = workers.LandCoordinators
 
 	// Register the server's own project immediately.
 	state.RegisterProject(workingDir)
+	seedSupervisedProjects(state)
+
+	workingRoot := canonicalizePath(workingDir)
+	if workingRoot == "" {
+		workingRoot = workingDir
+	}
+	registry := newSupervisorRegistry(state, func(projectRoot string) *WorkerManager {
+		if canonicalizePath(projectRoot) == workingRoot {
+			return workers
+		}
+		return NewWorkerManager(projectRoot)
+	})
+	s.supervisorRegistry = registry
+	s.supervisor = registry.getOrCreate(workingDir)
+
 	_ = state.save()
 
 	s.routes()
@@ -223,10 +236,15 @@ func New(addr, workingDir string) *Server {
 // subprocess-backed server-managed launch path. Tests that construct a Server
 // directly keep the in-process seam unless they call this explicitly.
 func (s *Server) EnableManagedWorkers() {
-	if s == nil || s.workers == nil {
+	if s == nil {
 		return
 	}
-	s.workers.enableManagedLaunch()
+	if s.workers != nil {
+		s.workers.enableManagedLaunch()
+	}
+	if s.supervisorRegistry != nil {
+		s.supervisorRegistry.EnableManagedLaunch()
+	}
 }
 
 // parseOperatorPromptAllowlistEnv parses a comma-separated identity list
@@ -305,7 +323,7 @@ const defaultSupervisorTick = 10 * time.Second
 // The loop is stopped by Shutdown, which cancels the goroutine's context
 // and blocks on its exit.
 func (s *Server) StartSupervisor() {
-	if s == nil || s.supervisor == nil || s.supervisorCancel != nil {
+	if s == nil || s.supervisorCancel != nil || (s.supervisorRegistry == nil && s.supervisor == nil) {
 		return
 	}
 	tick := defaultSupervisorTick
@@ -321,16 +339,25 @@ func (s *Server) StartSupervisor() {
 		defer close(s.supervisorDone)
 		ticker := time.NewTicker(tick)
 		defer ticker.Stop()
+		run := func() error {
+			if s.supervisorRegistry != nil {
+				return s.supervisorRegistry.ReconcileAll()
+			}
+			if s.supervisor != nil {
+				return s.supervisor.Reconcile()
+			}
+			return nil
+		}
 		// Reconcile once on startup so a freshly-started server with an
 		// existing `.ddx/workers/desired.json` doesn't wait a full tick
 		// before spinning up the desired workers.
-		_ = s.supervisor.Reconcile()
+		_ = run()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_ = s.supervisor.Reconcile()
+				_ = run()
 			}
 		}
 	}()
@@ -358,7 +385,11 @@ func (s *Server) Shutdown() error {
 		}
 	}
 	var firstErr error
-	if s.workers != nil {
+	if s.supervisorRegistry != nil {
+		if err := s.supervisorRegistry.Shutdown(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	} else if s.workers != nil {
 		if err := s.workers.Shutdown(); err != nil && firstErr == nil {
 			firstErr = err
 		}

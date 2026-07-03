@@ -77,8 +77,8 @@ The default DDx behavior is intentionally small: docs live under `docs/`, and
 `ddx doc prose --changed` checks changed Markdown with the embedded rules.
 Configuration is optional.
 
-The prose-quality config supports mode selection, severity, policy, scope
-filters, and vocabulary controls when a project needs custom behavior.
+When a project needs custom behavior, operators can set mode, severity,
+policy, scope filters, and vocabulary controls in the prose-quality config.
 
 ```yaml
 prose:

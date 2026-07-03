@@ -1,0 +1,28 @@
+{
+  "attempt_id": "20260703T130525-0400b725",
+  "bead_id": "ddx-851835bf",
+  "base_rev": "ebccc30a2b3cf74640382749c7bf1d9965027a6d",
+  "created_at": "2026-07-03T13:05:41.200291779Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-851835bf",
+    "title": "Fix auth bug",
+    "acceptance": "bug is fixed",
+    "labels": [
+      "backend",
+      "urgent"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T130525-0400b725",
+    "prompt": ".ddx/executions/20260703T130525-0400b725/prompt.md",
+    "manifest": ".ddx/executions/20260703T130525-0400b725/manifest.json",
+    "result": ".ddx/executions/20260703T130525-0400b725/result.json",
+    "checks": ".ddx/executions/20260703T130525-0400b725/checks.json",
+    "usage": ".ddx/executions/20260703T130525-0400b725/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-851835bf-20260703T130525-0400b725"
+  },
+  "prompt_sha": "e6ac6c521b7bb542e0cf6c3d1f0671bd4ee113ad9691571ea43bdaaa33820e16"
+}

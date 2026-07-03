@@ -1,0 +1,2 @@
+verification_command: ddx bead show ddx-66131337 | rg -q '^ID:[[:space:]]+ddx-66131337$' && ! ddx bead show ddx-66131337 | rg -q '^Description:' && ! ddx bead show ddx-66131337 | rg -q '^Acceptance:' && ddx bead dep tree ddx-66131337 | rg -q '^ddx-66131337 \[open\] Dep root$'
+reason: The bead is an empty tracker root with no description, acceptance criteria, or child work. There is nothing implementable in this worktree until the operator supplies real scope or decomposes it into child beads.

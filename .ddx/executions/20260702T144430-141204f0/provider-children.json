@@ -1,0 +1,336 @@
+{
+  "attempt_id": "20260702T144430-141204f0",
+  "bead_id": "ddx-f2b7cf89",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-02T16:35:33.437893047Z",
+  "reaped": [
+    {
+      "pid": 3446546,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3446569,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3447482,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3447508,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3576495,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped4036414929/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3577114,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren2364210838/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3577116,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren2364210838/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3585582,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/pgidcheck4205927814/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3617259,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3481926787/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3801790,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped2224434099/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3801782,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3567992163/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3895241,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3895172,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3910759,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren1919310557/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3912415,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3259503316/001/gemini -c \"$1\" 120 \u0026 echo $! \u003e \"$2\"; wait gemini /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3259503316/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3259503316/001/node.pid",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3913721,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped1922972350/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3913723,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped1922972350/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3916594,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren89064019/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3916596,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren89064019/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3937966,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3937782,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3950190,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3950380,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 4036004,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped2652686123/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 4062971,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped4236178269/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 20668,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3547085176/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 22103,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3777435573/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 129672,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3342679860/001/gemini -c \"$1\" 120 \u0026 echo $! \u003e \"$2\"; wait gemini /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3342679860/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup3342679860/001/node.pid",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 129667,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped1026219904/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 129670,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped1026219904/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 133543,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren4059924455/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 133572,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped3158506009/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 133575,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestAttemptProviderChildrenAreRouteScoped3158506009/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 133545,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren4059924455/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 134666,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup618608154/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup618608154/001/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 134667,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup618608154/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 136365,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3015024813/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 136364,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3015024813/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3015024813/001/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 234911,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped557389032/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 274320,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup325307639/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup325307639/001/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 274321,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup325307639/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}

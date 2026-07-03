@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./cmd -run 'TestBeadShowSurfacesFingerprintAndOverride' -count=1

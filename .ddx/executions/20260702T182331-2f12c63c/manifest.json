@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260702T182331-2f12c63c",
+  "bead_id": "ddx-43b6b5fe",
+  "base_rev": "76c99785cf596319ce4b55fc00f4d91a54ef6d5b",
+  "created_at": "2026-07-02T18:23:48.072018709Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-43b6b5fe",
+    "title": "config: TestModeMatrix — both modes pass the same scenario suite, spec citations updated",
+    "description": "PROBLEM\nThe two principles of epic ddx-602ae31a (ddx home resolution + skills/personas install topology) must behave identically across both modes (in-tree and convention). Today there is no single test suite that drives the same scenarios through both modes; coverage is per-mode-ad-hoc and divergence between modes is invisible until operators hit it in production.\n\nROOT CAUSE\nThe two parent beads (ddx-06cbaa90 and ddx-937de9fc) each carry per-feature tests. Neither owns the cross-mode equivalence guarantee.\n\nPROPOSED FIX\n\n1. Add cli/internal/agent/test_mode_matrix_test.go (or equivalent suite under a new package) that parameterizes every behaviour-equivalence scenario across both modes:\n\n  for mode in [Convention, InTree]:\n    setup_fixture(mode)\n    for scenario in [\n      \"bead-lifecycle\":           create/show/update/close\n      \"bead-execution\":           ddx try a bead, observe attempt evidence and state mutation\n      \"plugin-skill-resolution\":  ddx-side plugin lookup honors precedence; agent-tier symlinks resolve to plugin content\n      \"persona-binding\":          role → persona resolves correctly per binding config\n      \"worker-drain\":             ddx work --watch picks beads and lands them\n      \"meta-prompt-sync\":         CLAUDE.md (or equivalent) gets the right content\n      \"auto-commit-routing\":      bead create/update auto-commit lands in the right git repo (project's vs XDG's)\n      \"attachments\":              per-attempt event files written to the right anchor\n      \"index-lock-recovery\":      gitlock recovery fires correctly in both modes\n    ]:\n      run scenario in current mode\n      assert behaviour identical to the other mode modulo storage path\n\n2. Fixture setup must be deterministic and isolated:\n   - Convention mode fixture: tempdir as project root, no .ddx/; XDG_DATA_HOME pointed at a per-test tempdir; git remote set to a deterministic URL.\n   - In-tree mode fixture: tempdir as project root WITH .ddx/ pre-created; XDG_DATA_HOME pointed elsewhere (must not be consulted).\n   - Two clones of the same project share an XDG dir — explicitly tested as a separate sub-scenario.\n\n3. Document the test-mode invariant in cli/internal/agent/test_mode_matrix_test.go's package doc: \"Any behavior that diverges between Convention and InTree modes (other than the on-disk anchor) is a regression.\"\n\n4. SPEC UPDATES — propagate the resolver/mode model to every doc that references .ddx/ paths or project state. Each spec update added in this bead's commit cites principle-numbered tags so future readers see the link:\n   - TD-031 bead state machine — \"Storage anchors via ddxroot.Path(); see ddx-06cbaa90.\"\n   - SD-019 multi-project-server-topology — Project identity from `host/owner/repo`; reference ddx-06cbaa90.\n   - SD-020 multi-machine-coordinator-topology — same.\n   - ADR-021 operator-prompt-beads-web-write-path — reference ddx-06cbaa90.\n   - workers-sessions-operator-surface.md — worker status paths through ddxroot.Path().\n   - plan-2026-04-29-artifact-and-run-architecture — FEAT-010 paths through resolver.\n   - library/skills/ddx/SKILL.md and CLAUDE.md — install precedence per ddx-937de9fc.\n   - library/README.md — install topology overview.\n\nNON-SCOPE\n- New behaviours (every scenario in the matrix is already covered by ddx-06cbaa90 or ddx-937de9fc per-feature tests; this is the cross-mode equivalence layer).\n- Migration tooling for existing in-tree repos (out of scope; this repo stays in-tree).\n\nDEPS\nddx-06cbaa90 (ddx home resolution).\nddx-937de9fc (skills/personas/plugins).",
+    "acceptance": "1. cli/internal/agent/test_mode_matrix_test.go (or a comparable suite) exists, parameterized over [Convention, InTree] modes and the nine listed scenarios.\n2. The suite passes for every (mode, scenario) cell.\n3. TestModeMatrix_TwoClonesShareXDG asserts two project worktrees pointing at the same git remote share the XDG project dir AND register both in worktrees.json with one auto-pinned as master.\n4. TestModeMatrix_OperatorExpectationDocumented asserts the suite's package godoc clearly states the cross-mode equivalence invariant.\n5. Every spec listed under SPEC UPDATES has a citation to ddx-06cbaa90 or ddx-937de9fc (verified by `rg \"ddx-06cbaa90|ddx-937de9fc\" docs/helix/`).\n6. CLAUDE.md \"Persona System\" section updated to document install precedence and references ddx-937de9fc.\n7. library/skills/ddx/SKILL.md \"How this skill works\" section documents global vs project install and references ddx-937de9fc.\n8. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/... green.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-602ae31a",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260702T182331-2f12c63c",
+    "prompt": ".ddx/executions/20260702T182331-2f12c63c/prompt.md",
+    "manifest": ".ddx/executions/20260702T182331-2f12c63c/manifest.json",
+    "result": ".ddx/executions/20260702T182331-2f12c63c/result.json",
+    "checks": ".ddx/executions/20260702T182331-2f12c63c/checks.json",
+    "usage": ".ddx/executions/20260702T182331-2f12c63c/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-43b6b5fe-20260702T182331-2f12c63c"
+  },
+  "prompt_sha": "206248f2b31939a4157204822db45b63fa66a705c09601edf56d105c6a09d6c8"
+}

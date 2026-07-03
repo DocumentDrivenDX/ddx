@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./cmd ./internal/bead ./internal/server ./internal/server/graphql -run 'Test.*Reopen' -count=1

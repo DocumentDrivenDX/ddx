@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260702T164245-3f25ff12",
+  "bead_id": "ddx-4a76c375",
+  "base_rev": "c17c5436c655d0bbf92f0a74f504483268a93a7d",
+  "created_at": "2026-07-02T16:43:01.282521156Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4a76c375",
+    "title": "server: multi-project supervisor reconciles all registered projects (Phase 1.5 of ddx-9d1af129)",
+    "description": "# PROBLEM\nPhase 1 of ddx-9d1af129 (landed in 75713a02b) wires ONE `WorkerSupervisor` bound to the server's `workingDir` (the project referenced by `DDX_PROJECT_ROOT`). Operators who run `ddx worker enable` on additional projects (helix, dun, niflheim, tablespec, pqueue, heimq, etc.) get `.ddx/workers/desired.json` written but no supervisor ever reads it. Only the server's home project gets a supervised worker.\n\nObserved live 2026-07-02: server pid 3252642 (systemd-managed, --hub-mode) supervises `/home/erik/Projects/ddx`. `desired.json` files present under `/home/erik/Projects/{helix,dun,niflheim}/.ddx/workers/` are ignored. No workers spawn there.\n\n# ROOT CAUSE WITH FILE:LINE\n`cli/internal/server/server.go:196` constructs a single supervisor: `s.supervisor = NewWorkerSupervisor(workers)` where `workers := NewWorkerManager(workingDir)` at line 185. `WorkerSupervisor.Reconcile` reads exactly ONE `desired.json` — `s.manager.rootDir/desired.json` — which is `\u003cworkingDir\u003e/.ddx/workers/desired.json`.\n\nMulti-project registration exists at the state layer (`state.RegisterProject`, `state.GetProjects`) but nothing joins that surface to the supervisor.\n\n# PROPOSED FIX\nExtend the wiring to iterate registered projects on every reconcile tick:\n\n1. Introduce `SupervisorRegistry` in `cli/internal/server/workers_supervisor.go` (or new file `workers_supervisor_registry.go`):\n   ```go\n   type SupervisorRegistry struct {\n       mu          sync.Mutex\n       supervisors map[string]*WorkerSupervisor  // key: projectRoot\n       state       *ServerState\n       managerFor  func(projectRoot string) *WorkerManager\n   }\n   func (r *SupervisorRegistry) ReconcileAll() error {\n       for _, proj := range r.state.GetProjects() {\n           sup := r.getOrCreate(proj.Path)\n           _ = sup.Reconcile()  // per-project error isolation\n       }\n       return nil\n   }\n   ```\n\n2. Replace `Server.supervisor` (single) with `Server.supervisorRegistry` (multi-project). Keep `Server.supervisor` for backward compat / tests, but have the goroutine call `supervisorRegistry.ReconcileAll()`.\n\n3. Bootstrap: on server startup (after loading state), call `state.RegisterProject(\u003cpath\u003e)` for any path where `\u003cpath\u003e/.ddx/workers/desired.json` exists. Search paths: parent dirs of already-registered projects; env `DDX_SUPERVISED_PROJECTS` (colon-separated list); explicit `state.RegisterProject` API calls (existing surface).\n\n4. When a project has NO desired.json, the per-project supervisor's `Reconcile` returns nil early (already implemented at `workers_supervisor.go:241` via `errors.Is(err, os.ErrNotExist)`). So auto-registering safe-adjacent projects is fine.\n\n# NON-SCOPE\n- Cross-machine federation of desired-state (Phase 4/5).\n- UI to add/remove supervised projects (Phase 3, `ddx-2b15342f`).\n- Server-side per-project restart policy override (Phase 3).\n\n# IMPACT\nAfter this lands, `ddx worker enable --project \u003cpath\u003e` for any project the server knows about (via state.RegisterProject or env-var seeding) actually starts a supervised worker within one tick.",
+    "acceptance": "1. New type `SupervisorRegistry` (or equivalent) in cli/internal/server/ owns a per-projectRoot map of `*WorkerSupervisor`. Test `TestSupervisorRegistry_ReconcileAllVisitsEachRegisteredProject` proves iterating N registered projects calls Reconcile N times, isolated (one project's error doesn't stop the others).\n2. Server startup wires the registry into the reconcile goroutine. Test `TestServer_MultiProjectSupervisorPicksUpNewProjects` proves: given a server with 2 registered projects both having `desired.json`, both get supervised workers within 2 supervisor ticks.\n3. Env `DDX_SUPERVISED_PROJECTS` (colon-separated list of absolute paths) auto-registers those projects at startup. Test `TestServer_DDXSupervisedProjectsEnvRegistersProjects` proves paths in that env become entries in `state.GetProjects()` before the first Reconcile tick.\n4. Existing tests `TestServer_StartSupervisorTicksReconcile`, `TestServer_SupervisorReconcilesDesiredStateOnStart`, `TestWorkerCmd_SetPersistsDesiredState`, `TestWorkerCmd_EnableIsShortcut`, `TestWorkerCmd_StatusReportsAbsent` remain green.\n5. `cd cli \u0026\u0026 go test ./internal/server/... ./cmd/... -run 'Supervisor|Worker|worker' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:server",
+      "area:workers",
+      "kind:feature",
+      "phase:build",
+      "plan:server-managed-workers",
+      "supervisor:phase-1.5"
+    ],
+    "metadata": {
+      "queue-rank": 8
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260702T164245-3f25ff12",
+    "prompt": ".ddx/executions/20260702T164245-3f25ff12/prompt.md",
+    "manifest": ".ddx/executions/20260702T164245-3f25ff12/manifest.json",
+    "result": ".ddx/executions/20260702T164245-3f25ff12/result.json",
+    "checks": ".ddx/executions/20260702T164245-3f25ff12/checks.json",
+    "usage": ".ddx/executions/20260702T164245-3f25ff12/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-4a76c375-20260702T164245-3f25ff12"
+  },
+  "prompt_sha": "5bbb0842f9d64b0d1d52af20d24c20e7c7a87592eca82c8f54be50c95160c32a"
+}

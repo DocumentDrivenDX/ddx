@@ -1,0 +1,2 @@
+status: blocked
+reason: lefthook pre-commit runs `cd cli && go test -short -race -timeout 30m ./internal/agent`, which still times out in unrelated existing tests before this bead can be committed

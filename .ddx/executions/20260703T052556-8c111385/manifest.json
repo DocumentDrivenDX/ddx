@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T052556-8c111385",
+  "bead_id": "ddx-7daf46eb",
+  "base_rev": "9fa35da294e1193e2c93a1fc09171e132a7869da",
+  "created_at": "2026-07-03T05:26:10.527998574Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7daf46eb",
+    "title": "First task"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T052556-8c111385",
+    "prompt": ".ddx/executions/20260703T052556-8c111385/prompt.md",
+    "manifest": ".ddx/executions/20260703T052556-8c111385/manifest.json",
+    "result": ".ddx/executions/20260703T052556-8c111385/result.json",
+    "checks": ".ddx/executions/20260703T052556-8c111385/checks.json",
+    "usage": ".ddx/executions/20260703T052556-8c111385/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7daf46eb-20260703T052556-8c111385"
+  },
+  "prompt_sha": "05fb5446d154d297b1e736308325adfcd096df9b9ba0a9ccbc126a6378e08054"
+}

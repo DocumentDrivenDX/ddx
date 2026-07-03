@@ -1,0 +1,57 @@
+{
+  "bead_id": "ddx-7d9d4853",
+  "attempt_id": "20260703T084331-1466499c",
+  "base_rev": "916bba86f59481dd1595c2e8b1f53610c34d5fb0",
+  "result_rev": "6cd285e46cb99a558ea1f01a3e6672c951392107",
+  "implementation_rev": "6cd285e46cb99a558ea1f01a3e6672c951392107",
+  "landed_rev": "6cd285e46cb99a558ea1f01a3e6672c951392107",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260703T084331-1466499c/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260703T084331-1466499c",
+      "result_rev": "6cd285e46cb99a558ea1f01a3e6672c951392107",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-3ab04732",
+  "duration_ms": 6209459,
+  "tokens": 29517621,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260703T084331-1466499c",
+  "prompt_file": ".ddx/executions/20260703T084331-1466499c/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T084331-1466499c/manifest.json",
+  "result_file": ".ddx/executions/20260703T084331-1466499c/result.json",
+  "usage_file": ".ddx/executions/20260703T084331-1466499c/usage.json",
+  "started_at": "2026-07-03T08:43:48.04927596Z",
+  "finished_at": "2026-07-03T10:27:17.509273942Z"
+}

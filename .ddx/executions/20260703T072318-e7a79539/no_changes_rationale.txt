@@ -1,0 +1,2 @@
+status: proposed
+reason: empty bead record; no description, acceptance criteria, or scoped files/specs were provided, so operator input is required before execution can continue.

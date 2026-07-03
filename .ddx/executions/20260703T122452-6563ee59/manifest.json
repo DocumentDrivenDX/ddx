@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260703T122452-6563ee59",
+  "bead_id": "ddx-3740abf8",
+  "base_rev": "afa4915869ceae0e456d00f09fcb649754c8a044",
+  "created_at": "2026-07-03T12:25:04.65175271Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3740abf8",
+    "title": "Improve clarity",
+    "acceptance": "1. improve clarity\n2. make it nicer\n3. handle edges well\n",
+    "labels": [
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"improve clarity\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"make it nicer\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"handle edges well\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-07-03T10:28:36.714442532Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/3"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: snapshot project root dirtiness: fatal: .git/index: index file smaller than expected\",\"fingerprint\":\"20bdc7f6a775b660ac511e60a08523d1240d57d7f323de31b451f0d09dff379d\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"20bdc7f6a775b660ac511e60a08523d1240d57d7f323de31b451f0d09dff379d\"}",
+          "created_at": "2026-07-03T10:28:53.479626034Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"improve clarity\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"make it nicer\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"handle edges well\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-07-03T12:19:35.953156734Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/3"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-3740abf8)\",\"fingerprint\":\"faea7c3d058716f2360a139623a6a68610ecc2653bae8a9de6f90ac771dd4207\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"faea7c3d058716f2360a139623a6a68610ecc2653bae8a9de6f90ac771dd4207\"}",
+          "created_at": "2026-07-03T12:24:49.708642307Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T122452-6563ee59",
+    "prompt": ".ddx/executions/20260703T122452-6563ee59/prompt.md",
+    "manifest": ".ddx/executions/20260703T122452-6563ee59/manifest.json",
+    "result": ".ddx/executions/20260703T122452-6563ee59/result.json",
+    "checks": ".ddx/executions/20260703T122452-6563ee59/checks.json",
+    "usage": ".ddx/executions/20260703T122452-6563ee59/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-3740abf8-20260703T122452-6563ee59"
+  },
+  "prompt_sha": "d57d8ff843784463484ec59a221d66a4da7710fd01572e5f8c85f5c5f9de54f5"
+}

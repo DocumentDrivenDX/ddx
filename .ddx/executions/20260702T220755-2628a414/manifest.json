@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260702T220755-2628a414",
+  "bead_id": "ddx-89d00d0c",
+  "base_rev": "8fbd109d99aa5d65579dddf2b891021b76873a47",
+  "created_at": "2026-07-02T22:08:08.496931794Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-89d00d0c",
+    "title": "config: TestModeMatrix — both modes pass the same scenario suite, spec: part 3",
+    "description": "PROBLEM\nParent bead ddx-43b6b5fe is too broad for one execution pass. This child owns part 3 of 4 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nThe two principles of epic ddx-602ae31a (ddx home resolution + skills/personas install topology) must behave identically across both modes (in-tree and convention). Today there is no single test suite that drives the same scenarios through both modes; coverage is per-mode-ad-hoc and divergence between modes is invisible until operators hit it in production.\n\nROOT CAUSE\nThe two parent beads (ddx-06cbaa90 and ddx-937de9fc) each carry per-feature tests. Neither owns the cross-mode equivalence guarantee.\n\nPROPOSED FIX\n\n1. Add cli/internal/agent/test_mode_matrix_test.go (or equivalent suite under a new package) that parameterizes every behaviour-equivalence scenario across both modes:\n\n  for mode in [Convention, InTree]:\n    setup_fixture(mode)\n    for scenario in [\n      \"bead-lifecycle\":           create/show/update/close\n      \"bead-execution\":           ddx try a bead, observe attempt evidence and state mutation\n      \"plugin-skill-resolution\":  ddx-side plugin lookup honors precedence; agent-tier symlinks resolve to plugin content\n      \"persona-binding\":          role → persona resolves correctly per binding config\n      \"worker-drain\":             ddx work --watch picks beads and lands them\n      \"meta-prompt-sync\":         CLAUDE.md (or equivalent) gets the right content\n      \"auto-commit-routing\":      bead create/update auto-commit lands in the right git repo (project's vs XDG's)\n      \"attachments\":              per-attempt event files written to the right anchor\n      \"index-lock-recovery\":      gitlock recovery fires correctly in both modes\n    ]:\n      run scenario in current mode\n      assert behaviour identical to the other mode modulo storage path\n\n2. Fixture setup must be deterministic and isolated:\n   - Convention mode fixture: tempdir as project root, no .ddx/; XDG_DATA_HOME pointed at a per-test tempdir; git remote set to a deterministic URL.\n   - In-tree mode fixture: tempdir as project root WITH .ddx/ pre-created; XDG_DATA_HOME pointed elsewhere (must not be consulted).\n   - Two clones of the same project share an XDG dir — explicitly tested as a separate sub-scenario.\n\n3. Document the test-mode invariant in cli/internal/agent/test_mode_matrix_test.go's package doc: \"Any behavior that diverges between Convention and InTree modes (other than the on-disk anchor) is a regression.\"\n\n4. SPEC UPDATES — propagate the resolver/mode m\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Every spec listed under SPEC UPDATES has a citation to ddx-06cbaa90 or ddx-937de9fc (verified by `rg \"ddx-06cbaa90|ddx-937de9fc\" docs/helix/`).\n- CLAUDE.md \"Persona System\" section updated to document install precedence and references ddx-937de9fc.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Every spec listed under SPEC UPDATES has a citation to ddx-06cbaa90 or ddx-937de9fc (verified by `rg \"ddx-06cbaa90|ddx-937de9fc\" docs/helix/`).\n2. CLAUDE.md \"Persona System\" section updated to document install precedence and references ddx-937de9fc.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260702T220755-2628a414",
+    "prompt": ".ddx/executions/20260702T220755-2628a414/prompt.md",
+    "manifest": ".ddx/executions/20260702T220755-2628a414/manifest.json",
+    "result": ".ddx/executions/20260702T220755-2628a414/result.json",
+    "checks": ".ddx/executions/20260702T220755-2628a414/checks.json",
+    "usage": ".ddx/executions/20260702T220755-2628a414/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-89d00d0c-20260702T220755-2628a414"
+  },
+  "prompt_sha": "9b88668e701a61241ec0a734eacab00782ba045a4cd993d99628e2f58d366ce3"
+}

@@ -1,0 +1,2 @@
+verification_command: git diff --quiet HEAD -- .
+reason: The bead body has no description or acceptance criteria, so there are no source changes to make.

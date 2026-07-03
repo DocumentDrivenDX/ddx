@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./cmd -run 'TestBeadShowSurfacesFingerprint|TestBeadShowSurfacesFingerprintAndOverride' && go test ./internal/agent -run TestWorkLogRenderer

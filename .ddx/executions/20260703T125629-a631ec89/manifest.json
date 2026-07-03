@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260703T125629-a631ec89",
+  "bead_id": "ddx-9ba587dc",
+  "base_rev": "b2c1f2e006c9676784e8f98e9b5721c04164a403",
+  "created_at": "2026-07-03T12:56:43.03020707Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9ba587dc",
+    "title": "Open prose-only",
+    "acceptance": "1. make it better\n2. clean things up\n",
+    "labels": [
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"make it better\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"clean things up\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-07-03T12:51:16.987149961Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9ba587dc)\",\"fingerprint\":\"5aba9cac351876cd913ce0cab1e5ea7353f2ba872fbe64ee8e0461bb40fdaa7e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5aba9cac351876cd913ce0cab1e5ea7353f2ba872fbe64ee8e0461bb40fdaa7e\"}",
+          "created_at": "2026-07-03T12:56:27.212256867Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T125629-a631ec89",
+    "prompt": ".ddx/executions/20260703T125629-a631ec89/prompt.md",
+    "manifest": ".ddx/executions/20260703T125629-a631ec89/manifest.json",
+    "result": ".ddx/executions/20260703T125629-a631ec89/result.json",
+    "checks": ".ddx/executions/20260703T125629-a631ec89/checks.json",
+    "usage": ".ddx/executions/20260703T125629-a631ec89/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-9ba587dc-20260703T125629-a631ec89"
+  },
+  "prompt_sha": "429355677a18b88a06ee37682b663f2a5f6799cada218331de92e315bb1a591e"
+}

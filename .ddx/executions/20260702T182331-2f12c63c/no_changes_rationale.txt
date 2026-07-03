@@ -1,0 +1,4 @@
+status: open
+reason: split-first decomposition required; the parent bead spans test harness work, registry/persona/CLI behavior, and helix doc updates.
+orchestrator_action: decompose
+children: ddx-9aede25e, ddx-ccaa4cc6, ddx-bed631a3, ddx-3c9c6e4c, ddx-7dff7981, ddx-0ed4dd76, ddx-3ae0eab0

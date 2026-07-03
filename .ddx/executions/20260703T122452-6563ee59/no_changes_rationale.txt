@@ -1,0 +1,2 @@
+status: proposed
+reason: The bead has no description and only non-verifiable prose acceptance criteria, with no concrete file, spec, or prior bead scope to implement against, so operator input is required before execution can continue.

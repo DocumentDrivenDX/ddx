@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T064735-4b282091",
+  "bead_id": "ddx-b87820dd",
+  "base_rev": "05f0b9c66f24bd31f4887266508268d7378b02b8",
+  "created_at": "2026-07-03T06:48:01.716874608Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b87820dd",
+    "title": "Reopen with notes"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T064735-4b282091",
+    "prompt": ".ddx/executions/20260703T064735-4b282091/prompt.md",
+    "manifest": ".ddx/executions/20260703T064735-4b282091/manifest.json",
+    "result": ".ddx/executions/20260703T064735-4b282091/result.json",
+    "checks": ".ddx/executions/20260703T064735-4b282091/checks.json",
+    "usage": ".ddx/executions/20260703T064735-4b282091/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-b87820dd-20260703T064735-4b282091"
+  },
+  "prompt_sha": "b6d062950398449fd4496c4acf09825934650deb52ec535b15a7473026f385d8"
+}

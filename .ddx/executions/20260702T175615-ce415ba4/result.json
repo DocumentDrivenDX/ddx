@@ -1,0 +1,57 @@
+{
+  "bead_id": "ddx-a1bf2229",
+  "attempt_id": "20260702T175615-ce415ba4",
+  "base_rev": "2adef59cba98d93a41f469fbb8eedb93887a7442",
+  "result_rev": "4036de4f367d2a025c30a8558b7d6f113c61ca6c",
+  "implementation_rev": "4036de4f367d2a025c30a8558b7d6f113c61ca6c",
+  "landed_rev": "4036de4f367d2a025c30a8558b7d6f113c61ca6c",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260702T175615-ce415ba4/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260702T175615-ce415ba4",
+      "result_rev": "4036de4f367d2a025c30a8558b7d6f113c61ca6c",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-5e973ad5",
+  "duration_ms": 1195346,
+  "tokens": 7580027,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260702T175615-ce415ba4",
+  "prompt_file": ".ddx/executions/20260702T175615-ce415ba4/prompt.md",
+  "manifest_file": ".ddx/executions/20260702T175615-ce415ba4/manifest.json",
+  "result_file": ".ddx/executions/20260702T175615-ce415ba4/result.json",
+  "usage_file": ".ddx/executions/20260702T175615-ce415ba4/usage.json",
+  "started_at": "2026-07-02T17:56:29.235144458Z",
+  "finished_at": "2026-07-02T18:16:24.581617015Z"
+}

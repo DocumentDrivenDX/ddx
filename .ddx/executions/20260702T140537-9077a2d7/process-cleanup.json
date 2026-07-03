@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260702T140537-9077a2d7",
+  "bead_id": "ddx-a1bf2229",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7",
+  "trigger": "context canceled",
+  "started_at": "2026-07-02T14:19:12.853573481Z",
+  "finished_at": "2026-07-02T14:19:13.221172901Z",
+  "scanned": 1384,
+  "candidates": [
+    {
+      "pid": 2963788,
+      "ppid": 2959086,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go-build4057931927/b001/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build4057931927/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 2959086,
+      "ppid": 2959031,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli",
+      "command": "go test -short -race -timeout 30m ./cmd"
+    },
+    {
+      "pid": 2959031,
+      "ppid": 2959002,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/bead_merge_test.go"
+    },
+    {
+      "pid": 2959002,
+      "ppid": 1,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/bead_merge_test.go"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 2963788,
+      "ppid": 2959086,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go-build4057931927/b001/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build4057931927/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 2959086,
+      "ppid": 2959031,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli",
+      "command": "go test -short -race -timeout 30m ./cmd"
+    },
+    {
+      "pid": 2959031,
+      "ppid": 2959002,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/bead_merge_test.go"
+    },
+    {
+      "pid": 2959002,
+      "ppid": 1,
+      "pgid": 2959002,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-a1bf2229-20260702T140537-9077a2d7/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/bead_merge_test.go"
+    }
+  ]
+}

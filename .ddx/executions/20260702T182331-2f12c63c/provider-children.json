@@ -1,0 +1,24 @@
+{
+  "attempt_id": "20260702T182331-2f12c63c",
+  "bead_id": "ddx-43b6b5fe",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-02T18:44:09.366699357Z",
+  "reaped": [
+    {
+      "pid": 1167823,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1167856,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}

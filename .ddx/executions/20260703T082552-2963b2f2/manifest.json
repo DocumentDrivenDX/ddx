@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260703T082552-2963b2f2",
+  "bead_id": "ddx-63e028a2",
+  "base_rev": "9fe7715e40d334489a283348c9d30e319caeccdd",
+  "created_at": "2026-07-03T08:26:06.056470461Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-63e028a2",
+    "title": "test bead",
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: Placeholder only: the bead has a generic title, empty description and acceptance, null labels, and no parent/deps. There is no executable scope or verification target, so this cannot be safely refined without operator input.\",\"fingerprint\":\"347598e2b8d7819544e2c6458f93b943c6dc07cdef2ffa4a855481f7efe0406a\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"347598e2b8d7819544e2c6458f93b943c6dc07cdef2ffa4a855481f7efe0406a\"}",
+          "created_at": "2026-07-03T08:25:49.890083688Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T082552-2963b2f2",
+    "prompt": ".ddx/executions/20260703T082552-2963b2f2/prompt.md",
+    "manifest": ".ddx/executions/20260703T082552-2963b2f2/manifest.json",
+    "result": ".ddx/executions/20260703T082552-2963b2f2/result.json",
+    "checks": ".ddx/executions/20260703T082552-2963b2f2/checks.json",
+    "usage": ".ddx/executions/20260703T082552-2963b2f2/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-63e028a2-20260703T082552-2963b2f2"
+  },
+  "prompt_sha": "759837058de6adbac7edc12fbadba25e3de1deee2b4630c53b5833aab5d39a90"
+}

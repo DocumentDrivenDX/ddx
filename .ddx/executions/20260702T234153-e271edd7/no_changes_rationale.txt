@@ -1,0 +1,2 @@
+status: open
+reason: retryable package-level performance regression in cli/internal/bead/store_perf_test.go; go test ./internal/bead/... fails on TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget with lock timeout / p99 wait over budget, even when run in isolation. The Axon-specific targeted verification and lefthook run pre-commit were green.

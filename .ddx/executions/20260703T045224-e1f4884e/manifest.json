@@ -1,0 +1,28 @@
+{
+  "attempt_id": "20260703T045224-e1f4884e",
+  "bead_id": "ddx-3bea3473",
+  "base_rev": "2b564058516cddf9a50c5e2fd4fbb2f34246c3ec",
+  "created_at": "2026-07-03T04:52:38.560658971Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3bea3473",
+    "title": "Manual review provenance",
+    "labels": [
+      "helix",
+      "kind:planning",
+      "action:review"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T045224-e1f4884e",
+    "prompt": ".ddx/executions/20260703T045224-e1f4884e/prompt.md",
+    "manifest": ".ddx/executions/20260703T045224-e1f4884e/manifest.json",
+    "result": ".ddx/executions/20260703T045224-e1f4884e/result.json",
+    "checks": ".ddx/executions/20260703T045224-e1f4884e/checks.json",
+    "usage": ".ddx/executions/20260703T045224-e1f4884e/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-3bea3473-20260703T045224-e1f4884e"
+  },
+  "prompt_sha": "447218292434620af18c81d6ecafd8bac2902791f154b762a2401d66b1c16b6c"
+}
