@@ -1,0 +1,2 @@
+status: proposed
+reason: operator needed: bead ddx-3bea3473 has no description or acceptance criteria, so there is no concrete implementation target or verification surface yet.
