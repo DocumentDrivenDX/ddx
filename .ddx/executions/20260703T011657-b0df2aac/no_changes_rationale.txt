@@ -1,0 +1,2 @@
+status: proposed
+reason: operator needed: bead ddx-e8900b98 has no description or acceptance criteria, so there is no executable scope to implement or verify.

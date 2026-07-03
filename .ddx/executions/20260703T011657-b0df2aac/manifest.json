@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T011657-b0df2aac",
+  "bead_id": "ddx-e8900b98",
+  "base_rev": "8bfad603bbf0e023446c73c49bab7dd0e268e271",
+  "created_at": "2026-07-03T01:17:13.930940039Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e8900b98",
+    "title": "Claim me"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T011657-b0df2aac",
+    "prompt": ".ddx/executions/20260703T011657-b0df2aac/prompt.md",
+    "manifest": ".ddx/executions/20260703T011657-b0df2aac/manifest.json",
+    "result": ".ddx/executions/20260703T011657-b0df2aac/result.json",
+    "checks": ".ddx/executions/20260703T011657-b0df2aac/checks.json",
+    "usage": ".ddx/executions/20260703T011657-b0df2aac/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-e8900b98-20260703T011657-b0df2aac"
+  },
+  "prompt_sha": "0fdd81fa29504dd58226d539f8266789358fff6494f8528167d9b9d13e86bcb5"
+}
