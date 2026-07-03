@@ -1,0 +1,24 @@
+{
+  "attempt_id": "20260703T123249-d8077f7f",
+  "bead_id": "ddx-6c71c04f",
+  "base_rev": "6c2f621d5b12e30bcaf5e67f9bfd79371202e8d0",
+  "created_at": "2026-07-03T12:33:02.010504134Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6c71c04f",
+    "title": "Wire telemetry",
+    "acceptance": "1. TestWireTelemetry passes\n"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T123249-d8077f7f",
+    "prompt": ".ddx/executions/20260703T123249-d8077f7f/prompt.md",
+    "manifest": ".ddx/executions/20260703T123249-d8077f7f/manifest.json",
+    "result": ".ddx/executions/20260703T123249-d8077f7f/result.json",
+    "checks": ".ddx/executions/20260703T123249-d8077f7f/checks.json",
+    "usage": ".ddx/executions/20260703T123249-d8077f7f/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-6c71c04f-20260703T123249-d8077f7f"
+  },
+  "prompt_sha": "f6f291e41a522e6b3c4b4bcaf059b7b4a9319420d6f58970ac33ff5a8b6e5e6d"
+}
