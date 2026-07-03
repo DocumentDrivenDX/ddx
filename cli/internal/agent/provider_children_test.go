@@ -288,17 +288,17 @@ func TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup(t *testing
 	}
 }
 
-// TestWork_NonRouteProviderIsActuallyReaped proves the guard's termination
-// call actually kills a non-route provider child even when that child is not
-// its own process-group leader (pid != pgid) — e.g. because it retained an
-// unclassified wrapper's process group rather than becoming a leader itself.
-// Before the fix, signalProviderChildGroup treated ESRCH from the
-// process-group kill as "nothing left to do" and never signalled the bare
+// TestWork_NonRouteProviderPidNotProcessGroupLeaderIsReaped proves the guard's
+// termination call actually kills a non-route provider child even when that
+// child is not its own process-group leader (pid != pgid) — e.g. because it
+// retained an unclassified wrapper's process group rather than becoming a
+// leader itself. Before the fix, signalProviderChildGroup treated ESRCH from
+// the process-group kill as "nothing left to do" and never signalled the bare
 // pid, so the guard's "terminated by running-phase guard" diagnostic did not
 // reflect reality: the process kept running (and, in production, kept being
 // replaced by fresh spawns) while status.json reported it as reaped
 // (ddx-f2b7cf89).
-func TestWork_NonRouteProviderIsActuallyReaped(t *testing.T) {
+func TestWork_NonRouteProviderPidNotProcessGroupLeaderIsReaped(t *testing.T) {
 	shPath, err := exec.LookPath("sh")
 	if err != nil {
 		t.Skipf("sh not available: %v", err)

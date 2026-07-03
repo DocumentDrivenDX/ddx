@@ -29,16 +29,17 @@ func (s *noisyNeverClosingService) Execute(context.Context, agentlib.ServiceExec
 	return s.events, nil
 }
 
-// TestWork_ClaudeSubprocessDeathSynthesizesTerminalOutcome (ddx-f2b7cf89 AC2):
-// proves that once something external (in production, the running-phase
-// guard's harness-liveness watchdog) proves the route's own harness process
-// died and cancels the attempt context, executeOnService synthesizes a
-// terminal, typed outcome promptly — even while the provider keeps emitting
-// unrelated events that would otherwise reset the idle-silence timeout
-// indefinitely. Before wiring drainWatchdog.ctx to the caller's context, the
-// drain loop had no way to notice this cancellation except by the idle timer
-// firing, which continuous unrelated noise can suppress forever.
-func TestWork_ClaudeSubprocessDeathSynthesizesTerminalOutcome(t *testing.T) {
+// TestWork_ClaudeSubprocessDeathSynthesizesTerminalOutcomeUnderNoise
+// (ddx-f2b7cf89 AC2): proves that once something external (in production, the
+// running-phase guard's harness-liveness watchdog) proves the route's own
+// harness process died and cancels the attempt context, executeOnService
+// synthesizes a terminal, typed outcome promptly — even while the provider
+// keeps emitting unrelated events that would otherwise reset the
+// idle-silence timeout indefinitely. Before wiring drainWatchdog.ctx to the
+// caller's context, the drain loop had no way to notice this cancellation
+// except by the idle timer firing, which continuous unrelated noise can
+// suppress forever.
+func TestWork_ClaudeSubprocessDeathSynthesizesTerminalOutcomeUnderNoise(t *testing.T) {
 	events := make(chan agentlib.ServiceEvent)
 	svc := &noisyNeverClosingService{passthroughTestService: &passthroughTestService{}, events: events}
 	rcfg := resolvedWithPassthrough("claude", "", "", 0, 0)

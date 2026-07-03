@@ -13,8 +13,11 @@ package agent
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -99,9 +102,10 @@ func seedBeadStore(t *testing.T, cfg modeFixture, beadID string) *bead.Store {
 // allModes is the ordered set of modes exercised by every scenario.
 var allModes = []modeKind{modeInTree, modeConvention}
 
-// TestModeMatrix runs the nine behavioral-equivalence scenarios across both
-// storage modes. All (mode, scenario) cells must pass.
-func TestModeMatrix(t *testing.T) {
+// TestModeMatrix_BehavesIdenticallyAcrossModes runs the nine
+// behavioral-equivalence scenarios across both storage modes. All (mode,
+// scenario) cells must pass.
+func TestModeMatrix_BehavesIdenticallyAcrossModes(t *testing.T) {
 	for _, mode := range allModes {
 		mode := mode
 		t.Run(mode.String(), func(t *testing.T) {
@@ -474,4 +478,75 @@ func modeModeMatrixIndexLockRecovery(t *testing.T, kind modeKind) {
 		assert.False(t, xdgResult.Removed)
 		assert.Contains(t, xdgResult.Reason, "not present")
 	}
+}
+
+// TestModeMatrix_TwoClonesShareXDG verifies the shared-XDG two-clone
+// subscenario: two project worktrees with no in-tree .ddx/ that share the
+// same git remote must resolve to the same XDG convention root, and both
+// must register in that root's worktrees.json with the first bootstrapped
+// worktree auto-pinned as master.
+func TestModeMatrix_TwoClonesShareXDG(t *testing.T) {
+	setExecutionWorktreeRootForTest(t)
+	xdgHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgHome)
+
+	const remote = "git@github.com:matrix-org/shared-repo.git"
+
+	newClone := func() string {
+		root := t.TempDir()
+		runGitInteg(t, root, "init", "-b", "main")
+		runGitInteg(t, root, "config", "user.email", "matrix@ddx.test")
+		runGitInteg(t, root, "config", "user.name", "DDx Matrix")
+		require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("seed\n"), 0o644))
+		runGitInteg(t, root, "add", "seed.txt")
+		runGitInteg(t, root, "commit", "-m", "chore: matrix seed")
+		runGitInteg(t, root, "remote", "add", "origin", remote)
+		return root
+	}
+
+	firstRoot := newClone()
+	secondRoot := newClone()
+
+	// Neither clone has an in-tree .ddx/, so both bootstrap the same XDG
+	// convention root derived from the shared origin remote.
+	firstXDG := ddxroot.Path(context.Background(), firstRoot)
+	secondXDG := ddxroot.Path(context.Background(), secondRoot)
+	require.Equal(t, firstXDG, secondXDG, "clones sharing a remote must share the XDG project dir")
+
+	registry, err := ddxroot.LoadWorktreeRegistry(context.Background(), firstRoot)
+	require.NoError(t, err)
+
+	firstAbs, err := filepath.Abs(firstRoot)
+	require.NoError(t, err)
+	secondAbs, err := filepath.Abs(secondRoot)
+	require.NoError(t, err)
+
+	assert.Equal(t, firstAbs, registry.Master, "first worktree to bootstrap must be auto-pinned as master")
+	require.Len(t, registry.Paths, 2, "both worktrees must register in worktrees.json")
+
+	registered := map[string]bool{}
+	for _, entry := range registry.Paths {
+		registered[entry.Path] = true
+	}
+	assert.True(t, registered[firstAbs], "first worktree must be registered in worktrees.json")
+	assert.True(t, registered[secondAbs], "second worktree must be registered in worktrees.json")
+}
+
+// TestModeMatrix_OperatorExpectationDocumented verifies the package godoc for
+// this file states the cross-mode equivalence invariant operators rely on:
+// any behavior divergence between Convention and InTree modes, other than
+// the on-disk anchor, is a regression.
+func TestModeMatrix_OperatorExpectationDocumented(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller must resolve the current test file")
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, currentFile, nil, parser.ParseComments)
+	require.NoError(t, err, "parse %s", currentFile)
+	require.NotNil(t, f.Doc, "%s must carry a package doc comment", currentFile)
+
+	normalized := strings.Join(strings.Fields(f.Doc.Text()), " ")
+	assert.Contains(t, normalized,
+		"Any behavior that diverges between Convention and InTree modes (other than the on-disk anchor) is a regression.",
+		"package godoc must document the cross-mode equivalence invariant")
 }
