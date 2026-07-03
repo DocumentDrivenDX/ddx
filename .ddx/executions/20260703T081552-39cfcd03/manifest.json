@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260703T081552-39cfcd03",
+  "bead_id": "ddx-c40eb535",
+  "base_rev": "574bbd9bc3626d442ca6ad509ef11502969bb001",
+  "created_at": "2026-07-03T08:16:05.864189211Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c40eb535",
+    "title": "test bead",
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-c40eb535)\",\"fingerprint\":\"03fd5307982f5179de8364fa894443b6c39e278b45ca4bd29a0bf2980cb1f4c4\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"03fd5307982f5179de8364fa894443b6c39e278b45ca4bd29a0bf2980cb1f4c4\"}",
+          "created_at": "2026-07-03T08:15:49.258087671Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T081552-39cfcd03",
+    "prompt": ".ddx/executions/20260703T081552-39cfcd03/prompt.md",
+    "manifest": ".ddx/executions/20260703T081552-39cfcd03/manifest.json",
+    "result": ".ddx/executions/20260703T081552-39cfcd03/result.json",
+    "checks": ".ddx/executions/20260703T081552-39cfcd03/checks.json",
+    "usage": ".ddx/executions/20260703T081552-39cfcd03/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-c40eb535-20260703T081552-39cfcd03"
+  },
+  "prompt_sha": "5acc11804d20f0d7033c8e43b945ddee870dc7308347c254a6ff4aa31bd8c1b1"
+}
