@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T074213-3c5a9ab3",
+  "bead_id": "ddx-f9e889c6",
+  "base_rev": "8985936a95a3ac4e8f0e2ef892dc27a004ab626d",
+  "created_at": "2026-07-03T07:42:26.030805226Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f9e889c6",
+    "title": "Test override rendering"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T074213-3c5a9ab3",
+    "prompt": ".ddx/executions/20260703T074213-3c5a9ab3/prompt.md",
+    "manifest": ".ddx/executions/20260703T074213-3c5a9ab3/manifest.json",
+    "result": ".ddx/executions/20260703T074213-3c5a9ab3/result.json",
+    "checks": ".ddx/executions/20260703T074213-3c5a9ab3/checks.json",
+    "usage": ".ddx/executions/20260703T074213-3c5a9ab3/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-f9e889c6-20260703T074213-3c5a9ab3"
+  },
+  "prompt_sha": "0a990f66c833baa05cead4f9d47ad51ce81917ed577d39c0bfd0b4c011a24f2b"
+}
