@@ -127,23 +127,24 @@ func TestAxonBackend_GraphQLClientBoundary(t *testing.T) {
 	assert.Equal(t, transport, ax.GraphQLTransport)
 	require.Equal(t, client, ax.GraphQLClient)
 	assert.Equal(t, filepath.Join(dir, AxonDirName), ax.Dir)
-	assert.Equal(t, filepath.Join(dir, AxonDirName, AxonBeadsCollection+".jsonl"), ax.BeadsFile)
-	assert.Equal(t, filepath.Join(dir, AxonDirName, AxonEventsCollection+".jsonl"), ax.EventsFile)
 
 	plain := NewAxonBackend(dir, 3*time.Second)
 	assert.Nil(t, plain.GraphQLTransport)
 	assert.Nil(t, plain.GraphQLClient)
 }
 
-func TestAxonBackend_InitCreatesCollections(t *testing.T) {
+func TestAxonBackend_InitCreatesRootDir(t *testing.T) {
 	t.Parallel()
 	s := newAxonStore(t)
 	ax, ok := s.backend.(*AxonBackend)
 	require.True(t, ok)
 
-	for _, path := range []string{ax.BeadsFile, ax.EventsFile} {
-		_, err := os.Stat(path)
-		assert.NoError(t, err, "axon collection file %s should exist after Init", path)
+	_, err := os.Stat(ax.Dir)
+	assert.NoError(t, err, "axon root directory should exist after Init")
+	entries, err := os.ReadDir(ax.Dir)
+	require.NoError(t, err)
+	for _, entry := range entries {
+		assert.False(t, strings.HasSuffix(entry.Name(), ".jsonl"), "Init must not create JSONL snapshots")
 	}
 }
 
@@ -446,25 +447,26 @@ func TestAxonBackend_JSONLImportExportRoundTrip(t *testing.T) {
 	assert.Equal(t, a.ID, gotB.Dependencies[0].DependsOnID)
 }
 
-// TestAxonBackend_AtomicWriteSnapshotIntact proves WriteAll uses temp+rename
-// (writeAtomicFile) and does not leak partial state between writes.
-func TestAxonBackend_AtomicWriteSnapshotIntact(t *testing.T) {
+// TestAxonBackend_WriteAllUsesGraphQLTransport proves WriteAll mutates the
+// GraphQL transport snapshot rather than materialising local JSONL files.
+func TestAxonBackend_WriteAllUsesGraphQLTransport(t *testing.T) {
 	t.Parallel()
-	s := newAxonStore(t)
+	s, transport := newAxonStoreWithTransport(t)
 
 	for i := 0; i < 5; i++ {
 		require.NoError(t, s.Create(testCtx(), &Bead{Title: fmt.Sprintf("b-%d", i)}))
 	}
 
 	ax := s.backend.(*AxonBackend)
-	// No temp files should be visible after a quiescent WriteAll cycle.
+	beads, eventRows := transport.snapshot()
+	require.Len(t, beads, 5)
+	assert.Empty(t, eventRows)
+
+	// No JSONL snapshot files should be present after a quiescent WriteAll cycle.
 	entries, err := os.ReadDir(ax.Dir)
 	require.NoError(t, err)
 	for _, e := range entries {
-		assert.False(t, strings.HasPrefix(e.Name(), AxonBeadsCollection+".jsonl.tmp-"),
-			"unexpected temp file %s", e.Name())
-		assert.False(t, strings.HasPrefix(e.Name(), AxonEventsCollection+".jsonl.tmp-"),
-			"unexpected temp file %s", e.Name())
+		assert.False(t, strings.HasSuffix(e.Name(), ".jsonl"), "unexpected snapshot file %s", e.Name())
 	}
 
 	all, err := s.List("", "", nil)

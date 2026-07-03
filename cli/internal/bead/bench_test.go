@@ -113,7 +113,11 @@ func newAxonBenchStore(b *testing.B, beads []Bead) *Store {
 	b.Helper()
 	dir := filepath.Join(b.TempDir(), ddxroot.DirName)
 	s := NewStore(dir)
-	s.backend = NewAxonBackend(dir, s.LockWait)
+	transport := newFakeAxonGraphQLTransport()
+	ax := NewAxonBackend(dir, s.LockWait)
+	ax.GraphQLTransport = transport
+	ax.GraphQLClient = transport
+	s.backend = ax
 	require.NoError(b, s.Init(testCtx()))
 	require.NoError(b, s.WriteAll(beads))
 	return s

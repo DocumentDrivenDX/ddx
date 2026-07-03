@@ -1,11 +1,13 @@
 package bead
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -672,16 +674,54 @@ func (s *Store) migrateToAxon() (MigrateAxonStats, error) {
 		}
 	}
 
-	axon := NewAxonBackend(s.Dir, s.LockWait)
-	if err := axon.Init(); err != nil {
-		return stats, fmt.Errorf("bead: migrate-to-axon init: %w", err)
-	}
-	if err := axon.WithLock(func() error {
-		return axon.WriteAll(merged)
-	}); err != nil {
+	if err := writeAxonSnapshotFiles(s.Dir, merged); err != nil {
 		return stats, fmt.Errorf("bead: migrate-to-axon write: %w", err)
 	}
 	return stats, nil
+}
+
+func writeAxonSnapshotFiles(dir string, beads []Bead) error {
+	root := filepath.Join(dir, AxonDirName)
+	beadsFile := filepath.Join(root, AxonBeadsCollection+".jsonl")
+	eventsFile := filepath.Join(root, AxonEventsCollection+".jsonl")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return fmt.Errorf("bead: axon mkdir: %w", err)
+	}
+	sort.Slice(beads, func(i, j int) bool { return beads[i].ID < beads[j].ID })
+
+	var beadsBuf, eventsBuf bytes.Buffer
+	for _, b := range beads {
+		var events []BeadEvent
+		if b.Extra != nil {
+			if raw, ok := b.Extra["events"]; ok {
+				events = decodeBeadEvents(raw)
+			}
+		}
+		stripped := beadWithoutInlineEvents(b)
+		row, err := axonEncodeBead(stripped)
+		if err != nil {
+			return fmt.Errorf("bead: axon marshal %s: %w", b.ID, err)
+		}
+		beadsBuf.Write(row)
+		beadsBuf.WriteByte('\n')
+
+		for i, ev := range events {
+			data, err := axonEncodeEvent(b.ID, i, ev)
+			if err != nil {
+				return fmt.Errorf("bead: axon marshal event %s/%d: %w", b.ID, i, err)
+			}
+			eventsBuf.Write(data)
+			eventsBuf.WriteByte('\n')
+		}
+	}
+
+	if err := writeAtomicFile(eventsFile, eventsBuf.Bytes()); err != nil {
+		return fmt.Errorf("bead: axon write events: %w", err)
+	}
+	if err := writeAtomicFile(beadsFile, beadsBuf.Bytes()); err != nil {
+		return fmt.Errorf("bead: axon write beads: %w", err)
+	}
+	return nil
 }
 
 // hasInlineEvents reports whether a bead carries any inline events that

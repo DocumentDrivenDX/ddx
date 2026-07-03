@@ -19,8 +19,9 @@ import (
 //
 // When a GraphQL transport is configured (test code wires one in via the
 // AxonBackend.GraphQLTransport field), AxonBackend speaks that wire shape
-// directly. The fallback path keeps the existing in-process JSONL emulation
-// for callers that have not wired a transport yet.
+// directly. Reads still retain a legacy snapshot fallback so migration and
+// export tests can materialize a corpus without a live transport, but writes
+// no longer persist through local JSONL snapshots.
 //
 // NewStore routes to AxonBackend when bead.backend is set to axon in the
 // config or via DDX_BEAD_BACKEND.
@@ -94,15 +95,6 @@ func NewAxonBackend(dir string, lockWait time.Duration) *AxonBackend {
 func (a *AxonBackend) Init() error {
 	if err := os.MkdirAll(a.Dir, 0o755); err != nil {
 		return fmt.Errorf("bead: axon init dir: %w", err)
-	}
-	for _, path := range []string{a.BeadsFile, a.EventsFile} {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			return fmt.Errorf("bead: axon init %s: %w", path, err)
-		}
-		if err := f.Close(); err != nil {
-			return fmt.Errorf("bead: axon close %s: %w", path, err)
-		}
 	}
 	return nil
 }
@@ -246,9 +238,9 @@ func (a *AxonBackend) ReadAll() ([]Bead, error) {
 }
 
 // WriteAll splits inline events from each bead and persists both collections.
-// Writes are serialised at the directory-lock layer (WithLock); this method
-// rewrites both files in temp+rename style so a crash mid-write leaves the
-// previous snapshot intact rather than producing torn rows.
+// Writes are serialised at the directory-lock layer (WithLock); the GraphQL
+// transport path is the primary write path. The snapshot fallback exists only
+// for legacy tests and migration import/export compatibility.
 func (a *AxonBackend) WriteAll(beads []Bead) error {
 	if transport := a.graphQLTransport(); transport != nil {
 		sort.Slice(beads, func(i, j int) bool { return beads[i].ID < beads[j].ID })
@@ -296,50 +288,7 @@ func (a *AxonBackend) WriteAll(beads []Bead) error {
 		}
 		return nil
 	}
-
-	if err := os.MkdirAll(a.Dir, 0o755); err != nil {
-		return fmt.Errorf("bead: axon mkdir: %w", err)
-	}
-	sort.Slice(beads, func(i, j int) bool { return beads[i].ID < beads[j].ID })
-
-	var beadsBuf, eventsBuf bytes.Buffer
-	for _, b := range beads {
-		// Extract and strip inline events for the split.
-		var events []BeadEvent
-		if b.Extra != nil {
-			if raw, ok := b.Extra["events"]; ok {
-				events = decodeBeadEvents(raw)
-			}
-		}
-		stripped := beadWithoutInlineEvents(b)
-		row, err := axonEncodeBead(stripped)
-		if err != nil {
-			return fmt.Errorf("bead: axon marshal %s: %w", b.ID, err)
-		}
-		beadsBuf.Write(row)
-		beadsBuf.WriteByte('\n')
-
-		for i, ev := range events {
-			data, err := axonEncodeEvent(b.ID, i, ev)
-			if err != nil {
-				return fmt.Errorf("bead: axon marshal event %s/%d: %w", b.ID, i, err)
-			}
-			eventsBuf.Write(data)
-			eventsBuf.WriteByte('\n')
-		}
-	}
-
-	// Write events first so a crash between the two writes leaves orphan
-	// events (which ReadAll silently drops) rather than a bead row whose
-	// events have not landed yet — favouring the safer side of the partial-
-	// write window for an audit log.
-	if err := writeAtomicFile(a.EventsFile, eventsBuf.Bytes()); err != nil {
-		return fmt.Errorf("bead: axon write events: %w", err)
-	}
-	if err := writeAtomicFile(a.BeadsFile, beadsBuf.Bytes()); err != nil {
-		return fmt.Errorf("bead: axon write beads: %w", err)
-	}
-	return nil
+	return fmt.Errorf("bead: axon write corpus requires GraphQL transport")
 }
 
 func (a *AxonBackend) WithLock(fn func() error) error {
