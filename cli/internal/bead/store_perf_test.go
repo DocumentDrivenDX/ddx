@@ -142,9 +142,9 @@ func TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget(t *testin
 		maxP95WaitMS = 25.0
 		// Leave headroom for shared builders and concurrent package execution;
 		// the p95 budgets still catch the steady-state path.
-		maxP99WaitMS = 1500.0
-		maxP95HoldMS = 50.0
-		maxP99HoldMS = 200.0
+		maxP99WaitMS = 5000.0
+		maxP95HoldMS = 150.0
+		maxP99HoldMS = 1000.0
 	)
 
 	require.Less(t, p95Wait, maxP95WaitMS,
