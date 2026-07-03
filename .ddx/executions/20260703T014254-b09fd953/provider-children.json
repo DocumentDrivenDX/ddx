@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260703T014254-b09fd953",
+  "bead_id": "ddx-6dcb5798",
+  "trigger": "running_phase_non_route_provider_child",
+  "active_route": "codex",
+  "scanned_at": "2026-07-03T01:49:15.037508853Z",
+  "reaped": [
+    {
+      "pid": 2906538,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3089403,
+      "provider": "pi",
+      "command": "node /home/linuxbrew/.linuxbrew/bin/pi --list-models",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3089413,
+      "provider": "opencode",
+      "command": "opencode models",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3089403,
+      "provider": "pi",
+      "command": "node /home/linuxbrew/.linuxbrew/bin/pi --list-models",
+      "age_seconds": 2,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
