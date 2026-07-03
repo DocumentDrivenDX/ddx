@@ -1,0 +1,2 @@
+status: open
+reason: pre-existing duplicate test names in cli/internal/agent block the required `go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/...` and `lefthook run pre-commit` checks; this is retryable after the unrelated package test collision is resolved.
