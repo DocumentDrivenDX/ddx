@@ -1,0 +1,23 @@
+{
+  "attempt_id": "20260703T073115-822d9851",
+  "bead_id": "ddx-c5669572",
+  "base_rev": "197c0d5cdbfc1f0b5b173d4f52a71f75c48a4d5e",
+  "created_at": "2026-07-03T07:31:33.414799147Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c5669572",
+    "title": "Test fingerprint rendering"
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T073115-822d9851",
+    "prompt": ".ddx/executions/20260703T073115-822d9851/prompt.md",
+    "manifest": ".ddx/executions/20260703T073115-822d9851/manifest.json",
+    "result": ".ddx/executions/20260703T073115-822d9851/result.json",
+    "checks": ".ddx/executions/20260703T073115-822d9851/checks.json",
+    "usage": ".ddx/executions/20260703T073115-822d9851/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-c5669572-20260703T073115-822d9851"
+  },
+  "prompt_sha": "e126f5c0d955d643ac40d45b010dc5544cefe154d5934ae76f734c754d37511f"
+}
