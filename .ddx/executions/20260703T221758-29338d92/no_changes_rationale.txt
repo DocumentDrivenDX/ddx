@@ -1,0 +1,2 @@
+status: open
+reason: The bead contract is empty, with no description or acceptance criteria, so there is no concrete implementation target or verification surface for this attempt.
