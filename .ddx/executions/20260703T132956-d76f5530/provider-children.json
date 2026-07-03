@@ -1,0 +1,200 @@
+{
+  "attempt_id": "20260703T132956-d76f5530",
+  "bead_id": "ddx-66131337",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-03T13:33:58.199983762Z",
+  "reaped": [
+    {
+      "pid": 1269102,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1269125,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1276102,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1277129,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1277153,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1278054,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1278489,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1279367,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1279390,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1279934,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1279979,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1283610,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1283647,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1285020,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1284995,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1285983,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1289441,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1289406,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1290739,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1290766,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1291404,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1291432,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1292072,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1292101,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
