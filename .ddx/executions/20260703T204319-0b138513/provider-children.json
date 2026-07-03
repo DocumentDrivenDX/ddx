@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260703T204319-0b138513",
+  "bead_id": "ddx-5702e595",
+  "trigger": "context canceled",
+  "scanned_at": "2026-07-03T20:44:18.724809485Z",
+  "reaped": [
+    {
+      "pid": 1496147,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1496148,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1496148,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "attempt_ended"
+    },
+    {
+      "pid": 1496166,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "attempt_ended"
+    }
+  ]
+}
