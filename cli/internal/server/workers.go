@@ -1349,11 +1349,12 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 		return out[i].StartedAt.After(out[j].StartedAt)
 	})
 
-	// Compute PIDAlive for each record so operators can see liveness at a
-	// glance without running prune. This is a syscall per record; it's safe
-	// because List() is not on a hot path (workers are long-lived).
+	// Compute PIDAlive for each non-terminal record so operators can see
+	// liveness at a glance without running prune. Terminal records deliberately
+	// omit it: their stored PIDs are historical, and the OS may have reused the
+	// PID for an unrelated process by the time an operator lists workers.
 	for i := range out {
-		if out[i].PID > 0 {
+		if out[i].PID > 0 && !isTerminalWorkerState(out[i].State) {
 			alive := isPIDAlive(out[i].PID)
 			out[i].PIDAlive = &alive
 		}
@@ -1364,6 +1365,15 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 
 func isWorkerRegistryRecord(rec WorkerRecord) bool {
 	return rec.ID != "" || rec.Kind != "" || rec.State != ""
+}
+
+func isTerminalWorkerState(state string) bool {
+	switch state {
+	case "exited", "failed", "stopped", "reaped":
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *WorkerManager) Show(id string) (WorkerRecord, error) {

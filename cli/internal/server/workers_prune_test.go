@@ -329,6 +329,47 @@ func TestWorkerManagerPIDAliveInList(t *testing.T) {
 	// We just verify the field is present (not nil).
 }
 
+// TestWorkerManagerPIDAliveOmittedForTerminalWorker verifies that historical
+// worker records do not report liveness for reused PIDs. The current process
+// PID is always alive, so this reproduces the stale-record/PID-reuse case
+// deterministically.
+func TestWorkerManagerPIDAliveOmittedForTerminalWorker(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000000-term"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	rec := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-time.Hour),
+		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
+		PID:         os.Getpid(),
+	}
+	require.NoError(t, m.writeRecord(dir, rec))
+
+	recs, err := m.List()
+	require.NoError(t, err)
+
+	var found *WorkerRecord
+	for i := range recs {
+		if recs[i].ID == workerID {
+			found = &recs[i]
+			break
+		}
+	}
+	require.NotNil(t, found, "worker must appear in List()")
+	assert.Nil(t, found.PIDAlive, "terminal worker records must not report raw PID liveness")
+}
+
 // TestWorkerManagerPIDAliveNilForGoroutineWorker verifies that List omits
 // pid_alive for goroutine-only workers (PID == 0).
 func TestWorkerManagerPIDAliveNilForGoroutineWorker(t *testing.T) {
