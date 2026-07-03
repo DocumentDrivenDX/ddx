@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260703T230107-9ac28e55",
+  "bead_id": "ddx-17a7dbef",
+  "base_rev": "f21b64067103b5a1f0f83ebfcd8a9d488a6372c8",
+  "created_at": "2026-07-03T23:01:22.468245125Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-17a7dbef",
+    "title": "federation: narrow the worker-control follow-up bead",
+    "description": "PROBLEM\n`ddx-28f3cf37` still reads like a broad federation UI follow-up, but the real gap is the owner-targeted worker-control path. `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327-338` keeps TC-017 planned, while `docs/helix/01-frame/features/FEAT-026-federation.md:22-29,160-177` already defines the write-routing contract and `cli/internal/server/frontend/e2e/federation-worker-control.spec.ts:1-9,102-214` already spells out the expected start/stop/offline/idempotency behavior at the UI level.\n\nROOT CAUSE\nThe current bead is still coupled to the broader federation UI story in `ddx-28f3cf37`, but the concrete contract is already isolated in FEAT-026 and the dedicated worker-control spec. What is missing is a narrower bead body that only tracks the live owner-targeted write-routing implementation and the Go-side tests that prove `startWorker` and `stopWorker` reach exactly one owning spoke.\n\nPROPOSED FIX\n- Rewrite or supersede `ddx-28f3cf37` so it covers only worker start/stop owner-targeted writes, not read-federation smoke.\n- Name the missing implementation tests explicitly as `TestFederatedMutation_StartWorker_RoutesToOwner`, `TestFederatedMutation_StopWorker_RoutesToOwner`, `TestFederatedMutation_RefusesOfflineSpoke`, and `TestFederatedMutation_IdempotentRequestID`.\n- Keep the bead aligned to FEAT-026 and TC-017 instead of duplicating the read-only federation tests.\n\nNON-SCOPE\n- Do not add new `/federation` route read coverage.\n- Do not touch bead/document writes here.\n- Do not add ts-net or cross-host networking beyond the local loopback gate.\n- Do not modify the FEAT-026 text.\n\nPARENT + DEPS\nParent: `ddx-a038a090`. Upstream stale bead context: `ddx-0793ac75`.",
+    "acceptance": "1. `ddx bead show ddx-28f3cf37` is narrowed to worker-control owner-targeted writes or is closed/superseded.\n2. The bead body names `TestFederatedMutation_StartWorker_RoutesToOwner`, `TestFederatedMutation_StopWorker_RoutesToOwner`, `TestFederatedMutation_RefusesOfflineSpoke`, and `TestFederatedMutation_IdempotentRequestID` as the concrete gaps.\n3. The reconciliation notes cite `FEAT-026-federation.md:22-29,160-177`, `TP-002-server-web-ui.md:327-338`, and `federation-worker-control.spec.ts:1-9,102-214`.\n4. `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...` passes, and `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/federation-worker-control.spec.ts` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-b303cf96",
+    "labels": [
+      "phase:2",
+      "area:federation",
+      "area:web",
+      "area:server",
+      "kind:test",
+      "story:14",
+      "spec:FEAT-026",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-17a7dbef)\",\"fingerprint\":\"57e46f0eba0d0265f4db4ed2d5eb73fecbac96ffbf4c94e7f5878a1ded12cd17\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"57e46f0eba0d0265f4db4ed2d5eb73fecbac96ffbf4c94e7f5878a1ded12cd17\"}",
+          "created_at": "2026-07-03T23:00:57.330068884Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T230107-9ac28e55",
+    "prompt": ".ddx/executions/20260703T230107-9ac28e55/prompt.md",
+    "manifest": ".ddx/executions/20260703T230107-9ac28e55/manifest.json",
+    "result": ".ddx/executions/20260703T230107-9ac28e55/result.json",
+    "checks": ".ddx/executions/20260703T230107-9ac28e55/checks.json",
+    "usage": ".ddx/executions/20260703T230107-9ac28e55/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-17a7dbef-20260703T230107-9ac28e55"
+  },
+  "prompt_sha": "db3a2a657ed4d9c731e0fef17c45ec37c307905bd8198d6f1f3557dee6c885c3"
+}

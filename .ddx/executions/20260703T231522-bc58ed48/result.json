@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-b382d697",
+  "attempt_id": "20260703T231522-bc58ed48",
+  "base_rev": "c834438e43a908519a189e8f9e74c13202b9b3ff",
+  "result_rev": "c834438e43a908519a189e8f9e74c13202b9b3ff",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider process exited without emitting a final event\nfailed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "reason": "failed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "session_id": "eb-085a51a6",
+  "duration_ms": 92778,
+  "exit_code": 1,
+  "error": "agent: provider process exited without emitting a final event\nfailed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260703T231522-bc58ed48",
+  "prompt_file": ".ddx/executions/20260703T231522-bc58ed48/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T231522-bc58ed48/manifest.json",
+  "result_file": ".ddx/executions/20260703T231522-bc58ed48/result.json",
+  "worktree_path": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b382d697-20260703T231522-bc58ed48",
+  "started_at": "2026-07-03T23:16:03.217011076Z",
+  "finished_at": "2026-07-03T23:17:35.995350596Z"
+}

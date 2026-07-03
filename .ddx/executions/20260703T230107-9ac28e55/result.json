@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-17a7dbef",
+  "attempt_id": "20260703T230107-9ac28e55",
+  "base_rev": "f21b64067103b5a1f0f83ebfcd8a9d488a6372c8",
+  "result_rev": "f13393cde08232feb59d97063b822502a0e6a195",
+  "implementation_rev": "f13393cde08232feb59d97063b822502a0e6a195",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider process exited without emitting a final event",
+  "session_id": "eb-98339a2e",
+  "duration_ms": 973519,
+  "exit_code": 1,
+  "error": "agent: provider process exited without emitting a final event",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260703T230107-9ac28e55",
+  "prompt_file": ".ddx/executions/20260703T230107-9ac28e55/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T230107-9ac28e55/manifest.json",
+  "result_file": ".ddx/executions/20260703T230107-9ac28e55/result.json",
+  "started_at": "2026-07-03T23:01:22.473797912Z",
+  "finished_at": "2026-07-03T23:17:35.993321508Z"
+}
