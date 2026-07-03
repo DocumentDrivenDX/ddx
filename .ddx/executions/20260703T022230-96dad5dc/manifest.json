@@ -1,0 +1,26 @@
+{
+  "attempt_id": "20260703T022230-96dad5dc",
+  "bead_id": "ddx-264e76f0",
+  "base_rev": "3f1a40cbe0cb08b750a18c361bb7f614cfff8eeb",
+  "created_at": "2026-07-03T02:22:44.56894565Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-264e76f0",
+    "title": "Replay provenance",
+    "metadata": {
+      "closing_commit_sha": "9653820049db7edebe0374431544b1b8a8dbae88"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260703T022230-96dad5dc",
+    "prompt": ".ddx/executions/20260703T022230-96dad5dc/prompt.md",
+    "manifest": ".ddx/executions/20260703T022230-96dad5dc/manifest.json",
+    "result": ".ddx/executions/20260703T022230-96dad5dc/result.json",
+    "checks": ".ddx/executions/20260703T022230-96dad5dc/checks.json",
+    "usage": ".ddx/executions/20260703T022230-96dad5dc/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-264e76f0-20260703T022230-96dad5dc"
+  },
+  "prompt_sha": "e2dcbc6ad809ff242e4742575e789995e5eb25f598bc82c9fc41e7c872a17630"
+}

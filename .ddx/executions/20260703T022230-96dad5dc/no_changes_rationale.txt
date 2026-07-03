@@ -1,0 +1,1 @@
+verification_command: git cat-file -e 9653820049db7edebe0374431544b1b8a8dbae88^{commit} && git show --stat --summary --oneline --decorate=short 9653820049db7edebe0374431544b1b8a8dbae88 --
