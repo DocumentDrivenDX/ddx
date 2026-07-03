@@ -24,6 +24,7 @@ var (
 	cmdTestOriginalPath            string
 	cmdTestOriginalFizeauCacheDir  string
 	cmdTestOriginalClaudeTransport string
+	cmdTestOriginalDdxProjectRoot  string
 )
 
 // TestMain clears all GIT_* environment variables before running tests so
@@ -39,6 +40,7 @@ func TestMain(m *testing.M) {
 	cmdTestOriginalPath = os.Getenv("PATH")
 	cmdTestOriginalFizeauCacheDir = os.Getenv("FIZEAU_CACHE_DIR")
 	cmdTestOriginalClaudeTransport = os.Getenv("FIZEAU_CLAUDE_TRANSPORT")
+	cmdTestOriginalDdxProjectRoot = os.Getenv("DDX_PROJECT_ROOT")
 
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "GIT_") {
@@ -51,6 +53,7 @@ func TestMain(m *testing.M) {
 	// test and write into another test's temp HOME/TMPDIR, which makes temp-dir
 	// cleanup flaky under the full suite.
 	_ = os.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	_ = os.Unsetenv("DDX_PROJECT_ROOT")
 	cleanupTemp := isolateCmdTestTempRoot()
 	code := m.Run()
 	cleanupTemp()
@@ -124,6 +127,11 @@ func isolateCmdTestTempRoot() func() {
 			_ = os.Setenv("FIZEAU_CLAUDE_TRANSPORT", oldClaudeTransport)
 		} else {
 			_ = os.Unsetenv("FIZEAU_CLAUDE_TRANSPORT")
+		}
+		if cmdTestOriginalDdxProjectRoot != "" {
+			_ = os.Setenv("DDX_PROJECT_ROOT", cmdTestOriginalDdxProjectRoot)
+		} else {
+			_ = os.Unsetenv("DDX_PROJECT_ROOT")
 		}
 		if cmdTestOriginalPath != "" {
 			_ = os.Setenv("PATH", cmdTestOriginalPath)
