@@ -1,0 +1,1 @@
+verification_command: git diff --quiet HEAD -- . ':(exclude).ddx/executions/20260703T222526-32eec066/no_changes_rationale.txt'
