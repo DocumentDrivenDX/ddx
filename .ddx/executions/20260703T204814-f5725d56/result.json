@@ -1,0 +1,59 @@
+{
+  "bead_id": "ddx-9c5bca8f",
+  "attempt_id": "20260703T204814-f5725d56",
+  "base_rev": "b2799028b4edf51519b9d94e661093de46973338",
+  "result_rev": "f38121ecf0b45fe454f8f6c9021716a2e47d9e8c",
+  "implementation_rev": "f38121ecf0b45fe454f8f6c9021716a2e47d9e8c",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "preserved_needs_review",
+  "detail": "post-land gate failed: sh -c export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli \u0026\u0026 go vet ./...: exit status 1: # github.com/DocumentDrivenDX/ddx/internal/agent\n# [github.com/DocumentDrivenDX/ddx/internal/agent]\nvet: internal/agent/provider_children_test.go:301:6: TestWork_NonRouteProviderIsActuallyReaped redeclared in this block",
+  "orchestrator_status": "preserved_needs_review",
+  "reason": "post-land gate failed: sh -c export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli \u0026\u0026 go vet ./...: exit status 1: # github.com/DocumentDrivenDX/ddx/internal/agent\n# [github.com/DocumentDrivenDX/ddx/internal/agent]\nvet: internal/agent/provider_children_test.go:301:6: TestWork_NonRouteProviderIsActuallyReaped redeclared in this block",
+  "preserve_ref": "refs/ddx/iterations/ddx-9c5bca8f/20260703T204814-f5725d56-b2799028b4ed",
+  "candidate_ref": "refs/ddx/iterations/20260703T204814-f5725d56/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260703T204814-f5725d56",
+      "result_rev": "f38121ecf0b45fe454f8f6c9021716a2e47d9e8c",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-b7eade14",
+  "duration_ms": 545758,
+  "tokens": 3130302,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260703T204814-f5725d56",
+  "prompt_file": ".ddx/executions/20260703T204814-f5725d56/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T204814-f5725d56/manifest.json",
+  "result_file": ".ddx/executions/20260703T204814-f5725d56/result.json",
+  "usage_file": ".ddx/executions/20260703T204814-f5725d56/usage.json",
+  "started_at": "2026-07-03T20:48:24.184586216Z",
+  "finished_at": "2026-07-03T20:57:29.943088437Z"
+}
