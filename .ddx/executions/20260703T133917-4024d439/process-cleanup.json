@@ -1,0 +1,27 @@
+{
+  "attempt_id": "20260703T133917-4024d439",
+  "bead_id": "ddx-7b444bb6",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7b444bb6-20260703T133917-4024d439",
+  "trigger": "",
+  "started_at": "2026-07-03T16:48:19.838593233Z",
+  "finished_at": "2026-07-03T16:48:20.077488932Z",
+  "scanned": 1457,
+  "candidates": [
+    {
+      "pid": 3669487,
+      "ppid": 2047,
+      "pgid": 3667255,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7b444bb6-20260703T133917-4024d439/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build888364516/b368/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build888364516/b368/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3669487,
+      "ppid": 2047,
+      "pgid": 3667255,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-7b444bb6-20260703T133917-4024d439/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build888364516/b368/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build888364516/b368/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    }
+  ]
+}
