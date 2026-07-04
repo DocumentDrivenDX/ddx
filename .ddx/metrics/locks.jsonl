@@ -5604,3 +5604,9 @@
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":336808,"acquired_at":"2026-07-04T00:27:45.450751113Z","released_at":"2026-07-04T00:27:45.55831595Z","duration_ms":107}
 {"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":336808,"acquired_at":"2026-07-04T00:27:45.288893794Z","released_at":"2026-07-04T00:27:45.55847263Z","duration_ms":269}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":445379,"acquired_at":"2026-07-04T00:28:32.335403817Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":445379,"acquired_at":"2026-07-04T00:28:32.335403817Z","released_at":"2026-07-04T00:28:32.992922017Z","duration_ms":657}
+{"event":"acquire","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":75731,"acquired_at":"2026-07-04T00:30:28.089412916Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":75731,"acquired_at":"2026-07-04T00:30:28.089412916Z","released_at":"2026-07-04T00:30:48.515510845Z","duration_ms":20426}
+{"event":"acquire","lock_name":"tracker.lock","operation":"land_post_land_finalize","holder_pid":75731,"acquired_at":"2026-07-04T00:30:59.426613228Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"land_post_land_finalize","holder_pid":75731,"acquired_at":"2026-07-04T00:30:59.426613228Z","released_at":"2026-07-04T00:30:59.963341464Z","duration_ms":536}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":336808,"acquired_at":"2026-07-04T00:31:18.163572654Z"}
