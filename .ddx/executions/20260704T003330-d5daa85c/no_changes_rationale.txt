@@ -1,0 +1,2 @@
+status: proposed
+reason: operator needed to supply a concrete description and acceptance criteria; the bead is a placeholder with no implementation scope
