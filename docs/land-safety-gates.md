@@ -6,6 +6,19 @@ the target branch advanced. It preserves the attempted result under
 `refs/ddx/iterations/<bead-id>/<attempt-id>-<target-tip>` and records the bead
 outcome as `preserved_needs_review`.
 
+## Execute-Bead Gate Scope
+
+The default `execute-bead` merge/acceptance gate is intentionally bounded by
+the bead's governing artifacts. The enforcement path is
+`cli/internal/agent/execute_bead_orchestrator.go` calling
+`EvaluateRequiredGatesForResult`, and `cli/internal/agent/landing_gate_context.go`
+skips required-gate evaluation when no governing IDs are available.
+
+That means a workspace-wide build/test is not part of the default
+`execute-bead` land gate. The reason is scope isolation: the attempt is judged
+against the artifacts it owns, while repo-wide build/test remains a separate
+release-health concern unless a future policy explicitly adds a broader gate.
+
 Operator-visible bead notes and events include:
 
 - `preserved-needs-review`
