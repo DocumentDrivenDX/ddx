@@ -1,0 +1,141 @@
+{
+  "attempt_id": "20260704T012428-d0ae6349",
+  "bead_id": "ddx-53df5e2f",
+  "base_rev": "f1c19b0b32fe5b7ec7cdcc5f19bf0f0b6fa6fb5e",
+  "created_at": "2026-07-04T01:24:54.442642912Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-53df5e2f",
+    "title": "IMP: JSONL→Postgres importer for production AxonStore migration (replaces legacy MigrateToAxon)",
+    "description": "# PROBLEM\nThe legacy `*Store.MigrateToAxon` method (now exposed via `Migrator.MigrateToAxon` in MIG bead, returning `ErrDeprecated`) writes JSONL files under `.ddx/axon/` rather than performing an actual JSONL→Postgres migration. Per the audit in `docs/plans/plan-2026-05-10-axon-only-architecture.md`, production AxonStore deployment requires migrating existing `.ddx/beads.jsonl` corpora into Lakebase Postgres. The real importer is unimplemented.\n\n# ROOT CAUSE\n`cli/internal/bead/migrate.go` (function previously at `*Store.MigrateToAxon`, now folded into `*storeMigrator` per MIG bead) writes JSONL into a sidecar directory. The function does not connect to Postgres or invoke `AxonStore.Apply`/`AxonStore.Create`. Production deployment cannot use it to populate Lakebase.\n\n# PROPOSED FIX\n\n1. Implement a real importer in `cli/internal/bead/internal/storage/import_postgres.go` (or equivalent post-BL location). The importer:\n   - Reads `.ddx/beads.jsonl` (and `.ddx/beads-archive.jsonl` if present) — uses existing JSONL parser.\n   - For each bead, calls `axonStore.Create(ctx, \u0026b)` to insert into Postgres. Idempotent on `ErrConflict` (skip + log).\n   - For each bead, appends events via `axonStore.Apply(ctx, id, AppendEventOp{...})` per TD-027 §13 vocabulary (events come from `Extra[\"events\"]` on the JSONL bead or from sidecar `.ddx/attachments/\u003cbead\u003e/events.jsonl`).\n   - Tracks progress, supports `--dry-run` (counts without writes), `--limit N` (batched migration).\n   - Verifies post-migration: read back beads from Postgres, assert field-for-field equality with source JSONL (sample-based for large corpora).\n\n2. Expose via `Migrator` interface (added in MIG): rename/replace `MigrateToAxon` with the real implementation; same method name, different (correct) behavior.\n\n3. Update `cli/cmd/bead_migrate.go` to support the importer with appropriate flags:\n   - `ddx bead migrate --to-axon --dry-run`\n   - `ddx bead migrate --to-axon --apply [--limit N]`\n   - `ddx bead migrate --to-axon --verify` (read-back + checksum)\n\n4. Remove the deprecated JSONL-writing behavior. `ErrDeprecated` return from MIG bead is replaced by the real implementation.\n\n# NON-SCOPE\n- Schema-versioning migration ladder (separate concern; deferred until first v1→v2 breaking change).\n- Real-wire integration test against actual Postgres — separate WIRE bead.\n- Continuous sync between JSONL and Postgres — not in scope; this is one-shot migration.\n- AxonStore itself — implemented in AX (`ddx-9c5bca8f`).\n\n# Acceptance criteria\n\n1. New file `cli/internal/bead/internal/storage/import_postgres.go` (or equivalent) implements the JSONL→Postgres importer. Uses `axonStore.Create` + `axonStore.Apply` for inserts + event appends.\n2. Existing `Migrator.MigrateToAxon` method returns the real importer's result (not `ErrDeprecated`).\n3. CLI flags wired: `--to-axon --dry-run`, `--to-axon --apply`, `--to-axon --verify`. Test: `TestImporter_DryRun_CountsOnly`, `TestImporter_Apply_WritesToPostgres`, `TestImporter_Verify_DetectsDrift`.\n4. Idempotency: re-running `--apply` on an already-imported corpus is a no-op (skips conflicts). Test: `TestImporter_Apply_Idempotent_OnReRun`.\n5. Field-fidelity: every JSONL bead field is preserved in Postgres, including `extra` preserved-keys. Test: `TestImporter_PreservesExtras`.\n6. Event ordering: events imported preserve monotonic `created_at` (TD-027 §11.2 invariant 8). Test: `TestImporter_PreservesEventOrdering`.\n7. Attachment migration: sidecar files under `.ddx/attachments/\u003cbead\u003e/` are uploaded to Unity Catalog Volumes (or local-equivalent for testing). Test: `TestImporter_MigratesAttachments`.\n8. Verification mode: post-import, sample N beads, read back from AxonStore, assert equality with source. Test: `TestImporter_Verify_RoundTripPassesOnCleanImport`.\n9. `cd cli \u0026\u0026 go test ./...` is green (with httptest-served Axon-shaped GraphQL endpoint or in-memory backend).\n10. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:axon, area:migration, kind:feature, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: ddx-9c5bca8f (AxonStore must exist), MIG bead (Migrator interface must exist).",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:axon",
+      "area:bead",
+      "area:migration",
+      "kind:feature",
+      "phase:iterate",
+      "spec:TD-027",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:48:10.358407169Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T00:54:46.018541475Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T005102-023c5319\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":986256,\"output_tokens\":12254,\"total_tokens\":998510,\"cost_usd\":0,\"duration_ms\":213933,\"exit_code\":0}",
+          "created_at": "2026-07-04T00:54:46.116606508Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=998510 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T005102-023c5319\",\"bead_id\":\"ddx-53df5e2f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T00:54:50.47107862Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-07-04T00:54:50.841827101Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-07-04T00:54:51.185310757Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\ndecision_audit={\"failure_class\":\"no_evidence_produced\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=e12c4a47b080509ae2d232db7e634ee9e10f7d3f\nbase_rev=e12c4a47b080509ae2d232db7e634ee9e10f7d3f\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-07-04T00:54:51.419947535Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: restore project root mutation: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"fingerprint\":\"dd046cddf35120a94925f324d0ef75af94880c508217d2bb101ea3901e67188e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"dd046cddf35120a94925f324d0ef75af94880c508217d2bb101ea3901e67188e\"}",
+          "created_at": "2026-07-04T01:11:06.399053143Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:23:57.34830262Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"accepted_fingerprint\":\"1ad0cbfd580dbcc4f4a12fbd33ed01c3eddb6f7830b9ef30fd2eba1856958583\",\"decision\":\"park\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decomposition hook error: context deadline exceeded\",\"fingerprint\":\"1ad0cbfd580dbcc4f4a12fbd33ed01c3eddb6f7830b9ef30fd2eba1856958583\",\"intake_outcome\":\"operator_required\",\"operator_override\":false,\"policy_mode\":\"block\",\"prompt_fingerprint\":\"ec37c5657fb3e96e2edaf1ee9eb65de74543ddc9321dee96edda51ad3f78763d\",\"reason\":\"operator_required\",\"rule_fingerprint\":\"1ad0cbfd580dbcc4f4a12fbd33ed01c3eddb6f7830b9ef30fd2eba1856958583\",\"rule_id\":\"pre_claim_intake.operator_required\",\"suggested_action\":\"review intake result and accept, rewrite, split, block, or cancel\"}",
+          "created_at": "2026-07-04T01:15:31.011842633Z",
+          "kind": "intake.blocked",
+          "source": "ddx work",
+          "summary": "operator_required"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\norchestrator_action: decompose\nreason: bead exceeds single-pass size (10 ACs spanning importer core, dry-run/verify/attachments, and CLI wiring across cli/internal/bead and cli/cmd) and was split per Step 0 in a prior attempt into ddx-55a16aef, ddx-ff9300f9, ddx-b9884139 (parent-wired, sibling deps ordered: ff9300f9 depends on 55a16aef; b9884139 depends on 55a16aef and ff9300f9). The prior attempt crashed on a git index.lock contention in the shared origin repo before writing this rationale, leaving the bead flagged triage:no-changes-unjustified with no completion evidence. This file supplies that evidence; the decomposition itself required no further changes.\nchild_beads: ddx-55a16aef, ddx-ff9300f9, ddx-b9884139\ncycle_trace=[{\"cycle_index\":0,\"attempt_id\":\"20260704T011321-22621c3e\",\"result_rev\":\"842c1557ff38cabd32e0fe17f5dbcce501783f93\",\"implementer_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_result\":{},\"final_decision\":\"no_changes\",\"failure_class\":\"decomposed\",\"retry_action\":\"operator_attention\",\"escalation_count\":2,\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\",\"execution_decision\":\"proposed\"}]\ndecision_audit={\"failure_class\":\"decomposed\",\"retry_action\":\"operator_attention\",\"escalation_count\":2,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\",\"execution_decision\":\"proposed\"}\nresult_rev=842c1557ff38cabd32e0fe17f5dbcce501783f93\nbase_rev=842c1557ff38cabd32e0fe17f5dbcce501783f93\noutcome_reason=decomposed",
+          "created_at": "2026-07-04T01:23:58.523482697Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        }
+      ],
+      "needs-human-reason": "operator_required",
+      "needs-human-since": "2026-07-04T01:15:31Z",
+      "needs-human-source": "ddx work",
+      "needs-human-suggested-action": "review intake result and accept, rewrite, split, block, or cancel",
+      "needs-human-summary": "pre-claim intake blocked execution",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T012428-d0ae6349",
+    "prompt": ".ddx/executions/20260704T012428-d0ae6349/prompt.md",
+    "manifest": ".ddx/executions/20260704T012428-d0ae6349/manifest.json",
+    "result": ".ddx/executions/20260704T012428-d0ae6349/result.json",
+    "checks": ".ddx/executions/20260704T012428-d0ae6349/checks.json",
+    "usage": ".ddx/executions/20260704T012428-d0ae6349/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-53df5e2f-20260704T012428-d0ae6349"
+  },
+  "prompt_sha": "4120d951e03aed947e50b46b0efe26e55ba4f21a902f01878bfa948d98fb0e67"
+}

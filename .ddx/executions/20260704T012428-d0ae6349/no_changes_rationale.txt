@@ -1,0 +1,10 @@
+status: open
+orchestrator_action: decompose
+reason: Bead ddx-53df5e2f exceeds single-pass size per Step 0 (10 ACs spanning importer core, dry-run/verify/attachment migration, and CLI wiring across cli/internal/bead/internal/storage and cli/cmd — multiple unrelated subsystems). It was already decomposed by a prior attempt into three properly parent/dep-wired children:
+  - ddx-55a16aef (Implement JSONL→Postgres importer apply path) — covers parent AC1, AC4, AC6
+  - ddx-ff9300f9 (Add importer dry-run, verification, and attachment migration; deps: ddx-55a16aef) — covers parent AC5, AC7, AC8
+  - ddx-b9884139 (Wire bead migrate to the real Axon importer flags; deps: ddx-55a16aef, ddx-ff9300f9) — covers parent AC2, AC3
+Each child restates the go-test-green and lefthook-pre-commit gates from parent AC9/AC10. Verified in this pass: all three children exist with parent=ddx-53df5e2f, no dependency edges point back to the parent or any ancestor, sibling ordering is correct (ff9300f9 and b9884139 depend on 55a16aef; b9884139 also depends on ff9300f9), and ddx-55a16aef is currently claimed and in progress (machine eitri, session agent-loop-1783128441892059096) — confirming the split is live in the drain queue, not orphaned.
+
+The `triage:no-changes-unjustified` label and `needs-human-reason: operator_required` on this bead stem from an earlier attempt (20260704T005102-023c5319) that exited without a commit or rationale file (raw agent crash, no evidence produced) and a subsequent pre-claim intake park on a decomposition-hook timeout — neither reflects a defect in the decomposition itself, which is complete, valid, and already draining. No further top-level code change is needed on ddx-53df5e2f; all remaining work is scoped to the three children.
+child_beads: ddx-55a16aef, ddx-ff9300f9, ddx-b9884139
