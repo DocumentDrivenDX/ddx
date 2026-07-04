@@ -1,0 +1,42 @@
+status: blocked
+reason: AC4's playwright clause cannot be satisfied inside this bead's scope; it requires the not-yet-implemented federation worker-control feature that ddx-28f3cf37 itself tracks separately.
+
+Findings:
+
+1. AC1-3 (narrow ddx-28f3cf37, name the four Go test gaps, cite reconciliation notes)
+   are already satisfied. `ddx bead show ddx-28f3cf37` reads as a worker-control
+   owner-targeted write bead (title "federation: owner-targeted worker-control writes"),
+   names TestFederatedMutation_StartWorker_RoutesToOwner,
+   TestFederatedMutation_StopWorker_RoutesToOwner,
+   TestFederatedMutation_RefusesOfflineSpoke, and
+   TestFederatedMutation_IdempotentRequestID in its description, and its `notes` field
+   cites FEAT-026-federation.md:22-29,160-177, TP-002-server-web-ui.md:327-338, and
+   federation-worker-control.spec.ts:1-9,102-214. This reconciliation was already
+   committed in 523e03b80 ("chore(beads): update ddx-28f3cf37 [ddx: doc-stamp]") prior
+   to this execution. No further tracker edit is needed to satisfy AC1-3.
+
+2. AC4's Go clause passes as-is:
+   `cd cli && go test ./internal/server/graphql/... ./internal/federation/...`
+   -> ok github.com/DocumentDrivenDX/ddx/internal/server/graphql (27.1s)
+   -> ok github.com/DocumentDrivenDX/ddx/internal/federation (2.2s)
+
+3. AC4's playwright clause does not pass and cannot be made to pass within this
+   bead's scope:
+   `cd cli/internal/server/frontend && bunx playwright test e2e/federation-worker-control.spec.ts`
+   -> 4 failed (starts a spoke worker from the hub, stops a spoke worker from the hub,
+      refuses commands for an offline spoke, deduplicates retried forwarded worker commands)
+   The spec file's own header (federation-worker-control.spec.ts:7-8) states: "These
+   tests MUST FAIL until the hub federation workers view implements forwarded worker
+   start/stop for spoke-owned projects." Making them pass requires implementing
+   owner-targeted write forwarding across the GraphQL resolvers, the federation
+   write-routing layer, and the Svelte workers-federation UI -- a feature-sized change
+   that is exactly the work ddx-28f3cf37 exists to track, not something a bead titled
+   "narrow the worker-control follow-up bead" is scoped to build. ddx-28f3cf37 remains
+   open (unimplemented) as of this run, and this bead's NON-SCOPE section confines the
+   work here to the bead-tracker text, not the write-routing implementation.
+
+Recommendation: this bead's tracker-narrowing objective is already complete (AC1-3,
+plus the Go half of AC4). The remaining playwright gap in AC4 will close naturally
+once ddx-28f3cf37 is implemented and its four named Go tests plus the e2e spec go
+green -- that is out of scope here. No code or bead-tracker change is being committed
+by this run.
