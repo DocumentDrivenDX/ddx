@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260704T004313-89e47bd0",
+  "bead_id": "ddx-cce0227c",
+  "base_rev": "33a605d45604bf631eb88da6dfee73146b9a3552",
+  "created_at": "2026-07-04T00:43:22.90781406Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cce0227c",
+    "title": "docs: record execute-bead merge-gate scope decision",
+    "description": "PROBLEM\nThe current execute-bead landing path only evaluates required gates derived from governing artifacts. `cli/internal/agent/execute_bead_orchestrator.go:234-268` calls `EvaluateRequiredGatesForResult`, and `cli/internal/agent/landing_gate_context.go:95-114` skips gate evaluation entirely when no governing IDs are present. The policy decision about whether that is intentional, or whether a full workspace build/test must always run independent of bead scope, is not stated in a durable docs surface.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_orchestrator.go:234-268` binds landing checks to the bead's governing IDs.\n- `cli/internal/agent/landing_gate_context.go:95-114` skips required-gate evaluation when no governing IDs are available.\n- No nearby docs file currently spells out whether a full workspace build/test is intentionally out of scope for the default execute-bead gate.\n\nPROPOSED FIX\n- Add a durable decision note in docs or the execution bundle that states the intended scope of the default execute-bead merge/acceptance gate.\n- If the decision remains governing-artifact bounded, name the reason explicitly so operators know the workspace-wide build/test is intentionally not part of the default gate.\n- If the decision changes, document the required workspace-wide check and the file that will enforce it.\n\nNON-SCOPE\n- Do not change landing code in this bead.\n- Do not add or remove any required-gate checks here.\n- Do not change routing or worker selection.",
+    "acceptance": "1. A durable note exists that states whether the default execute-bead merge/acceptance gate intentionally remains governed by governing-artifact required checks only, or whether it now requires a workspace-wide build/test independent of bead scope.\n2. The note names the relevant landing path (`EvaluateRequiredGatesForResult` / `landing_gate_context.go`) so the decision is tied to a concrete enforcement point.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-0bdbc446",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "kind:documentation",
+      "spec:FEAT-010"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T004313-89e47bd0",
+    "prompt": ".ddx/executions/20260704T004313-89e47bd0/prompt.md",
+    "manifest": ".ddx/executions/20260704T004313-89e47bd0/manifest.json",
+    "result": ".ddx/executions/20260704T004313-89e47bd0/result.json",
+    "checks": ".ddx/executions/20260704T004313-89e47bd0/checks.json",
+    "usage": ".ddx/executions/20260704T004313-89e47bd0/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cce0227c-20260704T004313-89e47bd0"
+  },
+  "prompt_sha": "a8a99e3345d8933b3d23a71dc7289b2c8556a205c7f44719c6c7cf7b5dae98fb"
+}
