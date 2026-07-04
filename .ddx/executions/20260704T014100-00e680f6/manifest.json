@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260704T014100-00e680f6",
+  "bead_id": "ddx-3d96c6f9",
+  "base_rev": "045a407a477ceb2c852c123352b8ddc4c41d9851",
+  "created_at": "2026-07-04T01:41:24.091806045Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3d96c6f9",
+    "title": "IMP: JSONL→Postgres importer for production AxonStore migration (repla: part 2",
+    "description": "PROBLEM\nParent bead ddx-53df5e2f is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nThe legacy `*Store.MigrateToAxon` method (now exposed via `Migrator.MigrateToAxon` in MIG bead, returning `ErrDeprecated`) writes JSONL files under `.ddx/axon/` rather than performing an actual JSONL→Postgres migration. Per the audit in `docs/plans/plan-2026-05-10-axon-only-architecture.md`, production AxonStore deployment requires migrating existing `.ddx/beads.jsonl` corpora into Lakebase Postgres. The real importer is unimplemented.\n\n# ROOT CAUSE\n`cli/internal/bead/migrate.go` (function previously at `*Store.MigrateToAxon`, now folded into `*storeMigrator` per MIG bead) writes JSONL into a sidecar directory. The function does not connect to Postgres or invoke `AxonStore.Apply`/`AxonStore.Create`. Production deployment cannot use it to populate Lakebase.\n\n# PROPOSED FIX\n\n1. Implement a real importer in `cli/internal/bead/internal/storage/import_postgres.go` (or equivalent post-BL location). The importer:\n   - Reads `.ddx/beads.jsonl` (and `.ddx/beads-archive.jsonl` if present) — uses existing JSONL parser.\n   - For each bead, calls `axonStore.Create(ctx, \u0026b)` to insert into Postgres. Idempotent on `ErrConflict` (skip + log).\n   - For each bead, appends events via `axonStore.Apply(ctx, id, AppendEventOp{...})` per TD-027 §13 vocabulary (events come from `Extra[\"events\"]` on the JSONL bead or from sidecar `.ddx/attachments/\u003cbead\u003e/events.jsonl`).\n   - Tracks progress, supports `--dry-run` (counts without writes), `--limit N` (batched migration).\n   - Verifies post-migration: read back beads from Postgres, assert field-for-field equality with source JSONL (sample-based for large corpora).\n\n2. Expose via `Migrator` interface (added in MIG): rename/replace `MigrateToAxon` with the real implementation; same method name, different (correct) behavior.\n\n3. Update `cli/cmd/bead_migrate.go` to support the importer with appropriate flags:\n   - `ddx bead migrate --to-axon --dry-run`\n   - `ddx bead migrate --to-axon --apply [--limit N]`\n   - `ddx bead migrate --to-axon --verify` (read-back + checksum)\n\n4. Remove the deprecated JSONL-writing behavior. `ErrDeprecated` return from MIG bead is replaced by the real implementation.\n\n# NON-SCOPE\n- Schema-versioning migration ladder (separate concern; deferred until first v1→v2 breaking change).\n- Real-wire integration test against actual Postgres — separate WIRE bead.\n- Continuous sync between JSONL and Postg\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Implement the remaining bounded slice of the parent bead.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Implement the remaining bounded slice of the parent bead.\n2. cd cli \u0026\u0026 go test ./... passes.\n3. lefthook run pre-commit passes.",
+    "parent": "ddx-53df5e2f",
+    "labels": [
+      "area:axon",
+      "area:bead",
+      "area:migration",
+      "kind:feature",
+      "phase:iterate",
+      "spec:TD-027",
+      "triage:no-changes-unjustified",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T014100-00e680f6",
+    "prompt": ".ddx/executions/20260704T014100-00e680f6/prompt.md",
+    "manifest": ".ddx/executions/20260704T014100-00e680f6/manifest.json",
+    "result": ".ddx/executions/20260704T014100-00e680f6/result.json",
+    "checks": ".ddx/executions/20260704T014100-00e680f6/checks.json",
+    "usage": ".ddx/executions/20260704T014100-00e680f6/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3d96c6f9-20260704T014100-00e680f6"
+  },
+  "prompt_sha": "9a6982b0651a68180b2dd095c1c3eda1ce1449904883d32bfbffe3a063d195f7"
+}
