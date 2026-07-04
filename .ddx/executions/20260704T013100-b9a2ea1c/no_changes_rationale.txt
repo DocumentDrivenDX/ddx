@@ -1,0 +1,48 @@
+status: proposed
+reason: >
+  ddx-be5dd18c ("part 1 of 2") and its sibling ddx-8ea2e451 ("part 2 of 2") are a
+  duplicate, unbounded decomposition of parent ddx-74452926. A second, properly
+  scoped decomposition of the SAME parent already exists and is in progress:
+
+    - ddx-3d985375 "BL storage: privatize concrete bead backends behind
+      internal/storage and add public factories" — status: closed (commit
+      f92b8459b).
+    - ddx-27769c99 "BL lifecycle: move WatcherHub behind internal/lifecycle and
+      expose lifecycle factory" — status: open, deps: ddx-3d985375, currently
+      claimed by another active session (agent-loop-1783128401422988623).
+    - ddx-001aac3d "BL callers: narrow bead store fields to Backend and add
+      module-boundary import test" — status: open, deps: ddx-3d985375,
+      ddx-27769c99.
+    - ddx-c8951625 "BL lint: remove redundant bead-boundary analyzers and
+      document compiler enforcement" — status: open, deps: ddx-3d985375,
+      ddx-27769c99, ddx-001aac3d.
+
+  Together these four siblings' NON-SCOPE sections partition the entire parent
+  scope (storage relocation / lifecycle relocation / caller narrowing +
+  boundary test / lint cleanup) with no gap and no overlap. ddx-be5dd18c has no
+  concretely defined slice of its own beyond "first bounded slice of the
+  parent bead" — every concrete piece of work is already owned by one of the
+  four siblings above. Picking an arbitrary sub-slice here would either
+  duplicate work one of those beads is already doing (ddx-27769c99 is claimed
+  and running right now) or produce a conflicting partial move of the same
+  files (store.go, backend_jsonl.go, backend_external.go, axon_backend.go,
+  claim_liveness.go, attachments.go, archive.go, migrate.go, watcher.go) that
+  ddx-3d985375/ddx-27769c99 already touch.
+
+  Additionally, verified during investigation: ddx-3d985375 is marked closed
+  but only added type-alias facades under cli/internal/bead/internal/storage/
+  (e.g. `type Store = bead.Store`, `type JSONLBackend = bead.JSONLBackend`) —
+  the real concrete implementations in cli/internal/bead/store.go,
+  backend_jsonl.go, backend_external.go, axon_backend.go, claim_liveness.go,
+  attachments.go, archive.go, and migrate.go were never actually relocated and
+  remain fully public. TD-027 §21's physical-impossibility-of-bypass goal is
+  therefore NOT yet met despite ddx-3d985375's closed status. This is a defect
+  in that closed bead's execution, not something ddx-be5dd18c can fix without
+  reopening/duplicating ddx-3d985375's scope.
+
+  Operator decision needed: (1) close ddx-be5dd18c and ddx-8ea2e451 as
+  duplicates of the ddx-3d985375/ddx-27769c99/ddx-001aac3d/ddx-c8951625 track,
+  and (2) file a follow-up (or reopen ddx-3d985375) to perform the real file
+  relocation that the facade-only closure skipped, since ddx-27769c99 and
+  ddx-001aac3d both assume the storage package boundary is real when they
+  build the lifecycle move and the module-boundary import test on top of it.
