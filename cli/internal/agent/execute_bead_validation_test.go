@@ -184,11 +184,16 @@ func TestValidateAttemptIntegrity_SingleCommitNoEvidenceSkips(t *testing.T) {
 // distinguishes the DDx validation failure from an implementation failure.
 func TestLandBeadResult_AttemptIntegrityPreserved(t *testing.T) {
 	projectRoot := t.TempDir()
-	res := makeWorkerResult("ddx-integrity-01", "aaa0001", "bbb0001", 0)
-	res.Outcome = ExecuteBeadOutcomeTaskFailed
-	res.FailureMode = FailureModeAttemptIntegrity
-	res.Reason = AttemptIntegrityPreserveReason
-	res.Error = "DDx validation: the implementation commit was rewritten after the first commit. Detected by DDx, not an implementation failure."
+	res := &ExecuteBeadResult{
+		BeadID:            "ddx-integrity-01",
+		BaseRev:           "aaa0001",
+		ResultRev:         "ccc0001",
+		ImplementationRev: "bbb0001",
+		Outcome:           ExecuteBeadOutcomeTaskFailed,
+		FailureMode:       FailureModeAttemptIntegrity,
+		Reason:            AttemptIntegrityPreserveReason,
+		Error:             "DDx validation: the implementation commit was rewritten after the first commit. Detected by DDx, not an implementation failure.",
+	}
 	orch := &orchTestGitOps{}
 
 	advancer := &fakeLandingAdvancer{}
@@ -208,6 +213,9 @@ func TestLandBeadResult_AttemptIntegrityPreserved(t *testing.T) {
 	}
 	if orch.preserveRef == "" {
 		t.Error("expected the integrity-rejected commit to be preserved under an iteration ref")
+	}
+	if orch.preserveSHA != res.ImplementationRev {
+		t.Fatalf("preserve ref should pin implementation_rev %s, got %s", res.ImplementationRev, orch.preserveSHA)
 	}
 	if res.Status != ExecuteBeadStatusPreservedNeedsReview {
 		t.Errorf("expected status=preserved_needs_review, got %q", res.Status)

@@ -210,7 +210,11 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 	// merge as success; the specific explanation rides on res.Error.
 	if res.FailureMode == FailureModeAttemptIntegrity && res.ResultRev != res.BaseRev {
 		ref := PreserveRef(res.BeadID, res.BaseRev)
-		if err := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); err != nil {
+		preserveSHA := res.ResultRev
+		if res.ImplementationRev != "" && res.ImplementationRev != res.ResultRev {
+			preserveSHA = res.ImplementationRev
+		}
+		if err := gitOps.UpdateRef(projectRoot, ref, preserveSHA); err != nil {
 			return nil, fmt.Errorf("preserving result ref: %w", err)
 		}
 		landing.Outcome = "preserved"
