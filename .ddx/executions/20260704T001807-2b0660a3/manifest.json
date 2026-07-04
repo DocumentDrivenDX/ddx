@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260704T001807-2b0660a3",
+  "bead_id": "ddx-19f9c9c0",
+  "base_rev": "446325c6fd72a38281f9ef9df8f59a3b7fe91a0b",
+  "created_at": "2026-07-04T00:18:16.103945649Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-19f9c9c0",
+    "title": "federation: narrow the bead/document write follow-up bead",
+    "description": "PROBLEM\n`ddx-359e812b` is still too broad for what remains. `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:340-351,353-363` keeps bead, spec, and document writes planned, but the current Playwright suite already covers the mocked forwarded paths in `cli/internal/server/frontend/e2e/beads-queue-mutations.spec.ts:210-268` and `cli/internal/server/frontend/e2e/spec-editing.spec.ts:204-256`, while `cli/internal/server/frontend/e2e/federation-2node.spec.ts:219-307` already covers the read-federation shell around the owner-write entry points.\n\nROOT CAUSE\nThe stale bead conflates three concerns: hub/spoke federation reads, mocked UI write-forwarding, and the live owner-targeted persistence gap. FEAT-026 says forwarding is owner-targeted and never broadcast (`docs/helix/01-frame/features/FEAT-026-federation.md:22-29,160-177`), so the bead should only track the missing live bead/document write persistence and refusal behavior, not the already-covered smoke paths.\n\nPROPOSED FIX\n- Rewrite or supersede `ddx-359e812b` so it narrows to live owner-targeted bead create/edit and documentWrite persistence.\n- Keep the ts-net guard as a separate child if it is still load-bearing.\n- Add or update the missing owner-write tests as `TestFederatedBeadWrite_ForwardsToOwner`, `TestFederatedDocumentWrite_ForwardsToOwner`, `TestFederatedWrite_RejectsOfflineSpoke`, and `TestFederatedWrite_IdempotentRequestID`.\n\nNON-SCOPE\n- Do not add new federation read smoke.\n- Do not add screenshot assertions.\n- Do not implement managed-node outbound control from ADR-028.\n- Do not change the mocked Playwright smoke paths unless they are being split out of this bead.\n\nPARENT + DEPS\nParent: `ddx-a038a090`. Upstream stale bead context: `ddx-28f3cf37`.",
+    "acceptance": "1. `ddx bead show ddx-359e812b` is narrowed to live owner-targeted write persistence or is closed/superseded.\n2. The bead body names `TestFederatedBeadWrite_ForwardsToOwner`, `TestFederatedDocumentWrite_ForwardsToOwner`, `TestFederatedWrite_RejectsOfflineSpoke`, and `TestFederatedWrite_IdempotentRequestID`.\n3. The reconciliation notes cite `TP-002-server-web-ui.md:340-351,353-363`, `beads-queue-mutations.spec.ts:210-268`, `spec-editing.spec.ts:204-256`, and `federation-2node.spec.ts:219-307`.\n4. `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...` passes, and `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-b303cf96",
+    "labels": [
+      "phase:2",
+      "area:federation",
+      "area:web",
+      "area:tests",
+      "kind:test",
+      "story:14",
+      "spec:FEAT-026",
+      "ac-quality:needs-refinement"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T001807-2b0660a3",
+    "prompt": ".ddx/executions/20260704T001807-2b0660a3/prompt.md",
+    "manifest": ".ddx/executions/20260704T001807-2b0660a3/manifest.json",
+    "result": ".ddx/executions/20260704T001807-2b0660a3/result.json",
+    "checks": ".ddx/executions/20260704T001807-2b0660a3/checks.json",
+    "usage": ".ddx/executions/20260704T001807-2b0660a3/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-19f9c9c0-20260704T001807-2b0660a3"
+  },
+  "prompt_sha": "684bac8a97ba6d7b7a4e723ae70e68f96046955680868d6d2902616f7785457f"
+}

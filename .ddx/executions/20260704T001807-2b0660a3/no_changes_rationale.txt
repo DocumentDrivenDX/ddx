@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli/internal/server/frontend && bunx playwright test e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` is failing on the current branch with real assertion failures in the referenced bead/spec tests, including missing `projectId` forwarding, missing edit/approve buttons, missing stale-write errors, and missing graph refresh affordances. The Go gate passes, but AC4/AC5 are not satisfied yet, so this execution is retryable after the frontend/test behavior is aligned.
