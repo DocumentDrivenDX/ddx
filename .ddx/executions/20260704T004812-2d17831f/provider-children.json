@@ -3,12 +3,44 @@
   "bead_id": "ddx-c015b098",
   "trigger": "running_phase_non_route_provider_child",
   "active_route": "codex",
-  "scanned_at": "2026-07-04T00:53:36.308949741Z",
+  "scanned_at": "2026-07-04T01:00:06.308951116Z",
   "reaped": [
     {
       "pid": 1406119,
       "provider": "claude",
       "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1910417,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped1564396018/001/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1920309,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped2675141930/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1919337,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped2511151528/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1924136,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped1591071665/001/claude 120",
       "age_seconds": 0,
       "action": "terminated",
       "reason": "running_phase_non_route_provider_child"
