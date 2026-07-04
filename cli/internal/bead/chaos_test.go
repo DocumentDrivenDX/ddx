@@ -21,30 +21,16 @@ func skipFullBeadSuiteInShort(t *testing.T) {
 }
 
 // newTestBackend returns a Backend rooted at a fresh temp dir for the explicit
-// backend name supplied by the caller. The chaos suite uses it so both JSONL
-// and axon run through the same Backend interface surface rather than one path
-// silently defaulting to JSONL.
+// backend name supplied by the caller. The chaos suite uses the shared backend
+// selector so both JSONL and axon run through the same Backend interface
+// surface rather than one path silently defaulting to JSONL.
 //
 // Both backends get a 30s lock wait to handle the high concurrency in
 // LargeScale tests on slow CI machines (15 goroutines × 15 beads can push
 // the default 10s timeout on loaded runners).
 func newTestBackend(t *testing.T, backend string) Backend {
 	t.Helper()
-	switch backend {
-	case BackendJSONL:
-		s := newJSONLStore(t)
-		s.LockWait = 30 * time.Second
-		return s
-	case BackendAxon:
-		s := newAxonStore(t)
-		if ab, ok := s.backend.(*AxonBackend); ok {
-			ab.LockWait = 30 * time.Second
-		}
-		return s
-	default:
-		t.Fatalf("unsupported chaos backend %q", backend)
-		return nil
-	}
+	return newBackendTestStore(t, backend, 30*time.Second)
 }
 
 // chaosBackend names a backend constructor for the parameterized chaos suite.
