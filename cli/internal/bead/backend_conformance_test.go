@@ -3,6 +3,7 @@ package bead
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,19 +21,33 @@ func backendConformanceCases() []backendConformanceCase {
 	}
 }
 
-// newBackendConformanceStore makes the backend choice explicit for the
-// package-wide conformance matrix instead of relying on any default path.
-func newBackendConformanceStore(t *testing.T, backend string) *Store {
+// newBackendTestStore makes the backend choice explicit for backend-matrix
+// tests instead of relying on any default path.
+func newBackendTestStore(t *testing.T, backend string, lockWait time.Duration) *Store {
 	t.Helper()
+	var s *Store
 	switch backend {
 	case BackendJSONL:
-		return newJSONLStore(t)
+		s = newJSONLStore(t)
 	case BackendAxon:
-		return newAxonStore(t)
+		s = newAxonStore(t)
 	default:
 		t.Fatalf("unsupported backend %q", backend)
 		return nil
 	}
+	if lockWait > 0 {
+		s.LockWait = lockWait
+		if ab, ok := s.backend.(*AxonBackend); ok {
+			ab.LockWait = lockWait
+		}
+	}
+	return s
+}
+
+// newBackendConformanceStore preserves the package-wide conformance helper
+// shape while reusing the explicit backend selector above.
+func newBackendConformanceStore(t *testing.T, backend string) *Store {
+	return newBackendTestStore(t, backend, 0)
 }
 
 func forEachBackendConformanceCase(t *testing.T, fn func(*testing.T, backendConformanceCase)) {
