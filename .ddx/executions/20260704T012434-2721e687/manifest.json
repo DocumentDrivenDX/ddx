@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260704T012434-2721e687",
+  "bead_id": "ddx-a9218e18",
+  "base_rev": "68a3aeeaec23d9c4303f7531a897dc75f99851a5",
+  "created_at": "2026-07-04T01:25:10.757642359Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a9218e18",
+    "title": "DESIGN: leak-proof helper-process reaping (leftover-PID scan)",
+    "description": "PROBLEM\nWorker runs leave zombie/orphan helper processes (observed: orphan 'find' processes 23+ days old, plus orphan harness procs) that the operator had to hunt and kill manually ('kill the zombie claudes', 'get rid of the zombies and prevent them from happening').\n\nWHY THE NAIVE FIX FAILS (from adversarial review)\n- cli/internal/agent/orphan_harness_reaper.go acts only on processes where proc.PPID==1 AND looksLikeHarnessProcess(cmd) matches a fixed harness allowlist (claude|codex|gemini|opencode|pi) AND InferBead can attribute a bead+worktree from the cmdline.\n- The harness is started with Setpgid (own process group) and the reaper does killGroup(proc.PID), so a 'find' still inside the harness group is already reaped when the harness dies.\n- A 'find' that ESCAPED the group is not PPID-attributable to a harness and a bare 'find' cmdline cannot be mapped to a bead, so it is UNREACHABLE by the current reaper model. Extending looksLikeHarnessProcess to match 'find' would NOT fire.\n\nWHAT TO PRODUCE (design, not implementation)\n- A short design doc (under docs/dev/ or docs/helix/) specifying a leftover-PID/leftover-process scan keyed off the LEASE WORKTREE (e.g. processes with cwd or open files under a known execute-bead worktree root that outlive the lease), rather than a cmdline allowlist. Cover: detection signal, safety (never kill a live, legitimately-owned process), Linux-specificity, and how it composes with the existing group-kill + execution_cleanup_loop.go.\n- Decompose into child build beads with command-based ACs and depend them on this epic.\n\nNON-SCOPE (for THIS bead)\n- No implementation in this bead — design + child beads only.\n- Do not change Fizeau routing.",
+    "acceptance": "1. A committed design doc exists describing the leftover-worktree-keyed reaping mechanism and why the cmdline-allowlist approach is insufficient. 2. At least one child build bead is created (ddx bead create) with command-based ACs and wired via ddx bead dep add \u003cchild\u003e \u003cthis-epic\u003e. 3. ddx bead dep tree \u003cthis-epic\u003e shows the children.",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:reliability",
+      "kind:design",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:23:58.597034642Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T012434-2721e687",
+    "prompt": ".ddx/executions/20260704T012434-2721e687/prompt.md",
+    "manifest": ".ddx/executions/20260704T012434-2721e687/manifest.json",
+    "result": ".ddx/executions/20260704T012434-2721e687/result.json",
+    "checks": ".ddx/executions/20260704T012434-2721e687/checks.json",
+    "usage": ".ddx/executions/20260704T012434-2721e687/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-a9218e18-20260704T012434-2721e687"
+  },
+  "prompt_sha": "300177ef1a6a0b4b070259da93f6aad231cd0a442fe4f6c23eb81aa9cdfe9068"
+}
