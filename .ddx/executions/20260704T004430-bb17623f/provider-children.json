@@ -1,0 +1,17 @@
+{
+  "attempt_id": "20260704T004430-bb17623f",
+  "bead_id": "ddx-d99f7eb8",
+  "trigger": "running_phase_non_route_provider_child",
+  "active_route": "codex",
+  "scanned_at": "2026-07-04T00:47:38.011572003Z",
+  "reaped": [
+    {
+      "pid": 1077915,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}

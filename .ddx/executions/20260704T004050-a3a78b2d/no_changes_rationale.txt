@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/server/graphql/... ./internal/federation/...` passed, but `cd cli/internal/server/frontend && bunx playwright test e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` fails on current repo behavior after restoring frontend dependencies. The failing assertions are in the cited bead-queue/spec-editing coverage, so AC 4 is not satisfied in this run.
