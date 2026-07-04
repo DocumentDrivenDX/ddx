@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260704T004812-2d17831f",
+  "bead_id": "ddx-c015b098",
+  "base_rev": "4a564b36d55de46db5eac7c4b073235ef5f8283c",
+  "created_at": "2026-07-04T00:48:26.259975094Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c015b098",
+    "title": "Inject per-project .ddx/guardrails.md into the execute-bead guardrail block",
+    "description": "PROBLEM\nOperators re-paste hard per-project invariants ('do not delete anything from redpanda', 'never run perf tests on GitHub runners', 'do not touch the NAT') as prose every dispatch and every compaction, because there is no per-project guardrails file spliced into the load-bearing guardrail block the executor controls. Guardrails are currently static global consts.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go (~1945-2065): guardrails are hardcoded const prompt strings (instrCoreConstraints, instrBeadOverride, the numbered load-bearing guardrails). No reader splices a per-project file. The only per-project surface (AGENTS.md/CLAUDE.md) is harness-loaded prose, not part of the executor-controlled guardrail block.\n\nPROPOSED FIX\n- Read an OPTIONAL project-root file (.ddx/guardrails.md) and splice its contents into the execute-bead guardrail assembly so per-project invariants are injected on every dispatch (and therefore survive compaction automatically, since they are re-injected each iteration).\n- Absent file = no behavioral change.\n\nNON-SCOPE\n- Do not change the existing static guardrail consts' wording.\n- Do not add AGENTS.md parsing or change how the harness loads AGENTS.md.\n- Do not implement per-bead overrides (this is per-project only).\n\nPROVENANCE\nDerived from a session-harvest of local Claude/Codex operator prompts (2026-06-27), classified into deficiency-papering vs intent, then put through two adversarial-review rounds that dropped every item already shipped. This item survived as a verified, non-redundant gap. See docs/session-harvest-playbook.md.",
+    "acceptance": "1. A prompt-snapshot test (cli/internal/agent/testdata/execute_bead_prompt_snapshots/...) shows .ddx/guardrails.md content present in the dispatched prompt when the file exists. 2. A test shows the assembled prompt is unchanged when the file is absent. 3. cd cli \u0026\u0026 go test ./internal/agent/... passes; go build ./... succeeds.",
+    "labels": [
+      "area:agent",
+      "area:execute-bead",
+      "kind:feature",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:47:56.003354727Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T004812-2d17831f",
+    "prompt": ".ddx/executions/20260704T004812-2d17831f/prompt.md",
+    "manifest": ".ddx/executions/20260704T004812-2d17831f/manifest.json",
+    "result": ".ddx/executions/20260704T004812-2d17831f/result.json",
+    "checks": ".ddx/executions/20260704T004812-2d17831f/checks.json",
+    "usage": ".ddx/executions/20260704T004812-2d17831f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c015b098-20260704T004812-2d17831f"
+  },
+  "prompt_sha": "484e2452c2d717891ab068cfa48578659d91f8477e5cf45e2316cf96c9077ced"
+}

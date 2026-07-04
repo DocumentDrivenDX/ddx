@@ -1,12 +1,27 @@
 {
   "attempt_id": "20260704T010919-77e979ee",
   "bead_id": "ddx-3ae0eab0",
-  "trigger": "running_phase_non_route_provider_child",
-  "active_route": "claude",
-  "scanned_at": "2026-07-04T01:11:45.31360342Z",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-04T02:06:40.096660336Z",
   "reaped": [
     {
       "pid": 2721125,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3994580,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 269831,
       "provider": "codex",
       "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
       "age_seconds": 0,

@@ -1,0 +1,111 @@
+{
+  "attempt_id": "20260704T015701-3922046e",
+  "bead_id": "ddx-0ed4dd76",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e",
+  "trigger": "",
+  "started_at": "2026-07-04T02:06:35.889287527Z",
+  "finished_at": "2026-07-04T02:06:37.454605124Z",
+  "scanned": 392,
+  "candidates": [
+    {
+      "pid": 1399370,
+      "ppid": 1350291,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build604257576/b001/exe/a.out -importcfg /home/erik/.cache/fleet-tmp/go/go-build604257576/b001/importcfg.link -buildmode=exe -buildid=OAoLf3EXOh-vYWTBOQ0-/9aIo2X6msyJ_pPYWXwr3/TWjM5yPDA5_SREYdh9mc/OAoLf3EXOh-vYWTBOQ0- -extld=cc /home/erik/.cache/fleet-tmp/go/go-build604257576/b001/_pkg_.a"
+    },
+    {
+      "pid": 1350291,
+      "ppid": 1324359,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-workerprobe-bin-3109850407/ddx ."
+    },
+    {
+      "pid": 1499471,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b849/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b849/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1499470,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/registry",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b904/registry.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b904/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1499469,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/config",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b900/config.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b900/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1324359,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/agent/workerprobe",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b387/workerprobe.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b387/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1189846,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b366/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b366/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1399370,
+      "ppid": 1350291,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build604257576/b001/exe/a.out -importcfg /home/erik/.cache/fleet-tmp/go/go-build604257576/b001/importcfg.link -buildmode=exe -buildid=OAoLf3EXOh-vYWTBOQ0-/9aIo2X6msyJ_pPYWXwr3/TWjM5yPDA5_SREYdh9mc/OAoLf3EXOh-vYWTBOQ0- -extld=cc /home/erik/.cache/fleet-tmp/go/go-build604257576/b001/_pkg_.a"
+    },
+    {
+      "pid": 1350291,
+      "ppid": 1324359,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli",
+      "command": "go build -buildvcs=false -o /home/erik/.cache/fleet-tmp/ddx-workerprobe-bin-3109850407/ddx ."
+    },
+    {
+      "pid": 1324359,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/agent/workerprobe",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b387/workerprobe.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b387/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1189846,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b366/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b366/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 1499471,
+      "ppid": 636,
+      "pgid": 1108478,
+      "command": "[cmd.test] \u003cdefunct\u003e"
+    },
+    {
+      "pid": 1499470,
+      "ppid": 636,
+      "pgid": 1108478,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T015701-3922046e/cli/internal/registry",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2594005645/b904/registry.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2594005645/b904/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1499469,
+      "ppid": 636,
+      "pgid": 1108478,
+      "command": "[config.test] \u003cdefunct\u003e"
+    }
+  ]
+}

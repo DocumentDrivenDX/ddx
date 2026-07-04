@@ -1,0 +1,32 @@
+{
+  "bead_id": "ddx-9aede25e",
+  "attempt_id": "20260704T012747-65307d8d",
+  "base_rev": "9368611faf1f534d13f20d796adf3f5c8528fffe",
+  "result_rev": "9368611faf1f534d13f20d796adf3f5c8528fffe",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt; dirty paths: .crush/skills/nano-banana-pro-openrouter, cli/internal/agent/test_mode_matrix_test.go; rescue: .ddx/executions/20260704T012747-65307d8d/dirty_rescue.patch",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "preserve_ref": ".ddx/executions/20260704T012747-65307d8d/dirty_rescue.patch",
+  "no_evidence_paths": [
+    ".crush/skills/nano-banana-pro-openrouter",
+    "cli/internal/agent/test_mode_matrix_test.go"
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-50f7924f",
+  "duration_ms": 306283,
+  "tokens": 31774,
+  "cost_usd": 1.0834476000000002,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt; dirty paths: .crush/skills/nano-banana-pro-openrouter, cli/internal/agent/test_mode_matrix_test.go; rescue: .ddx/executions/20260704T012747-65307d8d/dirty_rescue.patch",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260704T012747-65307d8d",
+  "prompt_file": ".ddx/executions/20260704T012747-65307d8d/prompt.md",
+  "manifest_file": ".ddx/executions/20260704T012747-65307d8d/manifest.json",
+  "result_file": ".ddx/executions/20260704T012747-65307d8d/result.json",
+  "usage_file": ".ddx/executions/20260704T012747-65307d8d/usage.json",
+  "started_at": "2026-07-04T01:28:16.087961568Z",
+  "finished_at": "2026-07-04T01:33:22.371679257Z"
+}

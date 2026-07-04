@@ -1,0 +1,3 @@
+status: open
+reason: retryable package-test timeout in cli/internal/agent
+details: go test -timeout 30m ./internal/agent/... remained stuck in TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 18m+ with futex-waiting goroutines; the new guardrails change compiled and the new snapshot tests passed, but the required full package gate did not complete in this run.

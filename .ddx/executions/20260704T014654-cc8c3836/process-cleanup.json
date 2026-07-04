@@ -1,0 +1,111 @@
+{
+  "attempt_id": "20260704T014654-cc8c3836",
+  "bead_id": "ddx-27769c99",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836",
+  "trigger": "",
+  "started_at": "2026-07-04T02:06:35.942566614Z",
+  "finished_at": "2026-07-04T02:06:37.562823179Z",
+  "scanned": 396,
+  "candidates": [
+    {
+      "pid": 1510897,
+      "ppid": 636,
+      "pgid": 1503141,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build3333620749/b001/server.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build3333620749/b001/importcfg.link -s -w -buildmode=exe -buildid=D-z-P1_bLW5yqm029YDR/zIXWXFDUXKBbS8tr7Ajf/ejoX6xORUupmECL1Ajae/D-z-P1_bLW5yqm029YDR -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/a7/a78e9c8a71039c99df35faa1b1a9b3ddfc92bac133f264300d27fc11362d2208-d"
+    },
+    {
+      "pid": 1496133,
+      "ppid": 636,
+      "pgid": 1463277,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build222062851/b833/graphql.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build222062851/b833/importcfg.link -s -w -buildmode=exe -buildid=I6dA7O79HDMGRK975jJe/wspqV98vr4AjnP0QglPR/h_hsRUAugUAV7uwhEXgl/I6dA7O79HDMGRK975jJe -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/7f/7f8e362f4d70b1e9730e1703f6c8b245fcc802415bc83981e9707e7259bfa372-d"
+    },
+    {
+      "pid": 1495583,
+      "ppid": 636,
+      "pgid": 1463277,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build222062851/b001/server.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build222062851/b001/importcfg.link -s -w -buildmode=exe -buildid=D-z-P1_bLW5yqm029YDR/zIXWXFDUXKBbS8tr7Ajf/ejoX6xORUupmECL1Ajae/D-z-P1_bLW5yqm029YDR -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/a7/a78e9c8a71039c99df35faa1b1a9b3ddfc92bac133f264300d27fc11362d2208-d"
+    },
+    {
+      "pid": 1427363,
+      "ppid": 636,
+      "pgid": 1367764,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build1675989917/b833/graphql.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build1675989917/b833/importcfg.link -s -w -buildmode=exe -buildid=I6dA7O79HDMGRK975jJe/wspqV98vr4AjnP0QglPR/h_hsRUAugUAV7uwhEXgl/I6dA7O79HDMGRK975jJe -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/7f/7f8e362f4d70b1e9730e1703f6c8b245fcc802415bc83981e9707e7259bfa372-d"
+    },
+    {
+      "pid": 1427262,
+      "ppid": 636,
+      "pgid": 1367764,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build1675989917/b001/server.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build1675989917/b001/importcfg.link -s -w -buildmode=exe -buildid=D-z-P1_bLW5yqm029YDR/zIXWXFDUXKBbS8tr7Ajf/ejoX6xORUupmECL1Ajae/D-z-P1_bLW5yqm029YDR -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/a7/a78e9c8a71039c99df35faa1b1a9b3ddfc92bac133f264300d27fc11362d2208-d"
+    },
+    {
+      "pid": 1029871,
+      "ppid": 636,
+      "pgid": 996085,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2913779160/b275/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2913779160/b275/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 1005400,
+      "ppid": 636,
+      "pgid": 996085,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli/internal/bead",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2913779160/b258/bead.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2913779160/b258/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1510897,
+      "ppid": 636,
+      "pgid": 1503141,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build3333620749/b001/server.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build3333620749/b001/importcfg.link -s -w -buildmode=exe -buildid=D-z-P1_bLW5yqm029YDR/zIXWXFDUXKBbS8tr7Ajf/ejoX6xORUupmECL1Ajae/D-z-P1_bLW5yqm029YDR -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/a7/a78e9c8a71039c99df35faa1b1a9b3ddfc92bac133f264300d27fc11362d2208-d"
+    },
+    {
+      "pid": 1496133,
+      "ppid": 636,
+      "pgid": 1463277,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build222062851/b833/graphql.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build222062851/b833/importcfg.link -s -w -buildmode=exe -buildid=I6dA7O79HDMGRK975jJe/wspqV98vr4AjnP0QglPR/h_hsRUAugUAV7uwhEXgl/I6dA7O79HDMGRK975jJe -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/7f/7f8e362f4d70b1e9730e1703f6c8b245fcc802415bc83981e9707e7259bfa372-d"
+    },
+    {
+      "pid": 1495583,
+      "ppid": 636,
+      "pgid": 1463277,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build222062851/b001/server.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build222062851/b001/importcfg.link -s -w -buildmode=exe -buildid=D-z-P1_bLW5yqm029YDR/zIXWXFDUXKBbS8tr7Ajf/ejoX6xORUupmECL1Ajae/D-z-P1_bLW5yqm029YDR -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/a7/a78e9c8a71039c99df35faa1b1a9b3ddfc92bac133f264300d27fc11362d2208-d"
+    },
+    {
+      "pid": 1427363,
+      "ppid": 636,
+      "pgid": 1367764,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build1675989917/b833/graphql.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build1675989917/b833/importcfg.link -s -w -buildmode=exe -buildid=I6dA7O79HDMGRK975jJe/wspqV98vr4AjnP0QglPR/h_hsRUAugUAV7uwhEXgl/I6dA7O79HDMGRK975jJe -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/7f/7f8e362f4d70b1e9730e1703f6c8b245fcc802415bc83981e9707e7259bfa372-d"
+    },
+    {
+      "pid": 1427262,
+      "ppid": 636,
+      "pgid": 1367764,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T014654-cc8c3836/cli",
+      "command": "/home/linuxbrew/.linuxbrew/opt/go/libexec/pkg/tool/linux_arm64/link -o /home/erik/.cache/fleet-tmp/go/go-build1675989917/b001/server.test -importcfg /home/erik/.cache/fleet-tmp/go/go-build1675989917/b001/importcfg.link -s -w -buildmode=exe -buildid=D-z-P1_bLW5yqm029YDR/zIXWXFDUXKBbS8tr7Ajf/ejoX6xORUupmECL1Ajae/D-z-P1_bLW5yqm029YDR -X testing.testBinary=1 -extld=cc /home/erik/.cache/go-build/a7/a78e9c8a71039c99df35faa1b1a9b3ddfc92bac133f264300d27fc11362d2208-d"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 1029871,
+      "ppid": 636,
+      "pgid": 996085,
+      "command": "[server.test] \u003cdefunct\u003e"
+    },
+    {
+      "pid": 1005400,
+      "ppid": 636,
+      "pgid": 996085,
+      "command": "[bead.test] \u003cdefunct\u003e"
+    }
+  ]
+}

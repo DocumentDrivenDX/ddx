@@ -1,0 +1,33 @@
+diff --git a/cli/internal/agent/test_mode_matrix_test.go b/cli/internal/agent/test_mode_matrix_test.go
+index 5eb8cccaa..001a1eadc 100644
+--- a/cli/internal/agent/test_mode_matrix_test.go
++++ b/cli/internal/agent/test_mode_matrix_test.go
+@@ -140,6 +140,28 @@ func TestModeMatrix_BehavesIdenticallyAcrossModes(t *testing.T) {
+ 	}
+ }
+ 
++// TestModeMatrix_BeadLifecycle runs the bead-lifecycle scenario (create, show,
++// update, append-event, close) across both storage modes.
++func TestModeMatrix_BeadLifecycle(t *testing.T) {
++	for _, mode := range allModes {
++		mode := mode
++		t.Run(mode.String(), func(t *testing.T) {
++			modeModeMatrixBeadLifecycle(t, mode)
++		})
++	}
++}
++
++// TestModeMatrix_BeadExecution runs the bead-execution scenario (attempt
++// evidence anchoring, claim/unclaim) across both storage modes.
++func TestModeMatrix_BeadExecution(t *testing.T) {
++	for _, mode := range allModes {
++		mode := mode
++		t.Run(mode.String(), func(t *testing.T) {
++			modeModeMatrixBeadExecution(t, mode)
++		})
++	}
++}
++
+ // scenario: bead-lifecycle — create/show/update/close via bead.Store
+ func modeModeMatrixBeadLifecycle(t *testing.T, kind modeKind) {
+ 	t.Helper()
