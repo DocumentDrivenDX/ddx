@@ -73,9 +73,9 @@ func WithCollection(name string) StoreOption {
 	}
 }
 
-// NewStore creates a store with the given directory.
+// newStore creates a store with the given directory.
 // Defaults can be overridden via options or environment.
-func NewStore(dir string, opts ...StoreOption) *Store {
+func newStore(dir string, opts ...StoreOption) *Store {
 	if dir == "" {
 		dir = envOr("DDX_BEAD_DIR", ".ddx")
 	}
@@ -140,9 +140,9 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	return s
 }
 
-// NewStoreWithCollection creates a store for a named logical collection.
-func NewStoreWithCollection(dir, collection string) *Store {
-	return NewStore(dir, WithCollection(collection))
+// newStoreWithCollection creates a store for a named logical collection.
+func newStoreWithCollection(dir, collection string) *Store {
+	return newStore(dir, WithCollection(collection))
 }
 
 // Init creates the storage directory and file.
