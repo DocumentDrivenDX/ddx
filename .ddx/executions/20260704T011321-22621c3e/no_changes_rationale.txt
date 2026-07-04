@@ -1,0 +1,4 @@
+status: open
+orchestrator_action: decompose
+reason: bead exceeds single-pass size (10 ACs spanning importer core, dry-run/verify/attachments, and CLI wiring across cli/internal/bead and cli/cmd) and was split per Step 0 in a prior attempt into ddx-55a16aef, ddx-ff9300f9, ddx-b9884139 (parent-wired, sibling deps ordered: ff9300f9 depends on 55a16aef; b9884139 depends on 55a16aef and ff9300f9). The prior attempt crashed on a git index.lock contention in the shared origin repo before writing this rationale, leaving the bead flagged triage:no-changes-unjustified with no completion evidence. This file supplies that evidence; the decomposition itself required no further changes.
+child_beads: ddx-55a16aef, ddx-ff9300f9, ddx-b9884139

@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260704T011119-86067462",
+  "bead_id": "ddx-28f3cf37",
+  "base_rev": "e600c065573a00237b72668f855e2bed34fab0ff",
+  "created_at": "2026-07-04T01:11:31.642751798Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-28f3cf37",
+    "title": "federation: owner-targeted worker-control writes",
+    "description": "PROBLEM\n`ddx-28f3cf37` was still framed as broad federation UI work, but the remaining gap is only the owner-targeted worker-control path: hub-issued `startWorker` and `stopWorker` must route to the owning spoke, refuse offline spokes, and preserve request-id idempotency.\n\nROOT CAUSE\n`docs/helix/01-frame/features/FEAT-026-federation.md:22-29,160-177` already defines the write-routing contract. `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327-338` isolates TC-017. `cli/internal/server/frontend/e2e/federation-worker-control.spec.ts:1-9,102-214` already spells out the expected start/stop/offline/idempotency behavior.\n\nPROPOSED FIX\n- Narrow this bead to the worker-control owner-targeted write path.\n- Track the Go-side gaps explicitly as `TestFederatedMutation_StartWorker_RoutesToOwner`, `TestFederatedMutation_StopWorker_RoutesToOwner`, `TestFederatedMutation_RefusesOfflineSpoke`, and `TestFederatedMutation_IdempotentRequestID`.\n- Keep the bead aligned to FEAT-026 and TC-017 instead of reintroducing read-federation smoke.\n\nNON-SCOPE\n- Do not add new `/federation` route read coverage.\n- Do not expand this bead into bead/document write coverage.\n- Do not add ts-net or cross-host networking beyond loopback.",
+    "acceptance": "1. `ddx bead show ddx-28f3cf37` reads as a worker-control owner-targeted write bead, or the bead is closed/superseded.\n2. The bead body names `TestFederatedMutation_StartWorker_RoutesToOwner`, `TestFederatedMutation_StopWorker_RoutesToOwner`, `TestFederatedMutation_RefusesOfflineSpoke`, and `TestFederatedMutation_IdempotentRequestID`.\n3. The reconciliation notes cite `FEAT-026-federation.md:22-29,160-177`, `TP-002-server-web-ui.md:327-338`, and `federation-worker-control.spec.ts:1-9,102-214`.\n4. The bead no longer points at the broad `/federation` UI story as the active scope.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      "area:federation",
+      "area:web",
+      "area:server",
+      "kind:test",
+      "story:14",
+      "spec:FEAT-026",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:10:19.980250687Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T011119-86067462",
+    "prompt": ".ddx/executions/20260704T011119-86067462/prompt.md",
+    "manifest": ".ddx/executions/20260704T011119-86067462/manifest.json",
+    "result": ".ddx/executions/20260704T011119-86067462/result.json",
+    "checks": ".ddx/executions/20260704T011119-86067462/checks.json",
+    "usage": ".ddx/executions/20260704T011119-86067462/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-28f3cf37-20260704T011119-86067462"
+  },
+  "prompt_sha": "9369cd4eb9f2f04c3fbfa6529ea0537a24bde960536d1b55f15eebed8acdde30"
+}

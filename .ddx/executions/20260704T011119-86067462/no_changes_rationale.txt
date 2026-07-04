@@ -1,0 +1,10 @@
+status: open
+reason: all four ACs are already satisfied by the bead's live tracker record (.ddx/beads.jsonl), reconciled in an earlier commit in this session's history. No code, test, or further tracker change is required.
+
+Verification:
+- AC1: `ddx bead show ddx-28f3cf37` title is "federation: owner-targeted worker-control writes"; status is open (not the broad federation UI story).
+- AC2: description names TestFederatedMutation_StartWorker_RoutesToOwner, TestFederatedMutation_StopWorker_RoutesToOwner, TestFederatedMutation_RefusesOfflineSpoke, and TestFederatedMutation_IdempotentRequestID.
+- AC3: notes field cites FEAT-026-federation.md:22-29,160-177, TP-002-server-web-ui.md:327-338, and federation-worker-control.spec.ts:1-9,102-214 (all three files verified to exist at these paths).
+- AC4: description/non-scope section frames the bead solely around the owner-targeted worker-control write path; "broad federation UI work" only appears as historical PROBLEM-statement contrast, not as the active scope, and NON-SCOPE explicitly excludes new `/federation` read coverage.
+
+verification_command: bash -c 'J=$(ddx bead show ddx-28f3cf37 --json); for s in "TestFederatedMutation_StartWorker_RoutesToOwner" "TestFederatedMutation_StopWorker_RoutesToOwner" "TestFederatedMutation_RefusesOfflineSpoke" "TestFederatedMutation_IdempotentRequestID" "FEAT-026-federation.md:22-29,160-177" "TP-002-server-web-ui.md:327-338" "federation-worker-control.spec.ts:1-9,102-214"; do echo "$J" | grep -qF "$s" || exit 1; done; echo "$J" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get(\"title\")==\"federation: owner-targeted worker-control writes\" else 1)"'
