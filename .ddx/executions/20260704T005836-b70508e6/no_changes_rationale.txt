@@ -1,0 +1,12 @@
+status: open
+reason: retryable
+verification_command: cd cli && go test ./internal/server/graphql/... ./internal/federation/...
+
+Playwright still fails on existing bead/spec UI assertions in
+e2e/beads-queue-mutations.spec.ts and e2e/spec-editing.spec.ts
+(missing projectId forwarding, missing edit/approve buttons,
+missing stale-write errors, and missing graph refresh affordances).
+The Go gate also fails in the full package command on an unrelated
+ProviderTrend perf fixture under this host's current load; it only
+passes in -short mode. The tracker narrowing for ddx-359e812b is updated,
+but the acceptance gates for the exact command set are not green yet.
