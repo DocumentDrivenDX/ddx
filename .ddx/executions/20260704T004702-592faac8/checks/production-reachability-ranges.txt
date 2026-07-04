@@ -1,0 +1,13 @@
+cmd/active_work.go 4 4
+cmd/active_work.go 11 14
+cmd/agent_execute_loop_escalation.go 160 163
+cmd/execute_loop_shared.go 719 721
+cmd/try.go 655 657
+cmd/work_focus.go 4 4
+cmd/work_focus.go 17 25
+cmd/work_focus.go 88 88
+internal/activework/activework.go 45 48
+internal/exec/store.go 40 41
+internal/exec/store.go 47 53
+internal/processmetrics/processmetrics.go 30 30
+internal/processmetrics/processmetrics.go 664 664

@@ -1,0 +1,2 @@
+status: blocked
+reason: `cd cli && go test ./cmd` times out after 10m in this workspace before completing; the failure is in existing cmd package tests (`TestWork_WatchKillingWorkerReapsProviderChildWithin5s`, `TestWork_WarnsStaleSourceBinaryButProceeds`), so the bead cannot be verified green here.
