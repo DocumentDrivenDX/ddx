@@ -20,8 +20,8 @@ library:
 #       tsnet:
 #         hostname: ddx-project
 #
-# The live config schema currently uses `bead.backend`; this commented block
-# documents the Axon backend selection and connection settings for operators.
+# The checked-in example uses `bead.backend: axon`; the connection block below
+# shows the Axon endpoint, namespace, and collection settings.
 update_check:
     enabled: true
     frequency: 24h
