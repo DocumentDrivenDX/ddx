@@ -1,3 +1,0 @@
-internal/agent/execute_bead_orchestrator.go 213 217
-internal/agent/execute_bead_validation_test.go 187 196
-internal/agent/execute_bead_validation_test.go 217 219
