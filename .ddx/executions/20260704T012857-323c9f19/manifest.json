@@ -1,0 +1,133 @@
+{
+  "attempt_id": "20260704T012857-323c9f19",
+  "bead_id": "ddx-0ed4dd76",
+  "base_rev": "48efb74c17903a198d3b5891a06274656a4dbd5b",
+  "created_at": "2026-07-04T01:29:13.642993273Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0ed4dd76",
+    "title": "Update helix specs with ddx-06cbaa90 citations",
+    "description": "PROBLEM\nThe resolver/mode model appears in multiple spec docs, but the cross-reference to ddx-06cbaa90 is not consistently explicit everywhere the project-state path model is described.\n\nROOT CAUSE\nTD-031-bead-state-machine.md:90-125, 186-217, and 384; SD-019-multi-project-server-topology.md:65-78; SD-020-multi-machine-coordinator-topology.md:88-98 and 236; ADR-021-operator-prompt-beads-web-write-path.md:147-153 and 304; workers-sessions-operator-surface.md:41-49 and 67; and plan-2026-04-29-artifact-and-run-architecture.md:19-26 and 230 all describe ddxroot.Path() or project identity, but the spec trail still needs explicit ddx-06cbaa90 breadcrumbs in the updated prose.\n\nPROPOSED FIX\nUpdate each listed helix doc so the path/resolver wording explicitly cites ddx-06cbaa90 wherever it discusses project-scoped state, anchors, or identity.\n\nNON-SCOPE\nInstall topology docs and Go code.",
+    "acceptance": "1. Each listed spec file contains a ddx-06cbaa90 citation in the updated resolver/mode prose.\n2. rg \"ddx-06cbaa90\" docs/helix/ returns hits for each listed spec file.\n3. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:49:43.582873222Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"bead_id\":\"ddx-0ed4dd76\",\"detail\":\"resource_exhausted\",\"status\":\"resource_exhausted\"}",
+          "created_at": "2026-07-04T00:50:06.527130978Z",
+          "kind": "resource-exhausted",
+          "source": "ddx work",
+          "summary": "resource exhausted after cleanup; stopping work loop"
+        },
+        {
+          "actor": "erik",
+          "body": "resource_exhausted\ndecision_audit={\"failure_class\":\"unknown\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=unknown",
+          "created_at": "2026-07-04T00:50:06.605979265Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "resource_exhausted"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:09:00.408168951Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T01:18:07.041091913Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T011137-3178cee4\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":7675,\"output_tokens\":13172,\"total_tokens\":20847,\"cost_usd\":1.4410492000000001,\"duration_ms\":357995,\"exit_code\":0}",
+          "created_at": "2026-07-04T01:18:07.165488619Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=20847 cost_usd=1.4410 model=sonnet"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260704T011137-3178cee4/0\",\"cycle_index\":0,\"attempt_id\":\"20260704T011137-3178cee4\",\"base_rev\":\"d00076d902369d40999edcf3f35911e7fdef6b5c\",\"result_rev\":\"a61f5f4a9e9ce52cecb7f1573917e74a79f62005\"}",
+          "created_at": "2026-07-04T01:18:07.279596093Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T011137-3178cee4\",\"bead_id\":\"ddx-0ed4dd76\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T01:18:29.468327077Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "action=retry-land\ndetail=land coordination retry: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T010503-599319ab/provider-children.json\nM\t.ddx/metrics/attempts.jsonl: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T010503-599319ab/provider-children.json\nM\t.ddx/metrics/attempts.jsonl\nresult_rev=a61f5f4a9e9ce52cecb7f1573917e74a79f62005\nbase_rev=d00076d902369d40999edcf3f35911e7fdef6b5c\ndecision_audit={\"failure_class\":\"land_retry\",\"retry_action\":\"retry_land\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"retry\",\"reconcile_status\":\"pending\"}",
+          "created_at": "2026-07-04T01:18:29.588892759Z",
+          "kind": "land-coordination",
+          "source": "ddx work",
+          "summary": "retry-land"
+        },
+        {
+          "actor": "erik",
+          "body": "land coordination retry: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T010503-599319ab/provider-children.json\nM\t.ddx/metrics/attempts.jsonl: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T010503-599319ab/provider-children.json\nM\t.ddx/metrics/attempts.jsonl\ncycle_trace=[{\"cycle_index\":0,\"attempt_id\":\"20260704T011137-3178cee4\",\"result_rev\":\"a61f5f4a9e9ce52cecb7f1573917e74a79f62005\",\"implementer_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"review_result\":{},\"final_decision\":\"success\",\"failure_class\":\"none\",\"retry_action\":\"close\",\"escalation_count\":0,\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"landed\",\"reconcile_status\":\"not_applicable\"}]\ndecision_audit={\"failure_class\":\"land_retry\",\"retry_action\":\"retry_land\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"retry\",\"reconcile_status\":\"pending\"}\npreserve_ref=refs/ddx/iterations/ddx-0ed4dd76/20260704T011137-3178cee4-d00076d90236\nresult_rev=a61f5f4a9e9ce52cecb7f1573917e74a79f62005\nbase_rev=d00076d902369d40999edcf3f35911e7fdef6b5c\noutcome_reason=land_retry",
+          "created_at": "2026-07-04T01:18:29.643105103Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "land_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:22:40.831540074Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:28:42.134385466Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T012857-323c9f19",
+    "prompt": ".ddx/executions/20260704T012857-323c9f19/prompt.md",
+    "manifest": ".ddx/executions/20260704T012857-323c9f19/manifest.json",
+    "result": ".ddx/executions/20260704T012857-323c9f19/result.json",
+    "checks": ".ddx/executions/20260704T012857-323c9f19/checks.json",
+    "usage": ".ddx/executions/20260704T012857-323c9f19/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T012857-323c9f19"
+  },
+  "prompt_sha": "79b3d917ba4025f3f02222aa3edb6f869cf0325b7d65f665c4bbde2debc467d1"
+}

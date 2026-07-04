@@ -1,0 +1,61 @@
+{
+  "bead_id": "ddx-0ed4dd76",
+  "attempt_id": "20260704T012857-323c9f19",
+  "base_rev": "48efb74c17903a198d3b5891a06274656a4dbd5b",
+  "result_rev": "c4de7de9ec9f57f259ab3a7cce8a44093ea0e5d0",
+  "implementation_rev": "c4de7de9ec9f57f259ab3a7cce8a44093ea0e5d0",
+  "outcome": "land_coordination_retry",
+  "status": "land_retry",
+  "detail": "land coordination retry: land advancer: fast-forwarding refs/heads/main to merge commit 32faf13c6343512752175f6b25d1f4086bc29892: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at b67664b418d0520f75e50f4d4e3fe1f3fa1bb68f but expected 53504e3099fe9d1b89282bd76248dae708ca8f2e: exit status 128: land advancer: fast-forwarding refs/heads/main to merge commit 32faf13c6343512752175f6b25d1f4086bc29892: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at b67664b418d0520f75e50f4d4e3fe1f3fa1bb68f but expected 53504e3099fe9d1b89282bd76248dae708ca8f2e: exit status 128",
+  "orchestrator_status": "land_retry",
+  "reason": "land coordination retry: land advancer: fast-forwarding refs/heads/main to merge commit 32faf13c6343512752175f6b25d1f4086bc29892: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at b67664b418d0520f75e50f4d4e3fe1f3fa1bb68f but expected 53504e3099fe9d1b89282bd76248dae708ca8f2e: exit status 128",
+  "preserve_ref": "refs/ddx/iterations/ddx-0ed4dd76/20260704T012857-323c9f19-48efb74c1790",
+  "candidate_ref": "refs/ddx/iterations/20260704T012857-323c9f19/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260704T012857-323c9f19",
+      "result_rev": "c4de7de9ec9f57f259ab3a7cce8a44093ea0e5d0",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-8d81b953",
+  "duration_ms": 316567,
+  "tokens": 19506,
+  "cost_usd": 1.2797340999999998,
+  "exit_code": 0,
+  "error": "land advancer: fast-forwarding refs/heads/main to merge commit 32faf13c6343512752175f6b25d1f4086bc29892: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at b67664b418d0520f75e50f4d4e3fe1f3fa1bb68f but expected 53504e3099fe9d1b89282bd76248dae708ca8f2e: exit status 128",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "land_retry",
+  "execution_dir": ".ddx/executions/20260704T012857-323c9f19",
+  "prompt_file": ".ddx/executions/20260704T012857-323c9f19/prompt.md",
+  "manifest_file": ".ddx/executions/20260704T012857-323c9f19/manifest.json",
+  "result_file": ".ddx/executions/20260704T012857-323c9f19/result.json",
+  "usage_file": ".ddx/executions/20260704T012857-323c9f19/usage.json",
+  "started_at": "2026-07-04T01:29:13.66516616Z",
+  "finished_at": "2026-07-04T01:34:30.232700051Z"
+}

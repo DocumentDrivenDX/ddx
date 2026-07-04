@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-438d7ee3",
+  "attempt_id": "20260704T013528-2b9d720c",
+  "base_rev": "9fc3b9f72d83872df1915de8b5fbf8ec55be4761",
+  "result_rev": "9fc3b9f72d83872df1915de8b5fbf8ec55be4761",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "signal: terminated",
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-08702401",
+  "duration_ms": 38825,
+  "exit_code": -1,
+  "error": "signal: terminated",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260704T013528-2b9d720c",
+  "prompt_file": ".ddx/executions/20260704T013528-2b9d720c/prompt.md",
+  "manifest_file": ".ddx/executions/20260704T013528-2b9d720c/manifest.json",
+  "result_file": ".ddx/executions/20260704T013528-2b9d720c/result.json",
+  "started_at": "2026-07-04T01:36:27.670888211Z",
+  "finished_at": "2026-07-04T01:37:06.495976887Z"
+}

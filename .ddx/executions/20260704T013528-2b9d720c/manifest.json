@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260704T013528-2b9d720c",
+  "bead_id": "ddx-438d7ee3",
+  "base_rev": "9fc3b9f72d83872df1915de8b5fbf8ec55be4761",
+  "created_at": "2026-07-04T01:36:27.652368098Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-438d7ee3",
+    "title": "beads: add structured cross-repo blocker ref field + known-repos config + validation",
+    "description": "PROBLEM\nThere is no structured way to record which repo+bead a status=blocked bead is waiting on. Only free-text ExternalBlockerReason exists (cli/internal/bead/lifecycle.go:12, cli/internal/bead/store.go:761).\n\nROOT CAUSE\ncli/internal/bead/lifecycle.go and cli/internal/bead/store.go model status=blocked with a single free-text reason field only; cli/internal/config/types.go:21-50 (NewConfig) has no place to register other repos by name.\n\nPROPOSED FIX (see docs/helix/02-design/technical-designs/TD-040-cross-repo-blocker-recheck.md §2-3 for full contract)\n- cli/internal/bead/store.go: add const ExtraLifecycleCrossRepoBlockerRef = \"lifecycle-cross-repo-blocker-ref\", storing JSON {\"repo\":\"\u003cname\u003e\",\"bead\":\"\u003cid\u003e\"} in Bead.Extra, alongside (not replacing) ExtraLifecycleExternalBlockerReason.\n- cli/internal/config/types.go: add KnownRepos map[string]KnownRepoConfig to NewConfig, where KnownRepoConfig has Path string (local, mutually exclusive with Node+Project) and Node/Project string (federation node_id/project_id per ADR-007).\n- cli/cmd/bead.go: add --blocked-by-ref \u003crepo\u003e#\u003cbead-id\u003e flag to `ddx bead update --status blocked`. Parse format (single '#', non-empty repo, non-empty bead-id); on parse failure return a hard error (not silently dropped). Validate \u003crepo\u003e exists as a key in the loaded known-repos config; on unknown repo return a hard error naming the repo.\n- ExternalBlockerReason remains required for status=blocked regardless of whether --blocked-by-ref is also set (lifecycle.go:122 unchanged).\n- `ddx bead show \u003cid\u003e --json` must surface the parsed ref via the existing Extra passthrough (no new top-level JSON field).\n\nNON-SCOPE\n- No recheck command or auto-reopen logic (child beads 2 and 3 of ddx-3b5ab8aa).\n- No federation query implementation, only the config schema shape for node/project entries.",
+    "acceptance": "1. cli/internal/bead/store.go defines ExtraLifecycleCrossRepoBlockerRef and a helper to marshal/unmarshal the {repo,bead} JSON shape, covered by TestCrossRepoBlockerRef_RoundTrip in cli/internal/bead/store_test.go.\n2. cli/internal/config/types.go adds KnownRepos map[string]KnownRepoConfig to NewConfig with Path and Node/Project fields, covered by TestConfig_KnownRepos_Unmarshal in cli/internal/config/types_test.go (or nearest existing config test file) asserting a known-repos YAML block round-trips.\n3. `ddx bead update \u003cid\u003e --status blocked --external-blocker-reason \"...\" --blocked-by-ref \u003crepo\u003e#\u003cbead-id\u003e` sets the structured Extra field only when \u003crepo\u003e is a known-repos key, and returns a non-zero exit with a clear error naming the bad input for: malformed ref (missing '#', empty repo, empty bead-id) and unknown repo. Covered by TestBeadUpdate_BlockedByRef_Validation in cli/cmd/bead_test.go (table test enumerating: valid ref, malformed ref, unknown repo, missing external-blocker-reason with only --blocked-by-ref set).\n4. `ddx bead show \u003cid\u003e --json` includes the parsed ref object under Extra for a bead created via AC3's valid case, asserted in the same or a companion test in cli/cmd/bead_test.go.\n5. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/config/... ./cmd/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "area:beads",
+      "area:lifecycle",
+      "kind:feature",
+      "td:TD-040"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:34:37.004193168Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T013528-2b9d720c",
+    "prompt": ".ddx/executions/20260704T013528-2b9d720c/prompt.md",
+    "manifest": ".ddx/executions/20260704T013528-2b9d720c/manifest.json",
+    "result": ".ddx/executions/20260704T013528-2b9d720c/result.json",
+    "checks": ".ddx/executions/20260704T013528-2b9d720c/checks.json",
+    "usage": ".ddx/executions/20260704T013528-2b9d720c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-438d7ee3-20260704T013528-2b9d720c"
+  },
+  "prompt_sha": "d9cdd3c63401908ec1ddea208b80a165c07d9c66135e21fb610bdac026871fca"
+}

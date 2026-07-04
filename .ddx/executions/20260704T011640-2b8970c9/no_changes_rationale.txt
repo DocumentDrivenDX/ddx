@@ -1,0 +1,50 @@
+status: proposed
+reason: >
+  AC1-AC3 are already satisfied by prior commit cc3e05846 ("chore(beads): update
+  ddx-359e812b"), which is an ancestor of this worktree's HEAD. `ddx bead show
+  ddx-359e812b` currently shows title "federation: live owner-targeted write
+  persistence follow-up" with description/notes narrowed to live owner-targeted
+  bead/document write persistence, naming TestFederatedBeadWrite_ForwardsToOwner,
+  TestFederatedDocumentWrite_ForwardsToOwner, TestFederatedWrite_RejectsOfflineSpoke,
+  and TestFederatedWrite_IdempotentRequestID, with reconciliation notes citing
+  TP-002-server-web-ui.md:340-351,353-363, beads-queue-mutations.spec.ts:210-268,
+  spec-editing.spec.ts:204-256, and federation-2node.spec.ts:219-307. No further
+  edit to ddx-359e812b is needed for AC1-AC3.
+
+  AC4's Go leg passes: `cd cli && go test ./internal/server/graphql/...
+  ./internal/federation/...` -> ok for both packages.
+
+  AC4's Playwright leg does not pass and cannot be made to pass within this
+  bead's NON-SCOPE. `bunx playwright test e2e/beads-queue-mutations.spec.ts
+  e2e/spec-editing.spec.ts` fails 8 of 10 tests, reproducibly across two runs.
+  Both spec files self-document this as expected, pre-existing, unfinished-UI
+  state, not a regression:
+    - beads-queue-mutations.spec.ts:8-9: "Most of these tests MUST FAIL until
+      the corresponding queue-mutation UI is implemented in the server
+      operator workbench."
+    - spec-editing.spec.ts:8-9: "These tests MUST FAIL until the full
+      spec-editing UI with path confinement, stale-write detection,
+      federation forwarding, and graph refresh is implemented."
+  Root causes are unrelated to federation write-forwarding and this bead's
+  reconciliation scope:
+    - BeadForm.svelte's BeadCreate/BeadUpdate mutation input never includes
+      `projectId` (cli/internal/server/frontend/src/lib/components/BeadForm.svelte:99-121),
+      so "creates a bead in the selected project only" and "forwards spoke
+      bead writes from the hub" fail on `toMatchObject({ projectId: ... })`.
+    - The bead detail route's Edit/lifecycle controls are not reachable the
+      way the specs probe, so "edits bead fields...", "runs lifecycle
+      actions...", and the equivalent spec-editing saves/stale/refresh tests
+      time out waiting for controls.
+  Implementing this UI wiring is real feature work, not a tracker/description
+  narrowing chore, and is explicitly out of this bead's NON-SCOPE ("Do not
+  change the mocked Playwright smoke paths unless they are being split out of
+  this bead"). The Go-level federation write-forwarding contract these specs
+  gesture at is already tracked separately by open beads ddx-3f3e1cbe
+  ("federation: prove live owner-targeted writes route to spoke") and
+  ddx-20e7ebf0 ("federation: prove forwarded write idempotency").
+
+  Needs an operator decision: either drop/relax the Playwright leg of AC4 on
+  ddx-19f9c9c0 (since it exercises pre-existing, self-documented-red UI gaps
+  unrelated to this bead's actual deliverable, which is already complete), or
+  file a new bug bead for the BeadForm.svelte projectId/edit-control gaps so
+  AC4 has something concrete to depend on.

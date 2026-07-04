@@ -1,0 +1,2 @@
+status: open
+reason: go test ./internal/bead/... currently fails in unrelated pre-existing store concurrency tests (TestChaos_LargeScaleConcurrentCreateReadAll, TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget, TestWalkUpClosure_CycleGuardTerminates, TestChaos_StatusCountsAfterChaos) with lock timeouts / timeout failure, so the required acceptance command is not green in this workspace.

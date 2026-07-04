@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260704T010313-fa3adece",
+  "bead_id": "ddx-27769c99",
+  "base_rev": "9a6bf452348133d658261ccb7d3f8e664de8803c",
+  "created_at": "2026-07-04T01:03:28.349114008Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-27769c99",
+    "title": "BL lifecycle: move WatcherHub behind internal/lifecycle and expose lifecycle factory",
+    "description": "PROBLEM\n`cli/internal/bead/watcher.go:12-100` still exports `WatcherHub`, `StoreFactory`, and `NewWatcherHub` from the public bead package, so lifecycle subscription remains directly importable instead of being hidden behind the internal boundary TD-027 §21 wants.\n\nROOT CAUSE\nThe watcher implementation still sits beside the public bead interfaces in `cli/internal/bead/watcher.go:12-100`. That leaves the concrete lifecycle polling hub reachable from any caller that can import `cli/internal/bead/`, instead of forcing callers through a narrow factory surface.\n\nPROPOSED FIX\n- Move `watcher.go` to `cli/internal/bead/internal/lifecycle/watcher_hub.go` and rename the package to `lifecycle`.\n- Keep `LifecycleEvent` and `LifecycleSubscriber` in the public package, but move the concrete hub and its project watcher internals behind `internal/lifecycle`.\n- Add or adjust `cli/internal/bead/factory.go` so the public entrypoint for lifecycle watching is `NewLifecycleSubscriber`, not `NewWatcherHub`.\n- Wire the relocated watcher to the new storage factory shape without re-exposing the concrete type from the public package.\n\nNON-SCOPE\n- Storage backend relocation.\n- Caller-field narrowing.\n- Boundary import test.\n- Lint analyzer cleanup.",
+    "acceptance": "1. `cli/internal/bead/internal/lifecycle/watcher_hub.go` exists and the concrete watcher hub is no longer exported from the public `bead` package.\n2. `cli/internal/bead/factory.go` exposes `NewLifecycleSubscriber`, while the public package keeps only the `LifecycleSubscriber` interface and `LifecycleEvent`.\n3. `TestWatcherHub_SubscribeLifecycle` and the server subscription tests still pass against the relocated lifecycle implementation.\n4. `cd cli \u0026\u0026 go test ./internal/bead/... ./internal/bead/internal/lifecycle/... ./internal/server/...` green.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-74452926",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "spec:TD-027",
+      "reliability"
+    ],
+    "metadata": {
+      "spec-id": "TD-027"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-027",
+      "path": "docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md",
+      "title": "Technical Design: Bead Storage System and Lifecycle"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260704T010313-fa3adece",
+    "prompt": ".ddx/executions/20260704T010313-fa3adece/prompt.md",
+    "manifest": ".ddx/executions/20260704T010313-fa3adece/manifest.json",
+    "result": ".ddx/executions/20260704T010313-fa3adece/result.json",
+    "checks": ".ddx/executions/20260704T010313-fa3adece/checks.json",
+    "usage": ".ddx/executions/20260704T010313-fa3adece/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-27769c99-20260704T010313-fa3adece"
+  },
+  "prompt_sha": "a34772afefcc2251297507dbeae5c429b2f5801eeaf05bff91c51ebc4113e236"
+}
