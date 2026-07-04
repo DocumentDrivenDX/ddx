@@ -69,13 +69,21 @@ func workerReadyDepthLabel(count int) string {
 	}
 }
 
+type workFocusStore interface {
+	activeWorkStore
+	ProposedOperatorAttention() ([]bead.Bead, error)
+	BlockedAll() ([]bead.BlockedBead, error)
+	ReadyExecution() ([]bead.Bead, error)
+	List(status, label string, where map[string]string) ([]bead.Bead, error)
+}
+
 // buildWorkFocusReport queries the store and returns a WorkFocusReport.
 //
 // projectRoot, when non-empty, enables the active_workers section and active
 // work summary: fresh claim heartbeats, liveness sidecars, and run-state files
 // are reconciled into one project-scoped view so the operator-facing answer
 // stays aligned across bead, work, and GraphQL status surfaces.
-func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusReport, error) {
+func buildWorkFocusReport(store workFocusStore, projectRoot string) (WorkFocusReport, error) {
 	// Collect operator-attention beads (status=proposed, any dep state).
 	operatorAttentionBeads, err := store.ProposedOperatorAttention()
 	if err != nil {

@@ -37,11 +37,18 @@ type Store struct {
 	ExecDir              string
 	DefinitionsDir       string
 	RunsDir              string
-	DefinitionCollection *bead.Store
-	RunCollection        *bead.Store
+	DefinitionCollection collectionBackend
+	RunCollection        collectionBackend
 	AgentRunner          AgentRunner
 	runCounter           uint64
 	graphBuilderFunc     func(string) (*docgraph.Graph, error)
+}
+
+type collectionBackend interface {
+	Init(context.Context) error
+	ReadAll(context.Context) ([]bead.Bead, error)
+	WriteAll([]bead.Bead) error
+	WithLock(func() error) error
 }
 
 func (s *Store) buildGraph() (*docgraph.Graph, error) {

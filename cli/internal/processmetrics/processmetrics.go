@@ -27,7 +27,7 @@ const (
 type Service struct {
 	WorkingDir string
 
-	store *bead.Store
+	store bead.BeadReader
 }
 
 // New creates a process-metrics service rooted at workingDir.
@@ -661,7 +661,7 @@ func beadsVisibleInSummaryWindow(beads []bead.Bead, query Query, costReport Cost
 	return visible, visibleIDs
 }
 
-func (s *Service) beadStore() *bead.Store {
+func (s *Service) beadStore() bead.BeadReader {
 	if s.store != nil {
 		return s.store
 	}

@@ -1,13 +1,19 @@
 package cmd
 
 import (
+	"context"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
-func collectActiveWorkSnapshot(projectRoot string, store *bead.Store, now time.Time) (activework.Snapshot, error) {
+type activeWorkStore interface {
+	ReadAll(context.Context) ([]bead.Bead, error)
+	ClaimLease(id string) (bead.ClaimLeaseRecord, bool, error)
+}
+
+func collectActiveWorkSnapshot(projectRoot string, store activeWorkStore, now time.Time) (activework.Snapshot, error) {
 	return activework.Collect(projectRoot, store, now)
 }
 
