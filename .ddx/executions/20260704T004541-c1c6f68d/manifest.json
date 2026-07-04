@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260704T004541-c1c6f68d",
+  "bead_id": "ddx-8ea2e451",
+  "base_rev": "9bbe01cfa08e3a1a9174b08250e054780419a044",
+  "created_at": "2026-07-04T00:46:11.771862247Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8ea2e451",
+    "title": "BL (Boundary Lockdown): caller narrowing + relocate concretes to interna: part 2",
+    "description": "PROBLEM\nParent bead ddx-74452926 is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nAfter Phase 1 (Foundation `ddx-c6317784`) and per-concern beads (L/C/X/Q/D/A/MIG) land, callers no longer use the removed workflow methods on `*Store` — but they still hold `*Store` as a struct field type for foundational reads/writes/queries/etc. The `Backend` interface composite isn't yet asserted on `*Store`. The concrete types (`*Store`, `RawBackend`, `JSONLBackend`, `ExternalBackend`, `AxonStore`, `*WatcherHub`) live at `cli/internal/bead/` — publicly importable from any other package.\n\nThe goal of TD-027 §21 is **physical impossibility** of bypass: not lint-prevented, not review-prevented, but a Go compiler error if any code outside `cli/internal/bead/` tries to import the concrete storage implementations. This bead enforces that via Go's `internal/` rule.\n\n# ROOT CAUSE\n- `cli/internal/bead/store.go` — `*Store` public.\n- `cli/internal/bead/backend_jsonl.go` — `JSONLBackend` public.\n- `cli/internal/bead/backend_external.go` — `ExternalBackend` public.\n- `cli/internal/bead/axon_backend.go` (or `AxonStore` post `ddx-9c5bca8f`) — public.\n- `cli/internal/bead/watcher.go` — `*WatcherHub` public.\n- All supporting concrete implementation files (`claim_liveness.go`, `attachments.go`, `archive.go`, `migrate.go`, etc.) — public.\n\nPlus the final assembly step (formerly \"K\" in earlier breakdowns): `Backend` composite interface declared, `ReadOnlyBackend` convenience composite, compile-time assertion `var _ Backend = (*Store)(nil)`. These were deferred from Foundation because the composite couldn't be asserted until all per-concern beads removed their methods.\n\n# PROPOSED FIX\n\nThis bead does three load-bearing things in one atomic change:\n\n## 1. Narrow caller field types from `*bead.Store` to `bead.Backend` (or narrower)\n\nEvery caller file in `cli/cmd/`, `cli/internal/agent/`, `cli/internal/server/`, `cli/internal/escalation/`, `cli/internal/agentmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/processmetrics/`, `cli/internal/exec/`, `cli/internal/agent/try/` that holds `*bead.Store` as a struct field or local variable is updated:\n\n- Most callers: change `*bead.Store` to `bead.Backend` (full interface). Mechanical rename.\n- Narrow candidates (identified during per-concern beads): use narrower sub-interface where appropriate (e.g., `cli/cmd/work_focus.go` → `bead.BeadQueries`; `cli/internal/agentmetrics/loader.go` → `bead.BeadRe\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Implement the remaining bounded slice of the parent bead.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Implement the remaining bounded slice of the parent bead.\n2. cd cli \u0026\u0026 go test ./... passes.\n3. lefthook run pre-commit passes.",
+    "parent": "ddx-74452926",
+    "labels": [
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "phase:iterate",
+      "reliability",
+      "spec:TD-027",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:44:32.379197172Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T004541-c1c6f68d",
+    "prompt": ".ddx/executions/20260704T004541-c1c6f68d/prompt.md",
+    "manifest": ".ddx/executions/20260704T004541-c1c6f68d/manifest.json",
+    "result": ".ddx/executions/20260704T004541-c1c6f68d/result.json",
+    "checks": ".ddx/executions/20260704T004541-c1c6f68d/checks.json",
+    "usage": ".ddx/executions/20260704T004541-c1c6f68d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8ea2e451-20260704T004541-c1c6f68d"
+  },
+  "prompt_sha": "b72842a8e72c75dc265777f3f77154eb93fe69d4d7b1f3438d00d39571e95dd3"
+}

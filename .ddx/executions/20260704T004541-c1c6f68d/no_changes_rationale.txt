@@ -1,0 +1,4 @@
+status: open
+reason: decomposed into existing execution-ready child beads because the scope exceeds the split-first threshold
+orchestrator_action: decompose
+child_ids: ddx-3d985375, ddx-27769c99, ddx-001aac3d, ddx-c8951625
