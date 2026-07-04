@@ -1,0 +1,2 @@
+status: open
+reason: placeholder bead with empty description and empty acceptance criteria; no implementation scope is defined
