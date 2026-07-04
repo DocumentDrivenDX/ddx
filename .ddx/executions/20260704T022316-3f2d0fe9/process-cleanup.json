@@ -1,0 +1,9 @@
+{
+  "attempt_id": "20260704T022316-3f2d0fe9",
+  "bead_id": "ddx-c8506158",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-c8506158-20260704T022316-3f2d0fe9",
+  "trigger": "context canceled",
+  "started_at": "2026-07-04T02:49:47.941647629Z",
+  "finished_at": "2026-07-04T02:49:48.130405229Z",
+  "scanned": 1450
+}
