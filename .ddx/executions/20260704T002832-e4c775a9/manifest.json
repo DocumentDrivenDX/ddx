@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260704T002832-e4c775a9",
+  "bead_id": "ddx-17a7dbef",
+  "base_rev": "de111357bc34434cceb3a61e2b63634e61934cdf",
+  "created_at": "2026-07-04T00:28:41.14019333Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-17a7dbef",
+    "title": "federation: narrow the worker-control follow-up bead",
+    "description": "PROBLEM\n`ddx-28f3cf37` still reads like a broad federation UI follow-up, but the real gap is the owner-targeted worker-control path. `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327-338` keeps TC-017 planned, while `docs/helix/01-frame/features/FEAT-026-federation.md:22-29,160-177` already defines the write-routing contract and `cli/internal/server/frontend/e2e/federation-worker-control.spec.ts:1-9,102-214` already spells out the expected start/stop/offline/idempotency behavior at the UI level.\n\nROOT CAUSE\nThe current bead is still coupled to the broader federation UI story in `ddx-28f3cf37`, but the concrete contract is already isolated in FEAT-026 and the dedicated worker-control spec. What is missing is a narrower bead body that only tracks the live owner-targeted write-routing implementation and the Go-side tests that prove `startWorker` and `stopWorker` reach exactly one owning spoke.\n\nPROPOSED FIX\n- Rewrite or supersede `ddx-28f3cf37` so it covers only worker start/stop owner-targeted writes, not read-federation smoke.\n- Name the missing implementation tests explicitly as `TestFederatedMutation_StartWorker_RoutesToOwner`, `TestFederatedMutation_StopWorker_RoutesToOwner`, `TestFederatedMutation_RefusesOfflineSpoke`, and `TestFederatedMutation_IdempotentRequestID`.\n- Keep the bead aligned to FEAT-026 and TC-017 instead of duplicating the read-only federation tests.\n\nNON-SCOPE\n- Do not add new `/federation` route read coverage.\n- Do not touch bead/document writes here.\n- Do not add ts-net or cross-host networking beyond the local loopback gate.\n- Do not modify the FEAT-026 text.\n\nPARENT + DEPS\nParent: `ddx-a038a090`. Upstream stale bead context: `ddx-0793ac75`.",
+    "acceptance": "1. `ddx bead show ddx-28f3cf37` is narrowed to worker-control owner-targeted writes or is closed/superseded.\n2. The bead body names `TestFederatedMutation_StartWorker_RoutesToOwner`, `TestFederatedMutation_StopWorker_RoutesToOwner`, `TestFederatedMutation_RefusesOfflineSpoke`, and `TestFederatedMutation_IdempotentRequestID` as the concrete gaps.\n3. The reconciliation notes cite `FEAT-026-federation.md:22-29,160-177`, `TP-002-server-web-ui.md:327-338`, and `federation-worker-control.spec.ts:1-9,102-214`.\n4. `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...` passes, and `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/federation-worker-control.spec.ts` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-b303cf96",
+    "labels": [
+      "phase:2",
+      "area:federation",
+      "area:web",
+      "area:server",
+      "kind:test",
+      "story:14",
+      "spec:FEAT-026",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-17a7dbef)\",\"fingerprint\":\"57e46f0eba0d0265f4db4ed2d5eb73fecbac96ffbf4c94e7f5878a1ded12cd17\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"57e46f0eba0d0265f4db4ed2d5eb73fecbac96ffbf4c94e7f5878a1ded12cd17\"}",
+          "created_at": "2026-07-03T23:00:57.330068884Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T23:17:36.009813248Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"2c66413306e616be58438b59caab37362dba739c\",\"classification\":\"blocked\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt verified that the tracker-narrowing work is already done and the Go verification passes, but the remaining Playwright AC is blocked by the unimplemented owner-targeted worker-control feature tracked by ddx-28f3cf37. That makes this bead's current acceptance criteria depend on an upstream implementation outside its stated scope.\",\"recommended_action\":\"release_claim_mark_blocked\",\"result_rev\":\"9a901acb0a706c5505b8d79c8d85d587319786e5\",\"session_id\":\"eb-994b5616\",\"status\":\"execution_failed\",\"suggested_amendments\":[{\"target\":\"acceptance\",\"amendment\":\"Remove the Playwright worker-control spec from this tracker-narrowing bead's required gate, or make ddx-17a7dbef explicitly depend on completion of ddx-28f3cf37 before requiring that spec to pass.\"},{\"target\":\"deps\",\"amendment\":\"Add ddx-28f3cf37 as a dependency if the Playwright clause remains required for closure.\"}],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-07-04T00:15:39.93698166Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "blocked: release_claim_mark_blocked"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\nrationale: status: blocked\nreason: AC4's playwright clause cannot be satisfied inside this bead's scope; it requires the not-yet-implemented federation worker-control feature that ddx-28f3cf37 itself tracks separately.\n\nFindings:\n\n1. AC1-3 (narrow ddx-28f3cf37, name the four Go test gaps, cite reconciliation notes)\n   are already satisfied. `ddx bead show ddx-28f3cf37` reads as a worker-control\n   owner-targeted write bead (title \"federation: owner-targeted worker-control writes\"),\n   names TestFederatedMutation_StartWorker_RoutesToOwner,\n   TestFederatedMutation_StopWorker_RoutesToOwner,\n   TestFederatedMutation_RefusesOfflineSpoke, and\n   TestFederatedMutation_IdempotentRequestID in its description, and its `notes` field\n   cites FEAT-026-federation.md:22-29,160-177, TP-002-server-web-ui.md:327-338, and\n   federation-worker-control.spec.ts:1-9,102-214. This reconciliation was already\n   committed in 523e03b80 (\"chore(beads): update ddx-28f3cf37 [ddx: doc-stamp]\") prior\n   to this execution. No further tracker edit is needed to satisfy AC1-3.\n\n2. AC4's Go clause passes as-is:\n   `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...`\n   -\u003e ok github.com/DocumentDrivenDX/ddx/internal/server/graphql (27.1s)\n   -\u003e ok github.com/DocumentDrivenDX/ddx/internal/federation (2.2s)\n\n3. AC4's playwright clause does not pass and cannot be made to pass within this\n   bead's scope:\n   `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/federation-worker-control.spec.ts`\n   -\u003e 4 failed (starts a spoke worker from the hub, stops a spoke worker from the hub,\n      refuses commands for an offline spoke, deduplicates retried forwarded worker commands)\n   The spec file's own header (federation-worker-control.spec.ts:7-8) states: \"These\n   tests MUST FAIL until the hub federation workers view implements forwarded worker\n   start/stop for spoke-owned projects.\" Making them pass requires implementing\n   owner-targeted write forwarding across the GraphQL resolvers, the federation\n   write-routing layer, and the Svelte workers-federation UI -- a feature-sized change\n   that is exactly the work ddx-28f3cf37 exists to track, not something a bead titled\n   \"narrow the worker-control follow-up bead\" is scoped to build. ddx-28f3cf37 remains\n   open (unimplemented) as of this run, and this bead's NON-SCOPE section confines the\n   work here to the bead-tracker text, not the write-routing implementation.\n\nRecommendation: this bead's tracker-narrowing objective is already complete (AC1-3,\nplus the Go half of AC4). The remaining playwright gap in AC4 will close naturally\nonce ddx-28f3cf37 is implemented and its four named Go tests plus the e2e spec go\ngreen -- that is out of scope here. No code or bead-tracker change is being committed\nby this run.\ndecision_audit={\"failure_class\":\"blocked\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=9a901acb0a706c5505b8d79c8d85d587319786e5\nbase_rev=2c66413306e616be58438b59caab37362dba739c\noutcome_reason=blocked",
+          "created_at": "2026-07-04T00:15:40.006225631Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:22:06.127531745Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"TC-017\\\"\",\"fingerprint\":\"e1742d034ecca80810a2688bb149106c13e42a0dc7a6f6e930142f28d8a3dbe6\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e1742d034ecca80810a2688bb149106c13e42a0dc7a6f6e930142f28d8a3dbe6\"}",
+          "created_at": "2026-07-04T00:27:10.923154222Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T002832-e4c775a9",
+    "prompt": ".ddx/executions/20260704T002832-e4c775a9/prompt.md",
+    "manifest": ".ddx/executions/20260704T002832-e4c775a9/manifest.json",
+    "result": ".ddx/executions/20260704T002832-e4c775a9/result.json",
+    "checks": ".ddx/executions/20260704T002832-e4c775a9/checks.json",
+    "usage": ".ddx/executions/20260704T002832-e4c775a9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-17a7dbef-20260704T002832-e4c775a9"
+  },
+  "prompt_sha": "c6880821387b3052b4aaf123bdc845ff33afd300c6881dcbb3477cc3432dae3d"
+}
