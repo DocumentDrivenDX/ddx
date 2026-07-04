@@ -1,0 +1,95 @@
+{
+  "attempt_id": "20260704T000238-318e9b50",
+  "bead_id": "ddx-8d3af2ed",
+  "base_rev": "c685307dc628701b634e0efa666ef39ae3f8ea08",
+  "created_at": "2026-07-04T00:02:49.553605078Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8d3af2ed",
+    "title": "federation: reconcile the stale GraphQL federation bead",
+    "description": "PROBLEM\n`ddx-0793ac75` is stale. The current read-federation coverage in `cli/internal/server/graphql/resolver_federation_test.go:77-80,315-320,474-487` and `cli/internal/server/frontend/e2e/federation-2node.spec.ts:219-307` already proves the hub/spoke read path, but `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327-350` still leaves owner-targeted writes planned. The bead still points at cancelled `ddx-387a0178`, so the queue treats it as dependency-waiting instead of narrowing it to the remaining write-routing gap.\n\nROOT CAUSE\n`TP-002-server-web-ui.md:327-350` splits the work into TC-017 worker control and TC-018 bead writes, while the current test tree already covers the read side (`resolver_federation_test.go:77-80,315-320,474-487` and `federation-2node.spec.ts:219-307`). The stale dependency edge to cancelled `ddx-387a0178` keeps the bead parked on work that can no longer execute.\n\nPROPOSED FIX\n- Reconcile `ddx-0793ac75` against current coverage and either close/supersede it or rewrite it so it names only the missing owner-write coverage.\n- Remove the blocking dependency on cancelled `ddx-387a0178` unless a note proves it is still load-bearing.\n- Preserve the FEAT-026 / Story 14 references and explicitly cite the current read coverage in `resolver_federation_test.go` and `federation-2node.spec.ts`.\n\nNON-SCOPE\n- Do not implement new federation code.\n- Do not hand-edit `.ddx/beads.jsonl`.\n- Do not rewrite execution-audit commits.\n- Do not change the live read-federation behavior.\n\nPARENT + DEPS\nParent: `ddx-a038a090`. Dependency to reconcile: `ddx-387a0178`.",
+    "acceptance": "1. `ddx bead show ddx-0793ac75` shows closed, superseded, or narrowed AC that names only missing owner-write coverage.\n2. `ddx bead dep tree ddx-0793ac75` no longer shows cancelled `ddx-387a0178` as a blocking dependency, or the bead note explicitly explains why it remains load-bearing.\n3. The bead text cites `TestFederation_QueryShape_TwoHealthySpokes`, `TestFederation_PartialResult_OneSpokeOffline`, and `TestFederation_VersionSkew_RendersAndSkips` as the live read coverage anchors.\n4. `ddx bead ready --execution` surfaces the next actionable federation bead after this stale dependency is removed or annotated.\n5. `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-b303cf96",
+    "labels": [
+      "phase:2",
+      "area:federation",
+      "area:beads",
+      "kind:chore",
+      "story:14",
+      "spec:FEAT-026",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: The bead has enough concrete context to act on, but its acceptance mixes tracker reconciliation with the follow-on owner-write work and allows multiple end states. A narrow rewrite can make the claim outcome single-valued without changing intent.\",\"fingerprint\":\"16f24bca81d1f026dd9001c7c451fc21b6acaf750f609b029370db0450dfab26\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"16f24bca81d1f026dd9001c7c451fc21b6acaf750f609b029370db0450dfab26\"}",
+          "created_at": "2026-07-03T22:49:37.405346733Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T22:55:44.465631039Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260703T224948-40f65fb6\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":1889449,\"output_tokens\":16694,\"total_tokens\":1906143,\"cost_usd\":0,\"duration_ms\":332712,\"exit_code\":0}",
+          "created_at": "2026-07-03T22:55:44.544427383Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=1906143 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260703T224948-40f65fb6/0\",\"cycle_index\":0,\"attempt_id\":\"20260703T224948-40f65fb6\",\"base_rev\":\"d303a6a87c21614a0c81354d489e6df56608e263\",\"result_rev\":\"58f6e4ab93bcd67a31a46fab5517124ff3e24ff9\"}",
+          "created_at": "2026-07-03T22:55:44.618500908Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260703T224948-40f65fb6\",\"bead_id\":\"ddx-8d3af2ed\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-03T22:55:54.946297439Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "preserved-needs-review\ngate_summary=large-deletion gate: .ddx/beads.jsonl deleted 252 lines (threshold 200) without intentional large deletion acknowledgement\npreserve_ref=refs/ddx/iterations/ddx-8d3af2ed/20260703T224948-40f65fb6-b03405dbddc7\nresult_rev=58f6e4ab93bcd67a31a46fab5517124ff3e24ff9\nlarge-deletion gate: .ddx/beads.jsonl deleted 252 lines (threshold 200) without intentional large deletion acknowledgement\ncycle_trace=[{\"cycle_index\":0,\"attempt_id\":\"20260703T224948-40f65fb6\",\"result_rev\":\"58f6e4ab93bcd67a31a46fab5517124ff3e24ff9\",\"implementer_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\"},\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\"},\"review_result\":{},\"final_decision\":\"success\",\"failure_class\":\"none\",\"retry_action\":\"close\",\"escalation_count\":0,\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"landed\",\"reconcile_status\":\"not_applicable\"}]\ndecision_audit={\"failure_class\":\"preserved_needs_review\",\"retry_action\":\"operator_attention\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\",\"execution_decision\":\"proposed\"}\npreserve_ref=refs/ddx/iterations/ddx-8d3af2ed/20260703T224948-40f65fb6-b03405dbddc7\nresult_rev=58f6e4ab93bcd67a31a46fab5517124ff3e24ff9\nbase_rev=d303a6a87c21614a0c81354d489e6df56608e263",
+          "created_at": "2026-07-03T22:55:55.183098161Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "preserved_needs_review"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode readiness classification result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\"}",
+          "created_at": "2026-07-04T00:02:27.25752808Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T000238-318e9b50",
+    "prompt": ".ddx/executions/20260704T000238-318e9b50/prompt.md",
+    "manifest": ".ddx/executions/20260704T000238-318e9b50/manifest.json",
+    "result": ".ddx/executions/20260704T000238-318e9b50/result.json",
+    "checks": ".ddx/executions/20260704T000238-318e9b50/checks.json",
+    "usage": ".ddx/executions/20260704T000238-318e9b50/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8d3af2ed-20260704T000238-318e9b50"
+  },
+  "prompt_sha": "d2b704c258c886a37b2f678e567df03c012da93bf3845db0b7bc256021516ae1"
+}

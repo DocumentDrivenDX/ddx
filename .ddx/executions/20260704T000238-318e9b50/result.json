@@ -1,0 +1,59 @@
+{
+  "bead_id": "ddx-8d3af2ed",
+  "attempt_id": "20260704T000238-318e9b50",
+  "base_rev": "c685307dc628701b634e0efa666ef39ae3f8ea08",
+  "result_rev": "23f9e8e12dfddca339ddf0d3b6c7e729eb36bd1c",
+  "implementation_rev": "23f9e8e12dfddca339ddf0d3b6c7e729eb36bd1c",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "preserved_needs_review",
+  "detail": "large-deletion gate: .ddx/beads.jsonl deleted 253 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "preserved_needs_review",
+  "reason": "large-deletion gate: .ddx/beads.jsonl deleted 253 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-8d3af2ed/20260704T000238-318e9b50-e0e3dda7e096",
+  "candidate_ref": "refs/ddx/iterations/20260704T000238-318e9b50/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260704T000238-318e9b50",
+      "result_rev": "23f9e8e12dfddca339ddf0d3b6c7e729eb36bd1c",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-c5cb0dd8",
+  "duration_ms": 269207,
+  "tokens": 1492870,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260704T000238-318e9b50",
+  "prompt_file": ".ddx/executions/20260704T000238-318e9b50/prompt.md",
+  "manifest_file": ".ddx/executions/20260704T000238-318e9b50/manifest.json",
+  "result_file": ".ddx/executions/20260704T000238-318e9b50/result.json",
+  "usage_file": ".ddx/executions/20260704T000238-318e9b50/usage.json",
+  "started_at": "2026-07-04T00:02:49.576525993Z",
+  "finished_at": "2026-07-04T00:07:18.78403703Z"
+}
