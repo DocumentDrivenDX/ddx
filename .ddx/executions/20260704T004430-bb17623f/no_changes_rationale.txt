@@ -1,0 +1,12 @@
+status: blocked
+reason: unrelated pre-existing failure in `cd cli && go test ./...` blocks the required bead gate
+
+Evidence:
+- `cli/internal/agent/attempt_backend.go:101-113` creates an isolated detached worktree with `git worktree add` from `req.BaseRev`.
+- `cli/internal/agent/execute_bead.go:891-999` prepares artifacts inside that isolated worktree and only reads bead context / prompt data from repo-tracked sources.
+- `cli/internal/agent/execute_bead.go:1731-1788` resolves bead metadata and governing refs from the worktree snapshot or tracked bead store, not from gitignored launch-time artifacts.
+- `cli/internal/agent/execute_bead.go:1930-1949` places the execution bundle under the attempt worktree path.
+
+Conclusion:
+- The root-cause hypothesis is confirmed: `ddx try` runs in an isolated worktree that does not inherit gitignored inputs from the launching checkout.
+- I could not complete the bead because the required verification command fails on an unrelated existing test (`cli/cmd/work_provider_orphan_linux_test.go`), so I did not commit any changes.

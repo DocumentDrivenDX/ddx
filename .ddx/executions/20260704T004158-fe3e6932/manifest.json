@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260704T004158-fe3e6932",
+  "bead_id": "ddx-3d985375",
+  "base_rev": "5f4e5fca067b2a0c1ff35be4d95f387abdadb2a7",
+  "created_at": "2026-07-04T00:42:14.619964898Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3d985375",
+    "title": "BL storage: privatize concrete bead backends behind internal/storage and add public factories",
+    "description": "PROBLEM\nThe concrete storage implementations are still publicly importable from `cli/internal/bead/`, so the compiler does not yet enforce the storage boundary TD-027 §21 wants. `cli/internal/bead/store.go:39-140` still defines the public `Store` constructor path, and `cli/internal/bead/backend.go:35-152` still assumes the concrete type lives in the public package.\n\nROOT CAUSE\n`cli/internal/bead/store.go:39-140` keeps `Store`, `NewStore`, and `NewStoreWithCollection` in the public package alongside the implementation details for backend selection. `cli/internal/bead/watcher.go:12-100` is the sibling lifecycle implementation, but this bead only covers the storage side. The result is that `RawBackend`, `JSONLBackend`, `ExternalBackend`, `AxonBackend`, and the store internals remain reachable outside the package boundary.\n\nPROPOSED FIX\n- Move `store.go`, `backend_jsonl.go`, `backend_external.go`, `axon_backend.go`, `claim_liveness.go`, `attachments.go`, `archive.go`, and `migrate.go` into `cli/internal/bead/internal/storage/` with package rename to `storage`.\n- Move `RawBackend` and `OperationApplier` into the same internal storage package.\n- Add `cli/internal/bead/factory.go` as the public constructor surface for `NewStore` and `NewStoreWithCollection`; keep it delegating to `internal/storage`.\n- Add the compile-time assertion `var _ Backend = (*storage.Store)(nil)` inside `internal/storage/` so the concrete type proves interface satisfaction after privatization.\n\nNON-SCOPE\n- Caller-field narrowing.\n- WatcherHub relocation to `internal/lifecycle`.\n- Boundary import test.\n- Lint analyzer cleanup.",
+    "acceptance": "1. `cli/internal/bead/internal/storage/` exists and contains the relocated storage implementation files, including `store.go`, `backend_jsonl.go`, `backend_external.go`, `axon_backend.go`, `claim_liveness.go`, `attachments.go`, `archive.go`, and `migrate.go`.\n2. `cli/internal/bead/factory.go` is the public constructor surface for storage and exports `NewStore` plus `NewStoreWithCollection`.\n3. `internal/storage` contains `var _ Backend = (*storage.Store)(nil)`.\n4. `TestNewStore_DefaultsToJSONL`, `TestNewStore_SelectsAxonFromConfig`, `TestExternalBackendCarriesLogicalCollectionName`, and `TestExternalBackendOpensBeadsArchiveWithFallback` still pass against the relocated storage package.\n5. `cd cli \u0026\u0026 go test ./internal/bead/... ./internal/bead/internal/storage/...` green.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-74452926",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "spec:TD-027",
+      "reliability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:34:06.471202879Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:41:43.527122862Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "TD-027"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-027",
+      "path": "docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md",
+      "title": "Technical Design: Bead Storage System and Lifecycle"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260704T004158-fe3e6932",
+    "prompt": ".ddx/executions/20260704T004158-fe3e6932/prompt.md",
+    "manifest": ".ddx/executions/20260704T004158-fe3e6932/manifest.json",
+    "result": ".ddx/executions/20260704T004158-fe3e6932/result.json",
+    "checks": ".ddx/executions/20260704T004158-fe3e6932/checks.json",
+    "usage": ".ddx/executions/20260704T004158-fe3e6932/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3d985375-20260704T004158-fe3e6932"
+  },
+  "prompt_sha": "a1b198849b4f2c052e62b05ea252572a89c332a3d902cf508426c5b0d545f54c"
+}
