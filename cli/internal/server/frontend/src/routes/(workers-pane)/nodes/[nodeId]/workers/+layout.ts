@@ -31,34 +31,6 @@ const NODE_WORKERS_QUERY = gql`
 	}
 `
 
-const FEDERATED_WORKERS_QUERY = gql`
-	query NodeWorkersFederation($first: Int) {
-		workers(first: $first) {
-			edges {
-				node {
-					id
-					kind
-					state
-					status
-					harness
-					model
-					currentBead
-					attempts
-					successes
-					failures
-					startedAt
-				}
-				cursor
-			}
-			pageInfo {
-				hasNextPage
-				endCursor
-			}
-			totalCount
-		}
-	}
-`
-
 const PROJECTS_QUERY = gql`
 	query ProjectsForWorkerPane {
 		projects {
@@ -73,6 +45,16 @@ const PROJECTS_QUERY = gql`
 	}
 `
 
+const FEDERATION_NODES_QUERY = gql`
+	query FederationNodesForWorkerPane {
+		federationNodes {
+			nodeId
+			name
+			status
+		}
+	}
+`
+
 export interface WorkerNode {
 	id: string
 	kind: string
@@ -81,16 +63,16 @@ export interface WorkerNode {
 	harness: string | null
 	model: string | null
 	projectRoot?: string | null
+	projectId?: string | null
+	projectName?: string | null
+	nodeId?: string | null
+	nodeName?: string | null
 	currentBead: string | null
 	attempts: number | null
 	successes: number | null
 	failures: number | null
 	startedAt: string | null
 	// Optional fields that may be present in mocked or extended responses
-	projectId?: string | null
-	projectName?: string | null
-	nodeName?: string | null
-	nodeId?: string | null
 }
 
 export interface WorkerEdge {
@@ -109,19 +91,30 @@ interface WorkersResult {
 }
 
 interface FederatedWorkersResult {
-	federatedWorkers: WorkerConnection
+	workers: WorkerConnection
 }
 
 interface ProjectNode {
 	id: string
 	name: string
 	path: string
+	nodeId?: string | null
 }
 
 interface ProjectsResult {
 	projects: {
 		edges: Array<{ node: ProjectNode }>
 	}
+}
+
+interface FederationNode {
+	nodeId: string
+	name: string
+	status: string
+}
+
+interface FederationNodesResult {
+	federationNodes: FederationNode[]
 }
 
 const EMPTY_CONNECTION: WorkerConnection = {
@@ -135,14 +128,37 @@ export const load: LayoutLoad = async ({ params, url, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 
 	if (scope === 'federation') {
-		const data = await client
-			.request<FederatedWorkersResult>(FEDERATED_WORKERS_QUERY, { first: 100 })
-			.catch(() => ({ federatedWorkers: EMPTY_CONNECTION }))
+		const [workersData, projectsData, federationNodesData] = await Promise.all([
+			client
+				.request<FederatedWorkersResult>(NODE_WORKERS_QUERY, { first: 100 })
+				.catch(() => ({ workers: EMPTY_CONNECTION })),
+			client
+				.request<ProjectsResult>(PROJECTS_QUERY)
+				.catch(() => ({ projects: { edges: [] as Array<{ node: ProjectNode }> } })),
+			client
+				.request<FederationNodesResult>(FEDERATION_NODES_QUERY)
+				.catch(() => ({ federationNodes: [] as FederationNode[] }))
+		])
+		const projectsByPath: Record<string, { id: string; name: string; nodeId: string | null }> = {}
+		const projectsById: Record<string, { id: string; name: string; path: string; nodeId: string | null }> = {}
+		for (const { node } of projectsData.projects.edges) {
+			const entry = { id: node.id, name: node.name, path: node.path, nodeId: node.nodeId ?? null }
+			projectsById[node.id] = entry
+			if (node.path) {
+				projectsByPath[node.path] = { id: node.id, name: node.name, nodeId: node.nodeId ?? null }
+			}
+		}
+		const federationNodesById: Record<string, FederationNode> = {}
+		for (const node of federationNodesData.federationNodes ?? []) {
+			federationNodesById[node.nodeId] = node
+		}
 		return {
 			nodeId: params.nodeId,
-			workers: data.federatedWorkers ?? EMPTY_CONNECTION,
+			workers: workersData.workers ?? EMPTY_CONNECTION,
 			scope: 'federation' as const,
-			projectsByPath: {} as Record<string, { id: string; name: string }>
+			projectsByPath,
+			projectsById,
+			federationNodesById
 		}
 	}
 
