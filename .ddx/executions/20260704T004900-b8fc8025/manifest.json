@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260704T004900-b8fc8025",
+  "bead_id": "ddx-cdd6d2df",
+  "base_rev": "dff534cd82eb1ee977bf1884d56cce56f63782dc",
+  "created_at": "2026-07-04T00:49:26.122379838Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cdd6d2df",
+    "title": "Beads can close task_succeeded while their own named AC test gate is lef: part 2",
+    "description": "PROBLEM\nParent bead ddx-956e5f63 is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM: A bead executed via `ddx try`/`ddx work` can land, close with outcome=task_succeeded, and be merged -- while the exact test command its own acceptance criteria named as a required gate is left failing on the merged result.\n\nCONCRETE EXAMPLE (project: cayce, bead cayce-8acffc83, \"Microsite: render Tier 1 real-agent-conversation demos from IP-008 captures\"): the bead's AC required `cd website \u0026\u0026 npm run test:e2e` to pass. It closed task_succeeded. Independently re-running that exact command on the merged commit showed 4 real failures -- two Playwright specs asserting content on two new pages the bead's own diff added references to (website/e2e/sections.spec.ts, website/e2e/visual-snapshots.spec.ts), because the two referenced pages (website/content/demos/basic-single-send.md, website/content/demos/multi-step-sequence.md) were never actually generated and committed. The bead built the renderer script (website/scripts/render-flow-demos.py) and its own unit tests using isolated fixtures (which passed), and separately updated a landing page to link the two pages that don't exist, but the actual generate-and-commit step for the real deliverable never happened.\n\nROOT CAUSE (most likely): `ddx try` runs each attempt in an isolated worktree. The renderer needed `target/cayce-agent-flow-transcripts/*.json`, a project-gitignored build artifact that only existed in the requesting session's own long-lived main checkout (from manual verification runs earlier in that session), not in the fresh isolated worktree the attempt actually ran in. The executing agent had no real input to render its actual deliverable against, so it could only validate via isolated-fixture unit tests -- and apparently never treated \"the exact AC-named integration test command actually passes against my own worktree's real build\" as a precondition for declaring success, or didn't notice its own newly-added Playwright specs were failing before finishing.\n\nIMPACT: an operator (or a supervising agent) who trusts a closed/task_succeeded status without independently re-running the bead's own AC commands will ship broken links / failing test suites to production. This defeats a core value proposition of AC-gated execution.\n\nPROPOSED FIX (not investigated in depth -- filed by an external observer, not a ddx maintainer):\n- Before a `ddx try` attempt reports success, if the bead's acceptance criteria\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Some AC-command-verification gate (either automatic exact-command re-run, or a required explicit executing-agent acknowledgment before declaring success) exists so a bead cannot close task_succeeded while its own literal AC command is failing.\n- A regression test reproduces the cayce-8acffc83 shape: an attempt whose own newly-added test file asserts something the attempt's own diff didn't actually deliver.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Some AC-command-verification gate (either automatic exact-command re-run, or a required explicit executing-agent acknowledgment before declaring success) exists so a bead cannot close task_succeeded while its own literal AC command is failing.\n2. A regression test reproduces the cayce-8acffc83 shape: an attempt whose own newly-added test file asserts something the attempt's own diff didn't actually deliver.\n3. cd cli \u0026\u0026 go test ./... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-956e5f63",
+    "labels": [
+      "area:agent",
+      "kind:bug",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:43:07.30017861Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:48:44.323475091Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T004900-b8fc8025",
+    "prompt": ".ddx/executions/20260704T004900-b8fc8025/prompt.md",
+    "manifest": ".ddx/executions/20260704T004900-b8fc8025/manifest.json",
+    "result": ".ddx/executions/20260704T004900-b8fc8025/result.json",
+    "checks": ".ddx/executions/20260704T004900-b8fc8025/checks.json",
+    "usage": ".ddx/executions/20260704T004900-b8fc8025/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cdd6d2df-20260704T004900-b8fc8025"
+  },
+  "prompt_sha": "63a1f66d37b674559c4853618f090d34f735fed34dba9da9023118ac5be63a2b"
+}

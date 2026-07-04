@@ -1,0 +1,2 @@
+status: open
+reason: repo-wide `cd cli && go test ./...` is still red in unrelated packages (`internal/bead`, `internal/server`, `internal/skills`) after the bead-specific gate changes; retry after those baseline failures are repaired.
