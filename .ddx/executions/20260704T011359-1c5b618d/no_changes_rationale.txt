@@ -1,0 +1,26 @@
+status: blocked
+reason: AC1-3 are already satisfied by the bead's current committed state, but AC4 cannot be met and the fix is out of this bead's own declared scope.
+
+Verified AC1-3 (no changes needed):
+- AC1: `ddx bead show ddx-359e812b` already shows the narrowed body (PROBLEM/ROOT CAUSE/PROPOSED FIX/NON-SCOPE/RECONCILIATION NOTES) — committed in 652aeca21 "chore: update tracker (execute-bead 20260704T011338)". `git diff HEAD -- .ddx/beads.jsonl` is empty.
+- AC2: the bead body already names TestFederatedBeadWrite_ForwardsToOwner, TestFederatedDocumentWrite_ForwardsToOwner, TestFederatedWrite_RejectsOfflineSpoke, and TestFederatedWrite_IdempotentRequestID.
+- AC3: the reconciliation notes already cite TP-002-server-web-ui.md:340-351,353-363, beads-queue-mutations.spec.ts:210-268, spec-editing.spec.ts:204-256, and federation-2node.spec.ts:219-307.
+
+AC4 status:
+- `cd cli && go test ./internal/server/graphql/... ./internal/federation/...` PASSES (ok, 151.253s and 3.316s).
+- `cd cli/internal/server/frontend && bunx playwright test e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` FAILS: 8 of 10 tests fail (2 passed). Failures span both the federation-forwarding tests and unrelated local-only tests (create bead, edit bead, lifecycle actions, save helix spec, stale-write refusal, graph refresh) — i.e. this is not a narrow federation gap, the whole feature surface these specs exercise is broken.
+
+Root cause (verified via git, not guessed):
+Commit cc1ab1954 ("Merge origin/main into main", 2026-07-02) silently discarded already-implemented and already-tested federation write-forwarding + bead/document UI work that had been merged by beads ddx-e81c01de, ddx-1644ead2, ddx-abd08e19, ddx-3c399bec, and ddx-c3b15c32 (all closed, all ancestors of HEAD per `git merge-base --is-ancestor`). Evidence:
+- `git diff --stat d4266aa9b cc1ab1954 -- 'cli/internal/server/federation*' 'cli/internal/server/graphql/resolver_mutation*' 'cli/internal/server/graphql/resolver_federation*' 'cli/internal/federation/*'` shows 3868 deleted lines across 14 files, including cli/internal/federation/forwarding.go (116 lines, deleted entirely), cli/internal/server/federation_provider.go (199 of 199 lines deleted, dropping ForwardMutation entirely), resolver_mutation_beads_federation.go + its 705-line test file (deleted entirely), and resolver_mutation_docs_federation_test.go (434 lines, deleted entirely).
+- `git diff --stat d4266aa9b cc1ab1954 -- cli/internal/server/frontend/` shows matching frontend regressions: BeadDetail.svelte lost 294 lines (Edit/Approve/lifecycle-action UI), documents/[...path]/+page.svelte changed substantially, and beads-queue-mutations.spec.ts / spec-editing.spec.ts themselves also changed in that merge — so the *current* test files expect UI/resolver behavior that the *current* implementation no longer has.
+- At d4266aa9b (pre-bad-merge), the dropped test files already contained TestFederatedDocumentWrite_ForwardsToOwner (exact AC2 name) plus close variants of the other three AC2 names (TestFederatedBeadCreate_ForwardsToOwner / TestFederatedBeadUpdate_ForwardsToOwner instead of a single TestFederatedBeadWrite_ForwardsToOwner, TestFederationForwardMutation_RejectsOfflineOrReadOnly instead of TestFederatedWrite_RejectsOfflineSpoke, TestFederationForwardMutation_IdempotentRequestID instead of TestFederatedWrite_IdempotentRequestID).
+
+Why this bead cannot fix it:
+- Recovering ~3868 backend lines + ~2000+ frontend lines across 30+ files, reconciled against whatever legitimate independent changes landed on both sides of that merge, is a multi-bead-sized undertaking by this repo's own size-check rubric (Step 0: >500 LOC across 5+ unrelated files).
+- This bead's own NON-SCOPE line explicitly forbids it: "Do not reintroduce the mocked Playwright smoke paths into this bead." AC4 requires exactly those mocked Playwright specs to pass, which is now self-contradictory given their current failing state.
+
+Existing ownership:
+- Sibling bead ddx-3f3e1cbe ("federation: prove live owner-targeted writes route to spoke", priority 1, open, parent ddx-a038a090, depends on ddx-b303cf96) already targets proving live owner-targeted bead/document/worker writes route to the spoke, via a live two-node e2e path (federation-2node.spec.ts) rather than the reverted mock-based resolver tests. That bead is the correct home for recovering/reimplementing this functionality.
+
+Suggested action: rewrite ddx-359e812b's AC4 to drop the beads-queue-mutations.spec.ts / spec-editing.spec.ts requirement (already NON-SCOPE'd) and defer the live-write proof entirely to ddx-3f3e1cbe, or close ddx-359e812b as superseded by ddx-3f3e1cbe.

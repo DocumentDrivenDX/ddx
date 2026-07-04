@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260704T011359-1c5b618d",
+  "bead_id": "ddx-359e812b",
+  "base_rev": "7cbea1f04f08f3543a3b56bfebeab8a1040877b3",
+  "created_at": "2026-07-04T01:14:31.084401295Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-359e812b",
+    "title": "federation: live owner-targeted write persistence follow-up",
+    "description": "PROBLEM\n`ddx-359e812b` is still too broad for the remaining gap. `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:340-351,353-363` already splits the planned work into TC-018.4 and TC-019.4, while the existing Playwright coverage in `cli/internal/server/frontend/e2e/beads-queue-mutations.spec.ts:210-268` and `cli/internal/server/frontend/e2e/spec-editing.spec.ts:204-256` already covers the mocked forwarded paths. `cli/internal/server/frontend/e2e/federation-2node.spec.ts:219-307` already covers the read-federation shell around the owner-write entry points.\n\nROOT CAUSE\nFEAT-026 routes `beadCreate`, `beadUpdate`, `beadApprove`, `beadBlock`, `beadCancel`, `beadReopen`, and `documentWrite` only to the owner node and never broadcasts (`docs/helix/01-frame/features/FEAT-026-federation.md:22-29,160-177`). The stale bead mixed that live owner-targeted write persistence work with already-covered UI smoke and the separate ts-net guard.\n\nPROPOSED FIX\n- Track only the live owner-targeted write persistence gap: bead create/edit and `documentWrite` forwarding, offline-spoke refusal, and idempotent request IDs.\n- Keep the ts-net guard as a separate bead if it still needs work.\n- Guard the narrowed scope with `TestFederatedBeadWrite_ForwardsToOwner`, `TestFederatedDocumentWrite_ForwardsToOwner`, `TestFederatedWrite_RejectsOfflineSpoke`, and `TestFederatedWrite_IdempotentRequestID`.\n- Do not expand this bead back into federation read smoke or mocked Playwright smoke coverage.\n\nNON-SCOPE\n- Do not add new federation read smoke.\n- Do not add screenshot assertions.\n- Do not implement managed-node outbound control from ADR-028.\n- Do not reintroduce the mocked Playwright smoke paths into this bead.\n\nRECONCILIATION NOTES\n- `TP-002-server-web-ui.md:340-351,353-363` isolates the bead and document write rows this bead is narrowing to.\n- `beads-queue-mutations.spec.ts:210-268` already covers the mocked spoke bead-write forwarding smoke.\n- `spec-editing.spec.ts:204-256` already covers the mocked spoke document-write forwarding smoke.\n- `federation-2node.spec.ts:219-307` already covers the read-federation shell around the owner-write entry points.",
+    "acceptance": "1. `ddx bead show ddx-359e812b` is narrowed to live owner-targeted bead/document write persistence or is closed/superseded.\n2. The bead body names `TestFederatedBeadWrite_ForwardsToOwner`, `TestFederatedDocumentWrite_ForwardsToOwner`, `TestFederatedWrite_RejectsOfflineSpoke`, and `TestFederatedWrite_IdempotentRequestID`.\n3. The reconciliation notes cite `TP-002-server-web-ui.md:340-351,353-363`, `beads-queue-mutations.spec.ts:210-268`, `spec-editing.spec.ts:204-256`, and `federation-2node.spec.ts:219-307`.\n4. `cd cli \u0026\u0026 go test ./internal/server/graphql/... ./internal/federation/...` passes, and `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      " area:federation",
+      " area:web",
+      " area:server",
+      " area:tests",
+      " kind:test",
+      " story:14",
+      " spec:FEAT-026",
+      " ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-be679e1a (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.442116303Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-359e812b)\",\"fingerprint\":\"23c0d71888d04693acfe031d3146140ca00387a04e41b4d412d904480ccf7477\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"23c0d71888d04693acfe031d3146140ca00387a04e41b4d412d904480ccf7477\"}",
+          "created_at": "2026-07-04T01:13:26.939058893Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T011359-1c5b618d",
+    "prompt": ".ddx/executions/20260704T011359-1c5b618d/prompt.md",
+    "manifest": ".ddx/executions/20260704T011359-1c5b618d/manifest.json",
+    "result": ".ddx/executions/20260704T011359-1c5b618d/result.json",
+    "checks": ".ddx/executions/20260704T011359-1c5b618d/checks.json",
+    "usage": ".ddx/executions/20260704T011359-1c5b618d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-359e812b-20260704T011359-1c5b618d"
+  },
+  "prompt_sha": "7c9767cb4f4ba19aa753c253fe9289da5fd752958afe7955968397f3a8afd0c1"
+}
