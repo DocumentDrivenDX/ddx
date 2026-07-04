@@ -10,6 +10,11 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
+type claimLeaseReader interface {
+	ReadAll(context.Context) ([]bead.Bead, error)
+	ClaimLease(id string) (bead.ClaimLeaseRecord, bool, error)
+}
+
 // Record describes one fresh source of active work for a bead.
 //
 // The snapshot reconciles claim-heartbeat leases, worker liveness sidecars,
@@ -42,7 +47,7 @@ type Snapshot struct {
 // - run-state files: their ExpiresAt timestamp
 //
 // Stale records are ignored.
-func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, error) {
+func Collect(projectRoot string, store claimLeaseReader, now time.Time) (Snapshot, error) {
 	byKey := make(map[string]Record)
 
 	add := func(rec Record) {
