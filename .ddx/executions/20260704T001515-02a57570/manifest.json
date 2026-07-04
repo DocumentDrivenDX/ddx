@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260704T001515-02a57570",
+  "bead_id": "ddx-09398ba6",
+  "base_rev": "7ca321a1eb498c74b9a68232ecf69a67dfd88dd9",
+  "created_at": "2026-07-04T00:15:28.3078796Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-09398ba6",
+    "title": "bead: redefine Backend composite and narrow caller Store types",
+    "description": "PROBLEM\n  TD-027 §21 still leaves callers holding `*bead.Store`, and `backend.go` still defines `Backend` as the legacy concrete method set instead of the TD-027 interface composite. That keeps the caller side coupled to the concrete tracker type.\n\nROOT CAUSE\n  `cli/internal/bead/backend.go:35-72` defines `Backend` as a monolithic API, not the 11-way composite. Representative concrete callers still live in `cli/cmd/bead.go:317-333,468,504,1634,1664`, `cli/internal/server/server.go:929,5269`, `cli/internal/processmetrics/processmetrics.go:30,664`, `cli/internal/exec/store.go:40-41`, `cli/internal/agent/execute_bead.go:218,243`, and `cli/internal/agent/try/attempt_test.go:651-654`.\n\nPROPOSED FIX\n  - Redefine `Backend` in `cli/internal/bead/backend.go` as `BeadInitializer + BeadReader + BeadLifecycle + BeadEventReader + BeadEventWriter + BeadQueries + BeadDependencyReader + BeadDependencyWriter + BeadArchive + BeadInterchangeReader + BeadInterchangeWriter`.\n  - Declare `ReadOnlyBackend` as the reader-only composite called for by TD-027 §6.1.\n  - Replace `*bead.Store` fields and locals in the caller clusters above with `bead.Backend` or the narrowest fitting sub-interface, keeping only the documented file-level exceptions in `bead_doctor.go`, the git/file paths in `bead.go`, and `sync.go`.\n  - Keep the existing compile-time `var _ Backend = (*Store)(nil)` assertion valid after the composite rewrite.\n\nNON-SCOPE\n  - Moving concrete storage types under `internal/`.\n  - Relocating `WatcherHub`.\n  - Lint analyzer removal.\n  - AxonStore implementation work.\n\n",
+    "acceptance": "1. `TestCallerMigration_NoConcreteStore` passes and AST-scans `cli/cmd/`, `cli/internal/agent/`, `cli/internal/server/`, `cli/internal/escalation/`, `cli/internal/agentmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/processmetrics/`, `cli/internal/exec/`, and `cli/internal/agent/try/` for concrete `*bead.Store` usage outside the allowlist.\n2. `TestCallerMigration_AllowlistMatchesDocumentedExceptions` passes and the only remaining concrete/file-level cases are the documented exceptions.\n3. `cd cli \u0026\u0026 go test ./...` is green after the interface rewrite and caller narrowing.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-74452926",
+    "labels": [
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "phase:iterate",
+      "reliability",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "spec-id": "TD-027"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-027",
+      "path": "docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md",
+      "title": "Technical Design: Bead Storage System and Lifecycle"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260704T001515-02a57570",
+    "prompt": ".ddx/executions/20260704T001515-02a57570/prompt.md",
+    "manifest": ".ddx/executions/20260704T001515-02a57570/manifest.json",
+    "result": ".ddx/executions/20260704T001515-02a57570/result.json",
+    "checks": ".ddx/executions/20260704T001515-02a57570/checks.json",
+    "usage": ".ddx/executions/20260704T001515-02a57570/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570"
+  },
+  "prompt_sha": "d88e00fd047c5c9eb9e832a11de1078abbd06278dbc6377ff2535c352468a939"
+}

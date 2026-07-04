@@ -1,0 +1,153 @@
+{
+  "attempt_id": "20260704T001515-02a57570",
+  "bead_id": "ddx-09398ba6",
+  "worktree": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570",
+  "trigger": "agent: provider process exited without emitting a final event",
+  "started_at": "2026-07-04T01:57:17.203480788Z",
+  "finished_at": "2026-07-04T01:57:17.533822992Z",
+  "scanned": 1479,
+  "candidates": [
+    {
+      "pid": 2465924,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/server/graphql",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b998/graphql.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b998/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2462121,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/bead",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b948/bead.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b948/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2456223,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/exec",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b970/exec.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b970/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2455856,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/metric",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b984/metric.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b984/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454513,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/agent/workerprobe",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b905/workerprobe.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b905/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454490,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/integration",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b977/integration.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b977/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454217,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b996/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b996/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454207,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b891/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b891/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2439229,
+      "ppid": 2439193,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli",
+      "command": "go test ./..."
+    },
+    {
+      "pid": 2439193,
+      "ppid": 2047,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli",
+      "command": "bash -lc cd /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli \u0026\u0026 go test ./... \u003e /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/.ddx/executions/20260704T001515-02a57570/go-test-all.log 2\u003e\u00261; printf \"%s\" $? \u003e /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/.ddx/executions/20260704T001515-02a57570/go-test-all.exit"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 2465924,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/server/graphql",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b998/graphql.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b998/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2462121,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/bead",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b948/bead.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b948/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2456223,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/exec",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b970/exec.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b970/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2455856,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/metric",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b984/metric.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b984/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454513,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/agent/workerprobe",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b905/workerprobe.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b905/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454490,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/integration",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b977/integration.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b977/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454217,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b996/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b996/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2454207,
+      "ppid": 2439229,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go-build2880729409/b891/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go-build2880729409/b891/testlog.txt -test.paniconexit0 -test.timeout=10m0s"
+    },
+    {
+      "pid": 2439229,
+      "ppid": 2439193,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli",
+      "command": "go test ./..."
+    },
+    {
+      "pid": 2439193,
+      "ppid": 2047,
+      "pgid": 2439193,
+      "cwd": "/home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli",
+      "command": "bash -lc cd /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/cli \u0026\u0026 go test ./... \u003e /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/.ddx/executions/20260704T001515-02a57570/go-test-all.log 2\u003e\u00261; printf \"%s\" $? \u003e /home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-09398ba6-20260704T001515-02a57570/.ddx/executions/20260704T001515-02a57570/go-test-all.exit"
+    }
+  ]
+}
