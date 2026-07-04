@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260704T012616-071bb4ce",
+  "bead_id": "ddx-3b5ab8aa",
+  "base_rev": "17a20fbce3b1ec68c86fdcfe39dac95524d14bdb",
+  "created_at": "2026-07-04T01:26:29.00821455Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3b5ab8aa",
+    "title": "DESIGN: structured cross-repo blocker ref + auto-recheck",
+    "description": "PROBLEM\nWhen a bead in one repo is blocked on work in ANOTHER repo (e.g. niflheim beads blocked on heimq), operators hand-carry 'SKIP these heimq-blocked beads' as prose across sessions and compactions. They wanted to mark them blocked but had to fall back to priority-4 + notes.\n\nCURRENT STATE (from adversarial review — gap is NARROWER than first thought)\n- An external-blocker primitive ALREADY exists: cli/internal/bead/lifecycle.go has StatusBlocked + a required ExternalBlockerReason, a LifecycleBucketBlockedExternal bucket, an ExternalBlocked() store query (store.go), and a manual recheck workflow (operator reopens when cleared).\n- The RESIDUAL gap: the blocker reason is FREE TEXT with MANUAL reopen. There is no STRUCTURED cross-repo reference (\u003crepo\u003e#\u003cbead\u003e) and no AUTOMATED recheck.\n\nWHAT TO PRODUCE (design, not implementation)\n- A short design doc specifying: a structured cross-repo blocker reference field (repo + bead id) layered on the existing ExternalBlockerReason, and an automated recheck that flips the bead back to open when the referenced bead closes. Cover: how the recheck observes another repo's tracker (the referenced repo may be local or remote), failure modes, and backward compatibility with free-text reasons.\n- Decompose into child build beads with command-based ACs depending on this epic.\n\nNON-SCOPE (for THIS bead)\n- No implementation in this bead — design + child beads only.\n- Do not replace the existing external-blocker primitive; build ON it.\n- No new lifecycle statuses.",
+    "acceptance": "1. A committed design doc exists describing the structured \u003crepo\u003e#\u003cbead\u003e reference + auto-recheck layered on the existing external-blocker primitive. 2. At least one child build bead is created with command-based ACs and wired via ddx bead dep add \u003cchild\u003e \u003cthis-epic\u003e. 3. ddx bead dep tree \u003cthis-epic\u003e shows the children.",
+    "labels": [
+      "area:beads",
+      "area:lifecycle",
+      "kind:feature",
+      "kind:design",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:24:19.518165224Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T012616-071bb4ce",
+    "prompt": ".ddx/executions/20260704T012616-071bb4ce/prompt.md",
+    "manifest": ".ddx/executions/20260704T012616-071bb4ce/manifest.json",
+    "result": ".ddx/executions/20260704T012616-071bb4ce/result.json",
+    "checks": ".ddx/executions/20260704T012616-071bb4ce/checks.json",
+    "usage": ".ddx/executions/20260704T012616-071bb4ce/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3b5ab8aa-20260704T012616-071bb4ce"
+  },
+  "prompt_sha": "e4452fb9cd045574386e4f56a7c86285c237211cb1f3010edb6e70987cf95805"
+}

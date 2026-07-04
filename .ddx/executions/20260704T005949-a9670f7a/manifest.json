@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260704T005949-a9670f7a",
+  "bead_id": "ddx-55a16aef",
+  "base_rev": "1b9208671806adb5db5307578d13598a064c2935",
+  "created_at": "2026-07-04T01:00:41.767030389Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-55a16aef",
+    "title": "Implement JSONL→Postgres importer apply path",
+    "description": "# PROBLEM\nThe current Axon migration path still rewrites the JSONL corpus into `.ddx/axon/` instead of inserting rows into Postgres. `cli/internal/bead/migrate.go:623-680` reads active + archive JSONL and calls `writeAxonSnapshotFiles`, while `cli/internal/bead/migrator.go:54-57` still returns `ErrDeprecated` from `MigrateToAxon`. There is no importer path that exercises `axonStore.Create` / `axonStore.Apply`.\n\n# ROOT CAUSE\n`migrateToAxon` is a snapshot copier, not a data importer. It deduplicates in-memory beads and serializes them back to axon JSONL files, which cannot populate Lakebase Postgres or prove row-level write semantics.\n\n# PROPOSED FIX\n- Add `cli/internal/bead/internal/storage/import_postgres.go` or equivalent with an importer that reads `.ddx/beads.jsonl` and `.ddx/beads-archive.jsonl`.\n- Use `axonStore.Create(ctx, \u0026b)` for bead insertion and `axonStore.Apply(ctx, id, AppendEventOp{...})` for event appends.\n- Treat conflict errors as idempotent skips, not failures.\n- Preserve event ordering by `created_at` when appending imported events.\n- Add tests that prove the write path uses the Postgres-style API and is safe to re-run.\n\n# NON-SCOPE\n- Dry-run accounting, verification read-back, and attachment upload behavior.\n- CLI flag parsing and command help changes.\n- Real-wire Postgres integration; this bead only makes the importer logic executable against the AxonStore abstraction used by tests.\n\n# ACCEPTANCE\n1. `cli/internal/bead/internal/storage/import_postgres.go` (or equivalent) exists and the implementation calls `axonStore.Create` plus `axonStore.Apply` for bead + event writes.\n2. `TestImporter_Apply_WritesToPostgres` proves the importer writes the expected rows/events through the backend abstraction.\n3. `TestImporter_Apply_Idempotent_OnReRun` proves a second apply skips existing rows instead of duplicating them.\n4. `TestImporter_PreservesEventOrdering` proves imported events are appended in monotonic `created_at` order.\n5. `cd cli \u0026\u0026 go test ./internal/bead/...` is green.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-53df5e2f",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:axon",
+      "area:migration",
+      "kind:feature",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:59:10.849545357Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "TD-027"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-027",
+      "path": "docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md",
+      "title": "Technical Design: Bead Storage System and Lifecycle"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260704T005949-a9670f7a",
+    "prompt": ".ddx/executions/20260704T005949-a9670f7a/prompt.md",
+    "manifest": ".ddx/executions/20260704T005949-a9670f7a/manifest.json",
+    "result": ".ddx/executions/20260704T005949-a9670f7a/result.json",
+    "checks": ".ddx/executions/20260704T005949-a9670f7a/checks.json",
+    "usage": ".ddx/executions/20260704T005949-a9670f7a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-55a16aef-20260704T005949-a9670f7a"
+  },
+  "prompt_sha": "502a86612b0a41638ef094da38777aa00750518fbe388e2b657dafc21ecbf893"
+}

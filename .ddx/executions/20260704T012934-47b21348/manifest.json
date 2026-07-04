@@ -1,0 +1,138 @@
+{
+  "attempt_id": "20260704T012934-47b21348",
+  "bead_id": "ddx-cbe6daff",
+  "base_rev": "fc71b3101c89b960b8380f8cbc75f13db648fc95",
+  "created_at": "2026-07-04T01:29:45.11673647Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cbe6daff",
+    "title": "BL (Boundary Lockdown): caller narrowing + relocate concretes to interna: part 2",
+    "description": "PROBLEM\nParent bead ddx-8ea2e451 is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-74452926 is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nAfter Phase 1 (Foundation `ddx-c6317784`) and per-concern beads (L/C/X/Q/D/A/MIG) land, callers no longer use the removed workflow methods on `*Store` — but they still hold `*Store` as a struct field type for foundational reads/writes/queries/etc. The `Backend` interface composite isn't yet asserted on `*Store`. The concrete types (`*Store`, `RawBackend`, `JSONLBackend`, `ExternalBackend`, `AxonStore`, `*WatcherHub`) live at `cli/internal/bead/` — publicly importable from any other package.\n\nThe goal of TD-027 §21 is **physical impossibility** of bypass: not lint-prevented, not review-prevented, but a Go compiler error if any code outside `cli/internal/bead/` tries to import the concrete storage implementations. This bead enforces that via Go's `internal/` rule.\n\n# ROOT CAUSE\n- `cli/internal/bead/store.go` — `*Store` public.\n- `cli/internal/bead/backend_jsonl.go` — `JSONLBackend` public.\n- `cli/internal/bead/backend_external.go` — `ExternalBackend` public.\n- `cli/internal/bead/axon_backend.go` (or `AxonStore` post `ddx-9c5bca8f`) — public.\n- `cli/internal/bead/watcher.go` — `*WatcherHub` public.\n- All supporting concrete implementation files (`claim_liveness.go`, `attachments.go`, `archive.go`, `migrate.go`, etc.) — public.\n\nPlus the final assembly step (formerly \"K\" in earlier breakdowns): `Backend` composite interface declared, `ReadOnlyBackend` convenience composite, compile-time assertion `var _ Backend = (*Store)(nil)`. These were deferred from Foundation because the composite couldn't be asserted until all per-concern beads removed their methods.\n\n# PROPOSED FIX\n\nThis bead does three load-bearing things in one atomic change:\n\n## 1. Narrow caller field types from `*bead.Store` to `bead.Backend` (or narrower)\n\nEvery caller file in `cli/cmd/`, `cli/internal/agent/`, `cli/internal/server/`, `cli/internal/escalation/`, `cli/internal/agentmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/processmetrics/`, `cli/internal/exec/`, `cli/internal/agent/try/` that holds `*bead.Store` as a struct field or local variable is updated:\n\n- Most callers: change `*bead.Store` to `bead.Backend` (full interface). Mechanical rename.\n- Narrow candidates (identified during per-concern beads): use narrower sub-inter\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- cd cli \u0026\u0026 go test ./... passes.\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. cd cli \u0026\u0026 go test ./... passes.\n2. lefthook run pre-commit passes.",
+    "parent": "ddx-8ea2e451",
+    "labels": [
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "phase:iterate",
+      "reliability",
+      "spec:TD-027",
+      "decomposed",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:59:37.963018298Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-07-04T01:00:30.549142991Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-cbe6daff\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-07-04T01:00:30.623156168Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\ndecision_audit={\"failure_class\":\"lock_contention\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=lock_contention",
+          "created_at": "2026-07-04T01:00:30.751055521Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: restore project root mutation: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"fingerprint\":\"dd046cddf35120a94925f324d0ef75af94880c508217d2bb101ea3901e67188e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"dd046cddf35120a94925f324d0ef75af94880c508217d2bb101ea3901e67188e\"}",
+          "created_at": "2026-07-04T01:11:00.183336583Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T01:22:44.834379034Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T011238-6a76f6c0\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":8184,\"output_tokens\":11827,\"total_tokens\":20011,\"cost_usd\":1.7662436000000001,\"duration_ms\":592617,\"exit_code\":0}",
+          "created_at": "2026-07-04T01:22:45.016596298Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=20011 cost_usd=1.7662 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T011238-6a76f6c0\",\"bead_id\":\"ddx-cbe6daff\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T01:22:51.020145735Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-07-04T01:22:51.289473742Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-07-04T01:22:51.533575112Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\ndecision_audit={\"failure_class\":\"no_evidence_produced\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=bea0af5f9e5eb031d3799172c1eadf3be7f29f9f\nbase_rev=bea0af5f9e5eb031d3799172c1eadf3be7f29f9f\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-07-04T01:22:51.730802641Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ac specifies a concrete, differentiated scope for 'part 2' distinct from its sibling child: This depth-2 child inherits the full TD-027 §21 problem/root-cause narrative from parent ddx-8ea2e451 (and its own parent ddx-74452926), but the decomposition step that produced this child never actually differentiates 'part 2 of 2' from its sibling. The parent's multi-item PROPOSED FIX is cut off mid-sentence ('use narrower sub-inter\\\\n...[truncated]'), losing whichever items (narrow-candidate sub-interfaces, the Backend/ReadOnlyBackend composite assembly, the compile-time assertion) were meant to distinguish this child from part 1. The child-specific PROPOSED FIX section that follows is pure boilerplate ('Implement only this child acceptance slice') backed by only generic gates (full test suite + lefthook), with no reference to a sibling bead ID, no enumerated deliverable, and no named Test* function. An executing agent cannot determine which concrete subset of caller-narrowing or interface-assembly work belongs to this bead versus its unnamed sibling. prior_attempts[0] (no_changes, agent exited without a commit) is consistent with this ambiguity — a prior agent found no boundable, actionable diff. prior_attempts[1] (execution_failed on a stale git index.lock) is unrelated infra noise and not a current blocker. Attempting execution as written risks either repeating the no-op outcome or silently claiming/overlapping scope that belongs to the sibling child, which is an unsafe scope choice rather than a simple prose cleanup.\",\"fingerprint\":\"7b522899ac22ca7f31e16605c60694d0ee701bb31dce650d873608b544d71c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"7b522899ac22ca7f31e16605c60694d0ee701bb31dce650d873608b544d71c0c\"}",
+          "created_at": "2026-07-04T01:27:10.553788117Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ],
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T012934-47b21348",
+    "prompt": ".ddx/executions/20260704T012934-47b21348/prompt.md",
+    "manifest": ".ddx/executions/20260704T012934-47b21348/manifest.json",
+    "result": ".ddx/executions/20260704T012934-47b21348/result.json",
+    "checks": ".ddx/executions/20260704T012934-47b21348/checks.json",
+    "usage": ".ddx/executions/20260704T012934-47b21348/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cbe6daff-20260704T012934-47b21348"
+  },
+  "prompt_sha": "19df976368a13a501965a517ecaaab9526f0be1fae67e0fac5f9a96b0508ec3b"
+}

@@ -1,0 +1,61 @@
+{
+  "bead_id": "ddx-3b5ab8aa",
+  "attempt_id": "20260704T012616-071bb4ce",
+  "base_rev": "17a20fbce3b1ec68c86fdcfe39dac95524d14bdb",
+  "result_rev": "75b9e8f429df34c298276034d59d1330b59becfb",
+  "implementation_rev": "75b9e8f429df34c298276034d59d1330b59becfb",
+  "outcome": "land_coordination_retry",
+  "status": "land_retry",
+  "detail": "land coordination retry: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl",
+  "orchestrator_status": "land_retry",
+  "reason": "land coordination retry: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl",
+  "preserve_ref": "refs/ddx/iterations/ddx-3b5ab8aa/20260704T012616-071bb4ce-17a20fbce3b1",
+  "candidate_ref": "refs/ddx/iterations/20260704T012616-071bb4ce/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260704T012616-071bb4ce",
+      "result_rev": "75b9e8f429df34c298276034d59d1330b59becfb",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-936ad563",
+  "duration_ms": 1055590,
+  "tokens": 36666,
+  "cost_usd": 2.2082108000000003,
+  "exit_code": 0,
+  "error": "land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "land_retry",
+  "execution_dir": ".ddx/executions/20260704T012616-071bb4ce",
+  "prompt_file": ".ddx/executions/20260704T012616-071bb4ce/prompt.md",
+  "manifest_file": ".ddx/executions/20260704T012616-071bb4ce/manifest.json",
+  "result_file": ".ddx/executions/20260704T012616-071bb4ce/result.json",
+  "usage_file": ".ddx/executions/20260704T012616-071bb4ce/usage.json",
+  "started_at": "2026-07-04T01:26:29.016414723Z",
+  "finished_at": "2026-07-04T01:44:04.607219806Z"
+}
