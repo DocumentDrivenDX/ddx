@@ -1,0 +1,77 @@
+{
+  "attempt_id": "20260704T010503-599319ab",
+  "bead_id": "ddx-9aede25e",
+  "base_rev": "b570039ffb089d8d1d323d42cb7e182227b0fd39",
+  "created_at": "2026-07-04T01:05:16.936707544Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9aede25e",
+    "title": "Add agent mode-matrix harness for lifecycle, execution, and XDG sharing",
+    "description": "PROBLEM\nThe current coverage in cli/internal/agent/execute_bead_artifacts_test.go:65-77 and cli/internal/agent/execute_bead_isolated_worktree_test.go:112-256 proves individual execution behaviors, but it does not exercise the same scenario set through both Convention and InTree fixtures. The cross-mode invariant from ddx-602ae31a stays untested.\n\nROOT CAUSE\nThe existing tests are per-feature and only assert one mode or one worktree shape at a time; no shared matrix harness drives both ddxroot.Path() layouts through the same scenarios.\n\nPROPOSED FIX\nAdd cli/internal/agent/test_mode_matrix_test.go (or a comparable test package) with package doc stating the cross-mode invariant. Parameterize Convention and InTree fixtures, then cover:\n- TestModeMatrix_BeadLifecycle\n- TestModeMatrix_BeadExecution\n- TestModeMatrix_TwoClonesShareXDG\n- TestModeMatrix_OperatorExpectationDocumented\nUse deterministic project roots, isolated XDG tempdirs, and a shared helper that makes the only allowed difference the on-disk anchor.\n\nNON-SCOPE\nPlugin/persona/meta-prompt/auto-commit/docs scenarios.",
+    "acceptance": "1. cli/internal/agent/test_mode_matrix_test.go exists with package doc and helpers for Convention/InTree fixtures.\n2. TestModeMatrix_BeadLifecycle, TestModeMatrix_BeadExecution, TestModeMatrix_TwoClonesShareXDG, and TestModeMatrix_OperatorExpectationDocumented exist and pass for both modes.\n3. The two-clone subscenario asserts the shared XDG project dir and worktrees.json master-pinning behavior.\n4. cd cli \u0026\u0026 go test ./internal/agent/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:27:10.144873813Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-07-04T00:49:44.075271729Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9aede25e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-07-04T00:49:44.142981608Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\ndecision_audit={\"failure_class\":\"lock_contention\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=lock_contention",
+          "created_at": "2026-07-04T00:49:44.271190121Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:04:43.156586322Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T010503-599319ab",
+    "prompt": ".ddx/executions/20260704T010503-599319ab/prompt.md",
+    "manifest": ".ddx/executions/20260704T010503-599319ab/manifest.json",
+    "result": ".ddx/executions/20260704T010503-599319ab/result.json",
+    "checks": ".ddx/executions/20260704T010503-599319ab/checks.json",
+    "usage": ".ddx/executions/20260704T010503-599319ab/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9aede25e-20260704T010503-599319ab"
+  },
+  "prompt_sha": "26177dcaa59c081883b174004beba2d77552c0003c5d3a017908f982e5fadfbb"
+}

@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260704T011137-3178cee4",
+  "bead_id": "ddx-0ed4dd76",
+  "base_rev": "d00076d902369d40999edcf3f35911e7fdef6b5c",
+  "created_at": "2026-07-04T01:12:07.540713381Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0ed4dd76",
+    "title": "Update helix specs with ddx-06cbaa90 citations",
+    "description": "PROBLEM\nThe resolver/mode model appears in multiple spec docs, but the cross-reference to ddx-06cbaa90 is not consistently explicit everywhere the project-state path model is described.\n\nROOT CAUSE\nTD-031-bead-state-machine.md:90-125, 186-217, and 384; SD-019-multi-project-server-topology.md:65-78; SD-020-multi-machine-coordinator-topology.md:88-98 and 236; ADR-021-operator-prompt-beads-web-write-path.md:147-153 and 304; workers-sessions-operator-surface.md:41-49 and 67; and plan-2026-04-29-artifact-and-run-architecture.md:19-26 and 230 all describe ddxroot.Path() or project identity, but the spec trail still needs explicit ddx-06cbaa90 breadcrumbs in the updated prose.\n\nPROPOSED FIX\nUpdate each listed helix doc so the path/resolver wording explicitly cites ddx-06cbaa90 wherever it discusses project-scoped state, anchors, or identity.\n\nNON-SCOPE\nInstall topology docs and Go code.",
+    "acceptance": "1. Each listed spec file contains a ddx-06cbaa90 citation in the updated resolver/mode prose.\n2. rg \"ddx-06cbaa90\" docs/helix/ returns hits for each listed spec file.\n3. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:49:43.582873222Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"bead_id\":\"ddx-0ed4dd76\",\"detail\":\"resource_exhausted\",\"status\":\"resource_exhausted\"}",
+          "created_at": "2026-07-04T00:50:06.527130978Z",
+          "kind": "resource-exhausted",
+          "source": "ddx work",
+          "summary": "resource exhausted after cleanup; stopping work loop"
+        },
+        {
+          "actor": "erik",
+          "body": "resource_exhausted\ndecision_audit={\"failure_class\":\"unknown\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=unknown",
+          "created_at": "2026-07-04T00:50:06.605979265Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "resource_exhausted"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:09:00.408168951Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T011137-3178cee4",
+    "prompt": ".ddx/executions/20260704T011137-3178cee4/prompt.md",
+    "manifest": ".ddx/executions/20260704T011137-3178cee4/manifest.json",
+    "result": ".ddx/executions/20260704T011137-3178cee4/result.json",
+    "checks": ".ddx/executions/20260704T011137-3178cee4/checks.json",
+    "usage": ".ddx/executions/20260704T011137-3178cee4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0ed4dd76-20260704T011137-3178cee4"
+  },
+  "prompt_sha": "f9b22f1fba97cf99a89cc76645174ef66ed321fa51b001efbe169b1df649cf15"
+}

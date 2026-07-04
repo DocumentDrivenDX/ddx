@@ -1,0 +1,2 @@
+status: open
+reason: `go test ./internal/agent/... -count=1` times out in existing TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 10m; targeted mode-matrix tests pass, but the bead-required package-wide suite is not green yet.
