@@ -1,0 +1,164 @@
+{
+  "attempt_id": "20260704T021043-e2ff2de0",
+  "bead_id": "ddx-3b5ab8aa",
+  "base_rev": "c1ce04c14743c41a6370d558a9c843620f68ae63",
+  "created_at": "2026-07-04T02:11:14.405650215Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3b5ab8aa",
+    "title": "DESIGN: structured cross-repo blocker ref + auto-recheck",
+    "description": "PROBLEM\nWhen a bead in one repo is blocked on work in ANOTHER repo (e.g. niflheim beads blocked on heimq), operators hand-carry 'SKIP these heimq-blocked beads' as prose across sessions and compactions. They wanted to mark them blocked but had to fall back to priority-4 + notes.\n\nCURRENT STATE (from adversarial review — gap is NARROWER than first thought)\n- An external-blocker primitive ALREADY exists: cli/internal/bead/lifecycle.go has StatusBlocked + a required ExternalBlockerReason, a LifecycleBucketBlockedExternal bucket, an ExternalBlocked() store query (store.go), and a manual recheck workflow (operator reopens when cleared).\n- The RESIDUAL gap: the blocker reason is FREE TEXT with MANUAL reopen. There is no STRUCTURED cross-repo reference (\u003crepo\u003e#\u003cbead\u003e) and no AUTOMATED recheck.\n\nWHAT TO PRODUCE (design, not implementation)\n- A short design doc specifying: a structured cross-repo blocker reference field (repo + bead id) layered on the existing ExternalBlockerReason, and an automated recheck that flips the bead back to open when the referenced bead closes. Cover: how the recheck observes another repo's tracker (the referenced repo may be local or remote), failure modes, and backward compatibility with free-text reasons.\n- Decompose into child build beads with command-based ACs depending on this epic.\n\nNON-SCOPE (for THIS bead)\n- No implementation in this bead — design + child beads only.\n- Do not replace the existing external-blocker primitive; build ON it.\n- No new lifecycle statuses.",
+    "acceptance": "1. A committed design doc exists describing the structured \u003crepo\u003e#\u003cbead\u003e reference + auto-recheck layered on the existing external-blocker primitive. 2. At least one child build bead is created with command-based ACs and wired via ddx bead dep add \u003cchild\u003e \u003cthis-epic\u003e. 3. ddx bead dep tree \u003cthis-epic\u003e shows the children.",
+    "labels": [
+      "area:beads",
+      "area:lifecycle",
+      "kind:feature",
+      "kind:design",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:24:19.518165224Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T01:44:06.256435589Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T012616-071bb4ce\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":10597,\"output_tokens\":26069,\"total_tokens\":36666,\"cost_usd\":2.2082108000000003,\"duration_ms\":1055590,\"exit_code\":0}",
+          "created_at": "2026-07-04T01:44:06.66448028Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=36666 cost_usd=2.2082 model=sonnet"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260704T012616-071bb4ce/0\",\"cycle_index\":0,\"attempt_id\":\"20260704T012616-071bb4ce\",\"base_rev\":\"17a20fbce3b1ec68c86fdcfe39dac95524d14bdb\",\"result_rev\":\"75b9e8f429df34c298276034d59d1330b59becfb\"}",
+          "created_at": "2026-07-04T01:44:06.863241572Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T012616-071bb4ce\",\"bead_id\":\"ddx-3b5ab8aa\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T01:44:56.970057768Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "action=retry-land\ndetail=land coordination retry: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl\nresult_rev=75b9e8f429df34c298276034d59d1330b59becfb\nbase_rev=17a20fbce3b1ec68c86fdcfe39dac95524d14bdb\ndecision_audit={\"failure_class\":\"land_retry\",\"retry_action\":\"retry_land\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"retry\",\"reconcile_status\":\"pending\"}",
+          "created_at": "2026-07-04T01:44:57.120947145Z",
+          "kind": "land-coordination",
+          "source": "ddx work",
+          "summary": "retry-land"
+        },
+        {
+          "actor": "erik",
+          "body": "land coordination retry: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl: land advancer: landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260704T012934-47b21348/provider-children.json\nM\t.ddx/metrics/attempts.jsonl\ncycle_trace=[{\"cycle_index\":0,\"attempt_id\":\"20260704T012616-071bb4ce\",\"result_rev\":\"75b9e8f429df34c298276034d59d1330b59becfb\",\"implementer_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\"},\"review_result\":{},\"final_decision\":\"success\",\"failure_class\":\"none\",\"retry_action\":\"close\",\"escalation_count\":0,\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"landed\",\"reconcile_status\":\"not_applicable\"}]\ndecision_audit={\"failure_class\":\"land_retry\",\"retry_action\":\"retry_land\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"retry\",\"reconcile_status\":\"pending\"}\npreserve_ref=refs/ddx/iterations/ddx-3b5ab8aa/20260704T012616-071bb4ce-17a20fbce3b1\nresult_rev=75b9e8f429df34c298276034d59d1330b59becfb\nbase_rev=17a20fbce3b1ec68c86fdcfe39dac95524d14bdb\noutcome_reason=land_retry",
+          "created_at": "2026-07-04T01:44:57.193578628Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "land_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-3b5ab8aa)\",\"fingerprint\":\"fb26030cc870d338ecf618fb1ddabc628f833f36eb311b026ed5484aa5e5cc06\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"fb26030cc870d338ecf618fb1ddabc628f833f36eb311b026ed5484aa5e5cc06\"}",
+          "created_at": "2026-07-04T01:50:40.428581861Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-07-04T01:53:44.919581781Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-3b5ab8aa\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-07-04T01:53:45.132336159Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\ndecision_audit={\"failure_class\":\"lock_contention\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=lock_contention",
+          "created_at": "2026-07-04T01:53:47.855909894Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T02:01:28.107381491Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"committing tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale; index-lock owner: no owner found but lock is fresh (age 0s \\u003c 30s): exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-07-04T02:04:37.715075914Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-3b5ab8aa\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-07-04T02:04:39.741999608Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale; index-lock owner: no owner found but lock is fresh (age 0s \u003c 30s): exit status 128\ndecision_audit={\"failure_class\":\"lock_contention\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=lock_contention",
+          "created_at": "2026-07-04T02:04:41.727392223Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-3b5ab8aa)\",\"fingerprint\":\"fb26030cc870d338ecf618fb1ddabc628f833f36eb311b026ed5484aa5e5cc06\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"fb26030cc870d338ecf618fb1ddabc628f833f36eb311b026ed5484aa5e5cc06\"}",
+          "created_at": "2026-07-04T02:09:56.101750111Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T021043-e2ff2de0",
+    "prompt": ".ddx/executions/20260704T021043-e2ff2de0/prompt.md",
+    "manifest": ".ddx/executions/20260704T021043-e2ff2de0/manifest.json",
+    "result": ".ddx/executions/20260704T021043-e2ff2de0/result.json",
+    "checks": ".ddx/executions/20260704T021043-e2ff2de0/checks.json",
+    "usage": ".ddx/executions/20260704T021043-e2ff2de0/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3b5ab8aa-20260704T021043-e2ff2de0"
+  },
+  "prompt_sha": "3912ed575faaf3379e0cacd0d0ba1208d1b9ec859f9bc4cd6dbb4a82278589fa"
+}
