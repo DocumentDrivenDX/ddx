@@ -1478,11 +1478,17 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		GoalGateCheck: func(ctx context.Context, gate string) (bool, error) {
+			t.Fatalf("goal gate check must not run without a persisted goal")
+			return false, nil
+		},
+	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork)
 	assert.Equal(t, 0, result.Attempts)
+	assert.Nil(t, result.Goal)
 }
 
 // TestExecuteBeadWorkerEpicIsNotOrdinaryWork: ordinary ddx work skips epic

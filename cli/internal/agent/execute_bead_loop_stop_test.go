@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -240,6 +241,81 @@ func TestExecuteBeadLoopResult_PreservesLoopEndExitReason(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, result.ExitReason, exitReason)
+}
+
+func TestExecuteBeadWorkerHonorsPersistedGoalAcrossRestart(t *testing.T) {
+	projectRoot := newRunStateProjectRoot(t)
+	wantGoal := WorkGoal{
+		Text: "drain the ready queue and stop only when perf_rebaseline is green",
+		StopPredicate: WorkGoalStopPredicate{
+			Kind: WorkGoalStopPredicateQueueEmptyAndGateGreen,
+			Gate: "perf_rebaseline",
+		},
+		Autonomy: "full_autonomy",
+	}
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-goal",
+		AttemptID:    "attempt-goal",
+		StartedAt:    time.Date(2026, 5, 15, 13, 0, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt"),
+		Goal:         &wantGoal,
+	}))
+
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run with an empty queue")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var pendingGateChecks atomic.Int32
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pendingResult, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{
+		ProjectRoot:  projectRoot,
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: 5 * time.Millisecond,
+		GoalGateCheck: func(ctx context.Context, gate string) (bool, error) {
+			pendingGateChecks.Add(1)
+			assert.Equal(t, "perf_rebaseline", gate)
+			cancel()
+			return false, nil
+		},
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, pendingResult)
+	assert.True(t, pendingResult.NoReadyWork)
+	require.NotNil(t, pendingResult.Goal)
+	assert.Equal(t, wantGoal.Text, pendingResult.Goal.Text)
+	assert.Equal(t, wantGoal.StopPredicate.Kind, pendingResult.Goal.StopPredicate.Kind)
+	assert.Equal(t, wantGoal.StopPredicate.Gate, pendingResult.Goal.StopPredicate.Gate)
+	assert.Equal(t, wantGoal.Autonomy, pendingResult.Goal.Autonomy)
+	assert.Greater(t, pendingGateChecks.Load(), int32(0))
+
+	result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
+		ProjectRoot: projectRoot,
+		Mode:        executeloop.ModeDrain,
+		GoalGateCheck: func(ctx context.Context, gate string) (bool, error) {
+			assert.Equal(t, "perf_rebaseline", gate)
+			return true, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Goal)
+	assert.Equal(t, wantGoal.Text, result.Goal.Text)
+	assert.Equal(t, wantGoal.StopPredicate.Kind, result.Goal.StopPredicate.Kind)
+	assert.Equal(t, wantGoal.StopPredicate.Gate, result.Goal.StopPredicate.Gate)
+	assert.Equal(t, wantGoal.Autonomy, result.Goal.Autonomy)
+	assert.Equal(t, "goal_satisfied", exitReason)
+	assert.Equal(t, string(work.StopConditionGoal), result.StopCondition)
+	assert.Equal(t, exitReason, result.ExitReason)
 }
 
 // TestStopCondition_BudgetAfterReviewCostPreventsClose verifies that when

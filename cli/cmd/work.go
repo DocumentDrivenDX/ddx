@@ -175,7 +175,7 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 		return enc.Encode(payload)
 	}
 
-	if result.NoReadyWork && result.Attempts == 0 {
+	if result.NoReadyWork && result.Attempts == 0 && result.Goal == nil {
 		writeNoReadyWorkSummary(w, projectRoot, result.NoReadyWorkDetail)
 		writeQueueSnapshotTerminalSummary(w, result.QueueSnapshot)
 		return nil
@@ -215,6 +215,9 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 }
 
 func writeWorkTerminalSummary(w io.Writer, result *agent.ExecuteBeadLoopResult) {
+	if result.Goal != nil {
+		fmt.Fprintf(w, "goal: %s\n", agent.FormatWorkGoal(result.Goal))
+	}
 	closed, changed, alreadySatisfied, preserved := countWorkTerminalOutcomes(result)
 	fmt.Fprintf(w, "worker exited: %s\n", workExitSummary(result))
 	fmt.Fprintf(w, "attempts: %d  |  closed: %d  |  changed: %d  |  already-satisfied: %d  |  preserved: %d  |  failures: %d\n",
@@ -303,6 +306,8 @@ func workExitSummary(result *agent.ExecuteBeadLoopResult) string {
 		return "no-progress policy stopped work"
 	case "blocked":
 		return "blocked waiting for external action"
+	case "goal_satisfied":
+		return "goal satisfied"
 	case "operator_attention":
 		return "operator attention required"
 	case "sigint", "sigterm", "context_cancelled":
