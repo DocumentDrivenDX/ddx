@@ -1,0 +1,3 @@
+status: proposed
+reason: operator needed
+details: The bead has no description, no acceptance criteria, and no referenced files or specs. There is no actionable implementation scope to verify or modify without operator revision of the bead contract.
