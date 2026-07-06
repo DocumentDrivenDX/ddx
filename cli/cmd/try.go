@@ -653,7 +653,7 @@ func tryExitCodeForStatus(status string) error {
 
 // unmetDeps returns the IDs of deps that are not yet closed, in the order
 // they appear in the bead's dependency list.
-func unmetDeps(store *bead.Store, b *bead.Bead) []string {
+func unmetDeps(store bead.Backend, b *bead.Bead) []string {
 	depIDs := b.DepIDs()
 	if len(depIDs) == 0 {
 		return nil

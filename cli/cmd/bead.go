@@ -465,7 +465,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 	return cmd
 }
 
-func (f *CommandFactory) validateExecuteBeadCreate(cmd *cobra.Command, s *bead.Store, b *bead.Bead) error {
+func (f *CommandFactory) validateExecuteBeadCreate(cmd *cobra.Command, s bead.Backend, b *bead.Bead) error {
 	if os.Getenv(agentpkg.DDXModeEnvKey) != agentpkg.DDXModeBeadExecution {
 		return nil
 	}
@@ -501,7 +501,7 @@ func (f *CommandFactory) validateExecuteBeadCreate(cmd *cobra.Command, s *bead.S
 	return fmt.Errorf("execute-bead child create rejected: %s (title=%q parent=%q current=%q)", reason, b.Title, b.Parent, currentID)
 }
 
-func (f *CommandFactory) appendExecuteBeadCreateRejection(s *bead.Store, currentID string, b *bead.Bead, reason string) {
+func (f *CommandFactory) appendExecuteBeadCreateRejection(s bead.Backend, currentID string, b *bead.Bead, reason string) {
 	if s == nil || currentID == "" {
 		return
 	}
@@ -1631,7 +1631,7 @@ func removeBeadLabel(b *bead.Bead, label string) {
 	b.Labels = labels
 }
 
-func appendNeedsHumanResolutionEvent(s *bead.Store, id, action, note string, children []string) error {
+func appendNeedsHumanResolutionEvent(s bead.Backend, id, action, note string, children []string) error {
 	body := note
 	if len(children) > 0 {
 		body = fmt.Sprintf("%s\nchildren: %s", note, strings.Join(children, ", "))
@@ -1661,7 +1661,7 @@ func normalizeChildIDs(children []string) []string {
 	return out
 }
 
-func validateSplitChildren(s *bead.Store, parentID string, children []string) error {
+func validateSplitChildren(s bead.Backend, parentID string, children []string) error {
 	if _, err := s.Get(context.Background(), parentID); err != nil {
 		return err
 	}
