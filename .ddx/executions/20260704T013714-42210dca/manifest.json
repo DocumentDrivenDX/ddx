@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260704T013714-42210dca",
+  "bead_id": "ddx-24015f5e",
+  "base_rev": "0e6e8b033a697be0ed218052fe784013b7b5ba51",
+  "created_at": "2026-07-04T01:37:32.288107436Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-24015f5e",
+    "title": "agent: add /proc fd-based worktree attribution fallback for orphan processes with unreadable cwd",
+    "description": "PROBLEM\nprocExecutionCleanupAttemptProcessScanner.inspect (cli/internal/agent/execution_cleanup_process_linux.go:57-74) drops a process entirely -- it is never even offered to classification -- whenever os.Readlink(\"/proc/\u003cpid\u003e/cwd\") fails or returns empty (execution_cleanup_process_linux.go:63,70-72), or when the resolved cwd no longer maps to any known root. Such a process is invisible to the leftover-worktree scan even though it may still hold open files inside a leased worktree (design: docs/helix/02-design/technical-designs/TD-040-leftover-worktree-process-reaping.md, \"Change 2\").\n\nROOT CAUSE\nWorktree attribution today has exactly one signal: cwd (executionCleanupAttemptProcessFromWorkerStatus, execution_cleanup_process.go:415-437, fed from procExecutionCleanupAttemptProcessScanner.inspect at execution_cleanup_process_linux.go:63). If proc.Worktree ends up empty, inspect returns `(executionCleanupAttemptProcess{}, false)` at execution_cleanup_process_linux.go:70-72 and the process is dropped from the scan entirely -- it never reaches classifyExecutionCleanupAttemptProcessGroup, so it can never be reaped no matter how long it has been orphaned.\n\nPROPOSED FIX\nIn procExecutionCleanupAttemptProcessScanner.inspect, when cwd-based attribution yields an empty Worktree, add a fallback: enumerate /proc/\u003cpid\u003e/fd/*, resolve each entry's symlink target (best-effort, skipping unreadable descriptors), and apply the same root-truncation rule used for cwd attribution (reuse or extract the truncate-to-root helper introduced or existing in execution_cleanup_process.go) against each resolved target. The first fd target that truncates to a root under the configured tempRoot becomes Worktree. This is strictly additive: cwd-based attribution keeps priority, and a process with no cwd signal and no matching fd signal remains unclassified (excluded from the scan, never killed), preserving today's conservative default.\n\nNON-SCOPE\n- No change to the classification/kill-safety logic in classifyExecutionCleanupAttemptProcessGroup -- this bead only widens the detection signal feeding it.\n- No non-Linux implementation -- mirrors the existing execution_cleanup_process_other.go no-op split.\n- No change to the cwd-based root-normalization fix (separate child bead, ddx-79dab565).",
+    "acceptance": "1. procExecutionCleanupAttemptProcessScanner.inspect (cli/internal/agent/execution_cleanup_process_linux.go) falls back to scanning /proc/\u003cpid\u003e/fd/* symlink targets for worktree attribution when cwd-based attribution resolves to an empty Worktree.\n2. New test TestProcExecutionCleanupAttemptProcessScanner_FdFallbackAttribution in a `_linux_test.go` real-process test file (following the spawn-and-inspect pattern of orphan_harness_reaper_realproc_linux_test.go) spawns a helper process with cwd outside every known root but an open file descriptor pointing under a fake worktree root, and asserts the scanner attributes proc.Worktree to that root.\n3. New test TestProcExecutionCleanupAttemptProcessScanner_NoFallbackWhenNoRootedFd (or equivalent) asserts a process with neither a rooted cwd nor a rooted open fd remains excluded from the scan (Scan omits it), unchanged from current behavior.\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run TestProcExecutionCleanupAttemptProcessScanner green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-a9218e18",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:reliability",
+      "kind:feature",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:34:54.45532014Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T013714-42210dca",
+    "prompt": ".ddx/executions/20260704T013714-42210dca/prompt.md",
+    "manifest": ".ddx/executions/20260704T013714-42210dca/manifest.json",
+    "result": ".ddx/executions/20260704T013714-42210dca/result.json",
+    "checks": ".ddx/executions/20260704T013714-42210dca/checks.json",
+    "usage": ".ddx/executions/20260704T013714-42210dca/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-24015f5e-20260704T013714-42210dca"
+  },
+  "prompt_sha": "d325534370b409a9a033754e075cfa6f0729b0964d68f10804213d5a47becd71"
+}

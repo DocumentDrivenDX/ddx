@@ -1,0 +1,100 @@
+{
+  "attempt_id": "20260704T020951-e238972d",
+  "bead_id": "ddx-c015b098",
+  "base_rev": "8e4444f7dd15b95ec33c2d59f25d058df8720fed",
+  "created_at": "2026-07-04T02:10:05.471150082Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c015b098",
+    "title": "Inject per-project .ddx/guardrails.md into the execute-bead guardrail block",
+    "description": "PROBLEM\nOperators re-paste hard per-project invariants ('do not delete anything from redpanda', 'never run perf tests on GitHub runners', 'do not touch the NAT') as prose every dispatch and every compaction, because there is no per-project guardrails file spliced into the load-bearing guardrail block the executor controls. Guardrails are currently static global consts.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go (~1945-2065): guardrails are hardcoded const prompt strings (instrCoreConstraints, instrBeadOverride, the numbered load-bearing guardrails). No reader splices a per-project file. The only per-project surface (AGENTS.md/CLAUDE.md) is harness-loaded prose, not part of the executor-controlled guardrail block.\n\nPROPOSED FIX\n- Read an OPTIONAL project-root file (.ddx/guardrails.md) and splice its contents into the execute-bead guardrail assembly so per-project invariants are injected on every dispatch (and therefore survive compaction automatically, since they are re-injected each iteration).\n- Absent file = no behavioral change.\n\nNON-SCOPE\n- Do not change the existing static guardrail consts' wording.\n- Do not add AGENTS.md parsing or change how the harness loads AGENTS.md.\n- Do not implement per-bead overrides (this is per-project only).\n\nPROVENANCE\nDerived from a session-harvest of local Claude/Codex operator prompts (2026-06-27), classified into deficiency-papering vs intent, then put through two adversarial-review rounds that dropped every item already shipped. This item survived as a verified, non-redundant gap. See docs/session-harvest-playbook.md.",
+    "acceptance": "1. A prompt-snapshot test (cli/internal/agent/testdata/execute_bead_prompt_snapshots/...) shows .ddx/guardrails.md content present in the dispatched prompt when the file exists. 2. A test shows the assembled prompt is unchanged when the file is absent. 3. cd cli \u0026\u0026 go test ./internal/agent/... passes; go build ./... succeeds.",
+    "labels": [
+      "area:agent",
+      "area:execute-bead",
+      "kind:feature",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:47:56.003354727Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T01:59:06.152978295Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T004812-2d17831f\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":4831843,\"output_tokens\":26551,\"total_tokens\":4858394,\"cost_usd\":0,\"duration_ms\":2372991,\"exit_code\":0}",
+          "created_at": "2026-07-04T01:59:06.291063136Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4858394 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T004812-2d17831f\",\"bead_id\":\"ddx-c015b098\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T01:59:11.392922131Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=retryable package-test timeout in cli/internal/agent details: go test -timeout 30m ./internal/agent/... remained stuck in TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 18m+ with futex-waiting goroutines; the new guardrails change compiled and the new snapshot tests passed, but the required full package gate did not complete in this run.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-07-04T01:59:11.57219568Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: retryable package-test timeout in cli/internal/agent\ndetails: go test -timeout 30m ./internal/agent/... remained stuck in TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 18m+ with futex-waiting goroutines; the new guardrails change compiled and the new snapshot tests passed, but the required full package gate did not complete in this run.\ndecision_audit={\"failure_class\":\"no_changes\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=4a564b36d55de46db5eac7c4b073235ef5f8283c\nbase_rev=4a564b36d55de46db5eac7c4b073235ef5f8283c\nretry_after=2026-07-04T02:04:11Z\noutcome_reason=no_changes",
+          "created_at": "2026-07-04T01:59:11.904269408Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-c015b098)\",\"fingerprint\":\"4371ec2df7d4ec891d75236673a1de4f0169986ba03918c0d3f4cedb66d576ad\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4371ec2df7d4ec891d75236673a1de4f0169986ba03918c0d3f4cedb66d576ad\"}",
+          "created_at": "2026-07-04T02:09:34.120453535Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "work-last-detail": "retryable package-test timeout in cli/internal/agent details: go test -timeout 30m ./internal/agent/... remained stuck in TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 18m+ with futex-waiting goroutines; the new guardrails change compiled and the new snapshot tests passed, but the required full package gate did not complete in this run.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-07-04T02:04:11Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "retryable package-test timeout in cli/internal/agent details: go test -timeout 30m ./internal/agent/... remained stuck in TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 18m+ with futex-waiting goroutines; the new guardrails change compiled and the new snapshot tests passed, but the required full package gate did not complete in this run.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T020951-e238972d",
+    "prompt": ".ddx/executions/20260704T020951-e238972d/prompt.md",
+    "manifest": ".ddx/executions/20260704T020951-e238972d/manifest.json",
+    "result": ".ddx/executions/20260704T020951-e238972d/result.json",
+    "checks": ".ddx/executions/20260704T020951-e238972d/checks.json",
+    "usage": ".ddx/executions/20260704T020951-e238972d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c015b098-20260704T020951-e238972d"
+  },
+  "prompt_sha": "32e8e3827d9c66435ee0fa4439d3e288a59f0a7885928d980a8a32149d8a0ed0"
+}

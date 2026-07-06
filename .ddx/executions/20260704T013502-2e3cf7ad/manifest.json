@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260704T013502-2e3cf7ad",
+  "bead_id": "ddx-79dab565",
+  "base_rev": "b67664b418d0520f75e50f4d4e3fe1f3fa1bb68f",
+  "created_at": "2026-07-04T01:35:24.896426148Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-79dab565",
+    "title": "agent: root-normalize fallback cwd-derived worktree path in attempt-process cleanup",
+    "description": "PROBLEM\nOrphaned helper processes (e.g. a stray `find`) whose cwd is a SUBDIRECTORY of a non-`.execute-bead-wt-*` scratch/execution root under the configured temp root (not the root itself) are never reaped by ExecutionCleanupManager.CleanupAttemptProcesses, so they survive indefinitely (observed: orphan 'find' processes 23+ days old, ddx-a9218e18; design: docs/helix/02-design/technical-designs/TD-040-leftover-worktree-process-reaping.md, \"Change 1\").\n\nROOT CAUSE\nexecutionCleanupAttemptProcessFromWorkerStatus (cli/internal/agent/execution_cleanup_process.go:415-437) resolves Worktree two ways. The primary path (workerstatus.InferBead + executionCleanupAttemptWorktreeRoot, execution_cleanup_process.go:387-409) correctly truncates any `.execute-bead-wt-*`-containing path to its root, no matter how deep the cwd is nested. The fallback path (execution_cleanup_process.go:420-426), used when cwd has NO `.execute-bead-wt-*` segment but IS inside tempRoot, instead does `worktree = filepath.Clean(trimmedCwd)` -- the raw, untruncated cwd. Downstream, classifyExecutionCleanupAttemptProcessGroup (execution_cleanup_process.go:201-332) requires an EXACT match: either ReadExecutionCleanupMetadata(proc.Worktree) finds a file literally at `\u003cWorktree\u003e/\u003cmetadata-filename\u003e` (execution_cleanup.go:1135), or matchingRunStateForMeta (execution_cleanup.go:877-900) does filepath.Clean string-equality against RunState.WorktreePath (execution_cleanup.go:895). When Worktree is a nested subdirectory instead of the owning root, both lookups miss and the process is permanently classified `preserved_uncertain_attempt_process` (execution_cleanup_process.go:266-272) -- never reaped.\n\nPROPOSED FIX\nIn the fallback branch of executionCleanupAttemptProcessFromWorkerStatus (execution_cleanup_process.go:420-426), truncate trimmedCwd to the first path component directly under tempRoot (i.e. `filepath.Join(tempRoot, firstComponentAfterTempRoot)`) before assigning Worktree, instead of using the raw cwd. This mirrors executionCleanupAttemptWorktreeRoot's truncate-at-next-separator rule but anchors at tempRoot instead of the `.execute-bead-wt-*` prefix.\n\nNON-SCOPE\n- No change to the primary `.execute-bead-wt-*` attribution path (execution_cleanup_process.go:415-419) -- it already truncates correctly.\n- No open-fd attribution fallback -- that is a separate child bead (see TD-040 \"Change 2\").\n- No change to orphan_harness_reaper.go's cmdline-allowlist path.\n- No change to kill semantics (still process-group SIGKILL via the existing KillGroup).",
+    "acceptance": "1. The fallback branch of executionCleanupAttemptProcessFromWorkerStatus (cli/internal/agent/execution_cleanup_process.go:420-426) truncates a cwd nested under a non-`.execute-bead-wt-*` tempRoot entry to that entry's root before assigning Worktree, instead of using the raw cwd.\n2. New test TestExecutionCleanupAttemptProcessFromWorkerStatus_NestedScratchCwdTruncatesToRoot in cli/internal/agent/execution_cleanup_process_test.go asserts that a process with cwd `\u003ctempRoot\u003e/scratch-2026-orphan/sub/dir` resolves Worktree to `\u003ctempRoot\u003e/scratch-2026-orphan`.\n3. New test TestClassifyExecutionCleanupAttemptProcessGroup_NestedScratchCwdMatchesStaleRunState in cli/internal/agent/execution_cleanup_process_test.go asserts that classifyExecutionCleanupAttemptProcessGroup classifies such a process as stale (matching a stale RunState by root WorktreePath) instead of preserved_uncertain_attempt_process, when the matched run state is not live.\n4. Existing test TestStaleAttemptProcessScanner_DetectsReparentedDescendantsByCwd in cli/internal/agent/execution_cleanup_process_test.go continues to pass unmodified.\n5. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestExecutionCleanupAttemptProcess|TestClassifyExecutionCleanupAttemptProcessGroup|TestStaleAttemptProcessScanner' green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-a9218e18",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:reliability",
+      "kind:bug",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:34:40.430407223Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T013502-2e3cf7ad",
+    "prompt": ".ddx/executions/20260704T013502-2e3cf7ad/prompt.md",
+    "manifest": ".ddx/executions/20260704T013502-2e3cf7ad/manifest.json",
+    "result": ".ddx/executions/20260704T013502-2e3cf7ad/result.json",
+    "checks": ".ddx/executions/20260704T013502-2e3cf7ad/checks.json",
+    "usage": ".ddx/executions/20260704T013502-2e3cf7ad/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-79dab565-20260704T013502-2e3cf7ad"
+  },
+  "prompt_sha": "0b4564f93c99c17e50b29c4e95a0b0a01fffd5c89c6fa9750ee3a4ea7a83458c"
+}

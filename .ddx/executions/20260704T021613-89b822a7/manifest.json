@@ -1,0 +1,188 @@
+{
+  "attempt_id": "20260704T021613-89b822a7",
+  "bead_id": "ddx-9aede25e",
+  "base_rev": "4be706b2585e4da56e36e8feec725b083550f0ca",
+  "created_at": "2026-07-04T02:16:49.823717804Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9aede25e",
+    "title": "Add agent mode-matrix harness for lifecycle, execution, and XDG sharing",
+    "description": "PROBLEM\nThe current coverage in cli/internal/agent/execute_bead_artifacts_test.go:65-77 and cli/internal/agent/execute_bead_isolated_worktree_test.go:112-256 proves individual execution behaviors, but it does not exercise the same scenario set through both Convention and InTree fixtures. The cross-mode invariant from ddx-602ae31a stays untested.\n\nROOT CAUSE\nThe existing tests are per-feature and only assert one mode or one worktree shape at a time; no shared matrix harness drives both ddxroot.Path() layouts through the same scenarios.\n\nPROPOSED FIX\nAdd cli/internal/agent/test_mode_matrix_test.go (or a comparable test package) with package doc stating the cross-mode invariant. Parameterize Convention and InTree fixtures, then cover:\n- TestModeMatrix_BeadLifecycle\n- TestModeMatrix_BeadExecution\n- TestModeMatrix_TwoClonesShareXDG\n- TestModeMatrix_OperatorExpectationDocumented\nUse deterministic project roots, isolated XDG tempdirs, and a shared helper that makes the only allowed difference the on-disk anchor.\n\nNON-SCOPE\nPlugin/persona/meta-prompt/auto-commit/docs scenarios.",
+    "acceptance": "1. cli/internal/agent/test_mode_matrix_test.go exists with package doc and helpers for Convention/InTree fixtures.\n2. TestModeMatrix_BeadLifecycle, TestModeMatrix_BeadExecution, TestModeMatrix_TwoClonesShareXDG, and TestModeMatrix_OperatorExpectationDocumented exist and pass for both modes.\n3. The two-clone subscenario asserts the shared XDG project dir and worktrees.json master-pinning behavior.\n4. cd cli \u0026\u0026 go test ./internal/agent/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:27:10.144873813Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-07-04T00:49:44.075271729Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9aede25e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-07-04T00:49:44.142981608Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\ndecision_audit={\"failure_class\":\"lock_contention\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=lock_contention",
+          "created_at": "2026-07-04T00:49:44.271190121Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:04:43.156586322Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T01:18:23.206325348Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T010503-599319ab\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":1730634,\"output_tokens\":9910,\"total_tokens\":1740544,\"cost_usd\":0,\"duration_ms\":786097,\"exit_code\":0}",
+          "created_at": "2026-07-04T01:18:23.28251929Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=1740544 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T010503-599319ab\",\"bead_id\":\"ddx-9aede25e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T01:18:26.497944815Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=`go test ./internal/agent/... -count=1` times out in existing TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 10m; targeted mode-matrix tests pass, but the bead-required package-wide suite is not green yet.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-07-04T01:18:26.591484075Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: `go test ./internal/agent/... -count=1` times out in existing TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 10m; targeted mode-matrix tests pass, but the bead-required package-wide suite is not green yet.\ndecision_audit={\"failure_class\":\"no_changes\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=b570039ffb089d8d1d323d42cb7e182227b0fd39\nbase_rev=b570039ffb089d8d1d323d42cb7e182227b0fd39\nretry_after=2026-07-04T01:23:26Z\noutcome_reason=no_changes",
+          "created_at": "2026-07-04T01:18:26.962894431Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Description gives root cause with file:line evidence (execute_bead_artifacts_test.go:65-77, execute_bead_isolated_worktree_test.go:112-256), a concrete proposed fix (new test_mode_matrix_test.go with four named TestModeMatrix_* functions), and explicit non-scope. AC is numbered, names the four test functions, and specifies the exact go test invocation. Prior attempts failed on infrastructure grounds (a pre-existing unrelated test, TestExecuteBead_ConcurrentWorkers_NoHEADRefRace, timing out after 10m in one attempt; a stale git index.lock in the other) rather than on ambiguity or missing scope in the bead itself — attempt 1 explicitly reports the new mode-matrix tests passed. These are recoverable/timeout and repo-concurrency system conditions, not bead-authoring defects, so the bead remains executable as written on retry.\",\"fingerprint\":\"afae2fa5a5b17125653d30afdb3f9e0d69515b857549a286ac721afca9abbde0\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"afae2fa5a5b17125653d30afdb3f9e0d69515b857549a286ac721afca9abbde0\"}",
+          "created_at": "2026-07-04T01:26:47.467164648Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T02:08:32.384372199Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T012747-65307d8d\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":24734,\"output_tokens\":7040,\"total_tokens\":31774,\"cost_usd\":1.0834476000000002,\"duration_ms\":306283,\"exit_code\":0}",
+          "created_at": "2026-07-04T02:08:33.203586063Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=31774 cost_usd=1.0834 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T012747-65307d8d\",\"bead_id\":\"ddx-9aede25e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T02:08:42.75268329Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-07-04T02:08:43.055130391Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-07-04T02:08:43.37726045Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt; dirty paths: .crush/skills/nano-banana-pro-openrouter, cli/internal/agent/test_mode_matrix_test.go; rescue: .ddx/executions/20260704T012747-65307d8d/dirty_rescue.patch\ndecision_audit={\"failure_class\":\"no_evidence_produced\",\"retry_action\":\"retry\",\"escalation_count\":2,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\npreserve_ref=.ddx/executions/20260704T012747-65307d8d/dirty_rescue.patch\nresult_rev=9368611faf1f534d13f20d796adf3f5c8528fffe\nbase_rev=9368611faf1f534d13f20d796adf3f5c8528fffe\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-07-04T02:08:43.63405412Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9aede25e)\",\"fingerprint\":\"3e96b130bb384031ecd5864203fc0b4513587a43bf5515c3bb8815a6abcbb735\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3e96b130bb384031ecd5864203fc0b4513587a43bf5515c3bb8815a6abcbb735\"}",
+          "created_at": "2026-07-04T02:15:44.336089966Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "work-last-detail": "`go test ./internal/agent/... -count=1` times out in existing TestExecuteBead_ConcurrentWorkers_NoHEADRefRace after 10m; targeted mode-matrix tests pass, but the bead-required package-wide suite is not green yet.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 2,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-07-04T01:23:26Z",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T021613-89b822a7",
+    "prompt": ".ddx/executions/20260704T021613-89b822a7/prompt.md",
+    "manifest": ".ddx/executions/20260704T021613-89b822a7/manifest.json",
+    "result": ".ddx/executions/20260704T021613-89b822a7/result.json",
+    "checks": ".ddx/executions/20260704T021613-89b822a7/checks.json",
+    "usage": ".ddx/executions/20260704T021613-89b822a7/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9aede25e-20260704T021613-89b822a7"
+  },
+  "prompt_sha": "e357c6caf45e09e162a2967c08bd14b7c4a622220337e1bd0c13af2795c773e0"
+}

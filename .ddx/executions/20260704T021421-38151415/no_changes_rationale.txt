@@ -1,0 +1,2 @@
+status: open
+reason: verification commands for the axon/backend bead are still not completing in this workspace; go test ./internal/bead/... and the narrower axon package tests have remained running for many minutes without a result, so I cannot prove the acceptance criteria yet.

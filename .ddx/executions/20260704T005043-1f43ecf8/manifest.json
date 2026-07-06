@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260704T005043-1f43ecf8",
+  "bead_id": "ddx-7b444bb6",
+  "base_rev": "549495ded65cb6ae1d96bffa2b530aa7fcd47014",
+  "created_at": "2026-07-04T00:50:54.069888788Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7b444bb6",
+    "title": "Persist a durable goal + stop-predicate on the work-drive (survives restart)",
+    "description": "PROBLEM\nThe #1 source of repeated operator prompts by volume: the operator re-pastes a ~2000-char goal/stop directive ('drain the ready queue by priority... do not stop until specs met and perf re-baselined... AskUserQuestion only for irreducible forks') every time a worker restarts or context compacts. The work-drive has no durable place to keep the operator's goal, stop-predicate, or autonomy posture, so it is re-injected by hand each iteration.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/run_state.go (RunState) persists only mechanical per-attempt fields (BeadID, AttemptID, WorktreePath, PID, candidate-cycle phase). No goal/stop-predicate/autonomy field.\n- cli/cmd/work.go loop stop conditions are mechanical only (drained/blocked/deferred/no_progress/signal via ExitReason). There is no persisted operator goal that is re-evaluated each iteration.\n\nPROPOSED FIX\n- Add a durable, optional goal object to the work-drive state (set once, e.g. `ddx work --goal \u003ctext|file\u003e` or a persisted .ddx/run-state field): operator goal text + an explicit stop-predicate + autonomy posture.\n- Re-load and surface it each work iteration so a restarted/compacted worker honors it without re-injection. This subsumes the old 'make the autonomy rule stick under a declared drain' item — the autonomy/stop posture lives here, not in HELIX docs.\n- Keep it ORTHOGONAL to the bead queue: the queue is WHAT work; the goal is the stop condition + posture. Document why both exist.\n\nNON-SCOPE\n- Do not change Fizeau routing or power selection.\n- Do not change bead lifecycle statuses.\n- Do not implement natural-language goal evaluation beyond a simple, testable predicate (e.g. 'queue empty AND \u003cnamed gate\u003e green').\n\nPROVENANCE\nDerived from a session-harvest of local Claude/Codex operator prompts (2026-06-27), classified into deficiency-papering vs intent, then put through two adversarial-review rounds that dropped every item already shipped. This item survived as a verified, non-redundant gap. See docs/session-harvest-playbook.md.",
+    "acceptance": "1. A goal/stop-predicate set once persists in run-state and is reloaded on a simulated worker restart without re-supplying it — covered by a Go test in cli/internal/agent/ (e.g. run_state round-trip + work-loop honors persisted goal). 2. With no goal set, behavior is unchanged (default mechanical stop conditions) — covered by test. 3. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... passes; go build ./... succeeds.",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:feature",
+      "source:session-harvest-2026-06-27"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-03T17:11:20.45353285Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260703T133917-4024d439\",\"bead_id\":\"ddx-7b444bb6\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-03T17:11:27.074493237Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "context deadline exceeded\ndecision_audit={\"failure_class\":\"timeout\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=47b1a53a0b24742daf0413c1b51219391df6fb16\nbase_rev=47b1a53a0b24742daf0413c1b51219391df6fb16\noutcome_reason=timeout",
+          "created_at": "2026-07-03T17:11:27.323078521Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:48:46.312250536Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T005043-1f43ecf8",
+    "prompt": ".ddx/executions/20260704T005043-1f43ecf8/prompt.md",
+    "manifest": ".ddx/executions/20260704T005043-1f43ecf8/manifest.json",
+    "result": ".ddx/executions/20260704T005043-1f43ecf8/result.json",
+    "checks": ".ddx/executions/20260704T005043-1f43ecf8/checks.json",
+    "usage": ".ddx/executions/20260704T005043-1f43ecf8/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7b444bb6-20260704T005043-1f43ecf8"
+  },
+  "prompt_sha": "32ad664b2c1fb474bbead4f77bcaffe7fa62c2360bd0ec1c1ba171ac981a02a1"
+}

@@ -1,0 +1,385 @@
+diff --git a/cli/cmd/execute_loop_shared.go b/cli/cmd/execute_loop_shared.go
+index 08f4fa61b..61356e588 100644
+--- a/cli/cmd/execute_loop_shared.go
++++ b/cli/cmd/execute_loop_shared.go
+@@ -132,6 +132,35 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
+ 	return spec, executeloop.DispatchOptions{Local: local, JSON: dispatchJSON}, nil
+ }
+ 
++func parseWorkGoalFlag(cmd *cobra.Command) *agent.RunGoal {
++	if cmd.Flags().Lookup("goal") == nil {
++		return nil
++	}
++	raw, err := cmd.Flags().GetString("goal")
++	if err != nil {
++		return nil
++	}
++	raw = strings.TrimSpace(raw)
++	if raw == "" {
++		return nil
++	}
++	text := raw
++	if info, statErr := os.Stat(raw); statErr == nil && !info.IsDir() {
++		if data, readErr := os.ReadFile(raw); readErr == nil {
++			text = string(data)
++		}
++	}
++	text = strings.TrimSpace(text)
++	if text == "" {
++		return nil
++	}
++	return &agent.RunGoal{
++		Text:            text,
++		StopPredicate:   "queue_empty",
++		AutonomyPosture: "drain-until-goal",
++	}
++}
++
+ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
+ 	watch, _ := cmd.Flags().GetBool("watch")
+ 	if !watch {
+@@ -149,7 +178,7 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
+ 	return true
+ }
+ 
+-func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string) agent.ExecuteBeadRuntime {
++func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string, goal *agent.RunGoal) agent.ExecuteBeadRuntime {
+ 	return agent.ExecuteBeadRuntime{
+ 		FromRev:          spec.FromRev,
+ 		Output:           output,
+@@ -157,6 +186,7 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
+ 		BeadEvents:       events,
+ 		AgentRunner:      runner,
+ 		ResourceChecker:  checker,
++		Goal:             goal,
+ 		RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
+ 	}
+ }
+@@ -192,6 +222,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
+ 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+ 	spec.ProjectRoot = projectRoot
+ 	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
++	goal := parseWorkGoalFlag(cmd)
+ 	if tryTargetBeadID != "" {
+ 		spec.Mode = executeloop.ModeOnce
+ 		spec.IdleInterval = executeloop.Duration{}
+@@ -436,6 +467,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
+ 			f.AgentRunnerOverride,
+ 			resourceChecker,
+ 			beadStoreRoot,
++			goal,
+ 		), gitOps)
+ 		if res != nil {
+ 			safetyNetAttemptID = res.AttemptID
+@@ -662,6 +694,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
+ 		EventSink:              loopSink,
+ 		WorkerID:               resolveClaimAssignee(),
+ 		ProjectRoot:            projectRoot,
++		Goal:                   goal,
+ 		CleanupRunner:          cleanupRunner,
+ 		ResourceChecker:        resourceChecker,
+ 		ServerHealthProbe:      serverHealthProbe,
+diff --git a/cli/cmd/work.go b/cli/cmd/work.go
+index e947fb39b..d5f9e01b3 100644
+--- a/cli/cmd/work.go
++++ b/cli/cmd/work.go
+@@ -49,6 +49,10 @@ Stop conditions (evaluated between attempts):
+ work runs inline in the current process; per ADR-022 there is no separate
+ "submit to server" mode. The legacy --local flag is accepted but ignored
+ (deprecation warning printed) and will be removed in a future release.
++
++Use --goal with raw text or a file path to seed a durable worker goal. The
++goal text is stored in run-state, reloaded on restart, and the default stop
++predicate is queue_empty.
+ `,
+ 		Example: `  # Drain the current execution-ready queue and exit
+   ddx work
+@@ -89,6 +93,7 @@ work runs inline in the current process; per ADR-022 there is no separate
+ 	cmd.Flags().String("reason", "", "Operator reason required by --ignore-cooldown")
+ 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
+ 	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")
++	cmd.Flags().String("goal", "", "Optional durable worker goal text or file path; persisted to run-state and reloaded on restart")
+ 	cmd.Flags().Bool("self-refresh", false, "Force re-exec onto a newer installed ddx binary between iterations (on by default in watch mode; use --no-self-refresh to disable)")
+ 	cmd.Flags().Bool("no-self-refresh", false, "Disable self-refresh: do NOT re-exec onto a newer installed ddx binary between watch iterations (self-refresh is on by default in watch mode)")
+ 	cmd.Flags().Duration("idle-interval", 30*time.Second, "Sleep duration between empty-queue scans in watch mode")
+diff --git a/cli/cmd/work_test.go b/cli/cmd/work_test.go
+index 9ced7f2e1..158208c01 100644
+--- a/cli/cmd/work_test.go
++++ b/cli/cmd/work_test.go
+@@ -37,7 +37,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
+ 	require.NoError(t, err, "ddx work must exist")
+ 	require.NotNil(t, workCmd)
+ 
+-	for _, name := range []string{"harness", "provider", "model", "label-filter", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
++	for _, name := range []string{"harness", "provider", "model", "label-filter", "goal", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
+ 		f := workCmd.Flags().Lookup(name)
+ 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
+ 	}
+@@ -46,6 +46,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
+ 	assert.Equal(t, "10", workCmd.Flags().Lookup("claim-rate-window").DefValue, "ddx work must default claim-rate window to 10")
+ 	assert.Equal(t, "0", workCmd.Flags().Lookup("claim-rate-threshold").DefValue, "ddx work must default claim-rate threshold to 0.0")
+ 	assert.Equal(t, "5", workCmd.Flags().Lookup("preclaim-warn-threshold").DefValue, "ddx work must default preclaim warn threshold to 5")
++	assert.Equal(t, "", workCmd.Flags().Lookup("goal").DefValue, "ddx work must default goal to empty")
+ }
+ 
+ func TestWorkCommandSuppressesUsageAndRawErrorOnInterrupt(t *testing.T) {
+@@ -1227,11 +1228,13 @@ func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {
+ 		nil,
+ 		nil,
+ 		"",
++		nil,
+ 	)
+ 
+ 	assert.Equal(t, "HEAD~1", runtime.FromRev)
+ 	assert.Same(t, &out, runtime.Output)
+ 	assert.Equal(t, budget, runtime.RateLimitMaxWait)
++	assert.Nil(t, runtime.Goal)
+ }
+ 
+ func TestParseExecuteLoopFlags_OnceFlag(t *testing.T) {
+diff --git a/cli/internal/agent/execute_bead.go b/cli/internal/agent/execute_bead.go
+index bdc060d7b..84daffc9f 100644
+--- a/cli/internal/agent/execute_bead.go
++++ b/cli/internal/agent/execute_bead.go
+@@ -278,6 +278,7 @@ type ExecuteBeadRuntime struct {
+ 	Service         agentlib.FizeauService
+ 	AgentRunner     AgentRunner
+ 	AttemptBackend  AttemptBackend
++	Goal            *RunGoal
+ 	// RateLimitMaxWait bounds the per-bead total wait spent on rate-limit
+ 	// retries (ddx-c6e3db02 RateLimitRetryContract / TD-031 §8.4). Zero uses
+ 	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
+@@ -978,11 +979,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
+ 	// executing without polling the bead tracker (CONTRACT-001 §5). The file
+ 	// is removed on completion; a crashed worker still leaves a stale file that
+ 	// RecoverOrphans can sweep later as a backstop.
++	goal := normalizeRunGoal(runtime.Goal)
++	if goal == nil {
++		goal = loadPersistedRunGoal(projectRoot)
++	}
+ 	runState := RunState{
+ 		BeadID:       beadID,
+ 		AttemptID:    attemptID,
+ 		Harness:      rcfg.Harness(),
+ 		Model:        rcfg.Model(),
++		Goal:         goal,
+ 		StartedAt:    time.Now().UTC(),
+ 		WorktreePath: wtPath,
+ 	}
+diff --git a/cli/internal/agent/execute_bead_loop.go b/cli/internal/agent/execute_bead_loop.go
+index f20f99648..a36f4ab4e 100644
+--- a/cli/internal/agent/execute_bead_loop.go
++++ b/cli/internal/agent/execute_bead_loop.go
+@@ -68,6 +68,10 @@ type ExecuteBeadLoopRuntime struct {
+ 	// ReviewCostCap, when non-nil, accumulates reviewer cost on the same
+ 	// loop budget tracker used by the implementer attempts.
+ 	ReviewCostCap *escalation.CostCapTracker
++	// Goal carries the durable worker objective seeded from the CLI or
++	// reloaded from run-state. When nil, the worker falls back to the
++	// persisted goal if one exists.
++	Goal *RunGoal
+ 	// RoutePreflight, when non-nil, runs once during Run bootstrap before
+ 	// the drain loop starts. It is expected to call upstream ResolveRoute
+ 	// against the loop's resolved (harness, model) and return whatever typed
+@@ -2312,10 +2316,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
+ 				result.QueueSnapshot = &snapshot
+ 			}
+ 		}
++		goal := normalizeRunGoal(runtime.Goal)
++		if goal == nil {
++			goal = loadPersistedRunGoal(runtime.ProjectRoot)
++		}
+ 		if applyStop(work.StopInput{
+-			NoReadyWork: true,
+-			Once:        loopMode == executeloop.ModeOnce,
+-			Mode:        loopMode,
++			NoReadyWork:   true,
++			Once:          loopMode == executeloop.ModeOnce,
++			Mode:          loopMode,
++			GoalSatisfied: goal != nil && strings.EqualFold(strings.TrimSpace(goal.StopPredicate), "queue_empty"),
+ 		}) {
+ 			return executeBeadIterationOutcome{Stop: true}, nil
+ 		}
+diff --git a/cli/internal/agent/run_state.go b/cli/internal/agent/run_state.go
+index 049f31015..888c4aebc 100644
+--- a/cli/internal/agent/run_state.go
++++ b/cli/internal/agent/run_state.go
+@@ -38,6 +38,7 @@ type RunState struct {
+ 	AttemptID    string    `json:"attempt_id"`
+ 	Harness      string    `json:"harness,omitempty"`
+ 	Model        string    `json:"model,omitempty"`
++	Goal         *RunGoal  `json:"goal,omitempty"`
+ 	StartedAt    time.Time `json:"started_at"`
+ 	WorktreePath string    `json:"worktree_path"`
+ 	PID          int       `json:"pid,omitempty"`
+@@ -54,6 +55,28 @@ type RunState struct {
+ 	RepairActive        bool   `json:"repair_active,omitempty"`
+ }
+ 
++// RunGoal is the durable, worker-level objective stored alongside run-state.
++// The goal text is operator-facing context; stop-predicate and autonomy posture
++// are the simple, testable controls used by the worker loop.
++type RunGoal struct {
++	Text            string `json:"text,omitempty"`
++	StopPredicate   string `json:"stop_predicate,omitempty"`
++	AutonomyPosture string `json:"autonomy_posture,omitempty"`
++}
++
++func normalizeRunGoal(goal *RunGoal) *RunGoal {
++	if goal == nil {
++		return nil
++	}
++	goal.Text = strings.TrimSpace(goal.Text)
++	goal.StopPredicate = strings.TrimSpace(goal.StopPredicate)
++	goal.AutonomyPosture = strings.TrimSpace(goal.AutonomyPosture)
++	if goal.Text == "" && goal.StopPredicate == "" && goal.AutonomyPosture == "" {
++		return nil
++	}
++	return goal
++}
++
+ // runStatePath returns the absolute path of the run-state file for the
+ // project rooted at projectRoot.
+ func runStatePath(projectRoot string) string {
+@@ -135,6 +158,7 @@ func normalizeRunState(state RunState) RunState {
+ 	if state.PID == 0 {
+ 		state.PID = os.Getpid()
+ 	}
++	state.Goal = normalizeRunGoal(state.Goal)
+ 	return state
+ }
+ 
+@@ -317,6 +341,16 @@ func latestRunState(states []RunState) (RunState, bool) {
+ 	return latest, true
+ }
+ 
++// loadPersistedRunGoal returns the latest durable goal stored in run-state, or
++// nil when no goal has been seeded yet.
++func loadPersistedRunGoal(projectRoot string) *RunGoal {
++	state, err := ReadRunState(projectRoot)
++	if err != nil || state == nil {
++		return nil
++	}
++	return normalizeRunGoal(state.Goal)
++}
++
+ func runStateNewer(a, b RunState) bool {
+ 	if !a.RefreshedAt.Equal(b.RefreshedAt) {
+ 		return a.RefreshedAt.After(b.RefreshedAt)
+diff --git a/cli/internal/agent/run_state_test.go b/cli/internal/agent/run_state_test.go
+index 7eeca9a15..6ed3e9d2e 100644
+--- a/cli/internal/agent/run_state_test.go
++++ b/cli/internal/agent/run_state_test.go
+@@ -177,6 +177,43 @@ func TestRunState_CandidateCycleFieldsRoundTrip(t *testing.T) {
+ 	}
+ }
+ 
++func TestRunState_GoalRoundTripAndReload(t *testing.T) {
++	projectRoot := newRunStateProjectRoot(t)
++	want := RunState{
++		BeadID:    "ddx-goal",
++		AttemptID: "attempt-goal",
++		Goal: &RunGoal{
++			Text:            "Drain the ready queue and stop when the gate is green.",
++			StopPredicate:   "queue_empty",
++			AutonomyPosture: "drain-until-goal",
++		},
++		StartedAt:    time.Date(2026, 5, 9, 4, 0, 0, 0, time.UTC),
++		WorktreePath: filepath.Join(projectRoot, "wt"),
++	}
++	if err := WriteRunState(projectRoot, want); err != nil {
++		t.Fatalf("WriteRunState: %v", err)
++	}
++
++	got, err := ReadRunState(projectRoot)
++	if err != nil || got == nil {
++		t.Fatalf("ReadRunState: got (%+v, %v)", got, err)
++	}
++	if got.Goal == nil {
++		t.Fatalf("ReadRunState lost goal: %+v", *got)
++	}
++	if got.Goal.Text != want.Goal.Text || got.Goal.StopPredicate != want.Goal.StopPredicate || got.Goal.AutonomyPosture != want.Goal.AutonomyPosture {
++		t.Fatalf("goal did not round trip: got %+v want %+v", got.Goal, want.Goal)
++	}
++
++	reloaded := loadPersistedRunGoal(projectRoot)
++	if reloaded == nil {
++		t.Fatalf("loadPersistedRunGoal returned nil")
++	}
++	if reloaded.Text != want.Goal.Text || reloaded.StopPredicate != want.Goal.StopPredicate || reloaded.AutonomyPosture != want.Goal.AutonomyPosture {
++		t.Fatalf("loadPersistedRunGoal = %+v, want %+v", reloaded, want.Goal)
++	}
++}
++
+ func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
+ 	projectRoot := newRunStateProjectRoot(t)
+ 	requireDir := testutils.MakeInitializedDDxRoot(t, projectRoot)
+diff --git a/cli/internal/agent/work/stop.go b/cli/internal/agent/work/stop.go
+index 27e126590..ee490bc64 100644
+--- a/cli/internal/agent/work/stop.go
++++ b/cli/internal/agent/work/stop.go
+@@ -17,17 +17,19 @@ const (
+ 	StopConditionBudget     StopCondition = "Budget"
+ 	StopConditionNoProgress StopCondition = "NoProgress"
+ 	StopConditionBlocked    StopCondition = "Blocked"
++	StopConditionGoal       StopCondition = "Goal"
+ )
+ 
+ // StopInput describes one possible terminal drain decision point.
+ type StopInput struct {
+-	ContextErr  error
+-	NoReadyWork bool
+-	Once        bool
+-	Mode        executeloop.Mode
+-	Budget      bool
+-	NoProgress  bool
+-	Blocked     bool
++	ContextErr    error
++	NoReadyWork   bool
++	Once          bool
++	Mode          executeloop.Mode
++	Budget        bool
++	NoProgress    bool
++	Blocked       bool
++	GoalSatisfied bool
+ }
+ 
+ // StopDecision is the classified terminal decision plus the legacy-compatible
+@@ -54,6 +56,8 @@ func ClassifyStop(in StopInput) (StopDecision, bool) {
+ 		return StopDecision{Condition: StopConditionBlocked, ExitReason: "blocked"}, true
+ 	case in.Once:
+ 		return StopDecision{Condition: StopConditionOnce, ExitReason: "once_complete"}, true
++	case in.GoalSatisfied:
++		return StopDecision{Condition: StopConditionGoal, ExitReason: "goal_satisfied"}, true
+ 	case in.NoReadyWork && in.Mode != executeloop.ModeWatch:
+ 		return StopDecision{Condition: StopConditionDrained, ExitReason: "drained"}, true
+ 	default:
+diff --git a/cli/internal/agent/work/stop_test.go b/cli/internal/agent/work/stop_test.go
+index 4b3d9f3b8..9639f5abb 100644
+--- a/cli/internal/agent/work/stop_test.go
++++ b/cli/internal/agent/work/stop_test.go
+@@ -17,8 +17,9 @@ func TestStopCondition_ClassifiesDrainExitReasons(t *testing.T) {
+ 			StopConditionBudget,
+ 			StopConditionNoProgress,
+ 			StopConditionBlocked,
++			StopConditionGoal,
+ 		}
+-		want := []string{"Drained", "Once", "Signal", "Budget", "NoProgress", "Blocked"}
++		want := []string{"Drained", "Once", "Signal", "Budget", "NoProgress", "Blocked", "Goal"}
+ 		for i := range got {
+ 			if string(got[i]) != want[i] {
+ 				t.Fatalf("StopCondition[%d] = %q, want %q", i, got[i], want[i])
+@@ -89,6 +90,13 @@ func TestStopCondition_ClassifiesDrainExitReasons(t *testing.T) {
+ 			wantCond:   StopConditionBlocked,
+ 			wantReason: "blocked",
+ 		},
++		{
++			name:       "goal satisfied",
++			input:      StopInput{GoalSatisfied: true},
++			wantOK:     true,
++			wantCond:   StopConditionGoal,
++			wantReason: "goal_satisfied",
++		},
+ 		{
+ 			name:   "idle is nonterminal",
+ 			input:  StopInput{NoReadyWork: true, Mode: executeloop.ModeWatch},

@@ -1,0 +1,110 @@
+{
+  "attempt_id": "20260704T021421-e72592fd",
+  "bead_id": "ddx-3ae0eab0",
+  "base_rev": "7b9b6e9f819781c212fcbae244efd8588de87784",
+  "created_at": "2026-07-04T02:15:21.545098621Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3ae0eab0",
+    "title": "Update install topology docs and add library README",
+    "description": "PROBLEM\nCLAUDE.md:211-221 already describes the persona system and plugin/persona precedence, and library/skills/ddx/SKILL.md:21-54 already describes install locations, but neither file explicitly ties the install-topology language back to ddx-937de9fc. The top-level library/README.md overview is also missing.\n\nROOT CAUSE\nThe install precedence story is split across the agent-facing guide and the skill doc, while the repo lacks a top-level library README that summarizes the project/global/baked-in topology in one place.\n\nPROPOSED FIX\nUpdate the Persona System section in CLAUDE.md, update the ddx skill doc's \"How this skill works\" section, and add library/README.md as the install-topology overview. Keep the text aligned with the project \u003e global \u003e baked-in precedence already used elsewhere.\n\nNON-SCOPE\nNo behavior changes to install resolution or the underlying plugin filesystem layout.",
+    "acceptance": "1. CLAUDE.md Persona System section documents project \u003e global \u003e baked-in precedence and cites ddx-937de9fc.\n2. library/skills/ddx/SKILL.md How this skill works section documents global vs project install and cites ddx-937de9fc.\n3. library/README.md exists and summarizes the install topology.\n4. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-43b6b5fe",
+    "labels": [
+      "area:config",
+      "area:tests",
+      "kind:tests",
+      "phase:3",
+      "initiative:zero-footprint",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CLAUDE.md Persona System section documents project \\u003e global \\u003e baked-in precedence and cites ddx-937de9fc.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"library/skills/ddx/SKILL.md How this skill works section documents global vs project install and cites ddx-937de9fc.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"library/README.md exists and summarizes the install topology.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":5,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-07-04T01:06:24.804076601Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=2/5"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T01:08:56.595759141Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T02:08:34.663121536Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T010919-77e979ee\",\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":2,\"output_tokens\":71,\"total_tokens\":73,\"cost_usd\":0,\"duration_ms\":3420812,\"exit_code\":143}",
+          "created_at": "2026-07-04T02:08:35.161287635Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=73 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T010919-77e979ee\",\"bead_id\":\"ddx-3ae0eab0\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T02:08:43.912675086Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"08e80cf61547a304d63da1982fb973effd0f071b\",\"classification\":\"timeout\",\"detail\":\"exit status 143\",\"rationale\":\"Attempt 20260704T010919-77e979ee ended with exit status 143 after 3420812 ms and only minimal token output, indicating the harness was terminated by a timeout or watchdog rather than a bead-owned test failure or merge issue.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"ceaf6eb4de1a0513dcc703cd55a9bf0bc3822a1e\",\"session_id\":\"eb-c95c557a\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-07-04T02:09:37.133417597Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "timeout: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 143\ndecision_audit={\"failure_class\":\"timeout\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"claude\",\"model\":\"sonnet\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=ceaf6eb4de1a0513dcc703cd55a9bf0bc3822a1e\nbase_rev=08e80cf61547a304d63da1982fb973effd0f071b\noutcome_reason=timeout",
+          "created_at": "2026-07-04T02:09:37.229127384Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CLAUDE.md Persona System section documents project \\u003e global \\u003e baked-in precedence and cites ddx-937de9fc.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"library/skills/ddx/SKILL.md How this skill works section documents global vs project install and cites ddx-937de9fc.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"library/README.md exists and summarizes the install topology.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/agent/... ./cmd/... ./internal/config/... ./internal/registry/... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":5,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-07-04T02:10:37.699315168Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=2/5"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T02:13:57.005044822Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T021421-e72592fd",
+    "prompt": ".ddx/executions/20260704T021421-e72592fd/prompt.md",
+    "manifest": ".ddx/executions/20260704T021421-e72592fd/manifest.json",
+    "result": ".ddx/executions/20260704T021421-e72592fd/result.json",
+    "checks": ".ddx/executions/20260704T021421-e72592fd/checks.json",
+    "usage": ".ddx/executions/20260704T021421-e72592fd/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3ae0eab0-20260704T021421-e72592fd"
+  },
+  "prompt_sha": "94af684f9b9a15360305aa194e90b169019a133080c8c9c85b6932d3154dd079"
+}

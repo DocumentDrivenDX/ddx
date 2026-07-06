@@ -1,0 +1,109 @@
+{
+  "attempt_id": "20260704T021911-4f367c6c",
+  "bead_id": "ddx-cdd6d2df",
+  "base_rev": "0824df224ff0c942d56a030a93fadf394a278968",
+  "created_at": "2026-07-04T02:19:21.755395101Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cdd6d2df",
+    "title": "Beads can close task_succeeded while their own named AC test gate is lef: part 2",
+    "description": "PROBLEM\nParent bead ddx-956e5f63 is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM: A bead executed via `ddx try`/`ddx work` can land, close with outcome=task_succeeded, and be merged -- while the exact test command its own acceptance criteria named as a required gate is left failing on the merged result.\n\nCONCRETE EXAMPLE (project: cayce, bead cayce-8acffc83, \"Microsite: render Tier 1 real-agent-conversation demos from IP-008 captures\"): the bead's AC required `cd website \u0026\u0026 npm run test:e2e` to pass. It closed task_succeeded. Independently re-running that exact command on the merged commit showed 4 real failures -- two Playwright specs asserting content on two new pages the bead's own diff added references to (website/e2e/sections.spec.ts, website/e2e/visual-snapshots.spec.ts), because the two referenced pages (website/content/demos/basic-single-send.md, website/content/demos/multi-step-sequence.md) were never actually generated and committed. The bead built the renderer script (website/scripts/render-flow-demos.py) and its own unit tests using isolated fixtures (which passed), and separately updated a landing page to link the two pages that don't exist, but the actual generate-and-commit step for the real deliverable never happened.\n\nROOT CAUSE (most likely): `ddx try` runs each attempt in an isolated worktree. The renderer needed `target/cayce-agent-flow-transcripts/*.json`, a project-gitignored build artifact that only existed in the requesting session's own long-lived main checkout (from manual verification runs earlier in that session), not in the fresh isolated worktree the attempt actually ran in. The executing agent had no real input to render its actual deliverable against, so it could only validate via isolated-fixture unit tests -- and apparently never treated \"the exact AC-named integration test command actually passes against my own worktree's real build\" as a precondition for declaring success, or didn't notice its own newly-added Playwright specs were failing before finishing.\n\nIMPACT: an operator (or a supervising agent) who trusts a closed/task_succeeded status without independently re-running the bead's own AC commands will ship broken links / failing test suites to production. This defeats a core value proposition of AC-gated execution.\n\nPROPOSED FIX (not investigated in depth -- filed by an external observer, not a ddx maintainer):\n- Before a `ddx try` attempt reports success, if the bead's acceptance criteria\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Some AC-command-verification gate (either automatic exact-command re-run, or a required explicit executing-agent acknowledgment before declaring success) exists so a bead cannot close task_succeeded while its own literal AC command is failing.\n- A regression test reproduces the cayce-8acffc83 shape: an attempt whose own newly-added test file asserts something the attempt's own diff didn't actually deliver.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Some AC-command-verification gate (either automatic exact-command re-run, or a required explicit executing-agent acknowledgment before declaring success) exists so a bead cannot close task_succeeded while its own literal AC command is failing.\n2. A regression test reproduces the cayce-8acffc83 shape: an attempt whose own newly-added test file asserts something the attempt's own diff didn't actually deliver.\n3. cd cli \u0026\u0026 go test ./... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-956e5f63",
+    "labels": [
+      "area:agent",
+      "kind:bug",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:43:07.30017861Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T00:48:44.323475091Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-04T02:09:54.722972101Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260704T004900-b8fc8025\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":17959186,\"output_tokens\":72778,\"total_tokens\":18031964,\"cost_usd\":0,\"duration_ms\":2559971,\"exit_code\":0}",
+          "created_at": "2026-07-04T02:09:54.788552615Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=18031964 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260704T004900-b8fc8025\",\"bead_id\":\"ddx-cdd6d2df\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-04T02:10:00.260017563Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=repo-wide `cd cli \u0026\u0026 go test ./...` is still red in unrelated packages (`internal/bead`, `internal/server`, `internal/skills`) after the bead-specific gate changes; retry after those baseline failures are repaired.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-07-04T02:10:00.415587184Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: repo-wide `cd cli \u0026\u0026 go test ./...` is still red in unrelated packages (`internal/bead`, `internal/server`, `internal/skills`) after the bead-specific gate changes; retry after those baseline failures are repaired.\ndecision_audit={\"failure_class\":\"no_changes\",\"retry_action\":\"retry\",\"escalation_count\":1,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=dff534cd82eb1ee977bf1884d56cce56f63782dc\nbase_rev=dff534cd82eb1ee977bf1884d56cce56f63782dc\nretry_after=2026-07-04T02:15:00Z\noutcome_reason=no_changes",
+          "created_at": "2026-07-04T02:10:00.691275186Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"project root mutation rejected\",\"fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"14dfad3e8360df050ef8e97beebd6d35f6bab18d3a57e1a8d7acdc94828e3b7f\"}",
+          "created_at": "2026-07-04T02:18:53.384668636Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-last-detail": "repo-wide `cd cli \u0026\u0026 go test ./...` is still red in unrelated packages (`internal/bead`, `internal/server`, `internal/skills`) after the bead-specific gate changes; retry after those baseline failures are repaired.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-07-04T02:15:00Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "repo-wide `cd cli \u0026\u0026 go test ./...` is still red in unrelated packages (`internal/bead`, `internal/server`, `internal/skills`) after the bead-specific gate changes; retry after those baseline failures are repaired.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260704T021911-4f367c6c",
+    "prompt": ".ddx/executions/20260704T021911-4f367c6c/prompt.md",
+    "manifest": ".ddx/executions/20260704T021911-4f367c6c/manifest.json",
+    "result": ".ddx/executions/20260704T021911-4f367c6c/result.json",
+    "checks": ".ddx/executions/20260704T021911-4f367c6c/checks.json",
+    "usage": ".ddx/executions/20260704T021911-4f367c6c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cdd6d2df-20260704T021911-4f367c6c"
+  },
+  "prompt_sha": "dab7b0b81f0dcff23ab3ab4b7f2ec2e466076fede052c5dcaf7b65c765b93970"
+}
