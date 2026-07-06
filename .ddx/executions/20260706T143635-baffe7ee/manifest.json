@@ -1,0 +1,78 @@
+{
+  "attempt_id": "20260706T143635-baffe7ee",
+  "bead_id": "ddx-739ce984",
+  "base_rev": "8472daf84f3c4e8205819b6b36b54633ac6d69bf",
+  "created_at": "2026-07-06T14:36:45.91291729Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-739ce984",
+    "title": "workers: autonomous tracker git sync (fetch/merge/push) at safe boundaries so federated nodes converge on queue state",
+    "description": "# PROBLEM\nFederated nodes share bead queues through git, but nothing in the server-managed worker path ever runs fetch/merge/push — queues silently diverge. Observed live 2026-07-05/06:\n- eitri's ddx checkout opened the session at main ahead 365 / behind 38 vs origin (weeks of worker closes never pushed; the retired /tmp factory-supervisor stopgap used to do per-cycle pull+push, server-managed workers do not).\n- sindri's ddx checkout (queried via its server API /api/beads/status) reports total=2315 vs eitri's 2339 — it is missing 24 beads created on eitri including the P0 fixes ddx-57faa17c and ddx-a6e99ad3, and it holds 1 closed bead (closed=2206 vs 2205) never pushed to origin.\nLatent failure: FEAT-026 partitions queue work by project owner, but ownership relies on both nodes seeing the same tracker. A worker started against a stale checkout re-executes already-closed beads or conflicts with landed work. FEAT-026's frame explicitly lists 'bead queues must be reconciled by hand' as the gap this bead closes.\n\n# ROOT CAUSE\nNo component owns tracker git sync during autonomous drains. cli/cmd/execute_loop_shared.go / the execute-bead loop land results to LOCAL main only; nothing fetches origin or pushes after close. The old stopgap supervisor script (per-cycle clean+pull/merge+push, see ddx-171dc478 stopgap) was retired when server-managed workers replaced it, dropping the sync side-effect.\n\n# DIRECTIVE (operator, 2026-07-06)\nForce a git sync BEFORE and AFTER claiming beads. The claim boundary — not just close/idle — is the sync point:\n1. PRE-CLAIM: git fetch origin + merge origin/main --no-ff before candidate selection, so the worker picks from the freshest queue and never claims a bead another node already closed or claimed.\n2. POST-CLAIM: commit + push the claim immediately, publishing it so other nodes' pre-claim syncs see the bead as taken. The cross-node double-execution window shrinks to the interval between one node's post-claim push and the other's pre-claim fetch.\n3. POST-CLOSE/LAND: push the close and landed result (as before).\nIdle-tick sync remains as a low-frequency backstop (default ~5min) for nodes that are not claiming.\n\n# PROPOSED FIX\nImplement the three sync points above in the worker loop. Merge with --no-ff only (never squash/rebase; union-merge JSONL conflicts per existing tracker-merge conventions). Pre-claim sync failure (unreachable origin) degrades to claim-from-local with a warning event — availability over freshness, matching the worker-autonomy posture of ADR-022. Push failures after claim retry with backoff, then emit loop.operator_attention rather than blocking the drain. Respect LandCoordinator (skip merge while a land is in flight). Gate behind --tracker-sync (default ON for --watch), mirroring the --no-X discoverable-opt-out convention enforced by cli/cmd/flag_design_test.go.\n\n# NON-SCOPE\n- Hub-forwarded owner-targeted writes (FEAT-026 story 14 beads ddx-3f3e1cbe, ddx-20e7ebf0, ddx-0793ac75).\n- Real-time distributed claim arbitration beyond the git claim protocol above (ownership partitioning remains the primary collision guard).\n- Fixing sindri's currently-stale checkout (operational one-time reconcile; this bead prevents recurrence).\n\nRelated: FEAT-026, ADR-007-federation-topology, ddx-171dc478 (closed; safe-boundary precedent).\n\nNo deps.",
+    "acceptance": "1. New test TestExecuteLoop_PreClaimSyncFetchesBeforeCandidateSelection proves: with a local bare fixture remote where origin/main closed bead X after the worker's last sync, the worker fetch+merges pre-claim and does NOT claim X (claims the next ready bead instead).\n2. New test TestExecuteLoop_PostClaimPushPublishesClaim proves: immediately after claim, the claim commit is pushed; a second store cloned from origin sees the bead as in_progress before implementation begins.\n3. New test TestExecuteLoop_PostCloseSyncPushesClose proves: after a landed close, origin's beads.jsonl contains the close.\n4. New test TestExecuteLoop_PreClaimSyncDegradesWhenOriginUnreachable proves: with origin unreachable, the worker warns and proceeds claiming from local state (no stall), and TestExecuteLoop_TrackerSyncFailureEmitsOperatorAttention proves persistent post-claim push failure emits loop.operator_attention without blocking the drain.\n5. Flag audit: --tracker-sync default-on for --watch with --no-tracker-sync opt-out passes cli/cmd/flag_design_test.go conventions.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TrackerSync|PreClaimSync|PostClaimPush' -count=1 green\n7. lefthook run pre-commit passes",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "area:federation",
+      "kind:feature",
+      "kind:reliability",
+      "phase:build",
+      "spec:FEAT-026"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-06T03:51:02.15654303Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260706T023458-5d0e68f2\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":23683489,\"output_tokens\":90309,\"total_tokens\":23773798,\"cost_usd\":0,\"duration_ms\":3476314,\"exit_code\":0}",
+          "created_at": "2026-07-06T03:51:02.218714628Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=23773798 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260706T023458-5d0e68f2\",\"bead_id\":\"ddx-739ce984\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-07-06T03:51:19.76736954Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"efa1df917a176163dc85974bf6877a793b610ac5\",\"classification\":\"tests_red\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt produced implementation commits, but required verification did not pass: lefthook pre-commit failed in internal/agent race tests after the focused tracker-sync test slice passed. Because code changes exist and final validation is red, this is a tests_red outcome rather than already_satisfied or no_changes.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"1ce9fd4f77a36e5ca5520fb57993351cf9439e75\",\"session_id\":\"eb-b3daff11\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[{\"title\":\"agent: stabilize concurrent worker HEAD race tests\",\"description\":\"PROBLEM\\nlefthook pre-commit can fail in the existing internal/agent race suite, including TestExecuteBead_ConcurrentWorkers_NoHEADRefRace and related tests, blocking unrelated worker changes from landing.\\n\\nROOT CAUSE\\nThe failing tests are reported as existing internal/agent race-suite instability rather than a tracker-sync-specific regression, but the durable root cause needs confirmation from the failing test output.\\n\\nPROPOSED FIX\\nReproduce the failing internal/agent tests, identify the race or test harness flake, and make the tests deterministic without weakening coverage.\\n\\nNON-SCOPE\\nDo not change tracker-sync behavior from ddx-739ce984 unless the reproduction proves it caused the failure.\",\"acceptance\":[\"1. TestExecuteBead_ConcurrentWorkers_NoHEADRefRace passes reliably under repeated runs.\",\"2. cd cli \\u0026\\u0026 go test ./internal/agent/... -run 'TestExecuteBead_ConcurrentWorkers_NoHEADRefRace|ConcurrentWorkers' -count=20 passes.\",\"3. lefthook run pre-commit passes.\"],\"labels\":[\"phase:build\",\"area:agent\",\"area:workers\",\"kind:reliability\"],\"parent\":\"ddx-739ce984\"}]}",
+          "created_at": "2026-07-06T03:51:59.657978976Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "tests_red: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\npowerClass=standard\nrationale: status: blocked\nreason: lefthook run pre-commit fails in the repository's existing internal/agent race suite, including TestExecuteBead_ConcurrentWorkers_NoHEADRefRace and related agent tests, after the tracker-sync changes pass the focused go test slice; the failure is unrelated to the bead's code paths and occurs in staged pre-commit validation.\ndecision_audit={\"failure_class\":\"tests_red\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=1ce9fd4f77a36e5ca5520fb57993351cf9439e75\nbase_rev=efa1df917a176163dc85974bf6877a793b610ac5\noutcome_reason=tests_red",
+          "created_at": "2026-07-06T03:51:59.736037795Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260706T143635-baffe7ee",
+    "prompt": ".ddx/executions/20260706T143635-baffe7ee/prompt.md",
+    "manifest": ".ddx/executions/20260706T143635-baffe7ee/manifest.json",
+    "result": ".ddx/executions/20260706T143635-baffe7ee/result.json",
+    "checks": ".ddx/executions/20260706T143635-baffe7ee/checks.json",
+    "usage": ".ddx/executions/20260706T143635-baffe7ee/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-739ce984-20260706T143635-baffe7ee"
+  },
+  "prompt_sha": "f287901989f152b56bb3a854f0197aea5acfebb3eb7d54ad14946840b8056a52"
+}
