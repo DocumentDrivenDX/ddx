@@ -44,6 +44,9 @@ func newLandTestRepo(t *testing.T) *landTestRepo {
 	r.runGit("config", "user.name", "Test")
 	r.runGit("config", "user.email", "test@test.local")
 	r.writeFile("README.md", "# test\n")
+	// Mirror production: execution evidence is per-machine and gitignored, so it
+	// is never tracked and never dirties the worktree (ddx-d10073a8).
+	r.writeFile(".gitignore", ".ddx/executions/\n")
 	r.runGit("add", "-A")
 	r.runGit("commit", "-m", "init")
 	r.baseSHA = r.resolveRef("refs/heads/main")
@@ -411,77 +414,6 @@ func (g *localOnlyGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) 
 	return g.real.DiffNameOnly(dir, base, tip)
 }
 
-type blockingEvidenceStageGitOps struct {
-	real         RealLandingGitOps
-	stageStarted chan struct{}
-	releaseStage <-chan struct{}
-	once         sync.Once
-}
-
-var _ LandingGitOps = (*blockingEvidenceStageGitOps)(nil)
-
-func (g *blockingEvidenceStageGitOps) CurrentBranch(dir string) (string, error) {
-	return g.real.CurrentBranch(dir)
-}
-
-func (g *blockingEvidenceStageGitOps) ResolveRef(dir, ref string) (string, error) {
-	return g.real.ResolveRef(dir, ref)
-}
-
-func (g *blockingEvidenceStageGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
-	return g.real.UpdateRefTo(dir, ref, sha, oldSHA)
-}
-
-func (g *blockingEvidenceStageGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
-	return g.real.SyncWorkTreeToHead(dir, fromRev)
-}
-
-func (g *blockingEvidenceStageGitOps) AddWorktree(dir, path, rev string) error {
-	return g.real.AddWorktree(dir, path, rev)
-}
-
-func (g *blockingEvidenceStageGitOps) AddBranchWorktree(dir, path, branch string) error {
-	return g.real.AddBranchWorktree(dir, path, branch)
-}
-
-func (g *blockingEvidenceStageGitOps) RemoveWorktree(dir, path string) error {
-	return g.real.RemoveWorktree(dir, path)
-}
-
-func (g *blockingEvidenceStageGitOps) MergeInto(wtDir, srcRev, msg string) error {
-	return g.real.MergeInto(wtDir, srcRev, msg)
-}
-
-func (g *blockingEvidenceStageGitOps) HeadRevAt(dir string) (string, error) {
-	return g.real.HeadRevAt(dir)
-}
-
-func (g *blockingEvidenceStageGitOps) CountCommits(dir, base, tip string) int {
-	return g.real.CountCommits(dir, base, tip)
-}
-
-func (g *blockingEvidenceStageGitOps) StageDir(dir, relPath string) error {
-	g.once.Do(func() {
-		if g.stageStarted != nil {
-			close(g.stageStarted)
-		}
-	})
-	<-g.releaseStage
-	return g.real.StageDir(dir, relPath)
-}
-
-func (g *blockingEvidenceStageGitOps) CommitStaged(dir, msg string) (string, error) {
-	return g.real.CommitStaged(dir, msg)
-}
-
-func (g *blockingEvidenceStageGitOps) DiffNumstat(dir, base, tip string) (string, error) {
-	return g.real.DiffNumstat(dir, base, tip)
-}
-
-func (g *blockingEvidenceStageGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
-	return g.real.DiffNameOnly(dir, base, tip)
-}
-
 // ----------------------------------------------------------------------------
 // Tests
 // ----------------------------------------------------------------------------
@@ -543,60 +475,6 @@ func TestLand_HappyPath_FastForward(t *testing.T) {
 	statusOut := r.runGit("status", "--porcelain", "feature.txt")
 	if strings.TrimSpace(statusOut) != "" {
 		t.Errorf("git status after Land() shows unexpected entry for feature.txt: %q", statusOut)
-	}
-}
-
-func TestLand_EvidenceCommitUsesCleanLandingWorktree(t *testing.T) {
-	r := newLandTestRepo(t)
-	ops := RealLandingGitOps{}
-
-	attemptID := "20260507T000000-cleanwt"
-	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
-	fullDir := filepath.Join(r.dir, evidenceDir)
-	if err := os.MkdirAll(fullDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(fullDir, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
-
-	hookMarker := filepath.Join(t.TempDir(), "pre-commit-pwd.txt")
-	hookPath := filepath.Join(r.dir, ".git", "hooks", "pre-commit")
-	hook := fmt.Sprintf("#!/bin/sh\npwd > %s\n", hookMarker)
-	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(hookPath, []byte(hook), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	req := LandRequest{
-		WorktreeDir:  r.dir,
-		BaseRev:      r.baseSHA,
-		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-clean-evidence",
-		AttemptID:    attemptID,
-		TargetBranch: "main",
-		EvidenceDir:  filepath.ToSlash(evidenceDir),
-	}
-	land, err := Land(r.dir, req, ops)
-	if err != nil {
-		t.Fatalf("Land: %v", err)
-	}
-	if land.EvidenceCommitSHA == "" {
-		t.Fatalf("expected evidence commit")
-	}
-	hookPWDBytes, err := os.ReadFile(hookMarker)
-	if err != nil {
-		t.Fatalf("reading hook marker: %v", err)
-	}
-	hookPWD := strings.TrimSpace(string(hookPWDBytes))
-	if hookPWD == "" {
-		t.Fatal("pre-commit hook did not record its working directory")
-	}
-	if hookPWD == r.dir {
-		t.Fatalf("evidence commit ran in operator checkout %s; want clean landing worktree", hookPWD)
 	}
 }
 
@@ -1317,106 +1195,6 @@ func TestChaos_PostLandCommandDoesNotHoldMainGitLock(t *testing.T) {
 	}
 }
 
-func TestChaos_PostLandEvidenceCommitDoesNotHoldMainGitLock(t *testing.T) {
-	r := newLandTestRepo(t)
-	var ops LandingGitOps = RealLandingGitOps{}
-
-	attemptID := "20260606T120000-evidence-lock"
-	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
-	prelim := &ExecuteBeadResult{
-		BeadID:       "ddx-land-evidence-lock",
-		AttemptID:    attemptID,
-		BaseRev:      r.baseSHA,
-		ResultRev:    r.baseSHA,
-		ExecutionDir: filepath.ToSlash(evidenceDir),
-		ResultFile:   filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
-		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
-	}
-	writeExecuteBeadBundle(t, r.dir, prelim, map[string]string{
-		"usage.json":           `{"tokens":123}`,
-		"embedded/agent.jsonl": `{"event":"step","n":1}` + "\n",
-	})
-
-	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
-	req := LandRequest{
-		WorktreeDir:  r.dir,
-		BaseRev:      r.baseSHA,
-		ResultRev:    workerSHA,
-		BeadID:       prelim.BeadID,
-		AttemptID:    attemptID,
-		TargetBranch: "main",
-		EvidenceDir:  filepath.ToSlash(evidenceDir),
-	}
-
-	stageStarted := make(chan struct{})
-	releaseStage := make(chan struct{})
-	var releaseOnce sync.Once
-	release := func() {
-		releaseOnce.Do(func() { close(releaseStage) })
-	}
-	ops = &blockingEvidenceStageGitOps{
-		real:         RealLandingGitOps{},
-		stageStarted: stageStarted,
-		releaseStage: releaseStage,
-	}
-
-	type landOutcome struct {
-		land *LandResult
-		err  error
-	}
-	landCh := make(chan landOutcome, 1)
-	go func() {
-		land, err := Land(r.dir, req, ops)
-		landCh <- landOutcome{land: land, err: err}
-	}()
-
-	select {
-	case <-stageStarted:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for evidence staging to start")
-	}
-
-	acquired := make(chan error, 1)
-	go func() {
-		start := time.Now()
-		if err := withMainGitLock(r.dir, "test", func() error { return nil }); err != nil {
-			acquired <- err
-			return
-		}
-		if waited := time.Since(start); waited > time.Second {
-			acquired <- fmt.Errorf("main-git lock was held for %s while evidence staging was blocked", waited)
-			return
-		}
-		acquired <- nil
-	}()
-
-	select {
-	case err := <-acquired:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for concurrent main-git lock acquisition")
-	}
-
-	release()
-
-	select {
-	case out := <-landCh:
-		if out.err != nil {
-			t.Fatalf("Land: %v", out.err)
-		}
-		if out.land == nil || out.land.Status != "landed" {
-			t.Fatalf("expected landed result, got %+v", out.land)
-		}
-		if out.land.EvidenceCommitSHA == "" {
-			t.Fatal("expected evidence commit SHA")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for Land to finish after evidence stage release")
-	}
-}
-
 func TestPerformance_LandPostLandFinalizeLockHoldUnderCap(t *testing.T) {
 	r := newLandTestRepo(t)
 
@@ -2107,6 +1885,19 @@ func TestLand_MergeRequired_IndexCleanAfterMerge(t *testing.T) {
 	}
 }
 
+// assertNoExecutionEvidenceOnBranch fails if any .ddx/executions/ path is
+// tracked on the given branch — the core invariant of ddx-d10073a8 (execution
+// evidence must never reach the durable branch).
+func assertNoExecutionEvidenceOnBranch(t *testing.T, r *landTestRepo, branch string) {
+	t.Helper()
+	out := r.runGit("ls-tree", "-r", "--name-only", branch)
+	for _, p := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(p), ".ddx/executions/") {
+			t.Fatalf("execution evidence reached durable branch %s: %s", branch, p)
+		}
+	}
+}
+
 func TestExecuteBeadLandingCommitsFinalResultArtifact(t *testing.T) {
 	r := newLandTestRepo(t)
 	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature content\n", "feat: worker change [ddx-final-result]")
@@ -2127,16 +1918,16 @@ func TestExecuteBeadLandingCommitsFinalResultArtifact(t *testing.T) {
 		Status:            ExecuteBeadStatusSuccess,
 		ExitCode:          0,
 	}
-	evidenceSHA := r.commitExecuteBeadEvidence(workerSHA, prelim, nil)
+	// Evidence bundle is written to disk only — it must NOT be committed
+	// (ddx-d10073a8). Land the implementation commit, never an evidence commit.
+	writeExecuteBeadBundle(t, r.dir, prelim, nil)
 
 	res := *prelim
-	res.ResultRev = evidenceSHA
-	res.EvidenceRev = evidenceSHA
 
 	land, err := Land(r.dir, LandRequest{
 		WorktreeDir:  r.dir,
 		BaseRev:      r.baseSHA,
-		ResultRev:    evidenceSHA,
+		ResultRev:    workerSHA,
 		BeadID:       res.BeadID,
 		AttemptID:    attemptID,
 		TargetBranch: "main",
@@ -2148,6 +1939,10 @@ func TestExecuteBeadLandingCommitsFinalResultArtifact(t *testing.T) {
 	if land.Status != "landed" {
 		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
 	}
+	if land.EvidenceCommitSHA != "" {
+		t.Fatalf("evidence must not be committed; got %q", land.EvidenceCommitSHA)
+	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
 
 	ApplyLandResultToExecuteBeadResult(&res, land)
 	if err := WriteExecuteBeadResultArtifact(r.dir, &res); err != nil {
@@ -2155,13 +1950,6 @@ func TestExecuteBeadLandingCommitsFinalResultArtifact(t *testing.T) {
 	}
 
 	resultRel := filepath.ToSlash(filepath.Join(evidenceDir, "result.json"))
-	if staged := strings.TrimSpace(r.runGit("diff", "--cached", "--name-only", "--", resultRel)); staged != "" {
-		t.Fatalf("final result artifact left staged diff: %s", staged)
-	}
-	if status := strings.TrimSpace(r.runGit("status", "--porcelain", "--", resultRel)); status != "" {
-		t.Fatalf("final result artifact left working tree diff: %s", status)
-	}
-
 	resultPath := filepath.Join(r.dir, filepath.FromSlash(resultRel))
 	raw, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -2222,16 +2010,12 @@ func TestExecuteBeadLandingFinalResultSkipsEmbeddedEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Land: %v", err)
 	}
-	if land.EvidenceCommitSHA == "" {
-		t.Fatalf("expected evidence commit SHA")
+	// No evidence commit is created (ddx-d10073a8); executions — including the
+	// embedded session log — must never reach the durable branch.
+	if land.EvidenceCommitSHA != "" {
+		t.Fatalf("evidence must not be committed; got %q", land.EvidenceCommitSHA)
 	}
-
-	embeddedPath := filepath.ToSlash(filepath.Join(evidenceDir, "embedded", "agent-001.jsonl"))
-	for _, path := range r.changedFiles(land.EvidenceCommitSHA) {
-		if path == embeddedPath {
-			t.Fatalf("final-result commit staged embedded session log %s", embeddedPath)
-		}
-	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
 }
 
 func TestExecuteBeadLandingFinalResultSkipsRunStateFiles(t *testing.T) {
@@ -2273,16 +2057,12 @@ func TestExecuteBeadLandingFinalResultSkipsRunStateFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Land: %v", err)
 	}
-	if land.EvidenceCommitSHA == "" {
-		t.Fatalf("expected evidence commit SHA")
+	// No evidence commit is created (ddx-d10073a8); run-state and other execution
+	// evidence must never reach the durable branch.
+	if land.EvidenceCommitSHA != "" {
+		t.Fatalf("evidence must not be committed; got %q", land.EvidenceCommitSHA)
 	}
-
-	runStateRel := filepath.ToSlash(filepath.Join(ddxroot.DirName, "run-state", attemptID+".json"))
-	for _, path := range r.changedFiles(land.EvidenceCommitSHA) {
-		if path == runStateRel {
-			t.Fatalf("final-result commit staged run-state file %s", runStateRel)
-		}
-	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
 }
 
 // Deterministic test clock helper — avoids unused time import when no test
@@ -2650,9 +2430,12 @@ func TestEvidenceCommitSucceedsWhenGitignored(t *testing.T) {
 	if land.Status != "landed" {
 		t.Fatalf("expected status=landed when .ddx/executions/ is gitignored, got %q (reason=%q)", land.Status, land.Reason)
 	}
-	if land.EvidenceCommitSHA == "" {
-		t.Fatalf("expected evidence commit SHA; evidence commit was skipped or failed")
+	// Even though the force-add path historically committed evidence, evidence
+	// must now NEVER reach the durable branch (ddx-d10073a8).
+	if land.EvidenceCommitSHA != "" {
+		t.Fatalf("evidence must not be committed even by force-add; got %q", land.EvidenceCommitSHA)
 	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
 }
 
 // TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL verifies that
