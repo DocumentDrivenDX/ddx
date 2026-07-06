@@ -17,6 +17,7 @@ package workerprobe
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -107,7 +108,15 @@ func (c *Config) applyDefaults() {
 		c.BufferCap = DefaultBufferCap
 	}
 	if c.HTTPClient == nil {
-		c.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+		c.HTTPClient = &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				// The local ddx-server uses an auto-generated self-signed
+				// cert; every other local-server client skips verification
+				// for the same reason (cmd/shared_helpers.go, internal/serverreg).
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local self-signed cert
+			},
+		}
 	}
 	if c.Now == nil {
 		c.Now = time.Now
