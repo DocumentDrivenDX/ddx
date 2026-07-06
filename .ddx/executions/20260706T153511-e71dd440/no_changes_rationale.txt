@@ -1,0 +1,2 @@
+status: blocked
+reason: pre-commit is blocked by an unrelated existing internal/agent race test: `CGO_ENABLED=1 go test -short -race -run TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s ./internal/agent -count=1` fails in `route_harness_liveness_unix_test.go:106` with `kill fake claude subprocess: no such process`; this bead cannot make progress on that repo-gate failure without touching out-of-scope tests.

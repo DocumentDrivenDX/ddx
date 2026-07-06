@@ -1,0 +1,144 @@
+{
+  "attempt_id": "20260706T153511-e71dd440",
+  "bead_id": "ddx-cd80f32f",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-06T16:03:37.191654421Z",
+  "reaped": [
+    {
+      "pid": 2799090,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2799069,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2924097,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3776558853/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 2924595,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped533572736/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3006084,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren333712652/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3006087,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNonRouteProviderChildren333712652/001/gemini 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3007839,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3771462534/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3007835,
+      "provider": "gemini",
+      "command": "/home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3771462534/001/node /home/erik/.cache/fleet-tmp/TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup3771462534/001/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3012728,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2670255865/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3013385,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s839016447/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3012942,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s3740819802/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3013340,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s884757304/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3013713,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s1944316836/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3098777,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3779836169/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3121993,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s1861633372/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3137935,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2275773923/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3139323,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 13,
+      "action": "terminated",
+      "reason": "attempt_ended"
+    }
+  ]
+}

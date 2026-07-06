@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260706T153511-e71dd440",
+  "bead_id": "ddx-cd80f32f",
+  "base_rev": "37ecd90fad069983876577f109a36488ed26712a",
+  "created_at": "2026-07-06T15:35:27.294150667Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cd80f32f",
+    "title": "agent: failed attempt leaked uncommitted source changes into the pqueue project root, parking the worker on dirty-root for 10 hours",
+    "description": "# PROBLEM\nObserved on eitri 2026-07-06: after execute-bead attempt 20260706T043710-ff946509 (bead pqueue-68aa6cfd, project /Users/erik/Projects/pqueue), six modified source files (crates/pqueue-core/src/domain.rs, crates/pqueue-core/tests/core_domain_tests.rs, crates/pqueue-engine/src/command.rs, crates/pqueue-engine/src/compose.rs, crates/pqueue-resp/tests/e2e.rs, +1) were left uncommitted in the PROJECT ROOT working tree — not in the attempt's isolated worktree. The attempt's implementation commit was correctly preserved at refs/ddx/iterations/20260706T043710-ff946509/0, but the leaked working-tree copy (which DIFFERED from the preserved commit) tripped the pre-claim dirty-root gate, and the pqueue worker exited with operator-attention on every relaunch from ~04:37Z until an operator stashed the files at ~14:35Z. Zero pqueue beads executed in that window.\n\n# ROOT CAUSE (to verify)\nddx try/work attempts execute in isolated worktrees; nothing should write source files to the project root. The likely writer is the land/merge path: a land attempt (merge of the candidate into the project-root checkout) that failed post-merge left conflict-resolution or checkout state behind without aborting/resetting. Investigate the land path for the outcome recorded for attempt 20260706T043710 (tracker commits 9e0545a/e8344a0 in pqueue show its evidence landed but the source commit did not), and any early-exit between 'git merge/checkout' and 'reset --hard on failure'.\n\n# PROPOSED FIX\nMake the land path transactional on the project-root checkout: on any land failure after mutating the working tree, restore the pre-land state (git merge --abort / git reset --hard to the pre-land rev — permitted here because the attempt's work is already preserved in the iteration ref; never touch operator-authored dirty paths that predate the land). Assert post-land that the project root is clean of attempt-authored paths, and emit operator_attention with the preserved-ref name if restoration fails.\n\n# NON-SCOPE\n- Dirty-root gate semantics (correct; it did its job).\n- Relaunch-suppression cadence (ddx-f5bc9fc5).\n\nRelated: ddx-f8fae018 (landing-index jam sibling), ddx-f5bc9fc5.\n\nNo deps.",
+    "acceptance": "1. New test TestLand_RestoresProjectRootOnFailedLand proves: a land that fails mid-merge leaves the project-root working tree exactly as before the land (no attempt-authored files dirty), with the attempt preserved in its iteration ref.\n2. New test TestLand_PostLandCleanlinessAssertion proves: a land that would leave attempt-authored paths dirty emits operator_attention naming the preserved ref instead of exiting silently.\n3. cd cli \u0026\u0026 go test ./internal/agent/... -run 'Land.*Restore|PostLandClean' -count=1 green\n4. lefthook run pre-commit passes",
+    "parent": "ddx-9f21457d",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "phase:build"
+    ],
+    "metadata": {
+      "queue-rank": 3
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260706T153511-e71dd440",
+    "prompt": ".ddx/executions/20260706T153511-e71dd440/prompt.md",
+    "manifest": ".ddx/executions/20260706T153511-e71dd440/manifest.json",
+    "result": ".ddx/executions/20260706T153511-e71dd440/result.json",
+    "checks": ".ddx/executions/20260706T153511-e71dd440/checks.json",
+    "usage": ".ddx/executions/20260706T153511-e71dd440/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cd80f32f-20260706T153511-e71dd440"
+  },
+  "prompt_sha": "3e571f548806bc0bfff35afc06011ce34f2ac80bee1e08bad4224207e3571e0d"
+}
