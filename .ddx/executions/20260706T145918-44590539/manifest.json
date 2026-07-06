@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260706T145918-44590539",
+  "bead_id": "ddx-f8582f42",
+  "base_rev": "a2dfb70255a0e3816478292bd55412feeb11452c",
+  "created_at": "2026-07-06T14:59:31.536233975Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f8582f42",
+    "title": "doctor: add 'ddx doctor --unjam' — codified remediation suite for drain-halting state",
+    "description": "# PROBLEM\nEvery jam recovery on eitri 2026-07-06 was a manual git procedure (commit .ddx/executions dirt in the landing checkout; stash leaked attempt files matching a preserve ref; git worktree prune). These procedures live in operator memory, not code — so they are untested, unavailable to the supervisor, and cost hours of stall waiting for a human.\n\n# PROPOSED FIX\nNew command 'ddx doctor --unjam' (project-scoped) that runs the remediation suite and reports each action taken:\n1. Classify dirty/staged paths in the project root and landing checkout: (a) DDx-owned state (.ddx/executions/, .ddx/metrics/) -\u003e commit as checkpoint; (b) paths whose content matches or derives from a refs/ddx/iterations/** preserve ref -\u003e git stash push with a message naming the ref; (c) anything else -\u003e report only, never touch.\n2. git worktree prune + remove orphaned .ddx-exec-wt entries whose gitdir is gone (observed failure 2026-07-06T14:36: 'stat worktree .git: no such file' misclassified as resource_exhausted).\n3. Clear stale claim leases (existing staleDiskEntryCanReleaseClaim path in cli/internal/server/workers.go).\n4. Prune phantom deps (existing 'ddx bead doctor --fix' logic).\nIdempotent; safe to run while a worker is live (respect LandCoordinator locks). Exit 0 with a machine-readable summary of actions; nonzero only on remediation errors.\n\n# NON-SCOPE\nGate/supervisor wiring (sibling beads); new gate semantics.\n\nParent: ddx-9f21457d. No deps.",
+    "acceptance": "1. TestDoctorUnjam_CheckpointsDdxOwnedDirt proves dirty .ddx/executions and .ddx/metrics paths are committed and the tree is then clean.\n2. TestDoctorUnjam_StashesPreservedAttemptDirt proves working-tree files matching a preserve-ref commit are stashed with the ref named in the stash message; operator-authored files are untouched and reported.\n3. TestDoctorUnjam_PrunesStaleWorktrees proves a worktree registration with missing gitdir is pruned and a subsequent worktree add succeeds.\n4. TestDoctorUnjam_Idempotent proves a second run performs zero actions.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'DoctorUnjam' -count=1 green\n6. lefthook run pre-commit passes",
+    "parent": "ddx-9f21457d",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:reliability",
+      "kind:feature",
+      "phase:build",
+      "epic:self-unjam"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: The bead bundles four independently testable remediation behaviors across tracker state, git worktrees, claim leases, and phantom deps, so it is too large for one claim. It is not blocked by missing parent/deps, but it lacks file:line root-cause evidence and should be split into execution-ready children.\",\"fingerprint\":\"15125eb2368a193ed23d725b2d4b9fbc56eaeab1023a826530f2c05c008aee80\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"15125eb2368a193ed23d725b2d4b9fbc56eaeab1023a826530f2c05c008aee80\"}",
+          "created_at": "2026-07-06T14:59:03.197758928Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 2
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260706T145918-44590539",
+    "prompt": ".ddx/executions/20260706T145918-44590539/prompt.md",
+    "manifest": ".ddx/executions/20260706T145918-44590539/manifest.json",
+    "result": ".ddx/executions/20260706T145918-44590539/result.json",
+    "checks": ".ddx/executions/20260706T145918-44590539/checks.json",
+    "usage": ".ddx/executions/20260706T145918-44590539/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539"
+  },
+  "prompt_sha": "67bd79c879be551a9b43162b6db65774d20809b9ae9d1d34ea671a04e616ac7e"
+}

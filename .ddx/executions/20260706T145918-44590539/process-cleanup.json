@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260706T145918-44590539",
+  "bead_id": "ddx-f8582f42",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539",
+  "trigger": "context canceled",
+  "started_at": "2026-07-06T15:17:59.564423443Z",
+  "finished_at": "2026-07-06T15:17:59.610369839Z",
+  "scanned": 132,
+  "candidates": [
+    {
+      "pid": 2326362,
+      "ppid": 2323892,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build4198353147/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build4198353147/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 2323892,
+      "ppid": 2235234,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 2235234,
+      "ppid": 2235229,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/command_factory_commands.go ./cmd/doctor.go ./cmd/doctor_unjam.go ./cmd/doctor_unjam_test.go ./internal/server/workers.go"
+    },
+    {
+      "pid": 2235229,
+      "ppid": 661,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/command_factory_commands.go ./cmd/doctor.go ./cmd/doctor_unjam.go ./cmd/doctor_unjam_test.go ./internal/server/workers.go"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 2326362,
+      "ppid": 2323892,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli/internal/server",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build4198353147/b001/server.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build4198353147/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 2323892,
+      "ppid": 2235234,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli",
+      "command": "go test -short -race -timeout 30m ./internal/server"
+    },
+    {
+      "pid": 2235234,
+      "ppid": 2235229,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./cmd/command_factory_commands.go ./cmd/doctor.go ./cmd/doctor_unjam.go ./cmd/doctor_unjam_test.go ./internal/server/workers.go"
+    },
+    {
+      "pid": 2235229,
+      "ppid": 661,
+      "pgid": 2235229,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f8582f42-20260706T145918-44590539/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./cmd/command_factory_commands.go ./cmd/doctor.go ./cmd/doctor_unjam.go ./cmd/doctor_unjam_test.go ./internal/server/workers.go"
+    }
+  ]
+}

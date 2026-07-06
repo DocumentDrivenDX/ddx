@@ -1,0 +1,10 @@
+cmd/execute_loop_shared.go 674 674
+cmd/shared_helpers.go 17 17
+cmd/shared_helpers.go 101 119
+cmd/work.go 94 95
+internal/agent/execute_bead_loop.go 131 134
+internal/agent/execute_bead_loop.go 2223 2225
+internal/agent/execute_bead_loop.go 2548 2550
+internal/agent/execute_bead_loop.go 4485 4487
+internal/agent/tracker_sync.go 1 142
+internal/agent/tracker_sync_test.go 1 205

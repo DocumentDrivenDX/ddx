@@ -1,0 +1,2 @@
+status: blocked
+reason: reproducible pre-commit failure in unrelated internal/agent liveness test TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s under go test -short -race prevents a green lefthook run in this worktree
