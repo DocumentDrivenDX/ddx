@@ -524,51 +524,6 @@ func TestLand_StagedOperatorFilesBlockLanding(t *testing.T) {
 	}
 }
 
-func TestLand_EvidenceCommitFailurePreservesAndRestoresTarget(t *testing.T) {
-	r := newLandTestRepo(t)
-	ops := RealLandingGitOps{}
-
-	attemptID := "20260507T000003-noevidence"
-	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
-	fullDir := filepath.Join(r.dir, evidenceDir, "embedded")
-	if err := os.MkdirAll(fullDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(fullDir, "agent.jsonl"), []byte(`{"event":"ignored"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
-	req := LandRequest{
-		WorktreeDir:  r.dir,
-		BaseRev:      r.baseSHA,
-		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-evidence-failure",
-		AttemptID:    attemptID,
-		TargetBranch: "main",
-		EvidenceDir:  filepath.ToSlash(evidenceDir),
-	}
-	land, err := Land(r.dir, req, ops)
-	if err != nil {
-		t.Fatalf("Land: %v", err)
-	}
-	if land == nil || land.Status != "preserved" {
-		t.Fatalf("expected preserved land result, got %+v", land)
-	}
-	if !strings.Contains(land.Reason, "evidence commit failed") {
-		t.Fatalf("preserve reason = %q, want evidence failure", land.Reason)
-	}
-	if land.PreserveRef == "" {
-		t.Fatalf("expected preserve ref")
-	}
-	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
-		t.Fatalf("main was not restored after evidence failure: got %s want %s", got, r.baseSHA)
-	}
-	if got := r.resolveRef(land.PreserveRef); got != workerSHA {
-		t.Fatalf("preserve ref = %s, want worker %s", got, workerSHA)
-	}
-}
-
 func TestLand_DirtyProjectRootDoesNotBlockSuccessfulLand(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
@@ -2391,17 +2346,14 @@ func TestStageDirForcesGitIgnored(t *testing.T) {
 }
 
 // TestEvidenceCommitSucceedsWhenGitignored verifies end-to-end that Land()
-// produces status="landed" with an evidence commit even when the project
-// .gitignore covers .ddx/executions/. Regression for ddx-723bd318.
+// produces status="landed" when the project .gitignore covers .ddx/executions/,
+// and — per ddx-d10073a8 — that no execution evidence reaches the durable branch.
 func TestEvidenceCommitSucceedsWhenGitignored(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
 
-	// Commit .gitignore covering .ddx/executions/ on top of the initial commit.
-	r.writeFile(".gitignore", ".ddx/executions/\n")
-	r.runGit("add", ".gitignore")
-	r.runGit("commit", "-m", "chore: gitignore executions dir")
-	baseSHA := r.resolveRef("refs/heads/main")
+	// The land fixture already gitignores .ddx/executions/.
+	baseSHA := r.baseSHA
 
 	attemptID := "20260510T000000-gitignore-e2e"
 	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
