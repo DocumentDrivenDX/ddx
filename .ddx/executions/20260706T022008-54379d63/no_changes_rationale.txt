@@ -1,0 +1,2 @@
+status: open
+reason: pre-existing cli/cmd integration failure blocks the required acceptance gate. `go test ./...` reaches `TestWork_WatchKillingWorkerReapsProviderChildWithin5s`, which deadlocks waiting for the stub codex child to start and exits before the suite can go green. This is retryable, but it is not resolved by the bounded try-command narrowing in this bead.

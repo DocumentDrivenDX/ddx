@@ -1,0 +1,2 @@
+status: blocked
+reason: lefthook run pre-commit fails in the repository's existing internal/agent race suite, including TestExecuteBead_ConcurrentWorkers_NoHEADRefRace and related agent tests, after the tracker-sync changes pass the focused go test slice; the failure is unrelated to the bead's code paths and occurs in staged pre-commit validation.

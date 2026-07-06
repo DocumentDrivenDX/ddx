@@ -1,0 +1,14 @@
+cmd/execute_loop_shared.go 152 166
+cmd/execute_loop_shared.go 714 714
+cmd/work.go 94 95
+cmd/work_self_refresh_test.go 7 8
+cmd/work_self_refresh_test.go 46 78
+internal/agent/execute_bead.go 1716 1811
+internal/agent/execute_bead_loop.go 92 96
+internal/agent/execute_bead_loop.go 1857 1879
+internal/agent/execute_bead_loop.go 2195 2200
+internal/agent/execute_bead_loop.go 2492 2513
+internal/agent/execute_bead_loop.go 2532 2537
+internal/agent/execute_bead_loop.go 4026 4030
+internal/agent/execute_bead_tracker_sync_test.go 1 217
+internal/server/workers.go 1222 1222
