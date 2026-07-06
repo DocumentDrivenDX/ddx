@@ -11,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -186,6 +187,14 @@ func TestWorkerSupervisorRestartBackoff(t *testing.T) {
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-supervisor-stale")
+	writeStaleClaimLeaseForTest(t, store, bead.ClaimLeaseRecord{
+		BeadID:    "ddx-supervisor-stale",
+		Owner:     "worker-test",
+		Machine:   "stale-machine",
+		StartedAt: time.Now().UTC().Add(-3 * time.Hour),
+		UpdatedAt: time.Now().UTC().Add(-3 * time.Hour),
+		PID:       9999998,
+	})
 
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()
@@ -229,6 +238,88 @@ func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	b, err := store.Get(context.Background(), "ddx-supervisor-stale")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status)
+}
+
+func TestSupervisorReconcile_FreshClaimingWorkerSurvivesTicks(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	supervisor := NewWorkerSupervisor(m)
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.Restart.Enabled = false
+	require.NoError(t, supervisor.SaveDesiredState(&desired))
+
+	store := bead.NewStore(ddxroot.JoinProject(root))
+	beadID := "ddx-supervisor-fresh-claim"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "fresh claim survives reconcile",
+		Status:    bead.StatusOpen,
+		Priority:  1,
+		IssueType: bead.DefaultType,
+	}))
+	require.NoError(t, store.Claim(beadID, "ddx"))
+
+	now := time.Now().UTC()
+	liveID := "worker-20260705T000000-live"
+	liveHandle, _ := newManagedIdleHandle(t, m, liveID, beadID, os.Getpid(), now.Add(-2*time.Second), now.Add(-time.Second))
+	liveHandle.record.CurrentAttempt = &CurrentAttemptInfo{
+		AttemptID: liveID + "-a1",
+		BeadID:    beadID,
+		Phase:     "running",
+		StartedAt: now.Add(-2 * time.Second),
+	}
+	liveDir := filepath.Join(m.rootDir, liveID)
+	require.NoError(t, os.MkdirAll(liveDir, 0o755))
+	require.NoError(t, m.writeRecord(liveDir, liveHandle.record))
+
+	staleID := "worker-20260705T000001-stale"
+	staleDir := filepath.Join(m.rootDir, staleID)
+	require.NoError(t, os.MkdirAll(staleDir, 0o755))
+	stale := WorkerRecord{
+		ID:          staleID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   now.Add(-5 * time.Minute),
+		PID:         0,
+		CurrentBead: beadID,
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: staleID + "-a1",
+			BeadID:    beadID,
+			Phase:     "running",
+			StartedAt: now.Add(-5 * time.Minute),
+		},
+	}
+	require.NoError(t, m.writeRecord(staleDir, stale))
+
+	for i := 0; i < 3; i++ {
+		require.NoError(t, supervisor.ReconcileAt(now.Add(time.Duration(i)*time.Second)))
+	}
+
+	liveRec, err := m.readRecord(liveDir)
+	require.NoError(t, err)
+	assert.Equal(t, "running", liveRec.State)
+
+	staleRec, err := m.readRecord(staleDir)
+	require.NoError(t, err)
+	assert.Equal(t, "stopped", staleRec.State)
+	assert.Equal(t, "stopped", staleRec.Status)
+
+	b, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, b.Status)
+
+	lease, found, err := store.ClaimLease(beadID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "ddx", lease.Owner)
+	assert.True(t, m.hasWorkerHandle(liveID))
 }
 
 func installBlockingWorkerFactory(m *WorkerManager) {

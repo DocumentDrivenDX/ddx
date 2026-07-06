@@ -1429,19 +1429,21 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 
 	if beadID != "" {
 		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-		body := fmt.Sprintf(
-			"worker=%s pid=%d reason=stop-stale",
-			id, rec.PID,
-		)
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
-			Kind:      "bead.stopped",
-			Summary:   "stop (stale)",
-			Body:      body,
-			Actor:     "ddx",
-			Source:    "server-workers",
-			CreatedAt: now,
-		})
-		_ = store.Unclaim(beadID)
+		if staleDiskEntryCanReleaseClaim(store, beadID) {
+			body := fmt.Sprintf(
+				"worker=%s pid=%d reason=stop-stale",
+				id, rec.PID,
+			)
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.stopped",
+				Summary:   "stop (stale)",
+				Body:      body,
+				Actor:     "ddx",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			_ = store.Unclaim(beadID)
+		}
 	}
 
 	rec.State = "stopped"
@@ -1457,6 +1459,37 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 		BeadID:    beadID,
 	})
 	return m.writeRecord(dir, rec)
+}
+
+// staleDiskEntryCanReleaseClaim reports whether stopStaleDiskEntry may safely
+// release the bead claim for beadID. Fresh leases are preserved; when the
+// heartbeat sidecar is absent or stale, the stale record cleanup can reclaim.
+func staleDiskEntryCanReleaseClaim(store *bead.Store, beadID string) bool {
+	lease, found, err := store.ClaimLease(beadID)
+	if err != nil {
+		return false
+	}
+	if !found {
+		return true
+	}
+	if lease.UpdatedAt.IsZero() {
+		return false
+	}
+
+	age := time.Since(lease.UpdatedAt)
+	if age <= bead.HeartbeatTTL {
+		return false
+	}
+
+	machine := os.Getenv("DDX_MACHINE_ID")
+	if machine == "" {
+		machine, _ = os.Hostname()
+	}
+	if lease.Machine != "" && lease.Machine == machine && lease.PID > 0 && processAlive(lease.PID) {
+		return age > 2*time.Hour
+	}
+
+	return true
 }
 
 func (m *WorkerManager) Stop(id string) error {
