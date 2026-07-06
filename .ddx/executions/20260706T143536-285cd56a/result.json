@@ -1,0 +1,60 @@
+{
+  "bead_id": "ddx-3007f0d3",
+  "attempt_id": "20260706T143536-285cd56a",
+  "base_rev": "6272981ba51fcefc9be69ae2beffc97a9d7682b6",
+  "result_rev": "71eb1b8832e9e35113815feb6b1183ad7f497410",
+  "implementation_rev": "71eb1b8832e9e35113815feb6b1183ad7f497410",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "merge conflict",
+  "orchestrator_status": "land_conflict",
+  "reason": "merge conflict",
+  "preserve_ref": "refs/ddx/iterations/ddx-3007f0d3/20260706T143536-285cd56a-5e988e5e00a4",
+  "candidate_ref": "refs/ddx/iterations/20260706T143536-285cd56a/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260706T143536-285cd56a",
+      "result_rev": "71eb1b8832e9e35113815feb6b1183ad7f497410",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-825b08c9",
+  "duration_ms": 545145,
+  "tokens": 32213,
+  "cost_usd": 2.513386899999999,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260706T143536-285cd56a",
+  "prompt_file": ".ddx/executions/20260706T143536-285cd56a/prompt.md",
+  "manifest_file": ".ddx/executions/20260706T143536-285cd56a/manifest.json",
+  "result_file": ".ddx/executions/20260706T143536-285cd56a/result.json",
+  "usage_file": ".ddx/executions/20260706T143536-285cd56a/usage.json",
+  "started_at": "2026-07-06T14:35:45.960646906Z",
+  "finished_at": "2026-07-06T14:44:51.106188431Z"
+}
