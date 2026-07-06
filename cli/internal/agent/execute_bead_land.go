@@ -574,6 +574,43 @@ func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
 	if len(paths) == 0 {
 		return false, nil
 	}
+	// Discriminate genuine local work from STALE content. A sibling land
+	// can move the ref before this land's post-lock sync runs, making every
+	// file it touched look dirty here; committing that state would create
+	// phantom reverts. A file whose on-disk blob matches the blob at any
+	// recent first-parent ancestor is stale (the sync will repair it), not
+	// local work — skip it. Content matching no recent ancestor is real
+	// local modification and is committed.
+	revsOut, revsErr := internalgit.Command(context.Background(), dir, "rev-list", "--first-parent", "-20", "HEAD").CombinedOutput()
+	if revsErr == nil {
+		revs := strings.Fields(strings.TrimSpace(string(revsOut)))
+		var genuine []string
+		for _, path := range paths {
+			wtOut, hashErr := internalgit.Command(context.Background(), dir, "hash-object", "--", path).CombinedOutput()
+			if hashErr != nil {
+				// Deleted or unreadable on disk — deletion of a tracked
+				// file is local work; keep it.
+				genuine = append(genuine, path)
+				continue
+			}
+			wtHash := strings.TrimSpace(string(wtOut))
+			stale := false
+			for _, rev := range revs {
+				blobOut, blobErr := internalgit.Command(context.Background(), dir, "rev-parse", rev+":"+path).CombinedOutput()
+				if blobErr == nil && strings.TrimSpace(string(blobOut)) == wtHash {
+					stale = true
+					break
+				}
+			}
+			if !stale {
+				genuine = append(genuine, path)
+			}
+		}
+		paths = genuine
+	}
+	if len(paths) == 0 {
+		return false, nil
+	}
 	// Concurrent lands in the same checkout race this section: another
 	// land's sync can consume the dirt between our status snapshot and the
 	// commit. Tolerate paths vanishing (--ignore-errors) and an
@@ -586,7 +623,11 @@ func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
 		}
 	}
 	msg := fmt.Sprintf("chore: checkpoint local tree before land (%s)", reason)
-	commitArgs := []string{"-c", "user.name=ddx-land-checkpoint", "-c", "user.email=land-checkpoint@ddx.local", "commit", "--no-verify", "-m", msg}
+	// Commit ONLY the checkpointed paths: other index entries (notably
+	// pre-staged tracker files awaiting their own durable-audit commit)
+	// must stay staged, not be swept into the checkpoint.
+	commitArgs := []string{"-c", "user.name=ddx-land-checkpoint", "-c", "user.email=land-checkpoint@ddx.local", "commit", "--no-verify", "-m", msg, "--"}
+	commitArgs = append(commitArgs, paths...)
 	if out, err := internalgit.Command(context.Background(), dir, commitArgs...).CombinedOutput(); err != nil {
 		lower := strings.ToLower(string(out))
 		if strings.Contains(lower, "nothing to commit") || strings.Contains(lower, "nothing added to commit") || strings.Contains(lower, "no changes added to commit") {
@@ -601,15 +642,7 @@ func ensureLandingWorktreeReady(dir, targetBranch string) error {
 	if !isInsideGitWorktree(dir) {
 		return nil
 	}
-	// Commit — never reset or refuse — any local tracked modifications
-	// before the land proceeds, serialized with ref updates so a racing
-	// land's in-flight sync is never snapshotted as local work.
-	if err := withMainGitLock(dir, "land_checkpoint", func() error {
-		_, cpErr := checkpointLandingWorktreeLocalChanges(dir, "pre-land "+targetBranch)
-		return cpErr
-	}); err != nil {
-		return err
-	}
+
 	branchOut, err := internalgit.Command(context.Background(), dir, "branch", "--show-current").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("checking landing branch: %s: %w", strings.TrimSpace(string(branchOut)), err)
@@ -687,6 +720,11 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 				if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
 					return nil
 				}
+			}
+			// Real staged work is committed — never reset or refused.
+			// The checkpoint preserves it in history and unjams the land.
+			if committed, cpErr := checkpointLandingWorktreeLocalChanges(dir, "staged at land boundary"); cpErr == nil && committed {
+				return nil
 			}
 			stagedOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-status").CombinedOutput()
 			staged := strings.TrimSpace(string(stagedOut))
@@ -1467,6 +1505,15 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		var retry bool
 
 		err = withMainGitLock(projectRoot, "land_ref_update", func() error {
+			// Commit — never reset or refuse — local tracked modifications
+			// before the ref moves. Inside the critical section so a racing
+			// land's in-flight sync is never snapshotted as local work.
+			if committed, cpErr := checkpointLandingWorktreeLocalChanges(wd, "pre-land "+prep.targetRef); cpErr != nil {
+				return cpErr
+			} else if committed {
+				retry = true
+				return nil
+			}
 			lockedTip, err := gitOps.ResolveRef(wd, prep.targetRef)
 			if err != nil {
 				return fmt.Errorf("re-resolving target tip %s: %w", prep.targetRef, err)
