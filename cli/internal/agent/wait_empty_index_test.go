@@ -74,18 +74,17 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 	r.writeFile("operator.txt", "operator's local work\n")
 	r.runGit("add", "operator.txt")
 
-	err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond)
-	if err == nil {
-		t.Fatalf("expected error for operator-staged work; got nil")
+	// Operator-staged work is checkpoint-committed — never refused or
+	// reset — and pre-claim proceeds.
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+		t.Fatalf("staged operator work should be checkpointed, not refused: %v", err)
 	}
-	if !strings.Contains(err.Error(), "staged changes") {
-		t.Fatalf("error = %v, want staged changes error", err)
+	content, rerr := os.ReadFile(filepath.Join(r.dir, "operator.txt"))
+	if rerr != nil || string(content) != "operator's local work\n" {
+		t.Fatalf("operator work content lost: %q err=%v", string(content), rerr)
 	}
-
-	// Operator's staged file must remain in the index.
-	staged := r.runGit("diff", "--cached", "--name-only")
-	if !strings.Contains(staged, "operator.txt") {
-		t.Fatalf("operator work was lost; staged=%q", staged)
+	if log := r.runGit("log", "--all", "--format=%s", "--", "operator.txt"); !strings.Contains(log, "checkpoint local tree before land") {
+		t.Fatalf("operator work was not checkpoint-committed; log=%q", log)
 	}
 }
 
@@ -135,12 +134,17 @@ func TestWaitForEmptyGitIndex_StagedCodeStillBlocksAlongsideTracker(t *testing.T
 	r.writeFile("main.go", "package main\n")
 	r.runGit("add", "main.go")
 
-	err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond)
-	if err == nil {
-		t.Fatalf("staged code file must block pre-claim even with tracker files staged")
+	// The staged code file is checkpoint-committed (tracker files are
+	// excluded from the checkpoint and remain live state), and pre-claim
+	// proceeds.
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+		t.Fatalf("staged code should be checkpointed, not refused: %v", err)
 	}
-	if !strings.Contains(err.Error(), "staged changes") {
-		t.Fatalf("error = %v, want staged changes error", err)
+	if log := r.runGit("log", "--all", "--format=%s", "--", "main.go"); !strings.Contains(log, "checkpoint local tree before land") {
+		t.Fatalf("staged code was not checkpoint-committed; log=%q", log)
+	}
+	if log := r.runGit("log", "--all", "--format=%s", "--", ".ddx/beads.jsonl"); strings.Contains(log, "checkpoint local tree before land") {
+		t.Fatalf("tracker file must not be swept into the checkpoint; log=%q", log)
 	}
 }
 
