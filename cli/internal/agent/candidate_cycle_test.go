@@ -553,6 +553,69 @@ func TestReviewClassification_CandidateCycleEventIncludesCandidateRev(t *testing
 	assert.Equal(t, ReviewTerminalClassUnsafeOrOutScope, body.Classification)
 }
 
+func TestExecuteBead_CandidateCycleRunsConfiguredReviewer(t *testing.T) {
+	reviewCalls := 0
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:      beadID,
+					AttemptID:   "attempt-configured-review-001",
+					Status:      ExecuteBeadStatusSuccess,
+					BaseRev:     "base-rev",
+					ResultRev:   "candidate-rev",
+					Harness:     "codex",
+					Provider:    "openai",
+					Model:       "gpt-5",
+					ActualPower: 70,
+				},
+				WorktreePath: "/attempt/worktree",
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, projectRoot string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewCalls++
+			assert.Equal(t, "/project", projectRoot)
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			return CandidateReviewResult{
+				Verdict:         "APPROVE",
+				Rationale:       "ready to land",
+				ReviewGroupID:   "rg-configured-review",
+				ReviewerIndices: []int{0},
+				ReviewerVerdicts: []string{
+					"APPROVE",
+				},
+				ReviewerRoute: ExecutionCycleRouteFacts{
+					Harness:     "claude",
+					Provider:    "anthropic",
+					Model:       "claude-opus-4-7",
+					ActualPower: 71,
+				},
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		RefStore:    &inMemoryCandidateRefStore{},
+		ProjectRoot: "/project",
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-configured-review-bead")
+	require.NoError(t, err)
+	require.True(t, result.Landed)
+	require.Len(t, result.Report.CycleTrace, 1)
+	assert.Equal(t, 1, reviewCalls, "configured reviewer must be invoked exactly once")
+
+	trace := result.Report.CycleTrace[0]
+	assert.Equal(t, "completed", trace.ReviewStatus)
+	assert.Equal(t, "APPROVE", trace.ReviewResult.Verdict)
+	assert.Equal(t, "rg-configured-review", trace.ReviewGroupID)
+	assert.Equal(t, "claude", trace.ReviewerRoute.Harness)
+	assert.Equal(t, "anthropic", trace.ReviewerRoute.Provider)
+	assert.Equal(t, "claude-opus-4-7", trace.ReviewerRoute.Model)
+	assert.Equal(t, 71, trace.ReviewerRoute.ActualPower)
+	assert.GreaterOrEqual(t, trace.ReviewerRoute.ActualPower, trace.ImplementerRoute.ActualPower+1)
+}
+
 func TestRepairCycle_RequestChangesAppendsRepairCommit(t *testing.T) {
 	var repairCalled bool
 	var landed CandidateResult

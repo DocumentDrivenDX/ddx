@@ -1012,6 +1012,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// singlePolicyAttempt runs one execution at a specific harness/model.
 		// The caller controls MinPower per rung; this helper keeps the
 		// profile stable and only advances the power floor.
+		var reviewer agent.CandidateReviewer
+		var postMergeReviewer agent.BeadReviewer
 		singlePolicyAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 			gitOps := &agent.RealGitOps{}
 			attemptProvider := spec.Provider
@@ -1037,6 +1039,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				FromRev:          spec.FromRev,
 				BeadEvents:       beadStore,
 				BeadCancel:       beadStore,
+				Reviewer:         reviewer,
+				NoReview:         spec.NoReview,
 				RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
 			}, gitOps)
 			if err != nil && res == nil {
@@ -1191,21 +1195,21 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		})
 
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
-		var reviewer agent.BeadReviewer
 		if !spec.NoReview {
-			reviewer = &agent.DefaultBeadReviewer{
+			postMergeReviewer = &agent.DefaultBeadReviewer{
 				ProjectRoot: projectRoot,
 				BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
 				BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
 				Harness:     spec.ReviewHarness,
 				Model:       spec.ReviewModel,
 			}
+			reviewer = postMergeReviewer.(agent.CandidateReviewer)
 		}
 
 		worker = &agent.ExecuteBeadWorker{
 			Store:    store,
 			Executor: executor,
-			Reviewer: reviewer,
+			Reviewer: postMergeReviewer,
 		}
 	}
 

@@ -185,6 +185,7 @@ type ExecutionCycleTrace struct {
 	ReviewGroupID        string                            `json:"review_group_id,omitempty"`
 	ReviewerIndices      []int                             `json:"reviewer_indices,omitempty"`
 	ReviewVerdicts       []string                          `json:"review_verdicts,omitempty"`
+	ReviewerRoute        ExecutionCycleRouteFacts          `json:"reviewer_route,omitempty"`
 	ReviewResult         ExecutionCycleReviewResult        `json:"review_result,omitempty"`
 	FinalDecision        string                            `json:"final_decision,omitempty"`
 	FailureClass         string                            `json:"failure_class"`
@@ -277,6 +278,8 @@ type ExecuteBeadRuntime struct {
 	ResourceChecker ExecutionResourceChecker
 	Service         agentlib.FizeauService
 	AgentRunner     AgentRunner
+	Reviewer        CandidateReviewer
+	NoReview        bool
 	AttemptBackend  AttemptBackend
 	// RateLimitMaxWait bounds the per-bead total wait spent on rate-limit
 	// retries (ddx-c6e3db02 RateLimitRetryContract / TD-031 §8.4). Zero uses
@@ -370,6 +373,8 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 		RefStore:    &GitCandidateRefStore{},
 		ProjectRoot: projectRoot,
 		BeadEvents:  runtime.BeadEvents,
+		Reviewer:    runtime.Reviewer,
+		NoReview:    runtime.NoReview,
 	}
 	cycleResult, err := coord.Run(ctx, res.BeadID)
 	if err != nil {

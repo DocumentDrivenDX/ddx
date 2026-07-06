@@ -150,6 +150,16 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
 }
 
 func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string) agent.ExecuteBeadRuntime {
+	var reviewer agent.CandidateReviewer
+	if !spec.NoReview {
+		reviewer = &agent.DefaultBeadReviewer{
+			ProjectRoot: spec.ProjectRoot,
+			BeadStore:   bead.NewStore(beadStoreRoot),
+			BeadEvents:  bead.NewStore(beadStoreRoot),
+			Harness:     spec.ReviewHarness,
+			Model:       spec.ReviewModel,
+		}
+	}
 	return agent.ExecuteBeadRuntime{
 		FromRev:          spec.FromRev,
 		Output:           output,
@@ -157,6 +167,8 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
 		BeadEvents:       events,
 		AgentRunner:      runner,
 		ResourceChecker:  checker,
+		Reviewer:         reviewer,
+		NoReview:         spec.NoReview,
 		RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
 	}
 }

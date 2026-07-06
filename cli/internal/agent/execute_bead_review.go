@@ -176,6 +176,7 @@ type ReviewResult struct {
 	ReviewerHarness  string     `json:"reviewer_harness,omitempty"`
 	ReviewerModel    string     `json:"reviewer_model,omitempty"`
 	ReviewerProvider string     `json:"reviewer_provider,omitempty"`
+	ActualPower      int        `json:"actual_power,omitempty"`
 	ReviewerIndex    int        `json:"reviewer_index,omitempty"`
 	SessionID        string     `json:"session_id,omitempty"`
 	BaseRev          string     `json:"base_rev,omitempty"`
@@ -1087,6 +1088,7 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 	}
 	group, groupErr := reviewer.reviewGroupWithDiff(ctx, beadID, candidate.Report.ResultRev, impl, diff, workDir, acCheckJSON)
 	review, reduceErr := reducePreCloseReviewGroup(group)
+	actualPower := reviewGroupActualPower(group)
 	if review == nil {
 		if reduceErr != nil {
 			return CandidateReviewResult{}, reduceErr
@@ -1102,6 +1104,12 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 		ReviewGroupID:    group.Bundle.GroupID,
 		ReviewerIndices:  make([]int, 0, len(group.Slots)),
 		ReviewerVerdicts: make([]string, 0, len(group.Slots)),
+		ReviewerRoute: ExecutionCycleRouteFacts{
+			Harness:     review.ReviewerHarness,
+			Provider:    review.ReviewerProvider,
+			Model:       review.ReviewerModel,
+			ActualPower: actualPower,
+		},
 	}
 	for _, slot := range group.Slots {
 		out.ReviewerIndices = append(out.ReviewerIndices, slot.ReviewerIndex)
@@ -1115,6 +1123,18 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 		return out, reduceErr
 	}
 	return out, groupErr
+}
+
+func reviewGroupActualPower(group *ReviewGroupResult) int {
+	if group == nil {
+		return 0
+	}
+	for _, slot := range group.Slots {
+		if slot.Result != nil && slot.Result.ActualPower > 0 {
+			return slot.Result.ActualPower
+		}
+	}
+	return 0
 }
 
 func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir string) (*ReviewResult, error) {
@@ -1341,6 +1361,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 		ReviewerHarness:  actualHarness,
 		ReviewerModel:    actualModel,
 		ReviewerProvider: actualProvider,
+		ActualPower:      actualPower,
 		SessionID:        sessionID,
 		BaseRev:          baseRev,
 		ResultRev:        resultRev,
