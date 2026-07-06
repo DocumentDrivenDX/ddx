@@ -246,6 +246,9 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 
 	addArgs := []string{"add", "-A", "--force", "--"}
 	addArgs = append(addArgs, allowedPaths...)
+	// Execution evidence is per-machine and must never be checkpoint-committed,
+	// even by this --force add (ddx-d10073a8).
+	addArgs = append(addArgs, ":(exclude,glob).ddx/executions/**")
 	if out, err := gitWithIndex(addArgs...); err != nil {
 		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
 	}

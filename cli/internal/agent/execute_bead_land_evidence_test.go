@@ -20,7 +20,9 @@ func TestLandingIndex_UnstagesOrphanedExecutionEvidence(t *testing.T) {
 	r := newLandTestRepo(t)
 	r.writeFile(".ddx/executions/20260706T000000-abc/result.json", `{"status":"ok"}`)
 	r.writeFile(".ddx/executions/20260706T000000-abc/manifest.json", `{}`)
-	r.runGit("add", ".ddx/executions")
+	// Force-stage: executions are gitignored, so an orphaned staged state only
+	// arises via a --force add.
+	r.runGit("add", "-f", ".ddx/executions")
 
 	require.False(t, indexIsClean(t, r.dir), "precondition: evidence should be staged")
 	require.True(t, unstageOrphanedExecutionEvidence(r.dir), "should unstage orphaned execution evidence")
@@ -42,7 +44,7 @@ func TestLandingIndex_RefusesStagedCode(t *testing.T) {
 		r := newLandTestRepo(t)
 		r.writeFile(".ddx/executions/run/result.json", "{}")
 		r.writeFile("code.go", "package main\n")
-		r.runGit("add", ".ddx/executions", "code.go")
+		r.runGit("add", "-f", ".ddx/executions", "code.go")
 		require.False(t, unstageOrphanedExecutionEvidence(r.dir))
 		require.False(t, indexIsClean(t, r.dir), "mixed set must remain staged")
 	})

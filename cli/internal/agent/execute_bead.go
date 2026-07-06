@@ -1542,18 +1542,12 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
 	}
 
-	// For the normal success path, commit the evidence bundle in the attempt
-	// worktree so Land() can find it in the landing finalization worktree
-	// without copying from the project root (AC: no live-worker noise in main).
-	if resultRev != baseRev && exitCode == 0 {
-		if newRev := commitEvidenceBundleInWorktree(wtPath, artifacts.DirRel, attemptID); newRev != "" {
-			if res.ImplementationRev != "" && newRev != res.ImplementationRev {
-				res.EvidenceRev = newRev
-			}
-			res.ResultRev = newRev
-			evidenceCommittedInWt = true
-		}
-	}
+	// Execution evidence is per-machine working state and must NEVER be
+	// committed (ddx-d10073a8). ResultRev stays the implementation/code commit;
+	// the evidence bundle is published to the project root on disk (the deferred
+	// publish above, evidenceCommittedInWt=false) where landing/review/audit read
+	// it directly. Nothing evidence-bearing rides the merge/ff into the durable
+	// branch.
 	if err := publishAttemptResult(res); err != nil {
 		return res, fmt.Errorf("publishing attempt result: %w", err)
 	}

@@ -23,8 +23,10 @@ var initGitignoreRules = []string{
 	".ddx/workers/",
 	".ddx/exec-runs.d/",
 	".ddx/.execute-bead-wt-*/",
-	".ddx/executions/*/embedded/",
-	".ddx/executions/**/scratch/",
+	// Execution evidence is per-machine working state and is NEVER committed;
+	// the durable audit trail lives in the events stream, not the execution
+	// dirs. Ignore the whole tree with no un-ignore exceptions (ddx-*).
+	".ddx/executions/",
 	".ddx/*.lock",
 	".ddx/*.tmp",
 	".ddx/server.env",
@@ -32,14 +34,6 @@ var initGitignoreRules = []string{
 	".ddx/run-state.json",
 	".ddx/run-state/",
 	".ddx/dirty-root-guard.json",
-	// DDx tracked evidence — explicitly un-ignored under executions/
-	"!.ddx/executions/",
-	"!.ddx/executions/*/",
-	"!.ddx/executions/*/prompt.md",
-	"!.ddx/executions/*/manifest.json",
-	"!.ddx/executions/*/result.json",
-	"!.ddx/executions/*/checks.json",
-	"!.ddx/executions/*/usage.json",
 	// Skills target links — rewritten per-machine, not tracked
 	".claude/skills/*/",
 	".agents/skills/*/",

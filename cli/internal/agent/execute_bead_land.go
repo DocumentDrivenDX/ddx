@@ -1181,45 +1181,22 @@ func prepareLandEvidence(projectRoot, wd string, req LandRequest, gitOps Landing
 	if err := rewriteFinalResultArtifactForLand(wd, req, result); err != nil {
 		return fmt.Errorf("rewriting final result artifact: %w", err)
 	}
-	if err := gitOps.StageDir(wd, req.EvidenceDir); err != nil {
-		return fmt.Errorf("stage evidence: %w", err)
-	}
+	// Execution evidence is per-machine and must never be committed (ddx-d10073a8):
+	// it is copied onto disk for landing/review to read, but NOT staged, so it
+	// never rides a commit into the durable branch.
 	return nil
 }
 
-// landEvidence creates the trailing evidence commit after the evidence files
-// have already been staged in the landing worktree. It runs under the
-// main-git lock only for the short ref-advancing commit boundary.
+// landEvidence is intentionally a no-op: execution evidence is per-machine
+// working state and must NEVER be committed to the durable branch (ddx-d10073a8).
+// The bundle is already published to the project root and copied onto disk in the
+// landing worktree by prepareLandEvidence, where landing/review/audit read it
+// directly. No evidence commit is created, so EvidenceCommitSHA stays empty and
+// the durable branch never advances past the implementation merge.
 func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
-	branch, err := gitOps.CurrentBranch(wd)
-	if err != nil {
-		return fmt.Errorf("evidence commit branch check: %w", err)
+	if result != nil {
+		result.EvidenceCommitSHA = ""
 	}
-	if branch != targetBranch {
-		return fmt.Errorf("evidence commit branch mismatch: on %q, want %q", branch, targetBranch)
-	}
-	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(req.AttemptID))
-	sha, err := gitOps.CommitStaged(wd, msg)
-	if err != nil {
-		return fmt.Errorf("commit evidence: %w", err)
-	}
-	if sha == "" {
-		// Evidence already committed in the working tree (worktree-origin path):
-		// the bundle was committed inside the attempt worktree as part of ResultRev
-		// so it is present at HEAD when the landing finalization worktree is checked
-		// out. No trailing commit needed; verify tracked files exist then accept.
-		if !evidenceDirHasTrackedFiles(wd, req.EvidenceDir) {
-			return fmt.Errorf("commit evidence: no staged evidence files under %s", req.EvidenceDir)
-		}
-		headSHA, headErr := gitOps.HeadRevAt(wd)
-		if headErr != nil {
-			return fmt.Errorf("evidence already committed, reading HEAD: %w", headErr)
-		}
-		result.EvidenceCommitSHA = headSHA
-		return nil
-	}
-	result.EvidenceCommitSHA = sha
-	result.NewTip = sha
 	return nil
 }
 

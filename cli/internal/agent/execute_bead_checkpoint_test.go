@@ -199,14 +199,19 @@ func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testin
 	assert.Contains(t, paths, filepath.ToSlash(manifestRel))
 	assert.NotContains(t, paths, filepath.ToSlash(embeddedRel))
 
+	// Only execution evidence is dirty, and evidence is never checkpointed
+	// (ddx-d10073a8), so there is nothing to commit.
 	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
 	require.NoError(t, err)
-	require.True(t, committed, "durable execution evidence should still checkpoint")
+	require.False(t, committed, "execution evidence must not be checkpointed")
 
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(manifestRel)), attemptID)
+	// Both evidence files remain on disk, untracked, and out of HEAD.
+	requireHeadMissingPath(t, projectRoot, manifestRel)
 	requireHeadMissingPath(t, projectRoot, embeddedRel)
-	_, statErr := os.Stat(filepath.Join(projectRoot, embeddedRel))
-	require.NoError(t, statErr, "embedded private file should remain on disk but stay untracked")
+	for _, rel := range []string{manifestRel, embeddedRel} {
+		_, statErr := os.Stat(filepath.Join(projectRoot, rel))
+		require.NoError(t, statErr, "evidence must remain on disk but stay untracked")
+	}
 }
 
 func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
@@ -238,18 +243,19 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 
 	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
 	require.NoError(t, err)
-	require.True(t, committed, "tracker/evidence dirt should checkpoint")
+	require.True(t, committed, "tracker dirt should checkpoint")
 
 	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	assert.NotEqual(t, headBefore, headAfter, "HEAD must advance for checkpointed bookkeeping")
 	committedPaths := runGitInteg(t, projectRoot, "show", "--pretty=format:", "--name-only", "HEAD")
-	for _, rel := range []string{beadsRel, manifestRel, promptRel, usageRel, resultRel, metricsRel} {
+	// Tracker + metrics are checkpointed; execution evidence must NEVER be
+	// committed, even by the --force checkpoint (ddx-d10073a8).
+	for _, rel := range []string{beadsRel, metricsRel} {
 		assert.Contains(t, committedPaths, filepath.ToSlash(rel))
 	}
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+manifestRel), attemptID)
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+promptRel), attemptID)
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+usageRel), attemptID)
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+resultRel), attemptID)
+	for _, rel := range []string{manifestRel, promptRel, usageRel, resultRel} {
+		assert.NotContains(t, committedPaths, filepath.ToSlash(rel), "execution evidence must not be checkpointed")
+	}
 	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+metricsRel), attemptID)
 }
 
