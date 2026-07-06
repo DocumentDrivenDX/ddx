@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
+	"github.com/spf13/cobra"
 )
 
 // resolveProjectRoot resolves the target project root from CLI flags,
@@ -95,6 +96,25 @@ func buildCLIPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx co
 		}
 		return nil
 	}
+}
+
+func workTrackerSyncEnabled(cmd *cobra.Command) bool {
+	watch, _ := cmd.Flags().GetBool("watch")
+	if !watch {
+		if cmd.Flags().Changed("tracker-sync") {
+			enabled, _ := cmd.Flags().GetBool("tracker-sync")
+			return enabled
+		}
+		return false
+	}
+	if noSync, _ := cmd.Flags().GetBool("no-tracker-sync"); noSync {
+		return false
+	}
+	if cmd.Flags().Changed("tracker-sync") {
+		enabled, _ := cmd.Flags().GetBool("tracker-sync")
+		return enabled
+	}
+	return true
 }
 
 func buildCLIResourceChecker(projectRoot string, override agent.ExecutionResourceChecker) agent.ExecutionResourceChecker {
