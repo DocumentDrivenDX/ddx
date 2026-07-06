@@ -2,12 +2,16 @@ package server
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -229,6 +233,14 @@ func TestWorkerManagerPruneSkipsLiveWorkers(t *testing.T) {
 func TestWorkerManagerStopStaleDiskEntry(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-stop-stale")
+	writeStaleClaimLeaseForTest(t, store, bead.ClaimLeaseRecord{
+		BeadID:    "ddx-stop-stale",
+		Owner:     "worker-test",
+		Machine:   "stale-machine",
+		StartedAt: time.Now().UTC().Add(-3 * time.Hour),
+		UpdatedAt: time.Now().UTC().Add(-3 * time.Hour),
+		PID:       9999999,
+	})
 
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()
@@ -276,6 +288,89 @@ func TestWorkerManagerStopStaleDiskEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(events), 1)
 	assert.Equal(t, "stop (stale)", events[0].Summary)
+}
+
+func writeStaleClaimLeaseForTest(t *testing.T, s *bead.Store, rec bead.ClaimLeaseRecord) {
+	t.Helper()
+
+	data, err := json.Marshal(rec)
+	require.NoError(t, err)
+	data = append(data, '\n')
+
+	root := filepath.Clean(filepath.Dir(s.Dir))
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	sum := sha1.Sum([]byte(filepath.Clean(root)))
+	path := filepath.Join(os.TempDir(), "ddx-claim-heartbeats", hex.EncodeToString(sum[:]), rec.BeadID+".json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, data, 0o644))
+}
+
+// TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim verifies that stale
+// disk cleanup preserves a fresh claim held by a different live worker.
+func TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	store := bead.NewStore(ddxroot.JoinProject(root))
+	beadID := "ddx-stop-stale-foreign"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "fresh live claim",
+		Status:    bead.StatusOpen,
+		Priority:  1,
+		IssueType: bead.DefaultType,
+	}))
+	require.NoError(t, store.Claim(beadID, "worker-live"))
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000001-stl2"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	stale := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-1 * time.Hour),
+		PID:         9999998,
+		CurrentBead: beadID,
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: workerID + "-a1",
+			BeadID:    beadID,
+			Phase:     "running",
+			StartedAt: time.Now().UTC().Add(-1 * time.Hour),
+		},
+	}
+	require.NoError(t, m.writeRecord(dir, stale))
+
+	require.NoError(t, m.stopStaleDiskEntry(workerID))
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "stopped", rec.State)
+	assert.Equal(t, "stopped", rec.Status)
+
+	b, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, b.Status)
+	assert.Equal(t, "worker-live", b.Owner)
+
+	lease, found, err := store.ClaimLease(beadID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "worker-live", lease.Owner)
+
+	events, err := store.EventsByKind(beadID, "bead.stopped")
+	require.NoError(t, err)
+	assert.Empty(t, events, "foreign live claims must not emit a stale stop event")
 }
 
 // TestWorkerManagerStopUnknownWorkerStillErrors verifies that Stop on a worker
