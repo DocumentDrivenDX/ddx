@@ -1,0 +1,10 @@
+{
+  "attempt_id": "20260706T020108-a92d187e",
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "tokens": 456292,
+  "input_tokens": 452552,
+  "cached_tokens": 407936,
+  "cache_hit_rate": 0.47407517594667214,
+  "output_tokens": 3740
+}
