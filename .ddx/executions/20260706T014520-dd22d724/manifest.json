@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260706T014520-dd22d724",
+  "bead_id": "ddx-c8506158",
+  "base_rev": "65a7a5a2daddbe6ff3c2831b0b53ffcadea4b464",
+  "created_at": "2026-07-06T01:45:28.606151804Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c8506158",
+    "title": "server: SupervisorRegistry spawns duplicate workers when in-memory handle is missing",
+    "description": "# PROBLEM\nAfter the multi-project supervisor landed (ddx-4a76c375 → commit d707c80af), the server spawns duplicate `ddx work --server-managed` processes for the same project instead of maintaining a single supervised worker per project. Observed live 2026-07-04 on sindri:\n\n```\nworker=worker-20260703T201939-8450 age=5h01m project=/home/erik/Projects/axon\nworker=worker-20260704T011310-bb6d age=27m    project=/home/erik/Projects/axon\nworker=worker-20260704T012243-XXXX age=18m    project=/home/erik/Projects/axon\nworker=worker-20260703T201939-8f2d age=5h01m project=/home/erik/Projects/helix\nworker=worker-20260704T011310-f86e age=27m    project=/home/erik/Projects/helix\nworker=worker-20260704T012243-XXXX age=18m    project=/home/erik/Projects/helix\n```\n\n3 concurrent workers per project after ~5h of uptime. desired_count=1 in each project's desired.json. This violates the supervisor contract that `running \u003e desired_count` triggers `stopNewestExcess`.\n\n# ROOT CAUSE HYPOTHESIS\nPer-project WorkerSupervisor state (seenTerminals, blockedTerminals, restartEvents, workerHandle map) may be shared or leaking across projects in SupervisorRegistry. Or: `hasWorkerHandle(rec.ID)` returns false for subprocess-launched workers whose in-memory handle was lost across a server restart, so old-generation workers are classified as \"stale\" (staleIDs) rather than \"running\", and Reconcile spawns a fresh one every tick without terminating the still-alive-in-OS process.\n\nGrep entry points:\n- `cli/internal/server/workers_supervisor.go:286` snapshotWorkers (state=running → staleIDs branch when !hasHandle)\n- `cli/internal/server/workers_supervisor.go:391` stopNewestExcess (only touches Manager.Stop by ID)\n- The new SupervisorRegistry landed in commit d707c80af — check its Reconcile loop and how it re-associates existing-process workers with fresh manager handles across supervisor restarts.\n\n# EVIDENCE\n- No worker exit events (workers are alive per `ps`, not dead)\n- desired.json `desired_count=1` for all 3 projects\n- Only ddx has a single worker (correct); ddx started before the server restart that introduced the multi-project registry\n- helix/axon supervisors began working after `systemctl restart ddx-server` and immediately spawned a NEW worker without stopping the pre-existing one\n\n# PROPOSED FIX\n1. Verify: `snapshotWorkers` needs to correctly classify a `state=running` record whose ProcessGroup is alive in the OS (via kill(pid, 0) probe or /proc scan) as \"active\" even when the in-memory handle is absent. Currently it moves such records to `staleIDs`, which allows a duplicate.\n2. If not resolvable via classification, add a strict pre-spawn check in the reconcile loop: before StartExecuteLoop, verify no living process matches `worker-\u003cid\u003e` cwd or command line for the target project.\n3. `stopNewestExcess` should reap orphan workers whose only difference from \"handle-tracked running\" is that the server lost the handle (adopt-and-stop path).\n\n# NON-SCOPE\n- niflheim's independent cycling issue (worker exits `status: success` within 1-2s) — separate bead.\n- ddx-4a76c375 itself (already closed) — this is a follow-up.",
+    "acceptance": "1. Test `TestSupervisorRegistry_DoesNotSpawnDuplicatesForActiveWorker` proves: given a running worker process whose in-memory handle was lost (simulating server restart), the supervisor reconciles WITHOUT spawning a second worker for the same project.\n2. Test `TestSupervisorRegistry_AdoptsOrTerminatesHandleLessRunningWorkers` proves: on server startup, handle-less-but-alive workers are either adopted into the manager OR gracefully stopped (implementer's choice) — but never left running as duplicates.\n3. Observed on live sindri: after applying the fix and restarting the server, `pgrep -af 'ddx work --server-managed' | wc -l` returns exactly `desired_count` per project (currently 3 for {ddx, helix, niflheim, axon minus dun which is stopped}).\n4. `cd cli \u0026\u0026 go test ./internal/server/... -run 'SupervisorRegistry|Duplicate|Adopt' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:server",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "supervisor:duplicate"
+    ],
+    "metadata": {
+      "queue-rank": 5
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260706T014520-dd22d724",
+    "prompt": ".ddx/executions/20260706T014520-dd22d724/prompt.md",
+    "manifest": ".ddx/executions/20260706T014520-dd22d724/manifest.json",
+    "result": ".ddx/executions/20260706T014520-dd22d724/result.json",
+    "checks": ".ddx/executions/20260706T014520-dd22d724/checks.json",
+    "usage": ".ddx/executions/20260706T014520-dd22d724/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c8506158-20260706T014520-dd22d724"
+  },
+  "prompt_sha": "afc3d898e4df4e9d2f05cd75ea726b7fd85012ec95c94eb4449d7d0af24d2d6c"
+}
