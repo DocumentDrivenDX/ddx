@@ -247,7 +247,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		ExecutorHost: hostnameOrEmpty(),
 		StartedAt:    time.Now().UTC(),
 	}
-	probe := workerprobe.New(probeIdent, workerprobe.Config{AddrFunc: serverpkg.ReadServerAddr})
+	// The DDx server serves a self-signed cert; inject a skip-verify client so
+	// worker registration/event mirroring succeeds instead of failing every
+	// POST with "tls: bad certificate".
+	probe := workerprobe.New(probeIdent, workerprobe.Config{
+		AddrFunc:   serverpkg.ReadServerAddr,
+		HTTPClient: newLocalServerClientTimeout(5 * time.Second),
+	})
 	probeCtx, probeCancel := context.WithCancel(context.Background())
 	probe.Start(probeCtx)
 	defer func() {
@@ -298,7 +304,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		if err != nil {
 			return false, err
 		}
-		client := &http.Client{Timeout: 5 * time.Second}
+		// The DDx server serves a self-signed cert, so this loopback probe must
+		// skip verification; a bare http.Client fails the handshake with
+		// "tls: bad certificate" and spams the server log.
+		client := newLocalServerClientTimeout(5 * time.Second)
 		resp, err := client.Do(req)
 		if err != nil {
 			return false, err
@@ -710,10 +719,34 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if err != nil {
 		return err
 	}
+	writeServerManagedResult(cmd, projectRoot, result)
 	if result != nil && result.ExitReason == "binary_refresh" {
 		return nil
 	}
 	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
+}
+
+// writeServerManagedResult persists the loop's structured terminal outcome to
+// the worker dir when running as a server-managed subprocess, so the
+// supervising ddx-server can classify the exit (notably operator-attention
+// stops) instead of treating every clean exit as a successful drain. See
+// ddx-3d57bc30.
+func writeServerManagedResult(cmd *cobra.Command, projectRoot string, result *agent.ExecuteBeadLoopResult) {
+	if result == nil {
+		return
+	}
+	f := cmd.Flags().Lookup("server-managed")
+	if f == nil {
+		return
+	}
+	workerID := f.Value.String()
+	if workerID == "" {
+		return
+	}
+	_ = serverpkg.WriteManagedWorkerResult(projectRoot, workerID, serverpkg.ManagedWorkerResult{
+		StopCondition:     result.StopCondition,
+		OperatorAttention: result.OperatorAttention != nil,
+	})
 }
 
 func (f *CommandFactory) buildAttemptAuditFinalizer(projectRoot string, store *bead.Store) func(agent.ExecuteBeadReport) error {

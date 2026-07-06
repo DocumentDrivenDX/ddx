@@ -126,8 +126,16 @@ func rewriteBindAddrForClient(u string) string {
 
 // newLocalServerClient returns an http.Client configured for the local DDx server.
 func newLocalServerClient() *http.Client {
+	return newLocalServerClientTimeout(30 * time.Second)
+}
+
+// newLocalServerClientTimeout is like newLocalServerClient but with a caller-chosen
+// timeout. The DDx server presents a self-signed cert (CN=ddx-server), so local
+// clients must skip verification; a bare http.Client verifies and fails the
+// handshake with "remote error: tls: bad certificate". See ddx bad-cert fix.
+func newLocalServerClientTimeout(timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local self-signed cert
 		},
