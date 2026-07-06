@@ -1,0 +1,2 @@
+status: blocked
+reason: lefthook run pre-commit is blocked by an unrelated flaky internal/agent race test, TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s, which exceeds its 180s race-mode deadline in this environment; the land changes and targeted land tests are green, but the staged repo hook does not complete cleanly.

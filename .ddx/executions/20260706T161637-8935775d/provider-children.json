@@ -1,0 +1,80 @@
+{
+  "attempt_id": "20260706T161637-8935775d",
+  "bead_id": "ddx-cd80f32f",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-07-06T16:45:51.790612015Z",
+  "reaped": [
+    {
+      "pid": 3768567,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped1365717403/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3770042,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_NonRouteProviderIsActuallyReaped3521655152/001/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3858555,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s1240426081/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3859780,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s2317309292/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3860450,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s3253522597/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3860465,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s894847826/002/claude 120",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3860583,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s1998865043/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 3994352,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s446721050/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 4018115,
+      "provider": "claude",
+      "command": "/home/erik/.cache/fleet-tmp/TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s4197391095/002/claude 120",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}

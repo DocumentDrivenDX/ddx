@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260706T161637-8935775d",
+  "bead_id": "ddx-cd80f32f",
+  "base_rev": "3409b08b8d41f146a3751515076fb14a057532cc",
+  "created_at": "2026-07-06T16:16:47.335601635Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cd80f32f",
+    "title": "agent: failed attempt leaked uncommitted source changes into the pqueue project root, parking the worker on dirty-root for 10 hours",
+    "description": "# PROBLEM\nObserved on eitri 2026-07-06: after execute-bead attempt 20260706T043710-ff946509 (bead pqueue-68aa6cfd, project /Users/erik/Projects/pqueue), six modified source files (crates/pqueue-core/src/domain.rs, crates/pqueue-core/tests/core_domain_tests.rs, crates/pqueue-engine/src/command.rs, crates/pqueue-engine/src/compose.rs, crates/pqueue-resp/tests/e2e.rs, +1) were left uncommitted in the PROJECT ROOT working tree — not in the attempt's isolated worktree. The attempt's implementation commit was correctly preserved at refs/ddx/iterations/20260706T043710-ff946509/0, but the leaked working-tree copy (which DIFFERED from the preserved commit) tripped the pre-claim dirty-root gate, and the pqueue worker exited with operator-attention on every relaunch from ~04:37Z until an operator stashed the files at ~14:35Z. Zero pqueue beads executed in that window.\n\n# ROOT CAUSE (to verify)\nddx try/work attempts execute in isolated worktrees; nothing should write source files to the project root. The likely writer is the land/merge path: a land attempt (merge of the candidate into the project-root checkout) that failed post-merge left conflict-resolution or checkout state behind without aborting/resetting. Investigate the land path for the outcome recorded for attempt 20260706T043710 (tracker commits 9e0545a/e8344a0 in pqueue show its evidence landed but the source commit did not), and any early-exit between 'git merge/checkout' and 'reset --hard on failure'.\n\n# PROPOSED FIX\nMake the land path transactional on the project-root checkout: on any land failure after mutating the working tree, restore the pre-land state (git merge --abort / git reset --hard to the pre-land rev — permitted here because the attempt's work is already preserved in the iteration ref; never touch operator-authored dirty paths that predate the land). Assert post-land that the project root is clean of attempt-authored paths, and emit operator_attention with the preserved-ref name if restoration fails.\n\n# NON-SCOPE\n- Dirty-root gate semantics (correct; it did its job).\n- Relaunch-suppression cadence (ddx-f5bc9fc5).\n\nRelated: ddx-f8fae018 (landing-index jam sibling), ddx-f5bc9fc5.\n\nNo deps.",
+    "acceptance": "1. New test TestLand_RestoresProjectRootOnFailedLand proves: a land that fails mid-merge leaves the project-root working tree exactly as before the land (no attempt-authored files dirty), with the attempt preserved in its iteration ref.\n2. New test TestLand_PostLandCleanlinessAssertion proves: a land that would leave attempt-authored paths dirty emits operator_attention naming the preserved ref instead of exiting silently.\n3. cd cli \u0026\u0026 go test ./internal/agent/... -run 'Land.*Restore|PostLandClean' -count=1 green\n4. lefthook run pre-commit passes",
+    "parent": "ddx-9f21457d",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "phase:build"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-07-06T16:12:02.635529782Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260706T153511-e71dd440\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":16035416,\"output_tokens\":63700,\"total_tokens\":16099116,\"cost_usd\":0,\"duration_ms\":1689891,\"exit_code\":0}",
+          "created_at": "2026-07-06T16:12:02.973699152Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=16099116 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260706T153511-e71dd440\",\"bead_id\":\"ddx-cd80f32f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-07-06T16:12:25.113906848Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"37ecd90fad069983876577f109a36488ed26712a\",\"classification\":\"tests_red\",\"detail\":\"mixed_commit_and_no_changes_rationale\",\"rationale\":\"The attempt produced an implementation commit, but required verification did not pass: pre-commit failed on an existing internal/agent race test. Because code changes exist and verification failed, the narrow documented classification is tests_red even if the failing test appears unrelated to the bead-owned change.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"9a87706292a4edd715b6a572f7aaff934bbbcbc3\",\"session_id\":\"eb-4234888f\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-07-06T16:13:09.508876108Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "tests_red: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "mixed_commit_and_no_changes_rationale\nrationale: status: blocked\nreason: pre-commit is blocked by an unrelated existing internal/agent race test: `CGO_ENABLED=1 go test -short -race -run TestWork_ClaudeSubprocessDeathEndToEndRecoversWithin60s ./internal/agent -count=1` fails in `route_harness_liveness_unix_test.go:106` with `kill fake claude subprocess: no such process`; this bead cannot make progress on that repo-gate failure without touching out-of-scope tests.\ndecision_audit={\"failure_class\":\"tests_red\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"cli\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"cli\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=9a87706292a4edd715b6a572f7aaff934bbbcbc3\nbase_rev=37ecd90fad069983876577f109a36488ed26712a\noutcome_reason=tests_red",
+          "created_at": "2026-07-06T16:13:09.59816402Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"acceptance criteria dropped or altered\",\"fingerprint\":\"a5009c61c899c35222e0cf80f68291112e4b76a566f9e181735e2281652ab1f2\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"a5009c61c899c35222e0cf80f68291112e4b76a566f9e181735e2281652ab1f2\"}",
+          "created_at": "2026-07-06T16:16:20.836289051Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        }
+      ],
+      "queue-rank": 3
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260706T161637-8935775d",
+    "prompt": ".ddx/executions/20260706T161637-8935775d/prompt.md",
+    "manifest": ".ddx/executions/20260706T161637-8935775d/manifest.json",
+    "result": ".ddx/executions/20260706T161637-8935775d/result.json",
+    "checks": ".ddx/executions/20260706T161637-8935775d/checks.json",
+    "usage": ".ddx/executions/20260706T161637-8935775d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cd80f32f-20260706T161637-8935775d"
+  },
+  "prompt_sha": "a3cdc521cd744ba026d1c5598c6ec1fc11d2a5afcff5d75ac6a4751e4818905c"
+}
