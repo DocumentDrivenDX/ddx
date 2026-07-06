@@ -311,9 +311,10 @@ func (s *WorkerSupervisor) snapshotWorkers(projectRoot string) (active []WorkerR
 		}
 
 		hasHandle := s.manager.hasWorkerHandle(rec.ID)
+		alive := rec.PID > 0 && processAlive(rec.PID)
 		switch rec.State {
 		case "running", "stopping":
-			if !hasHandle {
+			if !hasHandle && !alive {
 				staleIDs = append(staleIDs, rec.ID)
 				continue
 			}

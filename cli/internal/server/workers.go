@@ -1426,6 +1426,9 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
+	if rec.PID > 0 && processAlive(rec.PID) {
+		cleanupManagedWorkerProcessTree(rec.PID, nil, 250*time.Millisecond)
+	}
 
 	if beadID != "" {
 		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
