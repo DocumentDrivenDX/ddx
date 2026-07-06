@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -238,6 +239,110 @@ func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	b, err := store.Get(context.Background(), "ddx-supervisor-stale")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status)
+}
+
+func TestSupervisorRegistry_DoesNotSpawnDuplicatesForActiveWorker(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.enableManagedLaunch()
+
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.DefaultSpec.Mode = executeloop.ModeWatch
+	desired.DefaultSpec.IdleInterval = executeloop.Duration{Duration: 30 * time.Second}
+
+	supervisor := NewWorkerSupervisor(m)
+	require.NoError(t, supervisor.SaveDesiredState(&desired))
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:              executeloop.ModeWatch,
+		IdleInterval:      executeLoopIdleInterval(30 * time.Second),
+		OpaquePassthrough: true,
+	})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return processAlive(record.PID)
+	}, 5*time.Second, 20*time.Millisecond)
+	t.Cleanup(func() {
+		_ = m.Shutdown()
+		_ = cleanupManagedWorkerProcessTree(record.PID, nil, 0)
+		require.Eventually(t, func() bool {
+			return !processAlive(record.PID)
+		}, 5*time.Second, 20*time.Millisecond)
+	})
+
+	m.mu.Lock()
+	delete(m.workers, record.ID)
+	m.mu.Unlock()
+
+	require.NoError(t, supervisor.Reconcile())
+
+	require.Eventually(t, func() bool {
+		recs, err := m.List()
+		if err != nil {
+			return false
+		}
+		running := 0
+		for _, rec := range recs {
+			if rec.Kind == "work" && rec.ProjectRoot == root && rec.State == "running" {
+				running++
+			}
+		}
+		return running == 1 && len(recs) == 1
+	}, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestSupervisorRegistry_AdoptsOrTerminatesHandleLessRunningWorkers(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.enableManagedLaunch()
+
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 0
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.DefaultSpec.Mode = executeloop.ModeWatch
+	desired.DefaultSpec.IdleInterval = executeloop.Duration{Duration: 30 * time.Second}
+
+	supervisor := NewWorkerSupervisor(m)
+	require.NoError(t, supervisor.SaveDesiredState(&desired))
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:              executeloop.ModeWatch,
+		IdleInterval:      executeLoopIdleInterval(30 * time.Second),
+		OpaquePassthrough: true,
+	})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return processAlive(record.PID)
+	}, 5*time.Second, 20*time.Millisecond)
+	t.Cleanup(func() {
+		_ = m.Shutdown()
+		_ = cleanupManagedWorkerProcessTree(record.PID, nil, 0)
+	})
+
+	m.mu.Lock()
+	delete(m.workers, record.ID)
+	m.mu.Unlock()
+
+	require.NoError(t, supervisor.Reconcile())
+
+	require.Eventually(t, func() bool {
+		return !processAlive(record.PID)
+	}, 5*time.Second, 20*time.Millisecond)
+
+	rec, err := m.readRecord(filepath.Join(m.rootDir, record.ID))
+	require.NoError(t, err)
+	assert.Equal(t, "stopped", rec.State)
+	assert.Equal(t, "stopped", rec.Status)
 }
 
 func TestSupervisorReconcile_FreshClaimingWorkerSurvivesTicks(t *testing.T) {
