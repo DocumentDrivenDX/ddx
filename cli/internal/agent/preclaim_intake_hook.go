@@ -482,6 +482,10 @@ func newPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			Correlation:   map[string]string{"bead_id": beadID},
 			ClearProfile:  true,
 			ClearMinPower: true,
+			// Readiness is a text-only judgment of the bead's own definition; it
+			// must not spider the repository (ddx-d5d1ada7). Do not request repo
+			// tools for this dispatch.
+			RequiresTools: false,
 		}
 		runtime.ClearMaxPower = true
 		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime, promptVerbose)
@@ -642,6 +646,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	var sb strings.Builder
 	sb.WriteString("MODE: intake\n")
 	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
+	sb.WriteString("Judge ONLY from the bead fields in the JSON below. Do not read files, run commands, grep, or explore the repository; readiness is a fast text-only assessment of the bead's own definition. A file:line or Test* reference in the bead is a quality signal to look for in the text, not a cue to open the file.\n")
 	sb.WriteString("Do not rewrite bead fields in intake mode. If the bead is executable as written, classify it as ready even when the prose could be cleaner.\n")
 	sb.WriteString("Canonical schema: " + readinessChecksSchemaPath + ". Treat it as the source of truth for readiness_checks[].verdict and for forward-compatible extra fields.\n")
 	sb.WriteString("readiness_checks[].verdict may be a JSON bool, string, null, or omitted; match the schema and the Go decoder contract exactly.\n")

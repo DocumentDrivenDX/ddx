@@ -32,11 +32,17 @@ like `MODE: readiness` unless the caller gives a narrower schema.
 
 ## READINESS MODE
 
-Use readiness mode before a bead is claimed or dispatched. The input is bead
-JSON plus any available queue context, dependencies, prior attempt summaries,
-or cheap repository evidence. The goal is to decide whether the bead is a
-tractable, self-contained unit of work for an agent before DDx spends an
-implementation attempt.
+Use readiness mode before a bead is claimed or dispatched. The input is the
+bead JSON provided in the prompt (title, description, acceptance, labels, prior
+attempt summaries, dependencies, parent, depth). Judge readiness SOLELY from
+that bead text. Do NOT read files, run commands, grep, or otherwise explore the
+repository: readiness is a fast, text-only assessment of the bead's own
+definition — is it well enough defined to work, and small enough to work in one
+chunk — not a repository investigation. A `file:line` or `Test*` reference in
+the bead is a bead-quality signal to look for in the text; do not open the file
+to confirm it. The goal is to decide whether the bead is a tractable,
+self-contained unit of work for an agent before DDx spends an implementation
+attempt.
 
 Readiness mode answers a different question than infrastructure preflight.
 Do not classify provider outages, quota exhaustion, missing harnesses,
@@ -45,7 +51,7 @@ missing lifecycle automation as bead defects. Report those as system readiness
 failures so DDx can pause, preflight, clean up, or fail open according to the
 current policy.
 
-Check these bead-readiness failure reasons when the evidence is available:
+Check these bead-readiness failure reasons from the bead text alone:
 
 1. `too_large` — the bead bundles multiple independent implementation scopes,
    broad subsystem rewrites, or acceptance criteria that should be split into
@@ -64,9 +70,9 @@ Check these bead-readiness failure reasons when the evidence is available:
 7. `hidden_external_blocker` — progress depends on credentials, service state,
    human decisions, generated artifacts, or upstream work that is not encoded
    as a dependency or blocker.
-8. `already_satisfied_candidate` — cheap evidence strongly suggests the AC is
-   already met and the attempt would be a no-op unless verification proves
-   otherwise.
+8. `already_satisfied_candidate` — the bead text or a prior attempt summary
+   strongly suggests the AC is already met and the attempt would be a no-op
+   unless verification proves otherwise.
 
 Return JSON only:
 
@@ -167,7 +173,7 @@ cleared, resolved, or unblocked, treat that prior-attempt blocker as
 historical context only. Do not classify the bead as `operator_required` or
 blocked based on a stale prior-attempt event alone when newer notes or a
 reopen since that event explicitly cleared it. A newer note or reopen
-supersedes an older blocker prior attempt unless current cheap evidence
+supersedes an older blocker prior attempt unless a newer note or prior attempt
 revalidates the blocker.
 
 In `MODE: intake`, emit a `rewrite` object only when the bead is not executable
