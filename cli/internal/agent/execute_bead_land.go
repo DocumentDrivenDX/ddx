@@ -566,6 +566,18 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 					}
 				}
 			}
+			// A dead/interrupted attempt can leave DDx-managed execution
+			// evidence (.ddx/executions/*) staged-but-uncommitted in the landing
+			// worktree. That is per-machine working state, not real work (the
+			// durable audit trail is .ddx/attachments), so it must not jam the
+			// queue. When every staged path is execution evidence, unstage it —
+			// do not commit it — and re-check. A mixed or code-bearing staged set
+			// is still refused. See ddx-2ab14458.
+			if unstageOrphanedExecutionEvidence(dir) {
+				if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+					return nil
+				}
+			}
 			stagedOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-status").CombinedOutput()
 			staged := strings.TrimSpace(string(stagedOut))
 			if staged == "" {
@@ -582,6 +594,46 @@ func isRecoverableLandingIndexCorruption(output string) bool {
 	return strings.Contains(lower, "index file smaller than expected") ||
 		strings.Contains(lower, "bad index file") ||
 		strings.Contains(lower, "unexpected end of file while reading index")
+}
+
+// isExecutionEvidencePath reports whether a repo-relative (forward-slash) path
+// is DDx per-machine execution evidence under .ddx/executions/.
+func isExecutionEvidencePath(path string) bool {
+	p := strings.TrimSpace(path)
+	return p == ".ddx/executions" || strings.HasPrefix(p, ".ddx/executions/")
+}
+
+// unstageOrphanedExecutionEvidence unstages staged .ddx/executions/* evidence
+// when that is the ONLY thing staged in dir, so orphaned per-machine evidence
+// left by a dead/interrupted attempt cannot jam the landing-index guard. It
+// returns true when it unstaged something (the caller re-checks the index).
+// A staged set containing any non-execution-evidence path is left untouched so
+// real staged work is never silently discarded. Unstaging (rather than
+// committing) keeps execution dirs out of git history; the durable audit trail
+// lives in .ddx/attachments. See ddx-2ab14458.
+func unstageOrphanedExecutionEvidence(dir string) bool {
+	out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").CombinedOutput()
+	if err != nil {
+		return false
+	}
+	var staged []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if p := strings.TrimSpace(line); p != "" {
+			staged = append(staged, p)
+		}
+	}
+	if len(staged) == 0 {
+		return false
+	}
+	for _, p := range staged {
+		if !isExecutionEvidencePath(p) {
+			return false
+		}
+	}
+	if err := internalgit.Command(context.Background(), dir, "reset", "-q", "HEAD", "--", ".ddx/executions").Run(); err != nil {
+		return false
+	}
+	return true
 }
 
 // blockingStagedPaths returns the staged paths that would genuinely block a
