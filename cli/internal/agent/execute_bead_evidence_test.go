@@ -50,29 +50,20 @@ func TestExecuteBeadLandsEvidence(t *testing.T) {
 		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
 	}
 
-	// AC (1a): working tree is clean (git status --porcelain is empty).
+	// Working tree is clean: evidence is gitignored, so it is untracked+ignored.
 	statusOut := r.runGit("status", "--porcelain")
 	if strings.TrimSpace(statusOut) != "" {
-		t.Errorf("AC 1a FAILED: working tree not clean after Land:\n%s", statusOut)
+		t.Errorf("working tree not clean after Land:\n%s", statusOut)
 	}
 
-	// AC (1b): at least one file under .ddx/executions/<attempt-id>/ is present
-	// in git log for the result or successor commit.
-	logOut := r.runGit("log", "--all", "--oneline", "--name-only")
-	evidenceManifestPath := filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json"))
-	if !strings.Contains(logOut, evidenceManifestPath) {
-		t.Errorf("AC 1b FAILED: %s not found in git log:\n%s", evidenceManifestPath, logOut)
+	// Execution evidence must NEVER reach the durable branch (ddx-d10073a8);
+	// NewTip is the implementation commit, not an evidence commit.
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
+	if land.EvidenceCommitSHA != "" {
+		t.Errorf("evidence must not be committed; got %s", land.EvidenceCommitSHA)
 	}
-
-	// Evidence commit was created and NewTip advanced past the worker commit.
-	if land.EvidenceCommitSHA == "" {
-		t.Errorf("expected EvidenceCommitSHA to be set")
-	}
-	if land.NewTip == workerSHA {
-		t.Errorf("NewTip should be the evidence commit, not the worker commit")
-	}
-	if land.NewTip != land.EvidenceCommitSHA {
-		t.Errorf("NewTip (%s) != EvidenceCommitSHA (%s)", land.NewTip, land.EvidenceCommitSHA)
+	if land.NewTip != workerSHA {
+		t.Errorf("NewTip = %s, want worker commit %s (no evidence commit)", land.NewTip, workerSHA)
 	}
 
 	// AC (2): closing_commit_sha (the tip that will be recorded) still resolves.
@@ -141,9 +132,10 @@ func TestExecuteBeadLandsEvidence_MergePath(t *testing.T) {
 		t.Errorf("working tree not clean after merge-path land:\n%s", statusOut)
 	}
 
-	if land.EvidenceCommitSHA == "" {
-		t.Errorf("expected EvidenceCommitSHA on merge path")
+	if land.EvidenceCommitSHA != "" {
+		t.Errorf("evidence must not be committed on merge path; got %s", land.EvidenceCommitSHA)
 	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
 
 	// Worker commit still resolves (closing_commit_sha contract).
 	checkCmd := exec.Command("git", "-C", r.dir, "cat-file", "-e", workerSHA)
@@ -196,21 +188,26 @@ func TestVerifyCleanWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeEvidenceFile(t, evidenceDir, "result.json", `{"status":"test"}`)
+	dirRel := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
 
-	// Before VerifyCleanWorktree, evidence is untracked.
-	statusBefore := r.runGit("status", "--porcelain", "--", filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID)))
-	if strings.TrimSpace(statusBefore) == "" {
-		t.Fatal("expected untracked evidence files before verification")
+	// Evidence is gitignored (ddx-d10073a8), so it never dirties the worktree.
+	statusBefore := r.runGit("status", "--porcelain", "--", dirRel)
+	if strings.TrimSpace(statusBefore) != "" {
+		t.Fatalf("gitignored evidence should not appear dirty: %s", statusBefore)
 	}
 
 	if err := VerifyCleanWorktree(r.dir, attemptID); err != nil {
 		t.Fatalf("VerifyCleanWorktree: %v", err)
 	}
 
-	// After, evidence dir should be clean.
-	statusAfter := r.runGit("status", "--porcelain", "--", filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID)))
+	// Evidence must NOT be committed and must remain on disk; worktree stays clean.
+	if _, err := os.Stat(filepath.Join(evidenceDir, "result.json")); err != nil {
+		t.Errorf("evidence must remain on disk: %v", err)
+	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
+	statusAfter := r.runGit("status", "--porcelain", "--", dirRel)
 	if strings.TrimSpace(statusAfter) != "" {
-		t.Errorf("evidence dir still dirty after VerifyCleanWorktree:\n%s", statusAfter)
+		t.Errorf("evidence dir dirty after VerifyCleanWorktree:\n%s", statusAfter)
 	}
 }
 
