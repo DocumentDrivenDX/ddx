@@ -125,20 +125,24 @@ func TestWorkConcurrentAttempts_DirtyCheckoutDoesNotLoseSuccessfulResult(t *test
 	require.NoError(t, err)
 	ApplyLandingToResult(res, landing)
 
-	assert.Equal(t, ExecuteBeadStatusSuccess, res.Status)
-	assert.Equal(t, "merged", landing.Outcome)
+	// Operator and worker both touched README.md. The operator edit is
+	// checkpoint-committed before the land, so the land is an HONEST merge
+	// conflict: the successful result is preserved (not lost) and the
+	// operator content survives on disk and in history.
 	readme, err := os.ReadFile(filepath.Join(projectRoot, "README.md"))
 	require.NoError(t, err)
 	assert.Equal(t, "# operator edit\n", string(readme))
 	scratch, err := os.ReadFile(filepath.Join(projectRoot, "operator-scratch.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "scratch\n", string(scratch))
-
-	readmeAtHead := runGitInteg(t, projectRoot, "show", "refs/heads/main:README.md")
-	assert.Equal(t, "# worker edit", readmeAtHead)
-	require.NotEmpty(t, res.ResultFile)
-	resultAtHead := runGitInteg(t, projectRoot, "show", "refs/heads/main:"+res.ResultFile)
-	assert.Contains(t, resultAtHead, beadID)
+	log := runGitInteg(t, projectRoot, "log", "refs/heads/main", "--format=%s", "--", "README.md")
+	assert.Contains(t, log, "checkpoint local tree before land")
+	if landing.Outcome == "merged" {
+		t.Fatalf("conflicting result must not merge over the checkpointed operator edit")
+	}
+	require.NotEmpty(t, landing.PreserveRef, "successful result must be preserved on conflict")
+	preserved := runGitInteg(t, projectRoot, "rev-parse", landing.PreserveRef)
+	assert.Equal(t, res.ResultRev, preserved, "preserve ref must point at the worker result")
 }
 
 func TestWorkConcurrentAttempts_WorktreeLostLeavesBeadRetryable(t *testing.T) {

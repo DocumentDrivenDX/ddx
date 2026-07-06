@@ -228,11 +228,18 @@ func TestPreClaimOriginAheadStagedChangesBlockFastForward(t *testing.T) {
 
 	ops := RealLandingGitOps{}
 	res, err := ops.FetchOriginAncestryCheck(workDir, "main")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "staged changes")
-	assert.Empty(t, res.Action)
-	assert.Equal(t, initialSHA, runGitInteg(t, workDir, "rev-parse", "refs/heads/main"))
-	assert.Equal(t, "operator.txt", runGitInteg(t, workDir, "diff", "--cached", "--name-only"))
+	// Staged operator work is checkpoint-committed, never refused: local
+	// main advances by the checkpoint, origin has its own new commit, so
+	// the honest answer is divergence — and nothing is lost or reset.
+	require.NoError(t, err)
+	assert.Equal(t, "diverged", res.Action)
+	localTip := runGitInteg(t, workDir, "rev-parse", "refs/heads/main")
+	assert.NotEqual(t, initialSHA, localTip, "checkpoint commit should advance local main")
+	content, rerr := os.ReadFile(filepath.Join(workDir, "operator.txt"))
+	require.NoError(t, rerr)
+	assert.Equal(t, "operator\n", string(content))
+	log := runGitInteg(t, workDir, "log", "refs/heads/main", "--format=%s", "--", "operator.txt")
+	assert.Contains(t, log, "checkpoint local tree before land")
 }
 
 // TestPreClaimLocalAheadNoOp verifies that when local is ahead of origin the

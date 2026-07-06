@@ -441,17 +441,59 @@ func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) e
 	for _, path := range skipWorktreePaths {
 		skip[filepath.ToSlash(path)] = true
 	}
+	// blobAt returns the blob hash of path at rev, or "" when absent.
+	blobAt := func(rev, path string) string {
+		out, err := internalgit.Command(context.Background(), dir, "rev-parse", rev+":"+path).CombinedOutput()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	// worktreeBlob returns the blob hash of the file on disk, or "" when absent.
+	worktreeBlob := func(path string) string {
+		if _, statErr := os.Stat(filepath.Join(dir, path)); statErr != nil {
+			return ""
+		}
+		out, err := internalgit.Command(context.Background(), dir, "hash-object", "--", path).CombinedOutput()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
 	var indexFiles []string
 	var removedFiles []string
 	for _, f := range changed {
 		if skip[filepath.ToSlash(f)] {
 			continue
 		}
+		// Local work is never overwritten: only restore a path whose
+		// on-disk content is provably STALE (matches fromRev) or already
+		// current (matches HEAD). Anything else is a local modification
+		// that raced in during the land — leave it; the next land's
+		// pre-land checkpoint commits it. Recomputed per file here, not
+		// from a claim-time dirty list, because that list misses edits
+		// made while the attempt ran (observed live: operator edit
+		// clobbered by checkout-index -f, 2026-07-06 on eitri).
+		wtHash := worktreeBlob(f)
+		fromHash := blobAt(fromRev, f)
 		probe := internalgit.Command(context.Background(), dir, "ls-files", "--error-unmatch", "--", f)
 		if probe.Run() == nil {
-			indexFiles = append(indexFiles, f)
+			headHash := blobAt("HEAD", f)
+			switch {
+			case wtHash == headHash:
+				// Already current — nothing to do.
+			case wtHash == fromHash:
+				// Stale (including absent-in-both) — safe to materialize.
+				indexFiles = append(indexFiles, f)
+			default:
+				// Locally modified (or locally created/deleted vs
+				// fromRev) — preserve.
+			}
 		} else {
-			removedFiles = append(removedFiles, f)
+			if wtHash != "" && wtHash == fromHash {
+				removedFiles = append(removedFiles, f)
+			}
+			// Locally modified copies of a HEAD-deleted file are preserved.
 		}
 	}
 
@@ -496,9 +538,77 @@ func syncWorkTreeToHeadGuarded(gitOps LandingGitOps, dir, fromRev string, dirtyB
 	_ = gitOps.SyncWorkTreeToHead(dir, fromRev)
 }
 
+// checkpointLandingWorktreeLocalChanges commits any tracked local
+// modifications (staged or unstaged) in dir as a checkpoint commit. Local
+// work is never reset, refused, or deferred at the land boundary — it is
+// committed onto the current tip BEFORE the land advances the ref, while
+// HEAD, index, and working tree still agree (committing after update-ref
+// would snapshot a stale index and produce phantom reverts). Managed tracker
+// paths stay uncommitted: they are WithLock-owned live state with their own
+// commit machinery. Returns whether a checkpoint commit was created.
+func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
+	out, err := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--untracked-files=no").CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("checkpoint status: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		p := strings.TrimSpace(line[3:])
+		// Rename entries are "R  old -> new"; commit both sides.
+		if idx := strings.Index(p, " -> "); idx >= 0 {
+			for _, side := range []string{p[:idx], p[idx+4:]} {
+				if side = strings.TrimSpace(side); side != "" && !trackerpaths.IsManagedTrackerPath(side) {
+					paths = append(paths, side)
+				}
+			}
+			continue
+		}
+		if p == "" || trackerpaths.IsManagedTrackerPath(p) {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	if len(paths) == 0 {
+		return false, nil
+	}
+	// Concurrent lands in the same checkout race this section: another
+	// land's sync can consume the dirt between our status snapshot and the
+	// commit. Tolerate paths vanishing (--ignore-errors) and an
+	// emptied-out commit — "nothing left to checkpoint" is success.
+	addArgs := append([]string{"add", "--ignore-errors", "--"}, paths...)
+	if out, err := internalgit.Command(context.Background(), dir, addArgs...).CombinedOutput(); err != nil {
+		lower := strings.ToLower(string(out))
+		if !strings.Contains(lower, "did not match any files") && !strings.Contains(lower, "pathspec") {
+			return false, fmt.Errorf("checkpoint add: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+	}
+	msg := fmt.Sprintf("chore: checkpoint local tree before land (%s)", reason)
+	commitArgs := []string{"-c", "user.name=ddx-land-checkpoint", "-c", "user.email=land-checkpoint@ddx.local", "commit", "--no-verify", "-m", msg}
+	if out, err := internalgit.Command(context.Background(), dir, commitArgs...).CombinedOutput(); err != nil {
+		lower := strings.ToLower(string(out))
+		if strings.Contains(lower, "nothing to commit") || strings.Contains(lower, "nothing added to commit") || strings.Contains(lower, "no changes added to commit") {
+			return false, nil
+		}
+		return false, fmt.Errorf("checkpoint commit: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return true, nil
+}
+
 func ensureLandingWorktreeReady(dir, targetBranch string) error {
 	if !isInsideGitWorktree(dir) {
 		return nil
+	}
+	// Commit — never reset or refuse — any local tracked modifications
+	// before the land proceeds, serialized with ref updates so a racing
+	// land's in-flight sync is never snapshotted as local work.
+	if err := withMainGitLock(dir, "land_checkpoint", func() error {
+		_, cpErr := checkpointLandingWorktreeLocalChanges(dir, "pre-land "+targetBranch)
+		return cpErr
+	}); err != nil {
+		return err
 	}
 	branchOut, err := internalgit.Command(context.Background(), dir, "branch", "--show-current").CombinedOutput()
 	if err != nil {

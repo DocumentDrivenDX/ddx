@@ -627,18 +627,22 @@ func TestLand_StagedOperatorFilesBlockLanding(t *testing.T) {
 		EvidenceDir:  filepath.ToSlash(evidenceDir),
 	}
 	land, err := Land(r.dir, req, ops)
-	if err == nil {
-		t.Fatalf("Land succeeded with staged operator file; result=%+v", land)
+	if err != nil {
+		t.Fatalf("Land with staged operator file: %v", err)
 	}
-	if !strings.Contains(err.Error(), "staged changes") {
-		t.Fatalf("Land error = %v, want staged changes error", err)
+	if land.Status != "landed" {
+		t.Fatalf("expected landed, got %q reason=%q", land.Status, land.Reason)
 	}
-	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
-		t.Fatalf("main advanced despite staged operator file: got %s want %s", got, r.baseSHA)
+	// Staged operator work is checkpoint-committed, never refused or reset:
+	// content must be on disk AND in history, and the land must proceed.
+	if content, rerr := os.ReadFile(filepath.Join(r.dir, "operator.txt")); rerr != nil || string(content) != "operator staged content\n" {
+		t.Fatalf("staged operator content lost: content=%q err=%v", string(content), rerr)
 	}
-	cached := r.runGit("diff", "--cached", "--name-only")
-	if strings.TrimSpace(cached) != "operator.txt" {
-		t.Fatalf("staged operator file was not preserved in index: %q", cached)
+	if out := r.runGit("log", "--all", "--format=%s", "--", "operator.txt"); !strings.Contains(out, "checkpoint local tree before land") {
+		t.Fatalf("staged operator file was not checkpoint-committed; log=%q", out)
+	}
+	if out := r.runGit("merge-base", "--is-ancestor", workerSHA, "refs/heads/main"); strings.TrimSpace(out) != "" {
+		t.Fatalf("worker commit is not an ancestor of main: %q", out)
 	}
 }
 
@@ -710,11 +714,17 @@ func TestLand_DirtyProjectRootDoesNotBlockSuccessfulLand(t *testing.T) {
 	if land.Status != "landed" {
 		t.Fatalf("expected landed, got %q reason=%q", land.Status, land.Reason)
 	}
-	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
-		t.Fatalf("main tip = %s, want worker %s", got, workerSHA)
+	// The tracked operator edit is checkpoint-committed before the land, so
+	// main's tip is a merge that has BOTH the worker commit and the
+	// checkpoint as ancestors — nothing is reset, nothing blocks.
+	if out := r.runGit("merge-base", "--is-ancestor", workerSHA, "refs/heads/main"); strings.TrimSpace(out) != "" {
+		t.Fatalf("worker commit is not an ancestor of main: %q", out)
 	}
 	if content, err := os.ReadFile(filepath.Join(r.dir, "README.md")); err != nil || string(content) != "# operator edit\n" {
 		t.Fatalf("operator tracked edit was not preserved, content=%q err=%v", string(content), err)
+	}
+	if out := r.runGit("log", "refs/heads/main", "--format=%s", "--", "README.md"); !strings.Contains(out, "checkpoint local tree before land") {
+		t.Fatalf("operator README edit was not checkpoint-committed; log=%q", out)
 	}
 	if content, err := os.ReadFile(filepath.Join(r.dir, "operator-scratch.txt")); err != nil || string(content) != "scratch\n" {
 		t.Fatalf("operator untracked scratch was not preserved, content=%q err=%v", string(content), err)
@@ -740,27 +750,28 @@ func TestLand_SyncDeferredWhenOperatorCheckoutDirtyOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Land: %v", err)
 	}
-	if land.Status != "landed" {
-		t.Fatalf("expected landed, got %q reason=%q", land.Status, land.Reason)
+	// Operator and worker both edited README.md. The operator edit is
+	// checkpoint-committed before the land, so this is now an HONEST merge
+	// conflict (preserved for retry) instead of a silent tree/HEAD
+	// divergence with the sync deferred.
+	if land.Status != "preserved" {
+		t.Fatalf("expected preserved (merge conflict), got %q reason=%q", land.Status, land.Reason)
 	}
-	if !land.CheckoutSyncDeferred {
-		t.Fatalf("expected checkout sync to be deferred for dirty overlap")
+	if !strings.Contains(land.Reason, "conflict") {
+		t.Fatalf("preserve reason = %q, want merge conflict", land.Reason)
 	}
-	if len(land.CheckoutSyncDeferredPaths) != 1 || land.CheckoutSyncDeferredPaths[0] != "README.md" {
-		t.Fatalf("deferred paths = %v, want [README.md]", land.CheckoutSyncDeferredPaths)
+	if land.PreserveRef == "" {
+		t.Fatalf("expected preserve ref for conflicted worker result")
 	}
 	content, err := os.ReadFile(filepath.Join(r.dir, "README.md"))
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
 	if string(content) != "# operator edit\n" {
-		t.Fatalf("dirty operator README was overwritten: %q", string(content))
+		t.Fatalf("operator README was overwritten: %q", string(content))
 	}
-
-	res := &ExecuteBeadResult{Outcome: ExecuteBeadOutcomeTaskSucceeded}
-	ApplyLandResultToExecuteBeadResult(res, land)
-	if !strings.Contains(res.Reason, "checkout_sync_deferred: README.md") {
-		t.Fatalf("ExecuteBeadResult reason %q does not expose checkout sync deferral", res.Reason)
+	if out := r.runGit("log", "refs/heads/main", "--format=%s", "--", "README.md"); !strings.Contains(out, "checkpoint local tree before land") {
+		t.Fatalf("operator README edit was not checkpoint-committed; log=%q", out)
 	}
 }
 
@@ -790,6 +801,33 @@ func TestLand_SyncCleanCheckoutStillUpdatesFiles(t *testing.T) {
 	}
 	if string(content) != "feature\n" {
 		t.Fatalf("feature.txt content = %q, want feature", string(content))
+	}
+}
+
+// TestLand_SyncPreservesRacingOperatorEdit covers the belt behind the
+// pre-land checkpoint: an edit that lands on disk AFTER the ref moved (so the
+// checkpoint could not see it) must never be overwritten by the post-land
+// checkout sync, even when the same file changed in fromRev..HEAD.
+func TestLand_SyncPreservesRacingOperatorEdit(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	// Land a worker edit to README.md normally (clean checkout).
+	workerSHA := r.commitOn(r.baseSHA, "README.md", "# worker edit\n", "feat: worker readme")
+	fromRev := r.resolveRef("refs/heads/main")
+	r.runGit("update-ref", "refs/heads/main", workerSHA)
+	// Racing operator edit appears on disk after the ref moved, before sync.
+	r.writeFile("README.md", "# racing operator edit\n")
+
+	if err := ops.SyncWorkTreeToHead(r.dir, fromRev); err != nil {
+		t.Fatalf("SyncWorkTreeToHead: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(r.dir, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	if string(content) != "# racing operator edit\n" {
+		t.Fatalf("racing operator edit was overwritten by checkout sync: %q", string(content))
 	}
 }
 
