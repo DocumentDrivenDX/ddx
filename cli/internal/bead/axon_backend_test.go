@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead/axon"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,52 +43,80 @@ func newAxonStoreWithTransport(t *testing.T) (*Store, *fakeAxonGraphQLTransport)
 
 type fakeAxonGraphQLTransport struct {
 	mu     sync.Mutex
-	beads  []axonEntityEnvelope
-	events []axonEventEnvelope
+	beads  map[string]axon.Bead
+	events map[string][]axon.BeadEvent
 }
 
 func newFakeAxonGraphQLTransport() *fakeAxonGraphQLTransport {
-	return &fakeAxonGraphQLTransport{}
+	return &fakeAxonGraphQLTransport{
+		beads:  make(map[string]axon.Bead),
+		events: make(map[string][]axon.BeadEvent),
+	}
 }
 
 func (t *fakeAxonGraphQLTransport) Query(_ context.Context, query string, variables map[string]any, response any) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	switch query {
-	case axonReadCorpusQuery:
-		if response == nil {
-			return nil
-		}
-		resp, ok := response.(*axonCorpusResponse)
-		if !ok {
-			return fmt.Errorf("unexpected response type %T", response)
-		}
-		resp.Beads = append(resp.Beads[:0], t.beads...)
-		resp.Events = append(resp.Events[:0], t.events...)
+	switch resp := response.(type) {
+	case nil:
 		return nil
-	case axonWriteCorpusMutation:
-		var beads []axonEntityEnvelope
-		var events []axonEventEnvelope
-		if raw, ok := variables["beads"]; ok {
-			if err := decodeJSONValue(raw, &beads); err != nil {
-				return err
-			}
+	case *axon.GetBeadResponse:
+		id, _ := variables["id"].(string)
+		if bead, ok := t.beads[id]; ok {
+			copy := bead
+			resp.DDXBead = &copy
 		}
-		if raw, ok := variables["events"]; ok {
-			if err := decodeJSONValue(raw, &events); err != nil {
-				return err
-			}
+		return nil
+	case *axon.ListBeadsResponse:
+		beads := t.sortedBeadsLocked()
+		resp.DDXBeads = append(resp.DDXBeads[:0], beads...)
+		return nil
+	case *axon.CreateBeadResponse:
+		input, err := decodeAxonValue[axon.BeadInput](variables["input"])
+		if err != nil {
+			return err
 		}
-		t.beads = append(t.beads[:0], beads...)
-		t.events = append(t.events[:0], events...)
-		if response != nil {
-			if resp, ok := response.(*axonWriteCorpusResponse); ok {
-				resp.SaveCorpus.OK = true
-			}
+		bead := t.createBeadLocked(input)
+		resp.CreateEntity = &bead
+		return nil
+	case *axon.UpdateBeadResponse:
+		id, _ := variables["id"].(string)
+		expectedVersion, _ := variables["expectedVersion"].(int)
+		input, err := decodeAxonValue[axon.BeadInput](variables["input"])
+		if err != nil {
+			return err
 		}
+		bead, err := t.updateBeadLocked(id, expectedVersion, input)
+		if err != nil {
+			return err
+		}
+		resp.UpdateEntity = &bead
+		return nil
+	case *axon.ListBeadEventsResponse:
+		resp.DDXBeadEvents = append(resp.DDXBeadEvents[:0], t.sortedEventsLocked()...)
+		return nil
+	case *axon.CreateBeadEventResponse:
+		input, err := decodeAxonValue[axon.BeadEvent](variables["input"])
+		if err != nil {
+			return err
+		}
+		event := t.createEventLocked(input)
+		resp.CreateEntity = &event
+		return nil
+	case *axon.CreateLinkResponse:
+		fromID, _ := variables["from"].(string)
+		toID, _ := variables["to"].(string)
+		t.addDependencyLocked(fromID, toID)
+		resp.CreateLink = &axon.LinkResult{OK: true}
+		return nil
+	case *axon.DeleteLinkResponse:
+		fromID, _ := variables["from"].(string)
+		toID, _ := variables["to"].(string)
+		t.removeDependencyLocked(fromID, toID)
+		resp.DeleteLink = &axon.LinkResult{OK: true}
 		return nil
 	default:
-		return fmt.Errorf("unexpected query %q", query)
+		return fmt.Errorf("unexpected response type %T for query %q", response, query)
 	}
 }
 
@@ -98,12 +128,152 @@ func decodeJSONValue(src any, dst any) error {
 	return json.Unmarshal(raw, dst)
 }
 
-func (t *fakeAxonGraphQLTransport) snapshot() ([]axonEntityEnvelope, []axonEventEnvelope) {
+func decodeAxonValue[T any](src any) (T, error) {
+	var dst T
+	if err := decodeJSONValue(src, &dst); err != nil {
+		return dst, err
+	}
+	return dst, nil
+}
+
+func (t *fakeAxonGraphQLTransport) snapshot() ([]axon.Bead, []axon.BeadEvent) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	beads := append([]axonEntityEnvelope(nil), t.beads...)
-	events := append([]axonEventEnvelope(nil), t.events...)
+	beads := t.sortedBeadsLocked()
+	events := t.sortedEventsLocked()
 	return beads, events
+}
+
+func (t *fakeAxonGraphQLTransport) sortedBeadsLocked() []axon.Bead {
+	out := make([]axon.Bead, 0, len(t.beads))
+	for _, bead := range t.beads {
+		copy := bead
+		copy.Dependencies = append([]axon.Dependency(nil), bead.Dependencies...)
+		copy.Labels = append([]string(nil), bead.Labels...)
+		copy.Extra = cloneStringAnyMap(bead.Extra)
+		out = append(out, copy)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func (t *fakeAxonGraphQLTransport) sortedEventsLocked() []axon.BeadEvent {
+	out := make([]axon.BeadEvent, 0)
+	for _, events := range t.events {
+		for _, ev := range events {
+			copy := ev
+			out = append(out, copy)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].EventOf != out[j].EventOf {
+			return out[i].EventOf < out[j].EventOf
+		}
+		if out[i].Index != out[j].Index {
+			return out[i].Index < out[j].Index
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
+}
+
+func (t *fakeAxonGraphQLTransport) createBeadLocked(input axon.BeadInput) axon.Bead {
+	bead := axon.Bead{
+		Version:      1,
+		ID:           input.ID,
+		Title:        input.Title,
+		Status:       input.Status,
+		Priority:     input.Priority,
+		IssueType:    input.IssueType,
+		Owner:        input.Owner,
+		CreatedAt:    input.CreatedAt,
+		CreatedBy:    input.CreatedBy,
+		UpdatedAt:    input.UpdatedAt,
+		Labels:       append([]string(nil), input.Labels...),
+		Parent:       input.Parent,
+		Description:  input.Description,
+		Acceptance:   input.Acceptance,
+		Notes:        input.Notes,
+		Dependencies: nil,
+		Extra:        cloneStringAnyMap(input.Extra),
+	}
+	t.beads[bead.ID] = bead
+	return bead
+}
+
+func (t *fakeAxonGraphQLTransport) updateBeadLocked(id string, expectedVersion int, input axon.BeadInput) (axon.Bead, error) {
+	current, ok := t.beads[id]
+	if !ok {
+		return axon.Bead{}, fmt.Errorf("bead %s not found", id)
+	}
+	if expectedVersion != 0 && current.Version != expectedVersion {
+		return axon.Bead{}, fmt.Errorf("version mismatch for %s", id)
+	}
+	current.Version++
+	current.Title = input.Title
+	current.Status = input.Status
+	current.Priority = input.Priority
+	current.IssueType = input.IssueType
+	current.Owner = input.Owner
+	current.CreatedAt = input.CreatedAt
+	current.CreatedBy = input.CreatedBy
+	current.UpdatedAt = input.UpdatedAt
+	current.Labels = append([]string(nil), input.Labels...)
+	current.Parent = input.Parent
+	current.Description = input.Description
+	current.Acceptance = input.Acceptance
+	current.Notes = input.Notes
+	current.Extra = cloneStringAnyMap(input.Extra)
+	// Dependencies are maintained through explicit link mutations.
+	current.Dependencies = append([]axon.Dependency(nil), current.Dependencies...)
+	t.beads[id] = current
+	return current, nil
+}
+
+func (t *fakeAxonGraphQLTransport) createEventLocked(input axon.BeadEvent) axon.BeadEvent {
+	ev := input
+	if ev.CreatedAt.IsZero() {
+		ev.CreatedAt = time.Now().UTC()
+	}
+	ev.Index = len(t.events[ev.EventOf])
+	events := append(t.events[ev.EventOf], ev)
+	events[len(events)-1] = ev
+	t.events[ev.EventOf] = events
+	return ev
+}
+
+func (t *fakeAxonGraphQLTransport) addDependencyLocked(fromID, toID string) {
+	bead, ok := t.beads[fromID]
+	if !ok {
+		return
+	}
+	for _, dep := range bead.Dependencies {
+		if dep.DependsOnID == toID {
+			return
+		}
+	}
+	bead.Dependencies = append(bead.Dependencies, axon.Dependency{
+		IssueID:     fromID,
+		DependsOnID: toID,
+		Type:        "blocks",
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+	})
+	t.beads[fromID] = bead
+}
+
+func (t *fakeAxonGraphQLTransport) removeDependencyLocked(fromID, toID string) {
+	bead, ok := t.beads[fromID]
+	if !ok {
+		return
+	}
+	filtered := bead.Dependencies[:0]
+	for _, dep := range bead.Dependencies {
+		if dep.DependsOnID != toID {
+			filtered = append(filtered, dep)
+		}
+	}
+	bead.Dependencies = append([]axon.Dependency(nil), filtered...)
+	t.beads[fromID] = bead
 }
 
 type stubAxonGraphQLTransport struct{}
@@ -335,12 +505,13 @@ func TestAxonBackend_AppendEventSplitsIntoEventsCollection(t *testing.T) {
 	beads, eventRows := transport.snapshot()
 	require.Len(t, beads, 1)
 	require.Len(t, eventRows, 3)
-	for _, row := range eventRows {
-		assert.Equal(t, AxonEventsCollection, row.Collection)
+	for i, row := range eventRows {
 		assert.Equal(t, b.ID, row.EventOf)
+		assert.Equal(t, i, row.Index)
+		assert.Equal(t, fmt.Sprintf("event-%d", i), row.Summary)
 	}
-	if beads[0].Data.Extra != nil {
-		_, hasEvents := beads[0].Data.Extra["events"]
+	if beads[0].Extra != nil {
+		_, hasEvents := beads[0].Extra["events"]
 		assert.False(t, hasEvents, "bead row must not inline events in GraphQL storage")
 	}
 }
@@ -522,15 +693,14 @@ func TestAxonBackend_OrphanEventsDropped(t *testing.T) {
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "k", Summary: "live-event"}))
 
 	// Manually append an orphan event for a bead that does not exist.
-	orphan := axonEventEnvelope{
-		Collection:    AxonEventsCollection,
-		SchemaVersion: axonSchemaVersion,
-		EventOf:       "ddx-deadbeef",
-		Index:         0,
-		Event:         BeadEvent{Kind: "orphan", Summary: "orphaned", CreatedAt: time.Now().UTC()},
-	}
 	transport.mu.Lock()
-	transport.events = append(transport.events, orphan)
+	transport.events["ddx-deadbeef"] = append(transport.events["ddx-deadbeef"], axon.BeadEvent{
+		EventOf:   "ddx-deadbeef",
+		Index:     0,
+		Kind:      "orphan",
+		Summary:   "orphaned",
+		CreatedAt: time.Now().UTC(),
+	})
 	transport.mu.Unlock()
 
 	// Live bead's events still readable; orphan does not surface.

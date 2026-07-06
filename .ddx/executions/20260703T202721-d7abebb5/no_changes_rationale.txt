@@ -1,0 +1,1 @@
+verification_command: test -z "$(git status --short)"

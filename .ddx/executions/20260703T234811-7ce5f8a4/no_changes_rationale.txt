@@ -1,0 +1,3 @@
+status: open
+reason: split oversized parent bead into child beads ddx-09398ba6, ddx-f93750c3, ddx-44e0adc0, and ddx-0bae749e
+orchestrator_action: decompose

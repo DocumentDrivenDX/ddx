@@ -3,11 +3,7 @@ package axon
 import (
 	"context"
 	"errors"
-
-	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
-
-const changeEventsSubscriptionQuery = `subscription ChangeEvents($projectID: ID!) { changeEvents(projectID: $projectID) { ...ChangeEventFields } }`
 
 // ChangeEventsTransport is the minimal subscription transport surface used by
 // the Axon scaffold. The real websocket transport can be wired in later
@@ -35,16 +31,16 @@ func (c *SubscriptionClient) ChangeEvents(ctx context.Context, projectID string)
 	return c.transport.Subscribe(ctx, changeEventsSubscriptionQuery, map[string]any{"projectID": projectID})
 }
 
-// SubscribeLifecycle maps changeEvents into the bead lifecycle event shape so
+// SubscribeLifecycle maps changeEvents into the local lifecycle event shape so
 // higher-level callers can consume the stream without knowing the GraphQL
 // payload details.
-func (c *SubscriptionClient) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan bead.LifecycleEvent, func(), error) {
+func (c *SubscriptionClient) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error) {
 	events, cancel, err := c.ChangeEvents(ctx, projectID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	out := make(chan bead.LifecycleEvent)
+	out := make(chan LifecycleEvent)
 	go func() {
 		defer close(out)
 		for {

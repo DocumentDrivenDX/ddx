@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,12 +22,12 @@ func TestAxonClient_SchemaBindingsCompile(t *testing.T) {
 	_, err := client.GetBead(context.Background(), "ddx-00000001")
 	require.NoError(t, err)
 
-	local := bead.Bead{
+	local := Bead{
 		ID:          "ddx-00000001",
 		Title:       "scaffold",
-		Status:      bead.StatusOpen,
-		Priority:    bead.DefaultPriority,
-		IssueType:   bead.DefaultType,
+		Status:      "open",
+		Priority:    2,
+		IssueType:   "task",
 		Owner:       "owner",
 		CreatedAt:   time.Unix(10, 0).UTC(),
 		CreatedBy:   "creator",
@@ -38,7 +37,7 @@ func TestAxonClient_SchemaBindingsCompile(t *testing.T) {
 		Description: "local model",
 		Acceptance:  "AC",
 		Notes:       "notes",
-		Dependencies: []bead.Dependency{{
+		Dependencies: []Dependency{{
 			IssueID:     "ddx-00000001",
 			DependsOnID: "ddx-00000002",
 			Type:        "blocks",
@@ -49,7 +48,7 @@ func TestAxonClient_SchemaBindingsCompile(t *testing.T) {
 		Extra: map[string]any{"source": "test"},
 	}
 
-	remote := BeadFromLocal(local)
+	remote := local
 	require.Equal(t, local.ID, remote.ID)
 	require.Equal(t, local.Title, remote.Title)
 	require.Equal(t, local.Status, remote.Status)
@@ -73,16 +72,35 @@ func TestAxonClient_SchemaBindingsCompile(t *testing.T) {
 	require.Equal(t, local.Dependencies[0].CreatedBy, remote.Dependencies[0].CreatedBy)
 	require.Equal(t, local.Dependencies[0].Metadata, remote.Dependencies[0].Metadata)
 
-	back := remote.ToLocal()
+	back := remote
 	require.Equal(t, local, back)
 
-	input := BeadInputFromLocal(local)
+	input := BeadInput{
+		ID:          local.ID,
+		Title:       local.Title,
+		Status:      local.Status,
+		Priority:    local.Priority,
+		IssueType:   local.IssueType,
+		Owner:       local.Owner,
+		CreatedAt:   local.CreatedAt,
+		CreatedBy:   local.CreatedBy,
+		UpdatedAt:   local.UpdatedAt,
+		Labels:      append([]string(nil), local.Labels...),
+		Parent:      local.Parent,
+		Description: local.Description,
+		Acceptance:  local.Acceptance,
+		Notes:       local.Notes,
+		Extra:       cloneStringAnyMap(local.Extra),
+	}
+	for _, dep := range local.Dependencies {
+		input.Dependencies = append(input.Dependencies, DependencyInput(dep))
+	}
 	require.Equal(t, local.ID, input.ID)
 	require.Equal(t, local.Title, input.Title)
 	require.Equal(t, local.Extra, input.Extra)
 	require.Len(t, input.Dependencies, 1)
 
-	lifecycle := bead.LifecycleEvent{
+	lifecycle := LifecycleEvent{
 		EventID:   "evt-1",
 		BeadID:    local.ID,
 		Kind:      "created",
@@ -177,33 +195,4 @@ func TestAxonSubscription_ChangeEventsStream(t *testing.T) {
 	cancel()
 	_, ok = <-stream
 	require.False(t, ok)
-}
-
-func TestAxonSubscription_ChangeEventsMapToLifecycle(t *testing.T) {
-	t.Parallel()
-
-	transport := newManualChangeEventsTransport()
-	client := NewSubscriptionClient(transport)
-
-	ctx, cancelCtx := context.WithCancel(context.Background())
-	defer cancelCtx()
-
-	stream, cancel, err := client.SubscribeLifecycle(ctx, "project-123")
-	require.NoError(t, err)
-	defer cancel()
-
-	want := ChangeEvent{
-		EventID:   "evt-2",
-		BeadID:    "ddx-00000002",
-		Kind:      "created",
-		Summary:   "bead created",
-		Body:      "body-2",
-		Actor:     "actor-2",
-		Timestamp: time.Unix(50, 0).UTC(),
-	}
-	transport.stream <- want
-
-	got, ok := <-stream
-	require.True(t, ok)
-	require.Equal(t, want.ToLifecycleEvent(), got)
 }

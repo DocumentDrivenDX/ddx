@@ -1,0 +1,57 @@
+{
+  "bead_id": "ddx-9c5bca8f",
+  "attempt_id": "20260703T212859-ac90d076",
+  "base_rev": "f9cc5e7c03f629b9fcbb93d7778f24be083a4ef1",
+  "result_rev": "1f4f1a96a3a35175855390865b62c68e7edbc3ef",
+  "implementation_rev": "1f4f1a96a3a35175855390865b62c68e7edbc3ef",
+  "landed_rev": "1f4f1a96a3a35175855390865b62c68e7edbc3ef",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260703T212859-ac90d076/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260703T212859-ac90d076",
+      "result_rev": "1f4f1a96a3a35175855390865b62c68e7edbc3ef",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-83ff24c2",
+  "duration_ms": 2521535,
+  "tokens": 17572562,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260703T212859-ac90d076",
+  "prompt_file": ".ddx/executions/20260703T212859-ac90d076/prompt.md",
+  "manifest_file": ".ddx/executions/20260703T212859-ac90d076/manifest.json",
+  "result_file": ".ddx/executions/20260703T212859-ac90d076/result.json",
+  "usage_file": ".ddx/executions/20260703T212859-ac90d076/usage.json",
+  "started_at": "2026-07-03T21:29:15.443057322Z",
+  "finished_at": "2026-07-03T22:11:16.978867498Z"
+}

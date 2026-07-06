@@ -20,8 +20,8 @@ library:
 #       tsnet:
 #         hostname: ddx-project
 #
-# The checked-in example uses `bead.backend: axon`; the connection block below
-# shows the Axon endpoint, namespace, and collection settings.
+# This sample mirrors TD-030's `bead_tracker.backend: axon` example. The live
+# config loader still reads `bead.backend`.
 update_check:
     enabled: true
     frequency: 24h
