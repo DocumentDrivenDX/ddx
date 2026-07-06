@@ -128,6 +128,10 @@ type ExecuteBeadLoopRuntime struct {
 	// server-unavailable backoff. Healthy should return true only after /api/health
 	// succeeds and the lightweight smoke path is confirmed usable again.
 	ServerHealthProbe func(ctx context.Context) (bool, error)
+	// TrackerSyncEnabled controls claim-boundary git sync. When enabled the
+	// worker fetches and merges origin/main before selecting a candidate, then
+	// publishes tracker commits immediately after claim and close boundaries.
+	TrackerSyncEnabled bool
 	// ServerFailureWindow bounds the distinct-bead lookback used to detect
 	// repeated no_viable_provider outcomes that should be treated as a server-level
 	// outage rather than a bead-level failure. Zero means use the documented
@@ -2216,6 +2220,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard clear failed: %v\n", guardErr)
 		}
 	}
+	if runtime.TrackerSyncEnabled && runtime.ProjectRoot != "" {
+		syncTrackerBeforeClaim(ctx, runtime.ProjectRoot, runtime.Log, emit)
+	}
 
 	if runtime.TargetBeadID == "" {
 		if reopened, reopenErr := autoReopenRetryableProviderConnectivityProposals(ctx, w.Store, assignee, now().UTC(), emit); reopenErr != nil {
@@ -2538,6 +2545,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
 	recordClaimAttempt(true, candidate.ID)
+	if runtime.TrackerSyncEnabled && runtime.ProjectRoot != "" {
+		syncTrackerAfterClaim(ctx, runtime.ProjectRoot, candidate.ID, runtime.Log, emit)
+	}
 
 	overrideRetryAfter := ""
 	overrideMeta := forcedCooldownMetadata{}
@@ -4471,6 +4481,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	}
 	if finalizeDurableAuditOrStop(candidate.ID, report) {
 		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if runtime.TrackerSyncEnabled && runtime.ProjectRoot != "" && (report.Status == ExecuteBeadStatusSuccess || report.Status == ExecuteBeadStatusAlreadySatisfied) {
+		syncTrackerAfterClose(ctx, runtime.ProjectRoot, candidate.ID, runtime.Log, emit)
 	}
 
 	// Use the real attempt_id from the report if available.

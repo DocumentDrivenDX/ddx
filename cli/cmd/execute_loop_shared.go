@@ -671,6 +671,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		EventSink:              loopSink,
 		WorkerID:               resolveClaimAssignee(),
 		ProjectRoot:            projectRoot,
+		TrackerSyncEnabled:     workTrackerSyncEnabled(cmd),
 		CleanupRunner:          cleanupRunner,
 		ResourceChecker:        resourceChecker,
 		ServerHealthProbe:      serverHealthProbe,

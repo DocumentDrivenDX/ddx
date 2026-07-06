@@ -91,6 +91,8 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")
 	cmd.Flags().Bool("self-refresh", false, "Force re-exec onto a newer installed ddx binary between iterations (on by default in watch mode; use --no-self-refresh to disable)")
 	cmd.Flags().Bool("no-self-refresh", false, "Disable self-refresh: do NOT re-exec onto a newer installed ddx binary between watch iterations (self-refresh is on by default in watch mode)")
+	cmd.Flags().Bool("tracker-sync", false, "Synchronize tracker git state before each claim and after claim/close boundaries (on by default in watch mode; use --no-tracker-sync to disable)")
+	cmd.Flags().Bool("no-tracker-sync", false, "Disable tracker sync: do NOT fetch/merge/push tracker state between watch iterations (tracker sync is on by default in watch mode)")
 	cmd.Flags().Duration("idle-interval", 30*time.Second, "Sleep duration between empty-queue scans in watch mode")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
