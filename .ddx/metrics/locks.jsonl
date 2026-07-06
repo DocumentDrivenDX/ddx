@@ -8958,3 +8958,5 @@
 {"event":"acquire","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":21279,"acquired_at":"2026-07-06T23:13:36.856226387Z"}
 {"event":"release","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":21279,"acquired_at":"2026-07-06T23:13:36.856226387Z","released_at":"2026-07-06T23:13:36.985942678Z","duration_ms":129}
 {"event":"acquire","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":21279,"acquired_at":"2026-07-06T23:13:37.04760394Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":21279,"acquired_at":"2026-07-06T23:13:37.04760394Z","released_at":"2026-07-06T23:13:37.179816373Z","duration_ms":132}
+{"event":"acquire","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":21279,"acquired_at":"2026-07-06T23:13:37.243627904Z"}
