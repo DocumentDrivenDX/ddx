@@ -157,7 +157,7 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
-func recentProviderConnectivityMinPower(store *bead.Store, now time.Time, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
+func recentProviderConnectivityMinPower(store bead.Backend, now time.Time, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
 	if store == nil || ladder == nil {
 		return baseMinPower, agent.ExecuteBeadReport{}, false
 	}

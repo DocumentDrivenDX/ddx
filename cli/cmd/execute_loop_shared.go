@@ -716,7 +716,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
 }
 
-func (f *CommandFactory) buildAttemptAuditFinalizer(projectRoot string, store *bead.Store) func(agent.ExecuteBeadReport) error {
+func (f *CommandFactory) buildAttemptAuditFinalizer(projectRoot string, store bead.Backend) func(agent.ExecuteBeadReport) error {
 	if f.durableAuditFinalizeOverride != nil {
 		return f.durableAuditFinalizeOverride
 	}
