@@ -108,6 +108,10 @@ type ExecuteBeadLoopRuntime struct {
 	// report is still appended for operator visibility, but the stop itself is
 	// classified through work.StopConditionBudget.
 	BudgetStop func() (work.StopDecision, ExecuteBeadReport, bool)
+	// GoalGateCheck, when non-nil, evaluates the named gate in a persisted
+	// work-drive goal. It is only consulted when the queue is empty and the
+	// durable goal's stop predicate is active.
+	GoalGateCheck func(ctx context.Context, gate string) (bool, error)
 	// BinaryRefreshCheck, when non-nil, is checked before selecting the next
 	// bead. A true result means the caller has started a replacement worker
 	// with equivalent arguments and this loop should exit before claiming work.
@@ -985,6 +989,7 @@ type ExecuteBeadLoopResult struct {
 	ExitReason        string                 `json:"exit_reason,omitempty"`
 	OperatorAttention *OperatorAttentionStop `json:"operator_attention,omitempty"`
 	NoReadyWork       bool                   `json:"no_ready_work,omitempty"`
+	Goal              *WorkGoal              `json:"goal,omitempty"`
 	NoReadyWorkDetail NoReadyWorkBreakdown   `json:"no_ready_work_detail,omitempty"`
 	QueueSnapshot     *QueueSnapshot         `json:"queue_snapshot,omitempty"`
 	LastSuccessAt     time.Time              `json:"last_success_at,omitempty"`
@@ -1092,6 +1097,45 @@ func executeLoopEventSource(runtime ExecuteBeadLoopRuntime) string {
 		return "ddx try"
 	}
 	return "ddx work"
+}
+
+func goalWaitSleepInterval(runtime ExecuteBeadLoopRuntime, idleInterval time.Duration) time.Duration {
+	sleep := idleInterval
+	if sleep <= 0 {
+		sleep = runtime.PollInterval
+	}
+	if sleep <= 0 {
+		sleep = 30 * time.Second
+	}
+	return sleep
+}
+
+func evaluatePersistedWorkGoal(ctx context.Context, goal *WorkGoal, runtime ExecuteBeadLoopRuntime) (bool, string) {
+	if goal == nil || !goal.IsActive() {
+		return true, ""
+	}
+	switch goal.StopPredicate.Kind {
+	case WorkGoalStopPredicateQueueEmpty:
+		return true, ""
+	case WorkGoalStopPredicateQueueEmptyAndGateGreen:
+		gate := strings.TrimSpace(goal.StopPredicate.Gate)
+		if gate == "" {
+			return false, "goal stop predicate requires a gate name"
+		}
+		if runtime.GoalGateCheck == nil {
+			return false, fmt.Sprintf("goal gate %q check unavailable", gate)
+		}
+		green, err := runtime.GoalGateCheck(ctx, gate)
+		if err != nil {
+			return false, fmt.Sprintf("goal gate %q check failed: %v", gate, err)
+		}
+		if !green {
+			return false, fmt.Sprintf("goal gate %q is not green yet", gate)
+		}
+		return true, ""
+	default:
+		return false, fmt.Sprintf("unsupported goal stop predicate %q", goal.StopPredicate.Kind)
+	}
 }
 
 func forcedCooldownSnapshot(b bead.Bead, retryAfter string, overridden bool) forcedCooldownMetadata {
@@ -1827,6 +1871,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		setExit(string(decision.Condition), decision.ExitReason)
 		return true
 	}
+	workGoal, goalErr := ReadRunGoal(runtime.ProjectRoot)
+	if goalErr != nil && runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "goal load failed: %v (continuing mechanically)\n", goalErr)
+	}
+	if workGoal != nil && workGoal.IsActive() {
+		result.Goal = workGoal
+	} else {
+		result.Goal = nil
+	}
 	resetPreClaimIdleStreak := func() {
 		preClaimIdleDetail = ""
 		preClaimIdleStreak = 0
@@ -2312,7 +2365,38 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				result.QueueSnapshot = &snapshot
 			}
 		}
-		if applyStop(work.StopInput{
+		goalSleep := idleInterval
+		if result.Goal != nil {
+			goalSatisfied, goalDetail := evaluatePersistedWorkGoal(ctx, result.Goal, runtime)
+			if goalSatisfied {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "goal satisfied: %s\n", FormatWorkGoal(result.Goal))
+				}
+				emit("loop.goal_satisfied", map[string]any{
+					"goal":         FormatWorkGoal(result.Goal),
+					"project_root": runtime.ProjectRoot,
+				})
+				if applyStop(work.StopInput{
+					NoReadyWork:   true,
+					GoalSatisfied: true,
+					Once:          loopMode == executeloop.ModeOnce,
+					Mode:          loopMode,
+				}) {
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+			} else {
+				goalSleep = goalWaitSleepInterval(runtime, idleInterval)
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "goal pending: %s; %s; sleeping %s\n", FormatWorkGoal(result.Goal), goalDetail, goalSleep)
+				}
+				emit("loop.goal_wait", map[string]any{
+					"goal":           FormatWorkGoal(result.Goal),
+					"goal_detail":    goalDetail,
+					"sleep_interval": goalSleep.String(),
+					"project_root":   runtime.ProjectRoot,
+				})
+			}
+		} else if applyStop(work.StopInput{
 			NoReadyWork: true,
 			Once:        loopMode == executeloop.ModeOnce,
 			Mode:        loopMode,
@@ -2322,7 +2406,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		if runtime.Log != nil {
 			signature := workLogQueueSnapshotSignature(result.QueueSnapshot)
 			includeBlockers := signature != "" && signature != lastIdleQueueSignature
-			_, _ = fmt.Fprint(runtime.Log, workLog.FormatWatchIdle(idleInterval, result.QueueSnapshot, includeBlockers))
+			_, _ = fmt.Fprint(runtime.Log, workLog.FormatWatchIdle(goalSleep, result.QueueSnapshot, includeBlockers))
 			lastIdleQueueSignature = signature
 		}
 		clearTransientCandidateSkips()
@@ -2335,7 +2419,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		// (ddx-dc157075 AC #5) instead of treating it as terminal.
 		emit("loop.idle", map[string]any{
 			"reason":        "no_ready_work",
-			"idle_interval": idleInterval.String(),
+			"idle_interval": goalSleep.String(),
 		})
 		// Surface the idle substate via the progress channel so server-side
 		// drainProgress can flip WorkerRecord.Substate to "idle" without
@@ -2351,7 +2435,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			Message:   "no_ready_work",
 		})
 		resultsResetIdx = len(result.Results)
-		if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
+		if err := sleepOrWake(ctx, goalSleep, runtime.WakeCh); err != nil {
 			if exitReason == "" {
 				applyStop(work.StopInput{ContextErr: err})
 			}

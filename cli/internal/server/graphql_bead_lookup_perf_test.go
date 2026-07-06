@@ -315,6 +315,9 @@ func TestServerStateBeadSnapshotLatencyBudget(t *testing.T) {
 }
 
 func TestGraphQLBeadLookupLatencyBudget(t *testing.T) {
+	if raceEnabled {
+		t.Skip("latency budget not meaningful under race detector")
+	}
 	fixture := setupBeadLookupFixture(t)
 	warmBeadLookupIndex(t, fixture.handler, fixture.targetProject.ID)
 

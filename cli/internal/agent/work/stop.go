@@ -17,6 +17,7 @@ const (
 	StopConditionBudget     StopCondition = "Budget"
 	StopConditionNoProgress StopCondition = "NoProgress"
 	StopConditionBlocked    StopCondition = "Blocked"
+	StopConditionGoal       StopCondition = "Goal"
 )
 
 // StopInput describes one possible terminal drain decision point.
@@ -28,6 +29,10 @@ type StopInput struct {
 	Budget      bool
 	NoProgress  bool
 	Blocked     bool
+	// GoalSatisfied means the durable work-drive goal's stop predicate has
+	// been met. It is orthogonal to the bead queue: the queue can still be
+	// empty while the worker keeps waiting for the goal gate.
+	GoalSatisfied bool
 }
 
 // StopDecision is the classified terminal decision plus the legacy-compatible
@@ -52,6 +57,8 @@ func ClassifyStop(in StopInput) (StopDecision, bool) {
 		return StopDecision{Condition: StopConditionNoProgress, ExitReason: "no_progress"}, true
 	case in.Blocked:
 		return StopDecision{Condition: StopConditionBlocked, ExitReason: "blocked"}, true
+	case in.GoalSatisfied:
+		return StopDecision{Condition: StopConditionGoal, ExitReason: "goal_satisfied"}, true
 	case in.Once:
 		return StopDecision{Condition: StopConditionOnce, ExitReason: "once_complete"}, true
 	case in.NoReadyWork && in.Mode != executeloop.ModeWatch:

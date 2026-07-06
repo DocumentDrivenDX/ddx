@@ -238,7 +238,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		StartedAt:    time.Now().UTC(),
 	}
 	probe := workerprobe.New(probeIdent, workerprobe.Config{
-		AddrFunc: serverpkg.ReadServerAddr,
+		AddrFunc:   serverpkg.ReadServerAddr,
+		HTTPClient: newLocalServerClientTimeout(5 * time.Second),
 	})
 	probeCtx, probeCancel := context.WithCancel(context.Background())
 	probe.Start(probeCtx)

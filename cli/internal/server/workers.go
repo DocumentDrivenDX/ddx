@@ -690,6 +690,15 @@ func (m *WorkerManager) waitManagedWorkerExit(cmd *exec.Cmd, id, dir string, han
 	} else {
 		record.State = "exited"
 		record.Status = "success"
+		// A clean exit is otherwise indistinguishable from a real drain, so
+		// consult the structured result the subprocess wrote. Operator-attention
+		// stops (e.g. a dirty project root) must classify as restart-blocked so
+		// the supervisor parks the worker instead of relaunching it in a tight
+		// loop. See ddx-3d57bc30.
+		if res, ok := readManagedWorkerResult(dir); ok && res.IsRestartBlocking() {
+			record.Status = "operator_attention"
+			record.ReapReason = "operator_attention"
+		}
 	}
 	if preservedState != "" {
 		record.State = preservedState

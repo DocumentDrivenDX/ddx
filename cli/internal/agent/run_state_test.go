@@ -177,6 +177,56 @@ func TestRunState_CandidateCycleFieldsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRunState_GoalRoundTrip(t *testing.T) {
+	projectRoot := newRunStateProjectRoot(t)
+	want := WorkGoal{
+		Text: "drain the ready queue and wait for perf_rebaseline",
+		StopPredicate: WorkGoalStopPredicate{
+			Kind: WorkGoalStopPredicateQueueEmptyAndGateGreen,
+			Gate: "perf_rebaseline",
+		},
+		Autonomy: "full_autonomy",
+	}
+	state := RunState{
+		BeadID:       "ddx-goal",
+		AttemptID:    "attempt-goal",
+		StartedAt:    time.Date(2026, 5, 15, 13, 0, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt"),
+		Goal:         &want,
+	}
+	if err := WriteRunState(projectRoot, state); err != nil {
+		t.Fatalf("WriteRunState: %v", err)
+	}
+
+	gotState, err := ReadRunState(projectRoot)
+	if err != nil || gotState == nil {
+		t.Fatalf("ReadRunState: got (%+v, %v)", gotState, err)
+	}
+	if gotState.Goal == nil {
+		t.Fatalf("ReadRunState lost goal: %+v", *gotState)
+	}
+	if gotState.Goal.Text != want.Text ||
+		gotState.Goal.StopPredicate.Kind != want.StopPredicate.Kind ||
+		gotState.Goal.StopPredicate.Gate != want.StopPredicate.Gate ||
+		gotState.Goal.Autonomy != want.Autonomy {
+		t.Fatalf("goal did not round trip: got %+v want %+v", gotState.Goal, want)
+	}
+
+	gotGoal, err := ReadRunGoal(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunGoal: %v", err)
+	}
+	if gotGoal == nil {
+		t.Fatalf("ReadRunGoal returned nil for persisted goal")
+	}
+	if gotGoal.Text != want.Text ||
+		gotGoal.StopPredicate.Kind != want.StopPredicate.Kind ||
+		gotGoal.StopPredicate.Gate != want.StopPredicate.Gate ||
+		gotGoal.Autonomy != want.Autonomy {
+		t.Fatalf("ReadRunGoal: got %+v want %+v", gotGoal, want)
+	}
+}
+
 func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
 	projectRoot := newRunStateProjectRoot(t)
 	requireDir := testutils.MakeInitializedDDxRoot(t, projectRoot)
@@ -189,7 +239,7 @@ func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
 		t.Fatalf("ReadRunState: got (%+v, %v)", got, err)
 	}
 	if got.CandidateCyclePhase != "" || got.CandidateRef != "" || got.CandidateRev != "" ||
-		got.CycleIndex != 0 || got.ReviewActive || got.RepairActive {
+		got.CycleIndex != 0 || got.ReviewActive || got.RepairActive || got.Goal != nil {
 		t.Fatalf("legacy run-state should default candidate-cycle fields to zero values: %+v", *got)
 	}
 }

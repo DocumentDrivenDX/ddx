@@ -27,6 +27,86 @@ const RunStateDirName = "run-state"
 // attempt liveness records.
 const RunStateLivenessTTL = 2 * time.Minute
 
+const (
+	// WorkGoalStopPredicateQueueEmptyAndGateGreen is the simple, testable
+	// stop predicate used by the durable work-drive goal. The queue can keep
+	// draining independently of the goal; the goal only stops the worker once
+	// the queue is empty and the named gate reports green.
+	WorkGoalStopPredicateQueueEmptyAndGateGreen = "queue_empty_and_gate_green"
+	// WorkGoalStopPredicateQueueEmpty is the degenerate predicate used when the
+	// operator only wants the queue-empty stop and no additional gate check.
+	WorkGoalStopPredicateQueueEmpty = "queue_empty"
+)
+
+// WorkGoal is the durable operator goal attached to work-state. It is
+// orthogonal to the bead queue: the queue decides what work exists, while the
+// goal decides when the worker should stop and what autonomy posture it should
+// surface.
+type WorkGoal struct {
+	Text          string                `json:"text,omitempty"`
+	StopPredicate WorkGoalStopPredicate `json:"stop_predicate,omitempty"`
+	Autonomy      string                `json:"autonomy,omitempty"`
+}
+
+// WorkGoalStopPredicate is the explicit, testable stop predicate for a
+// work-drive goal. The current implementation only recognizes a small set of
+// simple predicates; natural-language evaluation is deliberately out of scope.
+type WorkGoalStopPredicate struct {
+	Kind string `json:"kind,omitempty"`
+	Gate string `json:"gate,omitempty"`
+}
+
+// IsActive reports whether the goal has a stop predicate that can affect the
+// worker's stop behavior.
+func (g WorkGoal) IsActive() bool {
+	return strings.TrimSpace(strings.ToLower(g.StopPredicate.Kind)) != ""
+}
+
+func normalizeWorkGoal(goal WorkGoal) WorkGoal {
+	goal.Text = strings.TrimSpace(goal.Text)
+	goal.StopPredicate.Kind = strings.ToLower(strings.TrimSpace(goal.StopPredicate.Kind))
+	goal.StopPredicate.Gate = strings.TrimSpace(goal.StopPredicate.Gate)
+	goal.Autonomy = strings.TrimSpace(goal.Autonomy)
+	if goal.StopPredicate.Kind == "" && goal.StopPredicate.Gate != "" {
+		goal.StopPredicate.Kind = WorkGoalStopPredicateQueueEmptyAndGateGreen
+	}
+	return goal
+}
+
+func workGoalIsZero(goal WorkGoal) bool {
+	return strings.TrimSpace(goal.Text) == "" &&
+		strings.TrimSpace(goal.StopPredicate.Kind) == "" &&
+		strings.TrimSpace(goal.StopPredicate.Gate) == "" &&
+		strings.TrimSpace(goal.Autonomy) == ""
+}
+
+// FormatWorkGoal renders the durable work-drive goal in a compact, stable
+// operator-facing format.
+func FormatWorkGoal(goal *WorkGoal) string {
+	if goal == nil {
+		return ""
+	}
+	normalized := normalizeWorkGoal(*goal)
+	if workGoalIsZero(normalized) {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	if normalized.Text != "" {
+		parts = append(parts, fmt.Sprintf("text=%q", normalized.Text))
+	}
+	if normalized.StopPredicate.Kind != "" {
+		predicate := fmt.Sprintf("stop=%s", normalized.StopPredicate.Kind)
+		if normalized.StopPredicate.Gate != "" {
+			predicate += fmt.Sprintf(" gate=%q", normalized.StopPredicate.Gate)
+		}
+		parts = append(parts, predicate)
+	}
+	if normalized.Autonomy != "" {
+		parts = append(parts, fmt.Sprintf("autonomy=%q", normalized.Autonomy))
+	}
+	return strings.Join(parts, " ")
+}
+
 // RunState is the on-disk record of an executing bead attempt. It is written at
 // execute-bead start, refreshed while the agent runs, and removed on completion
 // (or on orphan recovery of a crashed worker). Operators and HELIX consume this
@@ -44,6 +124,10 @@ type RunState struct {
 	SessionID    string    `json:"session_id,omitempty"`
 	RefreshedAt  time.Time `json:"refreshed_at,omitempty"`
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	// Goal is the durable operator goal / stop posture for the active work
+	// drive. It survives worker restarts while the run-state files remain on
+	// disk and is orthogonal to the bead queue itself.
+	Goal *WorkGoal `json:"goal,omitempty"`
 	// Candidate-cycle fields mirror cleanup metadata so operators can see
 	// which candidate phase owns a long-lived attempt worktree.
 	CandidateCyclePhase string `json:"candidate_cycle_phase,omitempty"`
@@ -135,6 +219,14 @@ func normalizeRunState(state RunState) RunState {
 	if state.PID == 0 {
 		state.PID = os.Getpid()
 	}
+	if state.Goal != nil {
+		goal := normalizeWorkGoal(*state.Goal)
+		if workGoalIsZero(goal) {
+			state.Goal = nil
+		} else {
+			state.Goal = &goal
+		}
+	}
 	return state
 }
 
@@ -146,6 +238,7 @@ func WriteRunState(projectRoot string, state RunState) error {
 	if projectRoot == "" {
 		return errors.New("WriteRunState: projectRoot is empty")
 	}
+	state = mergeLatestRunStateMetadata(projectRoot, state)
 	state = normalizeRunState(state)
 	attemptPath, err := runStateAttemptPath(projectRoot, state.AttemptID)
 	if err != nil {
@@ -304,6 +397,27 @@ func readRunStateAttemptFiles(projectRoot string) ([]RunState, error) {
 	return states, nil
 }
 
+func latestRunStateGoal(states []RunState) *WorkGoal {
+	if len(states) == 0 {
+		return nil
+	}
+	ordered := append([]RunState(nil), states...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return runStateNewer(ordered[i], ordered[j])
+	})
+	for _, state := range ordered {
+		if state.Goal == nil {
+			continue
+		}
+		goal := normalizeWorkGoal(*state.Goal)
+		if workGoalIsZero(goal) {
+			continue
+		}
+		return &goal
+	}
+	return nil
+}
+
 func latestRunState(states []RunState) (RunState, bool) {
 	if len(states) == 0 {
 		return RunState{}, false
@@ -325,6 +439,62 @@ func runStateNewer(a, b RunState) bool {
 		return a.StartedAt.After(b.StartedAt)
 	}
 	return a.AttemptID > b.AttemptID
+}
+
+func mergeLatestRunStateMetadata(projectRoot string, state RunState) RunState {
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		return state
+	}
+	for i := range states {
+		current := states[i]
+		if state.AttemptID != "" && current.AttemptID != state.AttemptID {
+			continue
+		}
+		if state.AttemptID == "" && state.WorktreePath != "" && current.WorktreePath != "" &&
+			filepath.Clean(current.WorktreePath) != filepath.Clean(state.WorktreePath) {
+			continue
+		}
+		if state.CandidateCyclePhase == "" {
+			state.CandidateCyclePhase = current.CandidateCyclePhase
+		}
+		if state.CandidateRef == "" {
+			state.CandidateRef = current.CandidateRef
+		}
+		if state.CandidateRev == "" {
+			state.CandidateRev = current.CandidateRev
+		}
+		if state.CycleIndex == 0 && current.CycleIndex != 0 {
+			state.CycleIndex = current.CycleIndex
+		}
+		if !state.ReviewActive {
+			state.ReviewActive = current.ReviewActive
+		}
+		if !state.RepairActive {
+			state.RepairActive = current.RepairActive
+		}
+		break
+	}
+	if state.Goal == nil {
+		if goal := latestRunStateGoal(states); goal != nil {
+			state.Goal = goal
+		}
+	}
+	return state
+}
+
+// ReadRunGoal returns the latest active work-drive goal, if any, without
+// disturbing the surrounding run-state files.
+func ReadRunGoal(projectRoot string) (*WorkGoal, error) {
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	goal := latestRunStateGoal(states)
+	if goal == nil || !goal.IsActive() {
+		return nil, nil
+	}
+	return goal, nil
 }
 
 // ClearRunState removes all run-state records, including the compatibility
