@@ -258,15 +258,17 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	defer localCoord.Stop()
 
 	// Post-merge reviewer (on by default, skipped via --no-review).
-	var reviewer agent.BeadReviewer
+	var reviewer agent.CandidateReviewer
+	var postMergeReviewer agent.BeadReviewer
 	if !noReview {
-		reviewer = &agent.DefaultBeadReviewer{
+		postMergeReviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
 			BeadStore:   bead.NewStore(beadStoreRoot),
 			BeadEvents:  bead.NewStore(beadStoreRoot),
 			Harness:     reviewHarness,
 			Model:       reviewModel,
 		}
+		reviewer = postMergeReviewer.(agent.CandidateReviewer)
 	}
 
 	// Determine whether zero-config auto-route applies (same logic as runWork).
@@ -391,6 +393,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					BeadStoreRoot:   beadStoreRoot,
 					BeadEvents:      bead.NewStore(beadStoreRoot),
 					ResourceChecker: resourceChecker,
+					Reviewer:        reviewer,
+					NoReview:        noReview,
 				}, gitOps)
 				// Safety net: commit any execution-evidence bundle that
 				// ExecuteBeadWithConfig published to the project root but the land
@@ -494,7 +498,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	worker := &agent.ExecuteBeadWorker{
 		Store:    forcedStore,
 		Executor: executor,
-		Reviewer: reviewer,
+		Reviewer: postMergeReviewer,
 	}
 
 	overrides := config.CLIOverrides{

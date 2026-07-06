@@ -78,6 +78,7 @@ type CandidateReviewResult struct {
 	ReviewGroupID        string
 	ReviewerIndices      []int
 	ReviewerVerdicts     []string
+	ReviewerRoute        ExecutionCycleRouteFacts
 }
 
 // CandidateReviewer runs a read-only review pass against a committed candidate
@@ -206,6 +207,7 @@ type AttemptCycleCoordinator struct {
 	Pass        ImplementationPass
 	Checks      CandidateCheckRunner // nil → skip pre-land checks
 	Reviewer    CandidateReviewer    // nil → skip candidate review (future)
+	NoReview    bool                 // true → skip review with durable no-review reason
 	Repair      RepairPass           // nil → skip repair loops (future)
 	Lander      CandidateLander
 	RefStore    CandidateRefStore // nil → no ref pinning
@@ -295,7 +297,10 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			}
 		}
 
-		if c.Reviewer == nil {
+		if c.NoReview || c.Reviewer == nil {
+			if c.NoReview {
+				candidate.Report.ReviewSkipReason = "--no-review"
+			}
 			break
 		}
 
@@ -648,6 +653,7 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 		PerAC:          append([]ReviewAC(nil), review.PerAC...),
 		Findings:       append([]Finding(nil), review.Findings...),
 	}
+	entry.ReviewerRoute = review.ReviewerRoute
 	return entry
 }
 

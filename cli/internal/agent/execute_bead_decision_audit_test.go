@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -405,6 +406,85 @@ func TestExecuteBeadResult_NiflheimEvidence_LandCoordinationDecisionAudit(t *tes
 		assert.Equal(t, "codex", nestedString(t, eventAudit, "actual_route", "harness"))
 		assert.Equal(t, "openai", nestedString(t, eventAudit, "actual_route", "provider"))
 		assert.Equal(t, "gpt-5", nestedString(t, eventAudit, "actual_route", "model"))
+	})
+}
+
+func TestExecuteBead_ReviewSkipRequiresExplicitOptOut(t *testing.T) {
+	t.Run("review:skip label remains durable", func(t *testing.T) {
+		store := bead.NewStore(t.TempDir())
+		require.NoError(t, store.Init(t.Context()))
+		skipped := &bead.Bead{
+			ID:     "ddx-review-skip",
+			Title:  "Review skip",
+			Labels: []string{"review:skip", "review:skip-reason:test-fixture"},
+		}
+		require.NoError(t, store.Create(t.Context(), skipped))
+
+		reviewOut := RunPostMergeReview(t.Context(), PostMergeReviewInput{
+			Bead: *skipped,
+			Report: ExecuteBeadReport{
+				BeadID:           "ddx-review-skip",
+				AttemptID:        "attempt-review-skip",
+				Harness:          "codex",
+				Provider:         "openai",
+				Model:            "gpt-5",
+				ActualPower:      70,
+				Status:           ExecuteBeadStatusSuccess,
+				ResultRev:        "feedface",
+				RequestedProfile: "standard",
+				PowerClass:       "standard",
+				EscalationCount:  1,
+			},
+			Store:    store,
+			Assignee: "worker",
+			Now:      time.Now,
+		})
+		require.True(t, reviewOut.Approved)
+		assert.Equal(t, "review:skip-reason:test-fixture", reviewOut.Report.ReviewSkipReason)
+
+		audit := executionDecisionAuditForReport(reviewOut.Report, reviewOut.Report.Status, false, "")
+		assert.Equal(t, "skipped", audit.ReviewStatus)
+		assert.Equal(t, "review:skip-reason:test-fixture", audit.ReviewSkipReason)
+	})
+
+	t.Run("--no-review remains explicit", func(t *testing.T) {
+		coord := &AttemptCycleCoordinator{
+			Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+				return CandidateResult{
+					Report: ExecuteBeadReport{
+						BeadID:    beadID,
+						AttemptID: "attempt-no-review",
+						Status:    ExecuteBeadStatusSuccess,
+						BaseRev:   "base-rev",
+						ResultRev: "candidate-rev",
+					},
+				}, nil
+			}),
+			NoReview: true,
+			Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+				return candidate.Report, nil
+			}),
+			ProjectRoot: "/project",
+		}
+
+		result, err := coord.Run(t.Context(), "ddx-no-review")
+		require.NoError(t, err)
+		require.Len(t, result.Report.CycleTrace, 1)
+		trace := result.Report.CycleTrace[0]
+		assert.Equal(t, "--no-review", trace.ReviewSkipReason)
+		assert.Equal(t, "skipped", trace.ReviewStatus)
+
+		audit := executionDecisionAuditForReport(result.Report, result.Report.Status, false, "")
+		assert.Equal(t, "skipped", audit.ReviewStatus)
+		assert.Equal(t, "--no-review", audit.ReviewSkipReason)
+	})
+
+	t.Run("empty diff uses dedicated event", func(t *testing.T) {
+		events := &inMemoryEventAppender{}
+		emitReviewerSkippedEmptyDiff(events, "ddx-empty-diff", "worker", time.Unix(0, 0))
+		require.Len(t, events.events, 1)
+		assert.Equal(t, ReviewerSkippedEmptyDiffEventKind, events.events[0].Kind)
+		assert.Equal(t, "reviewer skipped: empty diff (no commits produced)", events.events[0].Summary)
 	})
 }
 
