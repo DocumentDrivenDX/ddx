@@ -1,0 +1,2 @@
+status: open
+reason: The bead record still has an empty description and empty acceptance criteria, so there is no concrete implementation target or verification surface to work against in this attempt.
