@@ -482,6 +482,35 @@ func TestPreClaimIntakePromptIncludesEstimatedDifficultyGuidance(t *testing.T) {
 	assert.Contains(t, prompt, "Readiness score and difficulty are separate")
 }
 
+// TestBuildPreClaimIntakePrompt_ForbidsRepoExploration guards ddx-d5d1ada7:
+// readiness is a text-only judgment of the bead's own definition and must not
+// send the agent spidering the repository.
+func TestBuildPreClaimIntakePrompt_ForbidsRepoExploration(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	prompt, err := buildPreClaimIntakePrompt(root, store, b)
+	require.NoError(t, err)
+
+	assert.Contains(t, prompt, "Judge ONLY from the bead fields")
+	assert.Contains(t, prompt, "Do not read files, run commands, grep, or explore the repository")
+}
+
+// TestPreClaimIntakeDispatch_NoRepoTools guards ddx-d5d1ada7: the readiness
+// dispatch must not request repo tools.
+func TestPreClaimIntakeDispatch_NoRepoTools(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+	}
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	_, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.False(t, svc.lastReq.RequiresTools, "readiness dispatch must not request repo tools")
+}
+
 func TestDecompositionHook_CatalogUnavailableUsesAutoRouteWithoutMagicPower(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
