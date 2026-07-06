@@ -1,0 +1,59 @@
+{
+  "bead_id": "ddx-a6e99ad3",
+  "attempt_id": "20260706T010735-b8f37b75",
+  "base_rev": "948fa05ebe888a85a6ef75aa9321a761fe561a75",
+  "result_rev": "f1244924ee77b61e68f4b8d83a98684220a864f7",
+  "implementation_rev": "b61b13fd35000bc04866c51a5b4970071a937b2d",
+  "landed_rev": "f1244924ee77b61e68f4b8d83a98684220a864f7",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "merged onto current tip",
+  "orchestrator_status": "success",
+  "reason": "merged onto current tip",
+  "candidate_ref": "refs/ddx/iterations/20260706T010735-b8f37b75/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260706T010735-b8f37b75",
+      "result_rev": "b61b13fd35000bc04866c51a5b4970071a937b2d",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-53698066",
+  "duration_ms": 1195536,
+  "tokens": 21907,
+  "cost_usd": 2.5533251,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260706T010735-b8f37b75",
+  "prompt_file": ".ddx/executions/20260706T010735-b8f37b75/prompt.md",
+  "manifest_file": ".ddx/executions/20260706T010735-b8f37b75/manifest.json",
+  "result_file": ".ddx/executions/20260706T010735-b8f37b75/result.json",
+  "usage_file": ".ddx/executions/20260706T010735-b8f37b75/usage.json",
+  "started_at": "2026-07-06T01:07:44.753324974Z",
+  "finished_at": "2026-07-06T01:27:40.289862547Z"
+}

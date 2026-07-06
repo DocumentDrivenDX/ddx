@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260706T010755-dde002e0",
+  "bead_id": "ddx-57faa17c",
+  "base_rev": "57e3dcfee3d1bdecfb1213e04fb852dd6156aa77",
+  "created_at": "2026-07-06T01:08:13.050607267Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-57faa17c",
+    "title": "server: reconcile loop kills fresh server-managed workers ~5s after bead claim (spawn/kill churn every tick)",
+    "description": "# PROBLEM\nObserved live on eitri 2026-07-05 20:40-21:00 EDT (ddx v0.6.2-alpha104-4162-g772c3f55a): for every project with ready beads (ddx, snorri, pqueue), the supervisor spawns a fresh `ddx work --server-managed` worker on its 10s tick; the worker claims the top ready bead, prints 'readiness check: starting', then ~5s later receives SIGINT ('Cancel received, shutting down gracefully', exit status 130) and dies. The next tick spawns a replacement, which repeats the cycle. No bead ever executes; each cycle can invoke the codex-backed pre-claim intake hook, burning provider spend every 10 seconds per project. The cayce worker — whose queue was empty and which therefore never claimed — survived the whole window, so the kill correlates with the claim path, not worker age. Worker record example: /Users/erik/Projects/snorri/.ddx/workers/worker-20260706T004055-5645 (state=failed, last_error='exit status 130', log ends 'readiness check: starting' → 'Cancel received').\n\nThis is a distinct manifestation from ddx-c8506158 (duplicate long-lived workers on sindri after handle loss): here the workers hold live in-memory handles (spawned by the current server process) and are killed, not duplicated.\n\n# ROOT CAUSE HYPOTHESIS\nSomething in the per-tick reconcile path revokes the fresh worker's claim or stops it by ID. Grep entry points:\n- cli/internal/server/workers_supervisor.go:253-260 ReconcileAt: every tick, staleIDs (running-on-disk, no in-memory handle) go through stopStaleDiskEntry.\n- cli/internal/server/workers.go:1406-1459 stopStaleDiskEntry: unclaims the bead recorded on the stale record (`store.Unclaim(beadID)`) — with ~150 historical worker dirs per project, a stale record naming the SAME top-ready bead the live worker just claimed would release the live worker's claim out from under it; the worker's claim-guard then cancels the attempt (matches the observed SIGINT-equivalent graceful cancel). Verify whether stopStaleDiskEntry can fire repeatedly (writeRecord failure leaves state=running) or whether many distinct stale records reference the current top bead.\n- cli/internal/server/workers_supervisor.go:286-344 snapshotWorkers: confirm hasWorkerHandle is true for subprocess-launched workers of the CURRENT server generation; if false they land in staleIDs and get stop-stale'd (claim released + record flipped) within one tick of spawning — which matches the observed ≤10s lifetime exactly.\n\n# PROPOSED FIX\nDetermined by which hypothesis verifies. Candidates: make snapshotWorkers classify current-generation subprocess workers via OS-liveness (kill(pid,0)) instead of in-memory handle only; make stopStaleDiskEntry skip unclaim when the bead's current claim does not belong to the stale record's worker/attempt; one-shot stale sweep at startup instead of per-tick.\n\n# NON-SCOPE\n- ddx-c8506158 (adopt-or-terminate handle-less duplicates across restarts) — sibling, same root-cause area but different invariant.\n- workerprobe TLS registration failure (ddx-a6e99ad3).\n- Operator-attention relaunch suppression not being honored (separate bead).\n\nRelated: ddx-c8506158, ddx-a6e99ad3.\n\nNo deps.",
+    "acceptance": "1. New test TestSupervisorReconcile_FreshClaimingWorkerSurvivesTicks in cli/internal/server/ proves: a subprocess-launched worker of the current manager generation that has claimed a bead survives \u003e=3 consecutive ReconcileAt ticks (not stopped, claim intact).\n2. New test TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim proves: stopStaleDiskEntry on a stale record whose bead is currently claimed by a DIFFERENT live worker/attempt does not release that claim.\n3. Live verify on eitri documented in closing note: with desired_count=1 restored for ddx/snorri/pqueue, workers survive \u003e10 minutes (pgrep count stable across ticks) and at least one bead reaches a terminal outcome (success/no_changes/etc), no exit-130 churn in .ddx/workers records.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'Supervisor|StaleDisk' -count=1 green\n5. lefthook run pre-commit passes",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:server",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "supervisor:duplicate"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260706T010755-dde002e0",
+    "prompt": ".ddx/executions/20260706T010755-dde002e0/prompt.md",
+    "manifest": ".ddx/executions/20260706T010755-dde002e0/manifest.json",
+    "result": ".ddx/executions/20260706T010755-dde002e0/result.json",
+    "checks": ".ddx/executions/20260706T010755-dde002e0/checks.json",
+    "usage": ".ddx/executions/20260706T010755-dde002e0/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-57faa17c-20260706T010755-dde002e0"
+  },
+  "prompt_sha": "2d73a492799a71ba4ad1a6704898374bcf981aab12069e7754e380d41756d43a"
+}
