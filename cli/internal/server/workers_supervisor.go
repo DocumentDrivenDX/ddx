@@ -149,8 +149,13 @@ type WorkerSupervisor struct {
 
 	mu               sync.Mutex
 	seenTerminals    map[string]time.Time
-	blockedTerminals map[string]string
+	blockedTerminals map[string]blockedTerminal
 	restartEvents    []time.Time
+}
+
+type blockedTerminal struct {
+	Reason     string
+	TerminalAt time.Time
 }
 
 // NewWorkerSupervisor returns a supervisor for the given manager.
@@ -158,7 +163,7 @@ func NewWorkerSupervisor(m *WorkerManager) *WorkerSupervisor {
 	return &WorkerSupervisor{
 		manager:          m,
 		seenTerminals:    map[string]time.Time{},
-		blockedTerminals: map[string]string{},
+		blockedTerminals: map[string]blockedTerminal{},
 	}
 }
 
@@ -355,7 +360,7 @@ func (s *WorkerSupervisor) recordTerminalHistory(terminals []WorkerRecord, now t
 		s.seenTerminals = map[string]time.Time{}
 	}
 	if s.blockedTerminals == nil {
-		s.blockedTerminals = map[string]string{}
+		s.blockedTerminals = map[string]blockedTerminal{}
 	}
 
 	for _, rec := range terminals {
@@ -367,22 +372,19 @@ func (s *WorkerSupervisor) recordTerminalHistory(terminals []WorkerRecord, now t
 			continue
 		}
 		if isRestartBlockedWorker(rec) {
-			s.blockedTerminals[rec.ID] = firstNonEmpty(
-				rec.ReapReason,
-				rec.Status,
-				rec.LastError,
-				rec.Error,
-				rec.State,
-			)
+			s.blockedTerminals[rec.ID] = blockedTerminal{
+				Reason: firstNonEmpty(
+					rec.ReapReason,
+					rec.Status,
+					rec.LastError,
+					rec.Error,
+					rec.State,
+				),
+				TerminalAt: workerTerminalTime(rec, now),
+			}
 			continue
 		}
-		ts := rec.FinishedAt
-		if ts.IsZero() {
-			ts = rec.StartedAt
-		}
-		if ts.IsZero() {
-			ts = now
-		}
+		ts := workerTerminalTime(rec, now)
 		s.restartEvents = append(s.restartEvents, ts)
 	}
 
@@ -410,6 +412,7 @@ func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.clearResolvedTerminalBlocksLocked(state.UpdatedAt)
 	if len(s.blockedTerminals) > 0 {
 		return false
 	}
@@ -433,6 +436,20 @@ func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time)
 		}
 	}
 	return !now.Before(last.Add(delay))
+}
+
+func (s *WorkerSupervisor) clearResolvedTerminalBlocksLocked(desiredUpdatedAt time.Time) {
+	if desiredUpdatedAt.IsZero() || len(s.blockedTerminals) == 0 {
+		return
+	}
+	for id, block := range s.blockedTerminals {
+		if block.TerminalAt.IsZero() {
+			continue
+		}
+		if desiredUpdatedAt.After(block.TerminalAt) {
+			delete(s.blockedTerminals, id)
+		}
+	}
 }
 
 func restartBackoffDelay(policy WorkerRestartPolicy, recentEvents int) time.Duration {
@@ -479,6 +496,16 @@ func pruneTimeWindow(times []time.Time, now time.Time, window time.Duration) []t
 		out = append(out, ts)
 	}
 	return out
+}
+
+func workerTerminalTime(rec WorkerRecord, fallback time.Time) time.Time {
+	if !rec.FinishedAt.IsZero() {
+		return rec.FinishedAt
+	}
+	if !rec.StartedAt.IsZero() {
+		return rec.StartedAt
+	}
+	return fallback
 }
 
 func isExpectedTerminalWorker(rec WorkerRecord) bool {
