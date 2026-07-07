@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -183,6 +184,64 @@ func TestWorkerSupervisorRestartBackoff(t *testing.T) {
 		require.NoError(t, supervisor.Reconcile())
 		assert.Zero(t, runningManagedWorkerCount(t, m, root))
 	})
+}
+
+func TestSupervisor_ResolvedOperatorAttentionAllowsRespawnAfterDesiredUpdate(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	installBlockingWorkerFactory(m)
+	t.Cleanup(func() {
+		stopProjectWorkers(t, m, root)
+	})
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-time.Minute)
+	seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260707T000001-oa", terminalAt)
+
+	supervisor := NewWorkerSupervisor(m)
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.UpdatedAt = terminalAt.Add(time.Second)
+	require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+	require.NoError(t, supervisor.ReconcileAt(now))
+	require.Eventually(t, func() bool {
+		return runningManagedWorkerCount(t, m, root) == 1
+	}, 2*time.Second, 20*time.Millisecond)
+}
+
+func TestSupervisor_HistoricalOperatorAttentionDoesNotBlockFreshDesiredStateAcrossRestart(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	installBlockingWorkerFactory(m)
+	t.Cleanup(func() {
+		stopProjectWorkers(t, m, root)
+	})
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-10 * time.Minute)
+	seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260707T000002-oa", terminalAt)
+
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.UpdatedAt = terminalAt.Add(time.Minute)
+
+	first := NewWorkerSupervisor(m)
+	require.NoError(t, writeDesiredStateForTest(first, desired))
+
+	restarted := NewWorkerSupervisor(m)
+	require.NoError(t, restarted.ReconcileAt(now))
+	require.Eventually(t, func() bool {
+		return runningManagedWorkerCount(t, m, root) == 1
+	}, 2*time.Second, 20*time.Millisecond)
 }
 
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
@@ -459,6 +518,38 @@ func seedTerminalFailedWorker(t *testing.T, m *WorkerManager, root, workerID str
 		LastError:   "injected test failure",
 	}
 	require.NoError(t, m.writeRecord(dir, rec))
+}
+
+func seedTerminalOperatorAttentionWorker(t *testing.T, m *WorkerManager, root, workerID string, terminalAt time.Time) {
+	t.Helper()
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	rec := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "operator_attention",
+		ReapReason:  "operator_attention",
+		ProjectRoot: root,
+		StartedAt:   terminalAt.Add(-time.Minute),
+		FinishedAt:  terminalAt,
+	}
+	require.NoError(t, m.writeRecord(dir, rec))
+}
+
+func writeDesiredStateForTest(supervisor *WorkerSupervisor, state WorkerDesiredState) error {
+	state.ApplyDefaults(supervisor.manager.projectRoot)
+	if err := state.Validate(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(supervisor.manager.rootDir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(supervisor.desiredStatePath(), append(data, '\n'), 0o644)
 }
 
 func runningManagedWorkerCount(t *testing.T, m *WorkerManager, projectRoot string) int {
