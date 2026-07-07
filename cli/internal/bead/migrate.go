@@ -616,6 +616,9 @@ type MigrateAxonStats struct {
 	// Extra[events_attachment]) are not counted because they are not
 	// rewritten by the migration — the attachment file remains canonical.
 	EventsMigrated int
+	// AttachmentsMigrated is the number of externalized attachment sidecars
+	// copied into the importer target tree during migration.
+	AttachmentsMigrated int
 }
 
 // hasInlineEvents reports whether a bead carries any inline events that

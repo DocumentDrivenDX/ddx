@@ -1461,10 +1461,17 @@ func beadEventFromMap(m map[string]any) BeadEvent {
 	if v, ok := m["source"].(string); ok {
 		e.Source = v
 	}
-	if v, ok := m["created_at"].(string); ok {
+	switch v := m["created_at"].(type) {
+	case string:
+		if parsed, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			e.CreatedAt = parsed
+			break
+		}
 		if parsed, err := time.Parse(time.RFC3339, v); err == nil {
 			e.CreatedAt = parsed
 		}
+	case time.Time:
+		e.CreatedAt = v
 	}
 	return e
 }
