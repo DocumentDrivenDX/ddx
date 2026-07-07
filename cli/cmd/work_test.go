@@ -1159,10 +1159,10 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 	require.NoError(t, err, "output=%q", out)
 
 	// AC #2: the worktree is clean after the terminal failure path — the
-	// published evidence bundle is committed, not left untracked. The only
-	// tolerated leftover is .ddx/metrics/locks.jsonl: per-machine lock-latency
-	// diagnostics rewritten on every `ddx work` run, runtime-only state outside
-	// this bead's evidence contract.
+	// published evidence bundle is gitignored (never committed, ddx-d10073a8),
+	// so it does not dirty the worktree. The only tolerated leftover is
+	// .ddx/metrics/locks.jsonl: per-machine lock-latency diagnostics rewritten
+	// on every `ddx work` run, runtime-only state outside this bead's contract.
 	statusOut, statusErr := exec.Command("git", "-C", dir, "status", "--porcelain").CombinedOutput()
 	require.NoError(t, statusErr, string(statusOut))
 	var dirty []string
@@ -1175,9 +1175,11 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 	require.Empty(t, dirty,
 		"worktree must be clean after a provider_connectivity attempt; output=%q\nstatus:\n%s", out, statusOut)
 
-	// AC #1: any execution-evidence bundle that survived to the project root is
-	// committed (tracked), never left untracked. A clean worktree (above) plus
-	// a present-and-tracked or absent bundle satisfies the contract.
+	// AC #1: execution evidence is per-machine working state and must NEVER be
+	// committed (ddx-d10073a8). Any bundle that survived to the project root is
+	// preserved on disk but gitignored, so it never appears in git history. A
+	// clean worktree (above) plus a present-but-untracked or absent bundle
+	// satisfies the contract.
 	logOut, logErr := exec.Command("git", "-C", dir, "log", "--all", "--name-only", "--pretty=format:").CombinedOutput()
 	require.NoError(t, logErr, string(logOut))
 	execDir := filepath.Join(dir, ddxroot.DirName, "executions")
@@ -1191,8 +1193,8 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 					continue
 				}
 				tracked := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", e.Name(), name))
-				require.Contains(t, string(logOut), tracked,
-					"evidence file %s present on disk must be committed", tracked)
+				require.NotContains(t, string(logOut), tracked,
+					"evidence file %s present on disk must NOT be committed (ddx-d10073a8)", tracked)
 			}
 		}
 	}
