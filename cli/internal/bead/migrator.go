@@ -11,7 +11,7 @@ type Migrator interface {
 	MigrateLifecycle(ctx context.Context) (LifecycleMigrationStats, error)
 	MigrateLifecycleDryRun(ctx context.Context) (LifecycleMigrationStats, error)
 	MigrateFromHelix(ctx context.Context) (int, bool, error)
-	MigrateToAxon(ctx context.Context) (MigrateAxonStats, error)
+	MigrateToAxon(ctx context.Context, opts MigrateAxonOptions) (MigrateAxonStats, error)
 	MigrateDryRun(ctx context.Context) (MigrateStats, error)
 	DetectLifecycleMigrationRequired(ctx context.Context) (LifecycleMigrationGateStatus, error)
 	ReconcileLifecycleMetadata(ctx context.Context, opts ReconcileOptions) ([]ReconcilePlan, error)
@@ -50,8 +50,8 @@ func (m *storeMigrator) MigrateFromHelix(_ context.Context) (int, bool, error) {
 	return m.store.migrateFromHelix()
 }
 
-func (m *storeMigrator) MigrateToAxon(ctx context.Context) (MigrateAxonStats, error) {
-	return m.store.migrateToAxon(ctx)
+func (m *storeMigrator) MigrateToAxon(ctx context.Context, opts MigrateAxonOptions) (MigrateAxonStats, error) {
+	return m.store.migrateToAxonWithOptions(ctx, opts)
 }
 
 func (m *storeMigrator) DetectLifecycleMigrationRequired(_ context.Context) (LifecycleMigrationGateStatus, error) {

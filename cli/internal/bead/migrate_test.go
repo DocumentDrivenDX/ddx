@@ -390,10 +390,10 @@ func TestMigrateToAxonNoSources(t *testing.T) {
 	assert.Equal(t, 0, stats.EventsMigrated)
 }
 
-func TestMigrator_MigrateToAxon_UsesImporter(t *testing.T) {
+func TestMigrator_MigrateToAxon_ReturnsImporterResult(t *testing.T) {
 	s, _, _ := loadMigrateToAxonFixture(t)
 	mig := &storeMigrator{store: s}
-	stats, err := mig.MigrateToAxon(testCtx())
+	stats, err := mig.MigrateToAxon(testCtx(), MigrateAxonOptions{CopyAttachments: true})
 	require.NoError(t, err)
 	assert.Equal(t, 5, stats.BeadsMigrated)
 	assert.Equal(t, 4, stats.EventsMigrated)

@@ -33,27 +33,32 @@ func (op AppendEventOp) Apply(b *Bead) error {
 	return nil
 }
 
-type migrateAxonOptions struct {
+type MigrateAxonOptions struct {
 	DryRun          bool
 	Verify          bool
+	Limit           int
 	CopyAttachments bool
 }
 
 // migrateToAxon imports the JSONL corpus into the configured Axon-backed
 // store using the same write surface the backend exposes to callers.
 func (s *Store) migrateToAxon(ctx context.Context) (MigrateAxonStats, error) {
+	return s.migrateToAxonWithOptions(ctx, MigrateAxonOptions{
+		CopyAttachments: true,
+	})
+}
+
+func (s *Store) migrateToAxonWithOptions(ctx context.Context, opts MigrateAxonOptions) (MigrateAxonStats, error) {
 	if s == nil {
 		return MigrateAxonStats{}, fmt.Errorf("bead: nil store")
 	}
 	if err := ctx.Err(); err != nil {
 		return MigrateAxonStats{}, err
 	}
-	return importJSONLCorpusToAxon(ctx, s, s.Dir, migrateAxonOptions{
-		CopyAttachments: true,
-	})
+	return importJSONLCorpusToAxon(ctx, s, s.Dir, opts)
 }
 
-func importJSONLCorpusToAxon(ctx context.Context, target *Store, sourceDir string, opts migrateAxonOptions) (MigrateAxonStats, error) {
+func importJSONLCorpusToAxon(ctx context.Context, target *Store, sourceDir string, opts MigrateAxonOptions) (MigrateAxonStats, error) {
 	var stats MigrateAxonStats
 	if target == nil {
 		return stats, fmt.Errorf("bead: nil axon store")
@@ -61,10 +66,16 @@ func importJSONLCorpusToAxon(ctx context.Context, target *Store, sourceDir strin
 	if err := ctx.Err(); err != nil {
 		return stats, err
 	}
+	if opts.Limit < 0 {
+		return stats, fmt.Errorf("bead: migrate-to-axon limit must be >= 0")
+	}
 
 	sourceBeads, err := loadImportCorpusForAxon(sourceDir)
 	if err != nil {
 		return stats, err
+	}
+	if opts.Limit > 0 && len(sourceBeads) > opts.Limit {
+		sourceBeads = sourceBeads[:opts.Limit]
 	}
 
 	prepared, eventsMigrated, attachmentsMigrated, err := prepareImportedAxonCorpus(sourceDir, sourceBeads)

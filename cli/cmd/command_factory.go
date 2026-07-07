@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -65,6 +66,10 @@ type CommandFactory struct {
 	// callback. Tests inject this to assert on the number of land calls
 	// without needing a real git repo.
 	executeBeadLandingAdvancerOverride func(res *agent.ExecuteBeadResult) (*agent.LandResult, error)
+
+	// beadMigratorOverride, when non-nil, replaces the bead migrator factory
+	// so tests can capture migration options without hitting the real importer.
+	beadMigratorOverride func(*bead.Store) (bead.Migrator, error)
 
 	// syncGitRunnerOverride replaces the real git runner in 'ddx sync' (for testing).
 	syncGitRunnerOverride syncGitRunner

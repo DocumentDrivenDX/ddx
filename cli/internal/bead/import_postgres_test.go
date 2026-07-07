@@ -105,7 +105,7 @@ func TestImporter_DryRun_CountsOnly(t *testing.T) {
 	beforeAttachment, err := os.ReadFile(filepath.Join(sourceDir, "attachments", "ddx-imp-2", EventsAttachmentFileName))
 	require.NoError(t, err)
 
-	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, migrateAxonOptions{
+	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
 		DryRun:          true,
 		CopyAttachments: true,
 	})
@@ -124,6 +124,60 @@ func TestImporter_DryRun_CountsOnly(t *testing.T) {
 	snapshotAfter, err := target.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, snapshotBefore, snapshotAfter)
+}
+
+func TestImporter_Apply_RespectsLimit(t *testing.T) {
+	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	now := time.Date(2026, time.January, 7, 12, 30, 0, 0, time.UTC)
+	beads := []Bead{
+		{
+			ID:        "ddx-limit-1",
+			Title:     "one",
+			Status:    StatusOpen,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		{
+			ID:        "ddx-limit-2",
+			Title:     "two",
+			Status:    StatusClosed,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Extra: map[string]any{
+				"events": []map[string]any{
+					{"kind": "summary", "summary": "done", "created_at": now.Add(time.Minute).Format(time.RFC3339Nano)},
+				},
+			},
+		},
+		{
+			ID:        "ddx-limit-3",
+			Title:     "three",
+			Status:    StatusClosed,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	writeAxonImportCorpus(t, sourceDir, beads, nil)
+
+	target := newAxonStore(t)
+	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
+		Limit:           2,
+		CopyAttachments: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, stats.BeadsMigrated)
+	assert.Equal(t, 1, stats.EventsMigrated)
+
+	got, err := target.ReadAll(testCtx())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, []string{"ddx-limit-1", "ddx-limit-2"}, []string{got[0].ID, got[1].ID})
 }
 
 func TestImporter_PreservesExtras(t *testing.T) {
@@ -146,7 +200,7 @@ func TestImporter_PreservesExtras(t *testing.T) {
 	writeAxonImportCorpus(t, sourceDir, []Bead{sourceBead}, nil)
 
 	target := newAxonStore(t)
-	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, migrateAxonOptions{
+	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
 		CopyAttachments: true,
 		Verify:          true,
 	})
@@ -183,7 +237,7 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 	writeEventsSidecar(t, sourceDir, sourceBead.ID, events)
 
 	target := newAxonStore(t)
-	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, migrateAxonOptions{
+	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
 		CopyAttachments: true,
 	})
 	require.NoError(t, err)
@@ -208,7 +262,7 @@ func TestImporter_Verify_DetectsDrift(t *testing.T) {
 	writeAxonImportCorpus(t, sourceDir, sourceBeads, nil)
 
 	target := newAxonStore(t)
-	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, migrateAxonOptions{
+	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
 		CopyAttachments: true,
 	})
 	require.NoError(t, err)
@@ -262,7 +316,7 @@ func TestImporter_Verify_RoundTripPassesOnCleanImport(t *testing.T) {
 	})
 
 	target := newAxonStore(t)
-	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, migrateAxonOptions{
+	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
 		CopyAttachments: true,
 		Verify:          true,
 	})

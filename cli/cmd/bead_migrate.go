@@ -9,13 +9,16 @@ import (
 )
 
 func (f *CommandFactory) beadMigrator(s *bead.Store) (bead.Migrator, error) {
+	if f.beadMigratorOverride != nil {
+		return f.beadMigratorOverride(s)
+	}
 	return bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
 }
 
 func (f *CommandFactory) newBeadMigrateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
-		Short: "Split active beads.jsonl into beads + beads-archive + attachments",
+		Short: "Migrate bead storage between JSONL lifecycle and Axon importer flows",
 		Long: `Split the existing .ddx/beads.jsonl into the modern layout:
 
   * Closed beads' inline events are moved to per-bead sidecars under
@@ -27,11 +30,10 @@ The command is idempotent — a second run with no further changes is a
 no-op. All bead IDs remain addressable: 'ddx bead show', 'ddx bead list',
 and 'ddx bead status' transparently consult the archive partner.
 
-With --to axon, the command instead copies the entire JSONL corpus
-(.ddx/beads.jsonl + .ddx/beads-archive.jsonl, including externalized
-events) losslessly into the axon backend under .ddx/axon/. The source
-JSONL files are not modified — the operator removes them after verifying
-the migration via 'ddx bead export | diff'.`,
+With --to-axon, the command imports the JSONL corpus into the Axon
+backend using the importer path. Use --dry-run to inspect the counts,
+--apply to write the corpus, --verify to read back and validate the
+import, and --limit N to cap the number of beads imported.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
@@ -40,35 +42,40 @@ the migration via 'ddx bead export | diff'.`,
 				return err
 			}
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			applyLifecycle, _ := cmd.Flags().GetBool("apply")
+			applyFlag, _ := cmd.Flags().GetBool("apply")
+			verifyAxon, _ := cmd.Flags().GetBool("verify")
+			limit, _ := cmd.Flags().GetInt("limit")
+			toAxon, _ := cmd.Flags().GetBool("to-axon")
 			asJSON, _ := cmd.Flags().GetBool("json")
 			lifecycle, _ := cmd.Flags().GetBool("lifecycle")
-			target, _ := cmd.Flags().GetString("to")
-			if applyLifecycle && !lifecycle {
-				return fmt.Errorf("bead: --apply is only supported with --lifecycle")
-			}
-			if applyLifecycle && dryRun {
+			if applyFlag && dryRun {
 				return fmt.Errorf("bead: --apply and --dry-run are mutually exclusive")
 			}
 
-			if target != "" {
+			if toAxon {
 				if lifecycle {
-					return fmt.Errorf("bead: --lifecycle cannot be combined with --to")
+					return fmt.Errorf("bead: --lifecycle cannot be combined with --to-axon")
 				}
-				if target != "axon" {
-					return fmt.Errorf("bead: unknown migration target %q (supported: axon)", target)
+				if dryRun && verifyAxon {
+					return fmt.Errorf("bead: --verify is not supported with --dry-run")
 				}
-				if dryRun {
-					return fmt.Errorf("bead: --dry-run is not supported with --to axon")
+				if limit < 0 {
+					return fmt.Errorf("bead: --limit must be >= 0")
 				}
-				ax, err := mig.MigrateToAxon(cmd.Context())
+				ax, err := mig.MigrateToAxon(cmd.Context(), bead.MigrateAxonOptions{
+					DryRun:          dryRun,
+					Verify:          verifyAxon,
+					Limit:           limit,
+					CopyAttachments: true,
+				})
 				if err != nil {
 					return err
 				}
 				view := migrateAxonStatsView{
-					BeadsMigrated:  ax.BeadsMigrated,
-					EventsMigrated: ax.EventsMigrated,
-					To:             "axon",
+					MigrateAxonStats: ax,
+					DryRun:           dryRun,
+					Verify:           verifyAxon,
+					Limit:            limit,
 				}
 				if asJSON {
 					enc := json.NewEncoder(cmd.OutOrStdout())
@@ -76,8 +83,16 @@ the migration via 'ddx bead export | diff'.`,
 					return enc.Encode(view)
 				}
 				out := cmd.OutOrStdout()
-				fmt.Fprintf(out, "Migrated %d bead(s) (%d inline event(s)) to axon backend at .ddx/axon/\n", view.BeadsMigrated, view.EventsMigrated)
-				fmt.Fprintln(out, "Source files left intact — remove .ddx/beads.jsonl and .ddx/beads-archive.jsonl after verifying.")
+				if dryRun {
+					fmt.Fprintln(out, "Dry run — no files were modified.")
+				}
+				fmt.Fprintf(out, "Imported %d bead(s) (%d inline event(s)) into axon backend\n", view.BeadsMigrated, view.EventsMigrated)
+				if view.AttachmentsMigrated > 0 {
+					fmt.Fprintf(out, "Copied attachments: %d\n", view.AttachmentsMigrated)
+				}
+				if verifyAxon {
+					fmt.Fprintln(out, "Verification passed.")
+				}
 				return nil
 			}
 
@@ -86,7 +101,7 @@ the migration via 'ddx bead export | diff'.`,
 					st  bead.LifecycleMigrationStats
 					err error
 				)
-				if applyLifecycle {
+				if applyFlag {
 					err = f.withBeadTrackerWriteLock(func() error {
 						st, err = mig.MigrateLifecycle(cmd.Context())
 						if err != nil {
@@ -115,7 +130,7 @@ the migration via 'ddx bead export | diff'.`,
 					return enc.Encode(st)
 				}
 				out := cmd.OutOrStdout()
-				if !applyLifecycle {
+				if !applyFlag {
 					fmt.Fprintln(out, "Dry run — no files were modified.")
 				}
 				fmt.Fprintf(out, "needs_human labels:                  %d\n", st.LegacyNeedsHumanLabels)
@@ -128,7 +143,7 @@ the migration via 'ddx bead export | diff'.`,
 				fmt.Fprintf(out, "to closed:                           %d\n", st.ToClosed)
 				fmt.Fprintf(out, "to cancelled:                        %d\n", st.ToCancelled)
 				fmt.Fprintf(out, "schema marker missing:               %t\n", st.SchemaMarkerMissing)
-				if applyLifecycle {
+				if applyFlag {
 					fmt.Fprintf(out, "rows changed:                        %d\n", st.RowsChanged)
 					fmt.Fprintf(out, "marker written:                      %t\n", st.MarkerWritten)
 					if !st.Changed() {
@@ -186,9 +201,11 @@ the migration via 'ddx bead export | diff'.`,
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("dry-run", false, "Report what would change without writing")
+	cmd.Flags().Bool("to-axon", false, "Import the JSONL corpus into the Axon backend")
+	cmd.Flags().Bool("verify", false, "Verify the imported Axon corpus after writing")
+	cmd.Flags().Int("limit", 0, "Limit the number of beads imported into Axon (0 = all)")
 	cmd.Flags().Bool("lifecycle", false, "Migrate legacy lifecycle labels and pseudo-statuses to status-owned state")
-	cmd.Flags().Bool("apply", false, "Apply --lifecycle migration (default with --lifecycle is dry-run)")
-	cmd.Flags().String("to", "", "Migrate corpus to a different backend (supported: axon)")
+	cmd.Flags().Bool("apply", false, "Apply the selected migration mode")
 	return cmd
 }
 
@@ -199,7 +216,8 @@ type migrateStatsView struct {
 }
 
 type migrateAxonStatsView struct {
-	BeadsMigrated  int    `json:"BeadsMigrated"`
-	EventsMigrated int    `json:"EventsMigrated"`
-	To             string `json:"To"`
+	bead.MigrateAxonStats
+	DryRun bool `json:"DryRun,omitempty"`
+	Verify bool `json:"Verify,omitempty"`
+	Limit  int  `json:"Limit,omitempty"`
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,6 +14,43 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type captureAxonMigrator struct {
+	called bool
+	opts   bead.MigrateAxonOptions
+	stats  bead.MigrateAxonStats
+	err    error
+}
+
+func (m *captureAxonMigrator) MigrateLifecycle(context.Context) (bead.LifecycleMigrationStats, error) {
+	return bead.LifecycleMigrationStats{}, nil
+}
+
+func (m *captureAxonMigrator) MigrateLifecycleDryRun(context.Context) (bead.LifecycleMigrationStats, error) {
+	return bead.LifecycleMigrationStats{}, nil
+}
+
+func (m *captureAxonMigrator) MigrateFromHelix(context.Context) (int, bool, error) {
+	return 0, false, nil
+}
+
+func (m *captureAxonMigrator) MigrateToAxon(_ context.Context, opts bead.MigrateAxonOptions) (bead.MigrateAxonStats, error) {
+	m.called = true
+	m.opts = opts
+	return m.stats, m.err
+}
+
+func (m *captureAxonMigrator) MigrateDryRun(context.Context) (bead.MigrateStats, error) {
+	return bead.MigrateStats{}, nil
+}
+
+func (m *captureAxonMigrator) DetectLifecycleMigrationRequired(context.Context) (bead.LifecycleMigrationGateStatus, error) {
+	return bead.LifecycleMigrationGateStatus{}, nil
+}
+
+func (m *captureAxonMigrator) ReconcileLifecycleMetadata(context.Context, bead.ReconcileOptions) ([]bead.ReconcilePlan, error) {
+	return nil, nil
+}
 
 func TestMigrateCommand(t *testing.T) {
 	workingDir := t.TempDir()
@@ -83,27 +121,89 @@ func TestMigrateCommand(t *testing.T) {
 	assert.Equal(t, 0, stats2.Archived)
 }
 
-// TestMigrateCommandToAxon covers the --to axon flag documentation and the
-// deprecation behavior: the flag exists and is documented, but invoking it
-// now returns a deprecation error since MigrateToAxon is replaced by ddx-IMP.
-func TestMigrateCommandToAxon(t *testing.T) {
+func TestMigrateCommandToAxonHelp(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
 
 	helpOut, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--help")
 	require.NoError(t, err)
-	assert.Contains(t, helpOut, "--to", "--help must advertise the --to flag")
-	assert.Contains(t, helpOut, "axon", "--help must advertise the axon target")
+	assert.Contains(t, helpOut, "--to-axon", "--help must advertise the axon importer flag")
+	assert.NotContains(t, helpOut, "--to ", "--help must not mention the legacy --to flag")
+}
 
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
-	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
-	activeRows := `{"id":"ddx-mta-1","title":"open","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}` + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(activeRows), 0o644))
+func TestBeadMigrate_ToAxonDryRunRoutesToImporter(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	capture := &captureAxonMigrator{
+		stats: bead.MigrateAxonStats{BeadsMigrated: 3, EventsMigrated: 2},
+	}
+	factory.beadMigratorOverride = func(*bead.Store) (bead.Migrator, error) {
+		return capture, nil
+	}
 
-	// --to axon now returns ErrDeprecated: MigrateToAxon is replaced by ddx-IMP.
-	_, err = executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to", "axon")
-	require.Error(t, err, "ddx bead migrate --to axon must return deprecation error")
-	assert.Contains(t, err.Error(), "deprecated")
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to-axon", "--dry-run", "--json")
+	require.NoError(t, err)
+	assert.True(t, capture.called)
+	assert.True(t, capture.opts.DryRun)
+	assert.False(t, capture.opts.Verify)
+	assert.Equal(t, 0, capture.opts.Limit)
+	assert.True(t, capture.opts.CopyAttachments)
+
+	var stats struct {
+		BeadsMigrated  int `json:"BeadsMigrated"`
+		EventsMigrated int `json:"EventsMigrated"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.Equal(t, 3, stats.BeadsMigrated)
+	assert.Equal(t, 2, stats.EventsMigrated)
+}
+
+func TestBeadMigrate_ToAxonApplyRoutesToImporter(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	capture := &captureAxonMigrator{
+		stats: bead.MigrateAxonStats{BeadsMigrated: 4, EventsMigrated: 1, AttachmentsMigrated: 2},
+	}
+	factory.beadMigratorOverride = func(*bead.Store) (bead.Migrator, error) {
+		return capture, nil
+	}
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to-axon", "--apply", "--limit", "7", "--json")
+	require.NoError(t, err)
+	assert.True(t, capture.called)
+	assert.False(t, capture.opts.DryRun)
+	assert.False(t, capture.opts.Verify)
+	assert.Equal(t, 7, capture.opts.Limit)
+	assert.True(t, capture.opts.CopyAttachments)
+
+	var stats struct {
+		BeadsMigrated       int `json:"BeadsMigrated"`
+		EventsMigrated      int `json:"EventsMigrated"`
+		AttachmentsMigrated int `json:"AttachmentsMigrated"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.Equal(t, 4, stats.BeadsMigrated)
+	assert.Equal(t, 1, stats.EventsMigrated)
+	assert.Equal(t, 2, stats.AttachmentsMigrated)
+}
+
+func TestBeadMigrate_ToAxonVerifyRoutesToImporter(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	capture := &captureAxonMigrator{
+		stats: bead.MigrateAxonStats{BeadsMigrated: 1, EventsMigrated: 0},
+	}
+	factory.beadMigratorOverride = func(*bead.Store) (bead.Migrator, error) {
+		return capture, nil
+	}
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to-axon", "--verify")
+	require.NoError(t, err)
+	assert.True(t, capture.called)
+	assert.False(t, capture.opts.DryRun)
+	assert.True(t, capture.opts.Verify)
+	assert.Equal(t, 0, capture.opts.Limit)
+	assert.True(t, capture.opts.CopyAttachments)
 }
 
 func TestMigrateCommandDryRun(t *testing.T) {
