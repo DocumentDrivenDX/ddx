@@ -564,6 +564,41 @@ func TestLand_DirtyProjectRootDoesNotBlockSuccessfulLand(t *testing.T) {
 	}
 }
 
+func TestCheckpointLandingWorktreeLocalChanges_IgnoresLockMetrics(t *testing.T) {
+	r := newLandTestRepo(t)
+	locksRel := filepath.Join(ddxroot.DirName, "metrics", "locks.jsonl")
+	rotatedRel := filepath.Join(ddxroot.DirName, "metrics", "locks.jsonl.20260706T234207")
+	r.writeFile(locksRel, "{\"event\":\"initial\"}\n")
+	r.writeFile(rotatedRel, "{\"event\":\"rotated-initial\"}\n")
+	r.runGit("add", locksRel, rotatedRel)
+	r.runGit("commit", "-m", "track lock metrics")
+
+	headBefore := r.resolveRef("HEAD")
+	r.writeFile(locksRel, "{\"event\":\"land_ref_update\"}\n")
+	r.writeFile(rotatedRel, "{\"event\":\"rotated-land_ref_update\"}\n")
+
+	committed, err := checkpointLandingWorktreeLocalChanges(r.dir, "pre-land main")
+	if err != nil {
+		t.Fatalf("checkpointLandingWorktreeLocalChanges: %v", err)
+	}
+	if committed {
+		t.Fatalf("lock metrics dirt must not create a landing checkpoint commit")
+	}
+	if got := r.resolveRef("HEAD"); got != headBefore {
+		t.Fatalf("HEAD advanced for lock metrics only: before=%s after=%s", headBefore, got)
+	}
+	status := r.runGit("status", "--porcelain", "--", locksRel, rotatedRel)
+	if !strings.Contains(status, " M "+filepath.ToSlash(locksRel)) {
+		t.Fatalf("lock metrics file should remain dirty for its own machinery, status=%q", status)
+	}
+	if !strings.Contains(status, " M "+filepath.ToSlash(rotatedRel)) {
+		t.Fatalf("rotated lock metrics file should remain dirty for its own machinery, status=%q", status)
+	}
+	if log := r.runGit("log", "--format=%s", "--", locksRel, rotatedRel); strings.Contains(log, "checkpoint local tree before land") {
+		t.Fatalf("lock metrics must not be checkpoint-committed; log=%q", log)
+	}
+}
+
 func TestLand_SyncDeferredWhenOperatorCheckoutDirtyOverlap(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}

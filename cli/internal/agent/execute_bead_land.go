@@ -560,13 +560,13 @@ func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
 		// Rename entries are "R  old -> new"; commit both sides.
 		if idx := strings.Index(p, " -> "); idx >= 0 {
 			for _, side := range []string{p[:idx], p[idx+4:]} {
-				if side = strings.TrimSpace(side); side != "" && !trackerpaths.IsManagedTrackerPath(side) {
+				if side = strings.TrimSpace(side); side != "" && !skipLandingCheckpointPath(side) {
 					paths = append(paths, side)
 				}
 			}
 			continue
 		}
-		if p == "" || trackerpaths.IsManagedTrackerPath(p) {
+		if p == "" || skipLandingCheckpointPath(p) {
 			continue
 		}
 		paths = append(paths, p)
@@ -636,6 +636,17 @@ func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
 		return false, fmt.Errorf("checkpoint commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return true, nil
+}
+
+func skipLandingCheckpointPath(path string) bool {
+	clean := strings.TrimSpace(filepath.ToSlash(path))
+	if clean == "" {
+		return false
+	}
+	if trackerpaths.IsManagedTrackerPath(clean) {
+		return true
+	}
+	return clean == ".ddx/metrics/locks.jsonl" || strings.HasPrefix(clean, ".ddx/metrics/locks.jsonl.")
 }
 
 func ensureLandingWorktreeReady(dir, targetBranch string) error {
