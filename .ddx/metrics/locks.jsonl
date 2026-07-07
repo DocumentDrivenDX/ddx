@@ -9168,3 +9168,4 @@
 {"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":115390,"acquired_at":"2026-07-07T04:19:57.498407691Z","released_at":"2026-07-07T04:19:57.539391592Z","duration_ms":40}
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":115390,"acquired_at":"2026-07-07T04:19:57.555878836Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":115390,"acquired_at":"2026-07-07T04:19:57.555878836Z","released_at":"2026-07-07T04:19:57.653565295Z","duration_ms":97}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":115390,"acquired_at":"2026-07-07T04:19:57.469306971Z","released_at":"2026-07-07T04:19:58.540529172Z","duration_ms":1071}
