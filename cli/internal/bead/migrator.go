@@ -2,7 +2,6 @@ package bead
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -51,10 +50,8 @@ func (m *storeMigrator) MigrateFromHelix(_ context.Context) (int, bool, error) {
 	return m.store.migrateFromHelix()
 }
 
-// MigrateToAxon is deprecated. The JSONL-to-axon copy will be replaced by the
-// importer in the ddx-IMP bead. This method always returns ErrDeprecated.
-func (m *storeMigrator) MigrateToAxon(_ context.Context) (MigrateAxonStats, error) {
-	return MigrateAxonStats{}, fmt.Errorf("%w: MigrateToAxon is replaced by the importer in ddx-IMP", ErrDeprecated)
+func (m *storeMigrator) MigrateToAxon(ctx context.Context) (MigrateAxonStats, error) {
+	return m.store.migrateToAxon(ctx)
 }
 
 func (m *storeMigrator) DetectLifecycleMigrationRequired(_ context.Context) (LifecycleMigrationGateStatus, error) {

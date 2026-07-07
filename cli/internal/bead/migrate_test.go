@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -266,7 +265,7 @@ func TestMigrateLargeFixtureSplits(t *testing.T) {
 	assert.False(t, second.Changed())
 }
 
-func loadMigrateToAxonFixture(t *testing.T) (*Store, bytes.Buffer) {
+func loadMigrateToAxonFixture(t *testing.T) (*Store, *fakeAxonGraphQLTransport, bytes.Buffer) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
@@ -285,17 +284,21 @@ func loadMigrateToAxonFixture(t *testing.T) (*Store, bytes.Buffer) {
 	var preBuf bytes.Buffer
 	require.NoError(t, jsonlStore.ExportTo(testCtx(), &preBuf))
 	require.NotZero(t, preBuf.Len(), "fixture must produce a non-empty pre-migration export")
-	return jsonlStore, preBuf
+
+	axonStore := NewStore(dir)
+	transport := newFakeAxonGraphQLTransport()
+	ax := NewAxonBackend(dir, axonStore.LockWait)
+	ax.GraphQLTransport = transport
+	ax.GraphQLClient = transport
+	axonStore.backend = ax
+	require.NoError(t, axonStore.Init(testCtx()))
+	return axonStore, transport, preBuf
 }
 
-// TestMigrate_AxonBackend_RoundTrip verifies that the fixture pair
-// (.ddx/beads.jsonl + .ddx/beads-archive.jsonl) migrates to axon and that a
-// post-migration export matches the pre-migration JSONL export bead-for-bead
-// (sorted to ignore active-then-archive ordering quirks in ExportTo).
-func TestMigrate_AxonBackend_RoundTrip(t *testing.T) {
-	jsonlStore, preBuf := loadMigrateToAxonFixture(t)
+func TestImporter_Apply_WritesToPostgres(t *testing.T) {
+	axonStore, transport, _ := loadMigrateToAxonFixture(t)
 
-	stats, err := jsonlStore.migrateToAxon()
+	stats, err := axonStore.migrateToAxon(testCtx())
 	require.NoError(t, err)
 	// 3 active + 2 archive (no overlap) = 5 distinct beads.
 	assert.Equal(t, 5, stats.BeadsMigrated)
@@ -305,89 +308,95 @@ func TestMigrate_AxonBackend_RoundTrip(t *testing.T) {
 
 	// Source files left intact — operator removes them after verification.
 	for _, src := range []string{"beads.jsonl", "beads-archive.jsonl"} {
-		_, statErr := os.Stat(filepath.Join(jsonlStore.Dir, src))
+		_, statErr := os.Stat(filepath.Join(axonStore.Dir, src))
 		assert.NoError(t, statErr, "source file %s must not be deleted by migration", src)
 	}
-	// Axon collection files exist.
-	for _, dst := range []string{"axon/ddx_beads.jsonl", "axon/ddx_bead_events.jsonl"} {
-		_, statErr := os.Stat(filepath.Join(jsonlStore.Dir, dst))
-		assert.NoError(t, statErr, "axon file %s must exist after migration", dst)
+	beads, events := transport.snapshot()
+	assert.Len(t, beads, 5)
+	assert.Len(t, events, 4)
+	assert.ElementsMatch(t, []string{
+		"ddx-mta-active1",
+		"ddx-mta-active2",
+		"ddx-mta-active3",
+		"ddx-mta-arch1",
+		"ddx-mta-arch2",
+	}, []string{beads[0].ID, beads[1].ID, beads[2].ID, beads[3].ID, beads[4].ID})
+	assert.Equal(t, []string{"alice claimed", "progress note", "shipped", "closed by bob"}, []string{
+		events[0].Summary,
+		events[1].Summary,
+		events[2].Summary,
+		events[3].Summary,
+	})
+	assert.Equal(t, "ddx-mta-active2", events[0].EventOf)
+	assert.Equal(t, "ddx-mta-active2", events[1].EventOf)
+	assert.Equal(t, "ddx-mta-active3", events[2].EventOf)
+	assert.Equal(t, "ddx-mta-arch1", events[3].EventOf)
+}
+
+func TestImporter_Apply_Idempotent_OnReRun(t *testing.T) {
+	axonStore, transport, _ := loadMigrateToAxonFixture(t)
+	stats, err := axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+
+	beadsBefore, eventsBefore := transport.snapshot()
+	stats2, err := axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+	assert.Equal(t, 5, stats.BeadsMigrated)
+	assert.Equal(t, 4, stats.EventsMigrated)
+	assert.Equal(t, 0, stats2.BeadsMigrated, "second migration must report no new bead writes")
+	assert.Equal(t, 0, stats2.EventsMigrated, "second migration must report no new event writes")
+
+	beadsAfter, eventsAfter := transport.snapshot()
+	assert.Equal(t, beadsBefore, beadsAfter, "second migration must not duplicate bead rows")
+	assert.Equal(t, eventsBefore, eventsAfter, "second migration must not duplicate event rows")
+}
+
+func TestImporter_PreservesEventOrdering(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "beads.jsonl"), []byte(`{"id":"ddx-order-01","title":"ordering","type":"task","status":"open","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z","events":[{"kind":"summary","summary":"later","created_at":"2026-01-02T00:00:00Z"},{"kind":"summary","summary":"earlier","created_at":"2026-01-01T12:00:00Z"},{"kind":"summary","summary":"same-time-a","created_at":"2026-01-03T00:00:00Z"},{"kind":"summary","summary":"same-time-b","created_at":"2026-01-03T00:00:00Z"}]}`), 0o644))
+
+	axonStore := NewStore(dir)
+	transport := newFakeAxonGraphQLTransport()
+	ax := NewAxonBackend(dir, axonStore.LockWait)
+	ax.GraphQLTransport = transport
+	ax.GraphQLClient = transport
+	axonStore.backend = ax
+	require.NoError(t, axonStore.Init(testCtx()))
+
+	_, err := axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+
+	events, err := axonStore.Events("ddx-order-01")
+	require.NoError(t, err)
+	require.Len(t, events, 4)
+	for i := 1; i < len(events); i++ {
+		assert.False(t, events[i].CreatedAt.Before(events[i-1].CreatedAt), "events must be monotonic by created_at")
 	}
-
-	// Axon-backed export must match the JSONL export.
-	axStore := NewStore(jsonlStore.Dir)
-	axStore.backend = NewAxonBackend(jsonlStore.Dir, axStore.LockWait)
-	var postBuf bytes.Buffer
-	require.NoError(t, axStore.ExportTo(testCtx(), &postBuf))
-
-	pre := sortedNonEmptyLines(preBuf.String())
-	post := sortedNonEmptyLines(postBuf.String())
-	assert.Equal(t, pre, post, "post-migration export must round-trip the pre-migration export")
+	assert.Equal(t, "earlier", events[0].Summary)
+	assert.Equal(t, "later", events[1].Summary)
+	assert.Equal(t, "same-time-a", events[2].Summary)
+	assert.Equal(t, "same-time-b", events[3].Summary)
 }
 
-// TestMigrate_AxonBackend_Idempotent verifies that a second migration pass on
-// the same fixture is a no-op at the axon file level.
-func TestMigrate_AxonBackend_Idempotent(t *testing.T) {
-	jsonlStore, _ := loadMigrateToAxonFixture(t)
-	stats, err := jsonlStore.migrateToAxon()
-	require.NoError(t, err)
-
-	axBeadsBefore, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_beads.jsonl"))
-	require.NoError(t, err)
-	axEventsBefore, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_bead_events.jsonl"))
-	require.NoError(t, err)
-
-	stats2, err := jsonlStore.migrateToAxon()
-	require.NoError(t, err)
-	assert.Equal(t, stats, stats2, "second migration reports the same counts")
-
-	axBeadsAfter, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_beads.jsonl"))
-	require.NoError(t, err)
-	axEventsAfter, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_bead_events.jsonl"))
-	require.NoError(t, err)
-	assert.Equal(t, string(axBeadsBefore), string(axBeadsAfter), "second migration must not duplicate bead rows")
-	assert.Equal(t, string(axEventsBefore), string(axEventsAfter), "second migration must not duplicate event rows")
-}
-
-// TestMigrateToAxonRoundTripFromFixture preserves the original broader name so
-// existing documentation stays accurate while the AC-specific names above give
-// the bead a direct test target.
-func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
-	TestMigrate_AxonBackend_RoundTrip(t)
-	TestMigrate_AxonBackend_Idempotent(t)
-}
-
-// TestMigrateToAxonNoSources is a defensive sanity test: an empty .ddx with
-// no source files must not error and produces an empty axon snapshot.
 func TestMigrateToAxonNoSources(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	s := NewStore(dir)
-	stats, err := s.migrateToAxon()
+	stats, err := s.migrateToAxon(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 0, stats.BeadsMigrated)
 	assert.Equal(t, 0, stats.EventsMigrated)
 }
 
-func sortedNonEmptyLines(s string) []string {
-	lines := strings.Split(s, "\n")
-	out := make([]string, 0, len(lines))
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		out = append(out, l)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func TestMigrator_MigrateToAxon_ReturnsDeprecated(t *testing.T) {
-	s := newTestStore(t)
+func TestMigrator_MigrateToAxon_UsesImporter(t *testing.T) {
+	s, _, _ := loadMigrateToAxonFixture(t)
 	mig := &storeMigrator{store: s}
-	_, err := mig.MigrateToAxon(testCtx())
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrDeprecated)
+	stats, err := mig.MigrateToAxon(testCtx())
+	require.NoError(t, err)
+	assert.Equal(t, 5, stats.BeadsMigrated)
+	assert.Equal(t, 4, stats.EventsMigrated)
 }
 
 func TestMigrator_LifecycleMigration_RoundTrip(t *testing.T) {

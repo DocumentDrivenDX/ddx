@@ -1,13 +1,11 @@
 package bead
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -618,110 +616,6 @@ type MigrateAxonStats struct {
 	// Extra[events_attachment]) are not counted because they are not
 	// rewritten by the migration — the attachment file remains canonical.
 	EventsMigrated int
-}
-
-// migrateToAxon reads beads from the JSONL active collection
-// (.ddx/beads.jsonl) and the JSONL archive partner
-// (.ddx/beads-archive.jsonl) rooted under s.Dir and writes them losslessly
-// into the axon backend (.ddx/axon/). Source files are not modified.
-//
-// Reads always go through fresh JSONL backends regardless of s.backend so
-// the migration is deterministic and not affected by the operator's
-// configured backend (e.g. an axon-misconfigured store still migrates from
-// the on-disk JSONL files). Active wins on duplicate IDs.
-//
-// Idempotent: AxonBackend.WriteAll overwrites both collection files in
-// temp+rename style, so re-running on the same source state produces an
-// identical axon snapshot with no duplicates.
-func (s *Store) migrateToAxon() (MigrateAxonStats, error) {
-	var stats MigrateAxonStats
-
-	activeSpec := DefaultRegistry().Resolve(DefaultCollection)
-	activeFile, activeLock := activeSpec.PathsUnder(s.Dir)
-	activeBackend := NewJSONLBackend(s.Dir, activeFile, activeLock, s.LockWait)
-
-	archiveSpec := DefaultRegistry().Resolve(BeadsArchiveCollection)
-	archiveFile, archiveLock := archiveSpec.PathsUnder(s.Dir)
-	archiveBackend := NewJSONLBackend(s.Dir, archiveFile, archiveLock, s.LockWait)
-
-	activeBeads, err := activeBackend.ReadAll()
-	if err != nil {
-		return stats, fmt.Errorf("bead: migrate-to-axon read active: %w", err)
-	}
-	archiveBeads, err := archiveBackend.ReadAll()
-	if err != nil {
-		return stats, fmt.Errorf("bead: migrate-to-axon read archive: %w", err)
-	}
-
-	seen := make(map[string]bool, len(activeBeads))
-	merged := make([]Bead, 0, len(activeBeads)+len(archiveBeads))
-	for _, b := range activeBeads {
-		seen[b.ID] = true
-		merged = append(merged, b)
-	}
-	for _, b := range archiveBeads {
-		if seen[b.ID] {
-			continue
-		}
-		seen[b.ID] = true
-		merged = append(merged, b)
-	}
-
-	for i := range merged {
-		stats.BeadsMigrated++
-		if hasInlineEvents(&merged[i]) {
-			stats.EventsMigrated += len(decodeBeadEvents(merged[i].Extra["events"]))
-		}
-	}
-
-	if err := writeAxonSnapshotFiles(s.Dir, merged); err != nil {
-		return stats, fmt.Errorf("bead: migrate-to-axon write: %w", err)
-	}
-	return stats, nil
-}
-
-func writeAxonSnapshotFiles(dir string, beads []Bead) error {
-	root := filepath.Join(dir, AxonDirName)
-	beadsFile := filepath.Join(root, AxonBeadsCollection+".jsonl")
-	eventsFile := filepath.Join(root, AxonEventsCollection+".jsonl")
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return fmt.Errorf("bead: axon mkdir: %w", err)
-	}
-	sort.Slice(beads, func(i, j int) bool { return beads[i].ID < beads[j].ID })
-
-	var beadsBuf, eventsBuf bytes.Buffer
-	for _, b := range beads {
-		var events []BeadEvent
-		if b.Extra != nil {
-			if raw, ok := b.Extra["events"]; ok {
-				events = decodeBeadEvents(raw)
-			}
-		}
-		stripped := beadWithoutInlineEvents(b)
-		row, err := axonEncodeBead(stripped)
-		if err != nil {
-			return fmt.Errorf("bead: axon marshal %s: %w", b.ID, err)
-		}
-		beadsBuf.Write(row)
-		beadsBuf.WriteByte('\n')
-
-		for i, ev := range events {
-			data, err := axonEncodeEvent(b.ID, i, ev)
-			if err != nil {
-				return fmt.Errorf("bead: axon marshal event %s/%d: %w", b.ID, i, err)
-			}
-			eventsBuf.Write(data)
-			eventsBuf.WriteByte('\n')
-		}
-	}
-
-	if err := writeAtomicFile(eventsFile, eventsBuf.Bytes()); err != nil {
-		return fmt.Errorf("bead: axon write events: %w", err)
-	}
-	if err := writeAtomicFile(beadsFile, beadsBuf.Bytes()); err != nil {
-		return fmt.Errorf("bead: axon write beads: %w", err)
-	}
-	return nil
 }
 
 // hasInlineEvents reports whether a bead carries any inline events that
