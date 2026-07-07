@@ -60,9 +60,6 @@ func TestInitProject_ManagesScratchGitignoreRules(t *testing.T) {
 			t.Fatalf("expected managed ignore rule %q in .gitignore, got:\n%s", rule, content)
 		}
 	}
-	if containsExactLine(content, ".ddx/executions/") {
-		t.Fatalf("did not expect tracked execution evidence to be ignored, got:\n%s", content)
-	}
 	if containsExactLine(content, ".claude/") || containsExactLine(content, ".claude/skills/") {
 		t.Fatalf("did not expect claude skill mirror to be ignored, got:\n%s", content)
 	}

@@ -27,6 +27,12 @@ var initGitignoreRules = []string{
 	// the durable audit trail lives in the events stream, not the execution
 	// dirs. Ignore the whole tree with no un-ignore exceptions (ddx-*).
 	".ddx/executions/",
+	// Ephemeral lock-contention metrics ledger: rewritten on every tracker
+	// lock acquisition (including the ones the pre-land checkpoint itself
+	// takes), so tracking it makes checkpointLandingWorktreeLocalChanges
+	// commit it in a ~1/s loop. Keep it per-machine and untracked. Note
+	// attempts.jsonl stays managed/durable; only locks.jsonl is ephemeral.
+	".ddx/metrics/locks.jsonl",
 	".ddx/*.lock",
 	".ddx/*.tmp",
 	".ddx/server.env",
