@@ -29,15 +29,15 @@ func (f *CommandFactory) newInstallCommand() *cobra.Command {
 Without --global, installs into the current project:
   - In-tree mode (.ddx/ exists): <project>/.ddx/plugins/<name>/
   - Convention mode (no .ddx/): ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/
-Skill links are created under <project>/.claude/skills/ and <project>/.agents/skills/.
 
-With --global, installs into the machine-wide DDx plugin tree:
+With --global, installs into the machine-wide DDx package cache:
   ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
-Skill links are created under ~/.claude/skills/ and ~/.agents/skills/.
+
+For agent-facing skills, use the DDx Library plugin marketplace package:
+  npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
 
 Examples:
   ddx install helix                        # Install HELIX workflow (project-local)
-  ddx install helix --global               # Install HELIX workflow (machine-wide)
   ddx install helix --force                # Reinstall even if already up to date
   ddx plugin install helix --local ../helix --force
   ddx install persona/strict-code-reviewer # Install a single persona`,
@@ -46,7 +46,7 @@ Examples:
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
-	cmd.Flags().Bool("global", false, "Install into the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
+	cmd.Flags().Bool("global", false, "Install into the machine-wide DDx package cache (${XDG_DATA_HOME}/ddx/global/)")
 	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
 	return cmd
 }

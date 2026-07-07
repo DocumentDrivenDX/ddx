@@ -127,8 +127,23 @@ ddx run --persona architect --prompt review.md
 
 ## Getting more capabilities
 
-`ddx install <name>` adds plugins to the project. Plugins can ship
-personas, prompts, patterns, templates, and workflow skills.
+Install agent-facing skills through the marketplace path. Prefer the NPX
+marketplace installer when you want the DDx Library skills available outside one
+repository:
+
+```bash
+npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
+```
+
+Claude Code's native marketplace flow is equivalent for Claude Code users:
+
+```text
+/plugin marketplace add DocumentDrivenDX/ddx-library
+/plugin install ddx@ddx-library
+```
+
+`ddx install <name>` remains for DDx project package resources: personas,
+prompts, patterns, templates, and project-scoped workflow packages.
 
 ```bash
 ddx install helix              # HELIX workflow plugin
@@ -152,13 +167,11 @@ then the baked-in default package for `ddx` itself. This is project > global > b
 separately so operators can distinguish a real project install from a global
 fallback.
 
-The agent-facing skill outputs for project installs are the project-local
-`.agents/skills/<name>/` and `.claude/skills/<name>/` directories. Global
-installs created with `ddx install <name> --global` write the plugin to
-`${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and create links under
-`~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. Managed global
-installs are the supported machine-wide path; unmanaged home-directory skill
-installs are retired.
+Do not use `ddx install ddx --force` as skill-install guidance. Agent-facing
+skills are distributed through `ddx-library` as a plugin marketplace package;
+DDx package lookup is for runtime resources and project-local package state.
+The global install layer remains a DDx package cache, not the universal skills
+installer.
 
 ## Anti-patterns
 
@@ -199,6 +212,7 @@ ddx persona bind <role> <persona>
 ddx persona bindings
 
 # Plugin install
+npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
 ddx install <plugin>
 ddx search <term>
 ddx installed
