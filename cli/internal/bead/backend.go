@@ -19,60 +19,31 @@ type RawBackend interface {
 	WithLock(fn func() error) error
 }
 
-// Backend is the high-level bead-tracker contract that callers in
-// cli/cmd/bead_*.go and the agent loop will eventually program against. It
-// covers everything the bead description for ddx-bbdd7564 calls out: CRUD,
-// claim, list/ready/blocked, dep ops, events append, archive split, and
-// JSONL export/import.
-//
-// *Store satisfies this interface; the JSONL implementation lives in store.go
-// and delegates per-write serialization to the configured RawBackend
-// (JSONLBackend by default, ExternalBackend when DDX_BEAD_BACKEND or the
-// .ddx/config.yaml beads.backend field selects bd/br).
-//
-// chaos_test.go and other conformance suites should program against this
-// interface so additional backends can be exercised by the same tests.
+// Backend is the high-level bead-tracker contract. It is the TD-027
+// composition of the public storage sub-interfaces below, plus the existing
+// mutable operations that the rest of the repo still calls directly.
 type Backend interface {
-	// Foundational
-	Init(ctx context.Context) error
-	ReadAll(ctx context.Context) ([]Bead, error)
+	BeadInitializer
+	BeadReader
+	BeadLifecycle
+	BeadEventReader
+	BeadEventWriter
+	BeadQueries
+	BeadDependencyReader
+	BeadDependencyWriter
+	BeadArchive
+	BeadInterchangeReader
+	BeadInterchangeWriter
 
-	// CRUD
-	Create(ctx context.Context, b *Bead) error
-	Get(ctx context.Context, id string) (*Bead, error)
 	Update(ctx context.Context, id string, mutate func(*Bead)) error
 	Close(ctx context.Context, id string) error
-
-	// Claim
 	Claim(id, assignee string) error
 	ClaimWithOptions(id, assignee, session, worktree string) error
 	Unclaim(id string) error
-
-	// Query
-	List(status, label string, where map[string]string) ([]Bead, error)
-	Ready() ([]Bead, error)
-	Blocked() ([]Bead, error)
-
-	// Dep ops
-	DepAdd(ctx context.Context, id, depID string) error
-	DepRemove(ctx context.Context, id, depID string) error
-	DepTree(ctx context.Context, rootID string) (string, error)
-
-	// Events
-	AppendEvent(id string, event BeadEvent) error
-	Events(id string) ([]BeadEvent, error)
-
-	// Archive split
-	Archive(ctx context.Context, policy ArchivePolicy) ([]string, error)
-	Migrate(ctx context.Context) (MigrateStats, error)
-
-	// JSONL interchange
-	Import(ctx context.Context, source, filePath string) (int, error)
-	ExportTo(ctx context.Context, w io.Writer) error
 }
 
-// TD-027 foundation interfaces. These are additive and intentionally do not
-// change the legacy Store-backed interface above in this bead slice.
+// TD-027 foundation interfaces. These are the public storage contracts
+// composed by Backend and ReadOnlyBackend.
 type BeadInitializer interface {
 	Init(ctx context.Context) error
 }
@@ -85,29 +56,29 @@ type BeadReader interface {
 
 type BeadLifecycle interface {
 	Create(ctx context.Context, b *Bead) error
-	Apply(ctx context.Context, id string, op Operation) error
+	Apply(id string, op Operation) error
 }
 
 type BeadEventReader interface {
-	Events(ctx context.Context, id string) ([]BeadEvent, error)
-	EventsByKind(ctx context.Context, id, kind string) ([]BeadEvent, error)
+	Events(id string) ([]BeadEvent, error)
+	EventsByKind(id, kind string) ([]BeadEvent, error)
 }
 
 type BeadEventWriter interface {
-	AppendEvent(ctx context.Context, id string, event BeadEvent) error
+	AppendEvent(id string, event BeadEvent) error
 }
 
 type BeadQueries interface {
-	List(ctx context.Context, status, label string, where map[string]string) ([]Bead, error)
-	Ready(ctx context.Context) ([]Bead, error)
-	Blocked(ctx context.Context) ([]Bead, error)
-	ReadyExecutionBreakdown(ctx context.Context) (ReadyExecutionBreakdown, error)
-	ProposedOperatorAttention(ctx context.Context) ([]Bead, error)
-	NeedsHuman(ctx context.Context) ([]Bead, error)
-	ExternalBlocked(ctx context.Context) ([]Bead, error)
-	DependencyWaiting(ctx context.Context) ([]Bead, error)
-	BlockedAll(ctx context.Context) ([]BlockedBead, error)
-	Status(ctx context.Context) (*StatusCounts, error)
+	List(status, label string, where map[string]string) ([]Bead, error)
+	Ready() ([]Bead, error)
+	Blocked() ([]Bead, error)
+	ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error)
+	ProposedOperatorAttention() ([]Bead, error)
+	NeedsHuman() ([]Bead, error)
+	ExternalBlocked() ([]Bead, error)
+	DependencyWaiting() ([]Bead, error)
+	BlockedAll() ([]BlockedBead, error)
+	Status() (*StatusCounts, error)
 }
 
 type BeadDependencyReader interface {
