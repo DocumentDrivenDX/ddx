@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -47,6 +48,16 @@ func TestServiceLoadInputsUsesDDxRootSessionLog(t *testing.T) {
 	require.Equal(t, "as-root", sessions[0].ID)
 	_, err = os.Stat(filepath.Join(dir, ddxroot.DirName, "agent-logs", "sessions.jsonl"))
 	require.True(t, os.IsNotExist(err), "legacy in-tree session index should not exist")
+}
+
+func TestProcessMetricsUsesBackendInterfaces(t *testing.T) {
+	field, ok := reflect.TypeOf(Service{}).FieldByName("store")
+	require.True(t, ok)
+	require.Equal(t, reflect.TypeOf((*bead.ReadOnlyBackend)(nil)).Elem(), field.Type)
+
+	var backend bead.ReadOnlyBackend = bead.NewStore(t.TempDir())
+	svc := &Service{WorkingDir: t.TempDir(), store: backend}
+	require.Same(t, backend, svc.beadStore())
 }
 
 func writeMetricsFixture(t *testing.T) string {

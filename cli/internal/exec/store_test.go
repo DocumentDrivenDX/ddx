@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
@@ -62,6 +64,19 @@ func TestExecStoreUsesDDxRoot(t *testing.T) {
 	}
 	_, err := os.Stat(filepath.Join(legacyRoot, execRunAttachmentDir, "run-root", "manifest.json"))
 	require.True(t, os.IsNotExist(err), "legacy in-tree exec attachment should not exist")
+}
+
+func TestExecStoreUsesBackendInterfaces(t *testing.T) {
+	defField, ok := reflect.TypeOf(Store{}).FieldByName("DefinitionCollection")
+	require.True(t, ok)
+	require.Equal(t, reflect.TypeOf((*collectionBackend)(nil)).Elem(), defField.Type)
+
+	runField, ok := reflect.TypeOf(Store{}).FieldByName("RunCollection")
+	require.True(t, ok)
+	require.Equal(t, reflect.TypeOf((*collectionBackend)(nil)).Elem(), runField.Type)
+
+	var backend collectionBackend = bead.NewStoreWithCollection(ddxroot.JoinProject(t.TempDir()), execDefinitionCollection)
+	require.NotNil(t, backend)
 }
 
 type mockAgentRunner struct {
