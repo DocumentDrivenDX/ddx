@@ -35,6 +35,10 @@ type DiagnosticIssue struct {
 // runDoctor implements the doctor command logic
 func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	pathsStr, _ := cmd.Flags().GetString("paths")
+	unjam, _ := cmd.Flags().GetBool("unjam")
+	if unjam {
+		return f.runDoctorUnjam(cmd)
+	}
 	if pathsStr != "" {
 		return f.runDoctorScoped(strings.Fields(pathsStr))
 	}
