@@ -9531,3 +9531,12 @@
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":2609806,"acquired_at":"2026-07-08T06:57:43.535719112Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":2609806,"acquired_at":"2026-07-08T06:57:43.535719112Z","released_at":"2026-07-08T06:57:43.663367122Z","duration_ms":127}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609806,"acquired_at":"2026-07-08T06:59:43.965685803Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609806,"acquired_at":"2026-07-08T06:59:43.965685803Z","released_at":"2026-07-08T06:59:45.076040492Z","duration_ms":1110}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:40.919172428Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:41.323865639Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:41.323865639Z","released_at":"2026-07-08T07:20:41.377019609Z","duration_ms":53}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:41.400533828Z"}
+{"event":"violation","lock_name":"index.lock","operation":"index.commit","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:41.400533828Z","duration_ms":10008,"severity":"error","cap_ms":10000}
+{"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:41.400533828Z","released_at":"2026-07-08T07:21:05.124732644Z","duration_ms":23724}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":2609806,"acquired_at":"2026-07-08T07:20:40.919172428Z","released_at":"2026-07-08T07:21:05.124884519Z","duration_ms":24205}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609806,"acquired_at":"2026-07-08T07:22:29.198910483Z"}
