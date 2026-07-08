@@ -216,8 +216,8 @@ type AttemptDiagnostic struct {
 }
 
 // BeadEventAppender records append-only evidence events on a bead.
-// Implemented by *bead.Store — kept as a minimal interface so the agent
-// package does not need to import a concrete store type in tests.
+// Kept as a minimal interface so the agent package can consume bead event
+// backends without depending on the concrete tracker type.
 type BeadEventAppender interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 }
@@ -241,9 +241,9 @@ func appendWorkEvent(store BeadEventAppender, beadID, kind, summary string, body
 }
 
 // BeadCancelStore reads/writes the cancel markers on a bead's Extra map.
-// Implemented by *bead.Store. ADR-022 §Cancel SLA: the worker polls
-// IsCancelRequested mid-attempt and on a positive read writes
-// MarkCancelHonored before aborting at the next safe point.
+// ADR-022 §Cancel SLA: the worker polls IsCancelRequested mid-attempt and
+// on a positive read writes MarkCancelHonored before aborting at the next
+// safe point.
 type BeadCancelStore interface {
 	IsCancelRequested(id string) (bool, error)
 	MarkCancelHonored(id string) error

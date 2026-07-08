@@ -315,7 +315,7 @@ func (RealLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
 	return nil
 }
 
-// alwaysSkipSyncPaths lists live-state files governed by bead.Store WithLock.
+// alwaysSkipSyncPaths lists live-state files governed by the tracker backend.
 // The committed worktree version is a stale snapshot of tracker state at claim
 // time; the main-worktree copy is always authoritative and must never be
 // overwritten by SyncWorkTreeToHead regardless of dirty-before-land state.

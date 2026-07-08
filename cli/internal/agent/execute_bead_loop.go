@@ -858,14 +858,15 @@ func releaseWorkerClaim(store ExecuteBeadLoopStore, beadID, assignee string) err
 }
 
 // readyDiagnoser is the optional interface the work loop uses to explain an
-// empty execution queue. bead.Store satisfies it via ReadyExecutionBreakdown.
+// empty execution queue. The tracker backend satisfies it via
+// ReadyExecutionBreakdown.
 type readyDiagnoser interface {
 	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
 }
 
 // epicCloser is the optional interface the work loop uses for idle-path closure
 // cascade: closing epics whose children have all reached a terminal state.
-// bead.Store satisfies both methods.
+// The tracker backend satisfies both methods.
 type epicCloser interface {
 	EpicClosureCandidates(ctx context.Context) ([]bead.Bead, error)
 	Close(ctx context.Context, id string) error
@@ -6869,8 +6870,8 @@ func filterShieldedExcludedRoutes(excluded []agentlib.ExcludedRoute, shielded ma
 }
 
 // leaseReleaser is the narrow capability CheckAndApplyRouteExclusions needs to
-// atomically release a held lease on a route-resolution timeout. *bead.Store
-// satisfies it via Store.Release (ddx-449baa1d).
+// atomically release a held lease on a route-resolution timeout. The tracker
+// backend satisfies it via Store.Release (ddx-449baa1d).
 type leaseReleaser interface {
 	Release(id, assignee, targetStatus string) error
 }
