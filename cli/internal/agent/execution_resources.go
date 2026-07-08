@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"golang.org/x/sys/unix"
 )
@@ -102,6 +103,7 @@ func NewExecutionResourceChecker(projectRoot string, gitOps GitOps) *ExecutionRe
 		TempRoot:    executionCleanupTempRoot(projectRoot),
 		EvidenceRoots: []string{
 			executeBeadArtifactRoot(projectRoot), ddxroot.JoinProject(projectRoot, "runs"),
+			bead.ClaimLivenessRoot(ddxroot.JoinProject(projectRoot)),
 		},
 		GitOps:        gitOps,
 		CleanupRunner: NewExecutionCleanupManager(projectRoot, gitOps),

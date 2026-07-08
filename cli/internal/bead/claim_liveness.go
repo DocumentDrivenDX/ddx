@@ -29,9 +29,18 @@ type ClaimLeaseRecord struct {
 }
 
 func claimLivenessPath(ddxDir, id string) string {
+	return filepath.Join(ClaimLivenessRoot(ddxDir), id+".json")
+}
+
+// ClaimLivenessRoot returns the directory holding claim heartbeat sidecar
+// files for the project identified by ddxDir. Callers outside this package
+// (e.g. execution resource preflight) must use this instead of
+// reconstructing the path independently, so resource checks and heartbeat
+// writes always agree on the root that needs free inodes/bytes.
+func ClaimLivenessRoot(ddxDir string) string {
 	root := canonicalClaimRoot(ddxDir)
 	sum := sha1.Sum([]byte(root))
-	return filepath.Join(os.TempDir(), claimLivenessNamespace, hex.EncodeToString(sum[:]), id+".json")
+	return filepath.Join(os.TempDir(), claimLivenessNamespace, hex.EncodeToString(sum[:]))
 }
 
 func canonicalClaimRoot(ddxDir string) string {
