@@ -4314,6 +4314,17 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				}
 				return executeBeadIterationOutcome{Continue: true}, nil
 			}
+			if isLargeDeletionGateDetail(report.Detail) {
+				if err := stampPreservedReviewBlockMarkers(ctx, w.Store, candidate.ID, report, now().UTC()); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("stampPreservedReviewBlockMarkers", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+			}
 		} else if report.Status == ExecuteBeadStatusRepairCycleExhausted {
 			if err := applyRepairCycleExhaustedEscalation(w.Store, candidate.ID, assignee, report.ActualPower, now(), w.EscalationNextFloor); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
@@ -5540,6 +5551,23 @@ func oneLineGateSummary(detail string) string {
 		detail = strings.TrimSpace(detail[:idx])
 	}
 	return detail
+}
+
+// stampPreservedReviewBlockMarkers records durable Bead.Extra block markers
+// through the store API when the large-deletion safety gate preserves an
+// attempt for review. Deterministic ready-queue eligibility (bead.Store)
+// reads these markers to exclude the bead from worker readiness until an
+// operator stamps a matching preserved-review-unblocked-at/-attempt pair via
+// `ddx bead update --set` (ddx-ec1c1f89).
+func stampPreservedReviewBlockMarkers(ctx context.Context, store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, at time.Time) error {
+	fingerprint := hashText(oneLineGateSummary(report.Detail))
+	return store.Update(ctx, beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[bead.ExtraPreservedReviewBlockedAt] = at.Format(time.RFC3339)
+		b.Extra[bead.ExtraPreservedReviewBlockedAttempt] = report.AttemptID
+		b.Extra[bead.ExtraPreservedReviewGate] = bead.PreservedReviewGateLargeDeletion
+		b.Extra[bead.ExtraPreservedReviewFingerprint] = fingerprint
+	})
 }
 
 // writeLoopEvent emits one structured JSONL line to sink describing a

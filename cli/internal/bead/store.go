@@ -766,6 +766,24 @@ const ExtraLifecycleExternalBlockerReason = "lifecycle-external-blocker-reason"
 // attempt rather than being instantly re-parked by the guard (ddx-5c549120).
 const ExtraConsecutiveWedgeMarker = "work-consecutive-wedges"
 
+// Preserved-review block markers (ddx-ec1c1f89). Stamped when the preserve
+// path leaves unresolved needs-review evidence (e.g. the large-deletion
+// safety gate) so the bead is excluded from worker readiness until an
+// operator explicitly unblocks it with a matching attempt ID and a newer
+// timestamp via `ddx bead update --set`.
+const (
+	ExtraPreservedReviewBlockedAt        = "preserved-review-blocked-at"
+	ExtraPreservedReviewBlockedAttempt   = "preserved-review-blocked-attempt"
+	ExtraPreservedReviewGate             = "preserved-review-gate"
+	ExtraPreservedReviewFingerprint      = "preserved-review-fingerprint"
+	ExtraPreservedReviewUnblockedAt      = "preserved-review-unblocked-at"
+	ExtraPreservedReviewUnblockedAttempt = "preserved-review-unblocked-attempt"
+)
+
+// PreservedReviewGateLargeDeletion is the preserved-review-gate value stamped
+// when the large-deletion safety gate preserves an attempt for review.
+const PreservedReviewGateLargeDeletion = "large-deletion"
+
 func applyLifecycleTransitionMetadata(b *Bead, from, status string, opts LifecycleTransitionOptions) {
 	if b.Extra == nil {
 		b.Extra = make(map[string]any)
@@ -2245,6 +2263,7 @@ func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQ
 			EpicContainer:          isOrdinaryEpicContainer(b, openChildCount[b.ID], childCount[b.ID]),
 			ExternalBlockerReason:  extraStringVal(b.Extra, ExtraLifecycleExternalBlockerReason),
 			LegacyLabels:           b.Labels,
+			PreservedReviewBlocked: preservedReviewBlocked(b),
 		})
 		entries = append(entries, entry)
 	}
@@ -2296,6 +2315,40 @@ func activeRetryCooldown(b Bead, now time.Time, originHead string) (time.Time, b
 		return time.Time{}, false
 	}
 	return retryAfter, retryAfter.After(now)
+}
+
+// preservedReviewBlocked reports whether bead b carries an unresolved
+// preserved-needs-review block marker. A block stamped for attempt A only
+// clears when an operator stamps a matching preserved-review-unblocked-attempt
+// == A alongside a preserved-review-unblocked-at strictly after the block
+// timestamp; a mismatched attempt or a stale/malformed unblock timestamp
+// leaves the block active (ddx-ec1c1f89).
+func preservedReviewBlocked(b Bead) bool {
+	blockedAtStr := extraStringVal(b.Extra, ExtraPreservedReviewBlockedAt)
+	if blockedAtStr == "" {
+		return false
+	}
+	blockedAt, err := time.Parse(time.RFC3339, blockedAtStr)
+	if err != nil {
+		return false
+	}
+	unblockedAtStr := extraStringVal(b.Extra, ExtraPreservedReviewUnblockedAt)
+	if unblockedAtStr == "" {
+		return true
+	}
+	unblockedAt, err := time.Parse(time.RFC3339, unblockedAtStr)
+	if err != nil {
+		return true
+	}
+	if !unblockedAt.After(blockedAt) {
+		return true
+	}
+	blockedAttempt := extraStringVal(b.Extra, ExtraPreservedReviewBlockedAttempt)
+	unblockedAttempt := extraStringVal(b.Extra, ExtraPreservedReviewUnblockedAttempt)
+	if blockedAttempt == "" || unblockedAttempt != blockedAttempt {
+		return true
+	}
+	return false
 }
 
 func lifecycleExecutionEligible(b Bead) (bool, bool) {

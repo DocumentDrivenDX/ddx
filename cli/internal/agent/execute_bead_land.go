@@ -1793,7 +1793,7 @@ func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, c
 	if err != nil {
 		return nil, fmt.Errorf("preserving %s after large-deletion gate: %w", preserveRef, err)
 	}
-	return buildPreservedResult(req, preserveRef, fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold), contribCount), nil
+	return buildPreservedResult(req, preserveRef, fmt.Sprintf(LargeDeletionGateReasonPrefix+" %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold), contribCount), nil
 }
 
 func largeDeletionLineThreshold(req LandRequest) int {

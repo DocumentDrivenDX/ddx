@@ -1029,6 +1029,49 @@ func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
 	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }
 
+// TestExecuteBead_PreservedNeedsReviewLargeDeletionStampsExtraBlockMarkers
+// verifies that a preserved-needs-review outcome caused by the large-deletion
+// safety gate stamps durable Bead.Extra block markers through the store API
+// (ddx-ec1c1f89 AC1).
+func TestExecuteBead_PreservedNeedsReviewLargeDeletionStampsExtraBlockMarkers(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	preserveRef := "refs/ddx/iterations/" + first.ID + "/attempt-1"
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				AttemptID:   "attempt-large-deletion-1",
+				Status:      ExecuteBeadStatusPreservedNeedsReview,
+				Detail:      "large-deletion gate: huge.txt deleted 250 lines (threshold 200)",
+				PreserveRef: preserveRef,
+				ResultRev:   "feedbead",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	got, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.Extra)
+
+	blockedAt, _ := got.Extra[bead.ExtraPreservedReviewBlockedAt].(string)
+	require.NotEmpty(t, blockedAt, "preserved-review-blocked-at must be stamped")
+	_, err = time.Parse(time.RFC3339, blockedAt)
+	require.NoError(t, err, "preserved-review-blocked-at must be RFC3339")
+
+	assert.Equal(t, "attempt-large-deletion-1", got.Extra[bead.ExtraPreservedReviewBlockedAttempt])
+	assert.Equal(t, bead.PreservedReviewGateLargeDeletion, got.Extra[bead.ExtraPreservedReviewGate])
+
+	fingerprint, _ := got.Extra[bead.ExtraPreservedReviewFingerprint].(string)
+	assert.NotEmpty(t, fingerprint, "preserved-review-fingerprint must be stamped")
+}
+
 func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	executed := []string{}
