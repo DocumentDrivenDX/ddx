@@ -9379,3 +9379,4 @@
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":2609951,"acquired_at":"2026-07-08T01:31:34.20973849Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":2609951,"acquired_at":"2026-07-08T01:31:34.20973849Z","released_at":"2026-07-08T01:31:34.354445588Z","duration_ms":144}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609806,"acquired_at":"2026-07-08T01:31:53.908249309Z"}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":983612,"acquired_at":"2026-07-08T01:41:51.406092321Z"}
