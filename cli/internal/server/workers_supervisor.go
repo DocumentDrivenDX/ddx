@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 const (
@@ -412,9 +415,23 @@ func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.clearResolvedTerminalBlocksLocked(state.UpdatedAt)
 	if len(s.blockedTerminals) > 0 {
-		return false
+		dirtyPaths, known := projectRestartBlockingDirtyPaths(s.manager.projectRoot)
+		if known {
+			if len(dirtyPaths) == 0 {
+				log.Printf("worker supervisor: clearing stale restart-blocked terminal(s) for %s; current worktree is clean enough for pre-claim", s.manager.projectRoot)
+				s.blockedTerminals = map[string]blockedTerminal{}
+			} else {
+				log.Printf("worker supervisor: suppressing worker start for %s due to restart-blocked terminal(s) and current dirty paths: %s", s.manager.projectRoot, strings.Join(dirtyPaths, ", "))
+				return false
+			}
+		} else {
+			s.clearResolvedTerminalBlocksLocked(state.UpdatedAt)
+			if len(s.blockedTerminals) > 0 {
+				log.Printf("worker supervisor: suppressing worker start for %s due to restart-blocked terminal(s) awaiting desired-state refresh", s.manager.projectRoot)
+				return false
+			}
+		}
 	}
 
 	events := pruneTimeWindow(s.restartEvents, now, time.Hour)
@@ -436,6 +453,54 @@ func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time)
 		}
 	}
 	return !now.Before(last.Add(delay))
+}
+
+func projectRestartBlockingDirtyPaths(projectRoot string) ([]string, bool) {
+	if projectRoot == "" {
+		return nil, false
+	}
+
+	out, err := internalgit.Command(
+		context.Background(),
+		projectRoot,
+		"status",
+		"--porcelain",
+		"--untracked-files=all",
+		"--",
+		".",
+	).Output()
+	if err != nil {
+		return nil, false
+	}
+
+	var dirtyPaths []string
+	seen := map[string]struct{}{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || len(line) < 4 {
+			continue
+		}
+
+		path := strings.TrimSpace(line[3:])
+		if path == "" {
+			continue
+		}
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+		}
+		if path == "" {
+			continue
+		}
+		if strings.HasPrefix(path, ".ddx") {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		dirtyPaths = append(dirtyPaths, path)
+	}
+	return dirtyPaths, true
 }
 
 func (s *WorkerSupervisor) clearResolvedTerminalBlocksLocked(desiredUpdatedAt time.Time) {
