@@ -14,6 +14,7 @@ package lockmetrics
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/jsonl"
 )
 
 const (
@@ -111,39 +113,24 @@ func Path(projectRoot string) string {
 }
 
 // FileSink returns a sink that appends each event as one JSON line to
-// Path(projectRoot). Appends are serialized with O_APPEND and an internal
-// mutex so concurrent workers in one process do not interleave partial lines.
-// Write errors are best-effort and discarded — observability must never break
-// the operation being observed.
+// Path(projectRoot). Appends are serialized through the shared JSONL helper so
+// concurrent workers across processes do not interleave partial lines. Write
+// errors are best-effort and discarded — observability must never break the
+// operation being observed.
 func FileSink(projectRoot string) func(Event) {
 	path := Path(projectRoot)
-	var mu sync.Mutex
 	return func(ev Event) {
-		mu.Lock()
-		defer mu.Unlock()
 		_ = appendEvent(path, ev)
 	}
 }
 
 func appendEvent(path string, ev Event) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if fi, err := os.Stat(path); err == nil && fi.Size() >= MaxActiveSizeBytes {
-		_ = rotateLockMetrics(path)
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close() //nolint:errcheck
-	data, err := json.Marshal(ev)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	_, err = f.Write(data)
-	return err
+	return jsonl.AppendJSONL(context.Background(), path, ev, jsonl.WithBeforeAppend(func() error {
+		if fi, err := os.Stat(path); err == nil && fi.Size() >= MaxActiveSizeBytes {
+			return rotateLockMetrics(path)
+		}
+		return nil
+	}))
 }
 
 // RotateIfNeeded renames path to a timestamped archive when its size is at or
