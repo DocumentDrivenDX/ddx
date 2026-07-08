@@ -278,7 +278,7 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 	}
 
 	if len(active) < state.DesiredCount {
-		blockedCount := s.resolveBlockedTerminals(state)
+		blockedCount := s.resolveBlockedTerminals(state, now)
 		occupied := len(active) + blockedCount
 		if occupied < state.DesiredCount && s.canStartMore(state, now) {
 			missing := state.DesiredCount - occupied
@@ -418,8 +418,10 @@ func (s *WorkerSupervisor) stopNewestExcess(running []WorkerRecord, excess int) 
 // resolveBlockedTerminals reconciles the in-memory blocked-terminal set
 // against current worktree state and returns how many active blocks remain.
 // Each remaining active block consumes one desired worker slot rather than
-// suppressing all starts.
-func (s *WorkerSupervisor) resolveBlockedTerminals(state WorkerDesiredState) int {
+// suppressing all starts. Blocks that expire and permit a restart are fed
+// into restartEvents so the existing restart backoff throttles repeated
+// expired-block restarts the same way it throttles other restart loops.
+func (s *WorkerSupervisor) resolveBlockedTerminals(state WorkerDesiredState, now time.Time) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -431,6 +433,9 @@ func (s *WorkerSupervisor) resolveBlockedTerminals(state WorkerDesiredState) int
 	if known {
 		if len(dirtyPaths) == 0 {
 			log.Printf("worker supervisor: clearing stale restart-blocked terminal(s) for %s; current worktree is clean enough for pre-claim", s.manager.projectRoot)
+			for id, block := range s.blockedTerminals {
+				s.recordExpiredBlockedTerminalLocked(id, block, now)
+			}
 			s.blockedTerminals = map[string]blockedTerminal{}
 			return 0
 		}
@@ -438,11 +443,24 @@ func (s *WorkerSupervisor) resolveBlockedTerminals(state WorkerDesiredState) int
 		return len(s.blockedTerminals)
 	}
 
-	s.clearResolvedTerminalBlocksLocked(state.UpdatedAt)
+	s.clearResolvedTerminalBlocksLocked(state.UpdatedAt, now)
 	if len(s.blockedTerminals) > 0 {
 		log.Printf("worker supervisor: %d restart-blocked terminal(s) for %s consuming desired slot(s) awaiting desired-state refresh", len(s.blockedTerminals), s.manager.projectRoot)
 	}
 	return len(s.blockedTerminals)
+}
+
+// recordExpiredBlockedTerminalLocked logs the evidence for an expired
+// restart-blocked terminal and feeds it into restartEvents, backdated to the
+// terminal's own timestamp so the existing backoff window treats it the same
+// as any other restart that happened at that time. Callers must hold s.mu.
+func (s *WorkerSupervisor) recordExpiredBlockedTerminalLocked(id string, block blockedTerminal, now time.Time) {
+	ts := block.TerminalAt
+	if ts.IsZero() {
+		ts = now
+	}
+	log.Printf("worker supervisor: expired restart-blocked terminal %s (reason=%s) for %s permits restart; feeding restart backoff", id, block.Reason, s.manager.projectRoot)
+	s.restartEvents = append(s.restartEvents, ts)
 }
 
 func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time) bool {
@@ -518,7 +536,7 @@ func projectRestartBlockingDirtyPaths(projectRoot string) ([]string, bool) {
 	return dirtyPaths, true
 }
 
-func (s *WorkerSupervisor) clearResolvedTerminalBlocksLocked(desiredUpdatedAt time.Time) {
+func (s *WorkerSupervisor) clearResolvedTerminalBlocksLocked(desiredUpdatedAt, now time.Time) {
 	if desiredUpdatedAt.IsZero() || len(s.blockedTerminals) == 0 {
 		return
 	}
@@ -527,6 +545,7 @@ func (s *WorkerSupervisor) clearResolvedTerminalBlocksLocked(desiredUpdatedAt ti
 			continue
 		}
 		if desiredUpdatedAt.After(block.TerminalAt) {
+			s.recordExpiredBlockedTerminalLocked(id, block, now)
 			delete(s.blockedTerminals, id)
 		}
 	}

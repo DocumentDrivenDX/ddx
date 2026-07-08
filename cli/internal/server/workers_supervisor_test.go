@@ -392,6 +392,90 @@ func TestWorkerSupervisor_ActiveBlockedTerminalConsumesOneDesiredSlot(t *testing
 	})
 }
 
+func TestWorkerSupervisor_ExpiredBlockedTerminalFeedsRestartBackoff(t *testing.T) {
+	t.Run("expired operator_attention block feeds a restartEvents entry with reason/evidence", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+
+		m := NewWorkerManager(root)
+		defer m.StopWatchdog()
+		installBlockingWorkerFactory(m)
+		t.Cleanup(func() {
+			stopProjectWorkers(t, m, root)
+		})
+
+		now := time.Now().UTC()
+		terminalAt := now.Add(-time.Minute)
+		seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260708T000003-oa", terminalAt)
+
+		supervisor := NewWorkerSupervisor(m)
+		desired := DefaultWorkerDesiredState(root)
+		desired.DesiredCount = 1
+		desired.DefaultSpec.OpaquePassthrough = true
+		desired.UpdatedAt = terminalAt.Add(time.Second)
+		require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+		var buf bytes.Buffer
+		restore := redirectStdLogger(&buf)
+		defer restore()
+
+		require.NoError(t, supervisor.ReconcileAt(now))
+		require.Eventually(t, func() bool {
+			return runningManagedWorkerCount(t, m, root) == 1
+		}, 2*time.Second, 20*time.Millisecond)
+
+		assert.Contains(t, buf.String(), "expired restart-blocked terminal")
+		assert.Contains(t, buf.String(), "operator_attention")
+
+		supervisor.mu.Lock()
+		restartEvents := append([]time.Time(nil), supervisor.restartEvents...)
+		supervisor.mu.Unlock()
+		require.Len(t, restartEvents, 1, "expired block must feed exactly one restartEvents entry")
+		assert.True(t, restartEvents[0].Equal(terminalAt), "restart event should be backdated to the terminal's own timestamp")
+	})
+
+	t.Run("repeated expired dirty_root and operator_attention blocks are throttled by restart backoff", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+
+		m := NewWorkerManager(root)
+		defer m.StopWatchdog()
+		installBlockingWorkerFactory(m)
+		t.Cleanup(func() {
+			stopProjectWorkers(t, m, root)
+		})
+
+		now := time.Now().UTC()
+		firstTerminalAt := now.Add(-2 * time.Minute)
+		secondTerminalAt := now.Add(-90 * time.Second)
+		seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260708T000004-oa", firstTerminalAt)
+		seedTerminalDirtyRootWorker(t, m, root, "worker-20260708T000005-dr", secondTerminalAt)
+
+		supervisor := NewWorkerSupervisor(m)
+		desired := DefaultWorkerDesiredState(root)
+		desired.DesiredCount = 1
+		desired.DefaultSpec.OpaquePassthrough = true
+		desired.Restart.Enabled = true
+		desired.Restart.MaxRestartsPerHour = 1
+		desired.Restart.Backoff = executeloop.Duration{Duration: 30 * time.Second}
+		desired.Restart.BackoffMax = executeloop.Duration{Duration: 30 * time.Second}
+		desired.UpdatedAt = secondTerminalAt.Add(time.Second)
+		require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+		require.NoError(t, supervisor.ReconcileAt(now))
+
+		supervisor.mu.Lock()
+		restartEvents := append([]time.Time(nil), supervisor.restartEvents...)
+		supervisor.mu.Unlock()
+		require.Len(t, restartEvents, 2, "both expired blocks must feed restartEvents")
+
+		// Both expired blocks fed the backoff in the same tick, exceeding
+		// MaxRestartsPerHour, so the throttled restart must not start.
+		time.Sleep(50 * time.Millisecond)
+		assert.Zero(t, runningManagedWorkerCount(t, m, root))
+	})
+}
+
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-supervisor-stale")
@@ -678,6 +762,23 @@ func seedTerminalOperatorAttentionWorker(t *testing.T, m *WorkerManager, root, w
 		State:       "exited",
 		Status:      "operator_attention",
 		ReapReason:  "operator_attention",
+		ProjectRoot: root,
+		StartedAt:   terminalAt.Add(-time.Minute),
+		FinishedAt:  terminalAt,
+	}
+	require.NoError(t, m.writeRecord(dir, rec))
+}
+
+func seedTerminalDirtyRootWorker(t *testing.T, m *WorkerManager, root, workerID string, terminalAt time.Time) {
+	t.Helper()
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	rec := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "dirty_root",
+		ReapReason:  "dirty_root",
 		ProjectRoot: root,
 		StartedAt:   terminalAt.Add(-time.Minute),
 		FinishedAt:  terminalAt,

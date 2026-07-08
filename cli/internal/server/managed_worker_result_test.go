@@ -82,7 +82,7 @@ func TestSupervisor_OperatorAttentionTerminalDoesNotRespawn(t *testing.T) {
 
 	// The operator-attention terminal consumes the single desired slot, so
 	// it must still suppress relaunch (respawn thrash) when DesiredCount==1.
-	blocked := sup.resolveBlockedTerminals(state)
+	blocked := sup.resolveBlockedTerminals(state, now)
 	if blocked < state.DesiredCount {
 		t.Fatal("operator-attention terminal must suppress relaunch (respawn thrash)")
 	}
