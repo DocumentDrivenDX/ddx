@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -26,6 +27,15 @@ type ExecutionResourceRootCheck struct {
 	BytesFree      uint64   `json:"bytes_free,omitempty"`
 	InodesFree     uint64   `json:"inodes_free,omitempty"`
 	Notes          []string `json:"notes,omitempty"`
+
+	// FDExhausted is set when the writability probe failed because the
+	// process or host hit its open-file-descriptor limit (EMFILE/ENFILE),
+	// not because the root is permission- or filesystem-unwritable.
+	FDExhausted bool     `json:"fd_exhausted,omitempty"`
+	FDCount     int      `json:"fd_count,omitempty"`
+	FDSoftLimit uint64   `json:"fd_soft_limit,omitempty"`
+	FDHardLimit uint64   `json:"fd_hard_limit,omitempty"`
+	FDSample    []string `json:"fd_sample,omitempty"`
 }
 
 // ExecutionResourceCheckResult captures the roots and cleanup summary observed
@@ -209,11 +219,14 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 		return check, fmt.Errorf("resource preflight: %s: mkdir: %w", root, err)
 	}
 
-	writable, writableReason := probeWritableRoot(root)
+	writable, writableReason, fdExhausted := probeWritableRoot(root)
 	check.Writable = writable
 	check.WritableReason = writableReason
 	if !writable {
 		check.Notes = append(check.Notes, writableReason)
+		if fdExhausted {
+			applyFDDiagnostics(&check)
+		}
 		return check, fmt.Errorf("resource preflight: %s: %s", root, writableReason)
 	}
 
@@ -306,28 +319,62 @@ func (p *ExecutionResourcePreflight) hardMinFreeInodes() uint64 {
 	return executionResourceMinFreeInodes
 }
 
-func probeWritableRoot(root string) (bool, string) {
-	f, err := os.CreateTemp(root, ".ddx-resource-preflight-*")
+// createWritabilityProbeFile creates the temp file used to probe root
+// writability. Tests override this to simulate EMFILE/ENFILE without
+// actually exhausting the test process's file descriptors.
+var createWritabilityProbeFile = os.CreateTemp
+
+// probeWritableRoot reports whether root is writable. The third return value
+// is set when the failure is fd exhaustion (EMFILE/ENFILE) rather than an
+// ordinary permission- or filesystem-level unwritable root.
+func probeWritableRoot(root string) (bool, string, bool) {
+	f, err := createWritabilityProbeFile(root, ".ddx-resource-preflight-*")
 	if err != nil {
-		return false, "writability check failed: " + err.Error()
+		return false, "writability check failed: " + err.Error(), isFDExhaustionError(err)
 	}
 	name := f.Name()
 	if closeErr := f.Close(); closeErr != nil {
 		_ = os.Remove(name)
-		return false, "writability check close failed: " + closeErr.Error()
+		return false, "writability check close failed: " + closeErr.Error(), isFDExhaustionError(closeErr)
 	}
 	if removeErr := os.Remove(name); removeErr != nil {
-		return false, "writability check remove failed: " + removeErr.Error()
+		return false, "writability check remove failed: " + removeErr.Error(), false
 	}
-	return true, ""
+	return true, "", false
+}
+
+// isFDExhaustionError reports whether err is caused by the process or host
+// hitting its open-file-descriptor limit.
+func isFDExhaustionError(err error) bool {
+	return errors.Is(err, unix.EMFILE) || errors.Is(err, unix.ENFILE)
+}
+
+// applyFDDiagnostics attaches fd-exhaustion diagnostics (open fd count,
+// RLIMIT_NOFILE soft/hard values, and a compact sample of open fd targets) to
+// check so operators can distinguish fd pressure from a genuinely unwritable
+// root.
+func applyFDDiagnostics(check *ExecutionResourceRootCheck) {
+	diag := collectFDDiagnostics()
+	check.FDExhausted = true
+	check.FDCount = diag.Count
+	check.FDSoftLimit = diag.SoftLimit
+	check.FDHardLimit = diag.HardLimit
+	check.FDSample = diag.Sample
+	check.Notes = append(check.Notes, fmt.Sprintf(
+		"fd exhaustion: open_fds=%d soft_limit=%d hard_limit=%d",
+		diag.Count, diag.SoftLimit, diag.HardLimit,
+	))
 }
 
 func probeExecutionRoot(root string) (ExecutionResourceRootCheck, error) {
 	check := ExecutionResourceRootCheck{Path: root}
-	writable, writableReason := probeWritableRoot(root)
+	writable, writableReason, fdExhausted := probeWritableRoot(root)
 	check.Writable = writable
 	check.WritableReason = writableReason
 	if !writable {
+		if fdExhausted {
+			applyFDDiagnostics(&check)
+		}
 		return check, fmt.Errorf("resource preflight: %s: %s", root, writableReason)
 	}
 	bytesFree, inodesFree, err := probeRootCapacity(root)

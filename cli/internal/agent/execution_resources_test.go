@@ -2,13 +2,16 @@ package agent
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 type fakeExecutionCleanupRunner struct {
@@ -133,4 +136,54 @@ func (c *cleanupTogglingRunner) Cleanup(ctx context.Context) (ExecutionCleanupSu
 		c.onCleanup()
 	}
 	return c.inner.Cleanup(ctx)
+}
+
+// TestResourcePreflightClassifiesTooManyOpenFiles proves EMFILE from the
+// writability probe is classified as fd exhaustion (not an ordinary
+// unwritable root) and carries fd_count/fd_limit diagnostics. It injects the
+// EMFILE failure via createWritabilityProbeFile rather than actually
+// exhausting the test process's file descriptors, since lowering
+// RLIMIT_NOFILE process-wide is flaky and can crash the Go runtime (e.g. the
+// netpoller's epoll_create) if it hasn't initialized yet.
+func TestResourcePreflightClassifiesTooManyOpenFiles(t *testing.T) {
+	original := createWritabilityProbeFile
+	t.Cleanup(func() { createWritabilityProbeFile = original })
+	createWritabilityProbeFile = func(dir, pattern string) (*os.File, error) {
+		return nil, &os.PathError{Op: "open", Path: dir, Err: unix.EMFILE}
+	}
+
+	root := t.TempDir()
+	p := &ExecutionResourcePreflight{}
+	check, err := p.checkRoot(root)
+	require.Error(t, err)
+
+	assert.False(t, check.Writable)
+	assert.True(t, check.FDExhausted)
+	assert.Greater(t, check.FDSoftLimit, uint64(0))
+	assert.Greater(t, check.FDHardLimit, uint64(0))
+	if runtime.GOOS == "linux" {
+		assert.Greater(t, check.FDCount, 0)
+	}
+}
+
+// TestResourcePreflightPreservesOrdinaryUnwritableRoot proves non-EMFILE
+// writability failures still report an unwritable root without claiming fd
+// exhaustion.
+func TestResourcePreflightPreservesOrdinaryUnwritableRoot(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission checks are ineffective when running as root")
+	}
+
+	root := t.TempDir()
+	require.NoError(t, os.Chmod(root, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+
+	p := &ExecutionResourcePreflight{}
+	check, err := p.checkRoot(root)
+	require.Error(t, err)
+
+	assert.False(t, check.Writable)
+	assert.False(t, check.FDExhausted)
+	assert.Zero(t, check.FDCount)
+	assert.NotEmpty(t, check.WritableReason)
 }
