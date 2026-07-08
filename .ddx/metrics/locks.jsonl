@@ -9635,3 +9635,12 @@
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609951,"acquired_at":"2026-07-08T08:43:13.54692322Z"}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609951,"acquired_at":"2026-07-08T08:43:13.54692322Z","released_at":"2026-07-08T08:43:14.563227785Z","duration_ms":1016}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609806,"acquired_at":"2026-07-08T08:43:52.31071617Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609806,"acquired_at":"2026-07-08T08:43:52.31071617Z","released_at":"2026-07-08T08:43:53.188358623Z","duration_ms":877}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:01.306739748Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:01.992591675Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:01.992591675Z","released_at":"2026-07-08T09:03:02.04919328Z","duration_ms":56}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:02.073214148Z"}
+{"event":"violation","lock_name":"index.lock","operation":"index.commit","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:02.073214148Z","duration_ms":10000,"severity":"error","cap_ms":10000}
+{"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:02.073214148Z","released_at":"2026-07-08T09:03:27.805829319Z","duration_ms":25732}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":2609951,"acquired_at":"2026-07-08T09:03:01.306739748Z","released_at":"2026-07-08T09:03:27.805979568Z","duration_ms":26499}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2609951,"acquired_at":"2026-07-08T09:04:54.470720202Z"}
