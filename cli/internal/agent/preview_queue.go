@@ -8,7 +8,7 @@ import (
 )
 
 // PreviewQueueStore is the minimal read-only interface PreviewQueue needs.
-// *bead.Store satisfies this interface via ReadyExecution.
+// The tracker backend satisfies this interface via ReadyExecution.
 type PreviewQueueStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 }

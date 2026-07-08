@@ -648,10 +648,14 @@ func (s *attemptStore) IncrNoChangesCount(beadID string) (int, error) {
 	return s.noChangesCountCalls, nil
 }
 
-// beadStoreAdapter wraps *bead.Store to satisfy the try.Store interface,
-// delegating UpdateWithLifecycleStatus to the real store and stubbing unused methods.
+// beadStoreAdapter wraps the lifecycle update capability needed by try.Store
+// and stubs the other methods exercised by this test.
+type lifecycleUpdateStore interface {
+	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
+}
+
 type beadStoreAdapter struct {
-	s *bead.Store
+	s lifecycleUpdateStore
 }
 
 func (a *beadStoreAdapter) AppendEvent(_ string, _ bead.BeadEvent) error { return nil }
