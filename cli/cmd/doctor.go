@@ -38,6 +38,9 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	if pathsStr != "" {
 		return f.runDoctorScoped(strings.Fields(pathsStr))
 	}
+	if unjam, _ := cmd.Flags().GetBool("unjam"); unjam {
+		return f.runDoctorUnjam(cmd)
+	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	applyHousekeeping, _ := cmd.Flags().GetBool("apply")
