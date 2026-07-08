@@ -1,0 +1,22 @@
+### Findings
+
+| Severity | Area | Finding |
+|---|---|---|
+| BLOCKING | Bead readiness | The “Implementation Bead Boundaries” are still not execution-ready under the repo’s bead-authoring rules. They name files, but they do not include standalone PROBLEM / ROOT CAUSE WITH FILE:LINE / PROPOSED FIX / NON-SCOPE, specific `Test*` symbols, or exact validation commands per the supplied AGENTS.md template. This is especially risky for beads 4, 6, 7, and 8, where the current text would leave implementers to choose scope and tests. |
+| BLOCKING | Liveness predicate | The liveness rule still has ambiguous sources of truth. “when the worker has a current attempt” does not define how to derive the current attempt, and “`.ddx/run-state/<attempt>.json` (or the current run-state convention helper)” leaves two possible implementations. Before filing, name the exact helper/API/path and the precedence between worker record, status sidecar, run-state, and in-process handle. |
+| BLOCKING | JSONL append helper | The call-site scope is too open-ended: “attempt/routing metrics writers” and “any multi-worker runtime JSONL stream” are not a bounded file list. Agents could miss different writers or create competing helpers. Split this into a helper bead with exact package/API and separate migration beads that enumerate every target writer by file/function. |
+| BLOCKING | JSONL locking | The plan says “OS advisory lock” but does not specify the locking primitive, package location, context/timeout API, or behavior on platforms where the primitive differs. Since this is cross-process correctness, the bead needs a precise contract such as `AppendJSONL(ctx, path, row, opts)` plus the exact lock implementation expected by the repo’s supported OS set. |
+| BLOCKING | Preserved-needs-review gate | The durable evidence source is underspecified. “latest durable attempt evidence is `preserved-needs-review` with an unresolved large-deletion gate” does not identify the file/schema/event fields used to find that evidence, nor how ties or missing attempts are handled. Two implementers could reasonably inspect different execution mirrors, attempt metrics, bead notes, or lifecycle fields. |
+| BLOCKING | Preserved unblock metadata | The proposed unblock path uses `ddx bead update <id> --set preserved-review-unblocked-at=... --set preserved-review-unblocked-attempt=...`, but the plan does not establish that these metadata keys and `--set` semantics already exist, nor where eligibility reads them. If new metadata support is required, that is a separate dependency bead; if it already exists, cite the exact store fields/API. |
+| BLOCKING | Resource exhaustion | Bead 6 combines detection, operator attention, claim release, supervisor cleanup, restart backoff, and multi-project isolation without defining cleanup actions or thresholds for subprocess count, temp worktree count, and stale execution dir count. This is too large and underspecified for one execution bead; implementers will make incompatible recovery choices. |
+| WARNING | Terminal blocks | “same project supervisor” is conceptually clear but not tied to a concrete key. The bead should state whether project identity is repo root, normalized absolute path, config identity, or supervisor registry key. |
+| WARNING | Terminal throttle | “same throttle stream used by ordinary restart backoff” is not named. Cite the function/type that records restart throttles, or require adding it if missing. |
+| WARNING | Readiness decoding | The decoder behavior should pin edge cases: array join delimiter is newline, but empty arrays, blank strings, non-string array elements, and whitespace-only acceptance are not specified. |
+| WARNING | Meta-scan | “clear dead-PID run-state” risks colliding with the liveness changes unless it explicitly reuses the same `workerRecordLive` result and same current-attempt derivation. |
+| NOTE | DAG | The dependency graph is directionally good, but Bead 4 should be split as already implied by “4a/4b”; currently the numbered boundaries list only one Bead 4. |
+
+### Verdict: REQUEST_CHANGES
+
+### Summary
+
+The revised design is much closer, but it is not yet safe to file as execution-ready beads. The main blockers are not the high-level decisions; they are unresolved interfaces and evidence sources that would force agents to invent behavior in liveness, JSONL locking, preserved-review eligibility, and resource recovery. Tighten those contracts and split the broad beads before filing.
