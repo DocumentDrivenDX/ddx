@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -210,4 +212,64 @@ func TestDirtyRootCleanRootProceedsNormally(t *testing.T) {
 	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", got.Status)
+}
+
+func TestWorkWatch_PreservesDirtyRootAfterAttempt(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	inner, first, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var dirtyChecks int32
+	var preservedPaths []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			require.Equal(t, first.ID, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-dirty-after-attempt",
+				ResultRev: "abc1234",
+			}, nil
+		}),
+		preDispatchDirtyPreserver: func(_ string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error) {
+			preservedPaths = append([]string(nil), dirtyPaths...)
+			cancel()
+			return &PreDispatchDirtyPreservation{
+				DirtyPaths:     append([]string(nil), dirtyPaths...),
+				PreserveRef:    "refs/ddx/pre-dispatch/test",
+				RecoverCommand: "git stash apply refs/ddx/pre-dispatch/test",
+			}, nil
+		},
+	}
+
+	var logBuf, eventBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Log:          &logBuf,
+		EventSink:    &eventBuf,
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: 10,
+		ProjectRoot:  t.TempDir(),
+		SessionID:    "sess-dirty-after-attempt",
+		WorkerID:     "worker-dirty-after-attempt",
+		ProjectRootDirtyCheck: func(_ string) []string {
+			if atomic.AddInt32(&dirtyChecks, 1) == 1 {
+				return nil
+			}
+			return []string{"cli/internal/server/server.go"}
+		},
+	})
+	require.True(t, err == nil || errors.Is(err, context.Canceled), "unexpected run error: %v", err)
+	require.NotNil(t, result)
+
+	assert.Nil(t, result.OperatorAttention, "DDx-created post-attempt dirt should be preserved, not operator-attention")
+	assert.Equal(t, []string{"cli/internal/server/server.go"}, preservedPaths)
+	assert.Contains(t, logBuf.String(), "preserved DDx-created landing dirt")
+	assert.Contains(t, eventBuf.String(), "loop.dirty_root_preserved")
 }

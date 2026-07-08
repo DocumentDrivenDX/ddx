@@ -119,10 +119,12 @@ type ExecuteBeadLoopRuntime struct {
 	BinaryRefreshCheck func(ctx context.Context) (bool, error)
 	// ProjectRootDirtyCheck, when non-nil, is called at the top of each loop
 	// iteration before any bead is claimed. A non-empty return value means the
-	// canonical project root has uncommitted tracked non-.ddx changes. The
-	// worker emits loop.operator_attention and stops instead of proceeding to
-	// claim. Repeated exits for the same dirty path-set are tracked durably so
-	// a relaunch can escalate into a cooldown instead of spinning immediately.
+	// canonical project root has uncommitted tracked non-.ddx changes. Startup
+	// dirt stops the worker, while watch-mode dirt that appears after this
+	// worker already ran an attempt is preserved under a DDx ref and cleaned so
+	// autonomous work can continue. Repeated startup exits for the same dirty
+	// path-set are tracked durably so a relaunch can escalate into a cooldown
+	// instead of spinning immediately.
 	ProjectRootDirtyCheck func(projectRoot string) []string
 	// ServerHealthProbe, when non-nil, is used while the worker is in
 	// server-unavailable backoff. Healthy should return true only after /api/health
@@ -2167,6 +2169,36 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	}
 	if runtime.ProjectRootDirtyCheck != nil && runtime.ProjectRoot != "" {
 		if dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot); len(dirtyPaths) > 0 {
+			if loopMode == executeloop.ModeWatch && attemptStarted {
+				preserveDirty := w.preDispatchDirtyPreserver
+				if preserveDirty == nil {
+					preserveDirty = preservePreDispatchDirtyPaths
+				}
+				if preserved, preserveErr := preserveDirty(runtime.ProjectRoot, dirtyPaths); preserveErr == nil && preserved != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log,
+							"preserved DDx-created landing dirt in %s under %s; continuing watch. dirty paths: %s. recover with %s\n",
+							runtime.ProjectRoot,
+							preserved.PreserveRef,
+							strings.Join(preserved.DirtyPaths, ", "),
+							preserved.RecoverCommand,
+						)
+					}
+					emit("loop.dirty_root_preserved", map[string]any{
+						"reason":          "ddx_created_landing_dirt",
+						"project_root":    runtime.ProjectRoot,
+						"dirty_paths":     preserved.DirtyPaths,
+						"preserve_ref":    preserved.PreserveRef,
+						"recover_command": preserved.RecoverCommand,
+					})
+					if guardErr := clearDirtyRootGuardState(runtime.ProjectRoot); guardErr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard clear failed: %v\n", guardErr)
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				} else if preserveErr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "preserving DDx-created landing dirt failed: %v\n", preserveErr)
+				}
+			}
 			guardState, escalated, guardErr := updateDirtyRootGuardState(
 				runtime.ProjectRoot,
 				dirtyPaths,
