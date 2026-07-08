@@ -313,6 +313,85 @@ func TestWorkerSupervisor_CurrentDirtyRootStillBlocksStart(t *testing.T) {
 	assert.Contains(t, buf.String(), "dirty.txt")
 }
 
+func TestWorkerSupervisor_ActiveBlockedTerminalConsumesOneDesiredSlot(t *testing.T) {
+	t.Run("does not suppress all starts when desired count exceeds one", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+
+		m := NewWorkerManager(root)
+		defer m.StopWatchdog()
+		installBlockingWorkerFactory(m)
+		t.Cleanup(func() {
+			stopProjectWorkers(t, m, root)
+		})
+
+		now := time.Now().UTC()
+		terminalAt := now.Add(-time.Minute)
+		seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260708T000001-oa", terminalAt)
+
+		supervisor := NewWorkerSupervisor(m)
+		desired := DefaultWorkerDesiredState(root)
+		desired.DesiredCount = 2
+		desired.DefaultSpec.OpaquePassthrough = true
+		desired.UpdatedAt = terminalAt.Add(-time.Minute)
+		require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+		require.NoError(t, supervisor.ReconcileAt(now))
+		require.Eventually(t, func() bool {
+			return runningManagedWorkerCount(t, m, root) == 1
+		}, 2*time.Second, 20*time.Millisecond)
+
+		// The active blocked terminal continues to occupy one of the two
+		// desired slots, so the supervisor must not top up to full count.
+		time.Sleep(50 * time.Millisecond)
+		assert.Equal(t, 1, runningManagedWorkerCount(t, m, root))
+	})
+
+	t.Run("does not exceed desired count when active blocks plus live workers already satisfy it", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+
+		m := NewWorkerManager(root)
+		defer m.StopWatchdog()
+		installBlockingWorkerFactory(m)
+		t.Cleanup(func() {
+			stopProjectWorkers(t, m, root)
+		})
+
+		supervisor := NewWorkerSupervisor(m)
+		desired := DefaultWorkerDesiredState(root)
+		desired.DesiredCount = 2
+		desired.DefaultSpec.OpaquePassthrough = true
+		require.NoError(t, supervisor.SaveDesiredState(&desired))
+
+		seed, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+			Mode:              executeloop.ModeWatch,
+			IdleInterval:      executeLoopIdleInterval(30 * time.Second),
+			OpaquePassthrough: true,
+		})
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return runningManagedWorkerCount(t, m, root) == 1
+		}, 2*time.Second, 20*time.Millisecond)
+
+		now := time.Now().UTC()
+		terminalAt := now.Add(-time.Minute)
+		seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260708T000002-oa", terminalAt)
+
+		desired.UpdatedAt = terminalAt.Add(-time.Minute)
+		require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+		require.NoError(t, supervisor.ReconcileAt(now))
+
+		time.Sleep(50 * time.Millisecond)
+		assert.Equal(t, 1, runningManagedWorkerCount(t, m, root))
+
+		seedRec, err := m.Show(seed.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "running", seedRec.State)
+	})
+}
+
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-supervisor-stale")

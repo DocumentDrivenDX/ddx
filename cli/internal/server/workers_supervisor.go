@@ -277,13 +277,17 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 		}
 	}
 
-	if len(active) < state.DesiredCount && s.canStartMore(state, now) {
-		missing := state.DesiredCount - len(active)
-		for i := 0; i < missing; i++ {
-			spec := state.DefaultSpec
-			spec.ProjectRoot = projectRoot
-			if _, err := s.manager.StartExecuteLoop(spec); err != nil {
-				return err
+	if len(active) < state.DesiredCount {
+		blockedCount := s.resolveBlockedTerminals(state)
+		occupied := len(active) + blockedCount
+		if occupied < state.DesiredCount && s.canStartMore(state, now) {
+			missing := state.DesiredCount - occupied
+			for i := 0; i < missing; i++ {
+				spec := state.DefaultSpec
+				spec.ProjectRoot = projectRoot
+				if _, err := s.manager.StartExecuteLoop(spec); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -411,28 +415,39 @@ func (s *WorkerSupervisor) stopNewestExcess(running []WorkerRecord, excess int) 
 	return nil
 }
 
-func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time) bool {
+// resolveBlockedTerminals reconciles the in-memory blocked-terminal set
+// against current worktree state and returns how many active blocks remain.
+// Each remaining active block consumes one desired worker slot rather than
+// suppressing all starts.
+func (s *WorkerSupervisor) resolveBlockedTerminals(state WorkerDesiredState) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.blockedTerminals) > 0 {
-		dirtyPaths, known := projectRestartBlockingDirtyPaths(s.manager.projectRoot)
-		if known {
-			if len(dirtyPaths) == 0 {
-				log.Printf("worker supervisor: clearing stale restart-blocked terminal(s) for %s; current worktree is clean enough for pre-claim", s.manager.projectRoot)
-				s.blockedTerminals = map[string]blockedTerminal{}
-			} else {
-				log.Printf("worker supervisor: suppressing worker start for %s due to restart-blocked terminal(s) and current dirty paths: %s", s.manager.projectRoot, strings.Join(dirtyPaths, ", "))
-				return false
-			}
-		} else {
-			s.clearResolvedTerminalBlocksLocked(state.UpdatedAt)
-			if len(s.blockedTerminals) > 0 {
-				log.Printf("worker supervisor: suppressing worker start for %s due to restart-blocked terminal(s) awaiting desired-state refresh", s.manager.projectRoot)
-				return false
-			}
-		}
+	if len(s.blockedTerminals) == 0 {
+		return 0
 	}
+
+	dirtyPaths, known := projectRestartBlockingDirtyPaths(s.manager.projectRoot)
+	if known {
+		if len(dirtyPaths) == 0 {
+			log.Printf("worker supervisor: clearing stale restart-blocked terminal(s) for %s; current worktree is clean enough for pre-claim", s.manager.projectRoot)
+			s.blockedTerminals = map[string]blockedTerminal{}
+			return 0
+		}
+		log.Printf("worker supervisor: %d restart-blocked terminal(s) for %s consuming desired slot(s) due to current dirty paths: %s", len(s.blockedTerminals), s.manager.projectRoot, strings.Join(dirtyPaths, ", "))
+		return len(s.blockedTerminals)
+	}
+
+	s.clearResolvedTerminalBlocksLocked(state.UpdatedAt)
+	if len(s.blockedTerminals) > 0 {
+		log.Printf("worker supervisor: %d restart-blocked terminal(s) for %s consuming desired slot(s) awaiting desired-state refresh", len(s.blockedTerminals), s.manager.projectRoot)
+	}
+	return len(s.blockedTerminals)
+}
+
+func (s *WorkerSupervisor) canStartMore(state WorkerDesiredState, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	events := pruneTimeWindow(s.restartEvents, now, time.Hour)
 	s.restartEvents = events
