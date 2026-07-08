@@ -483,6 +483,8 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/attachments/"):
 		return true
+	case strings.HasPrefix(path, ".ddx/harness-sessions/"):
+		return true
 	case path == ".ddx/run-state.json":
 		return true
 	case path == ".ddx/run-state":

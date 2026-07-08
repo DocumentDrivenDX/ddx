@@ -185,6 +185,27 @@ func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
 	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, runStateRootRel, runStateAttemptRel)
 }
 
+func TestCheckpointPreDispatchDirtIgnoresHarnessSessionFiles(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260515T000001-harness"
+	harnessRel := filepath.Join(ddxroot.DirName, "harness-sessions", attemptID+".json")
+
+	writeCheckpointTestFile(t, projectRoot, harnessRel, `{"attempt_id":"`+attemptID+`","kind":"harness-session"}`+"\n")
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(harnessRel))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.False(t, committed, "harness session metadata should not checkpoint by itself")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+
+	requireHeadMissingPath(t, projectRoot, harnessRel)
+	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, harnessRel)
+}
+
 func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260515T000002-embedded"
