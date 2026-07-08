@@ -453,6 +453,9 @@ func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 }
 
 func preDispatchCheckpointAllowedPath(path string) bool {
+	if isLockMetricsPath(path) {
+		return false
+	}
 	switch {
 	case path == ".ddx/beads.jsonl":
 		return true
@@ -473,6 +476,8 @@ func preDispatchCheckpointAllowedPath(path string) bool {
 
 func preDispatchCheckpointIgnoredPath(path string) bool {
 	switch {
+	case isLockMetricsPath(path):
+		return true
 	case path == ".ddx/.git-tracker.lock":
 		return true
 	case strings.HasPrefix(path, ".ddx/.git-tracker.lock/"):

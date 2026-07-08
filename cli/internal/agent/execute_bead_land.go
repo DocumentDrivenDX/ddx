@@ -646,7 +646,7 @@ func skipLandingCheckpointPath(path string) bool {
 	if trackerpaths.IsManagedTrackerPath(clean) {
 		return true
 	}
-	return clean == ".ddx/metrics/locks.jsonl" || strings.HasPrefix(clean, ".ddx/metrics/locks.jsonl.")
+	return isLockMetricsPath(clean)
 }
 
 func ensureLandingWorktreeReady(dir, targetBranch string, checkpointExecutionEvidence bool) error {
