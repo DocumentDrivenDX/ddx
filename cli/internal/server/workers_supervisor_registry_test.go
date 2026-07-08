@@ -41,6 +41,58 @@ func TestSupervisorRegistry_ReconcileAllVisitsEachRegisteredProject(t *testing.T
 	require.NoError(t, srv.Shutdown())
 }
 
+func TestSupervisorRegistry_ReconcileAllContinuesOtherProjectsWhenOneRestartBlocked(t *testing.T) {
+	workDir := setupTestDir(t)
+	srv := New(":0", workDir)
+	require.NotNil(t, srv.supervisorRegistry)
+	t.Cleanup(func() {
+		_ = srv.Shutdown()
+	})
+
+	blockedRoot := t.TempDir()
+	goodRoot := t.TempDir()
+	for _, root := range []string{blockedRoot, goodRoot} {
+		runGit(t, "init", root)
+		runGit(t, "-C", root, "config", "user.email", "test@test.com")
+		runGit(t, "-C", root, "config", "user.name", "Test User")
+		initSupervisorProject(t, root)
+		setupBeadStore(t, root)
+	}
+
+	blockedPath := filepath.Join(blockedRoot, "dirty.txt")
+	require.NoError(t, os.WriteFile(blockedPath, []byte("dirty\n"), 0o644))
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-10 * time.Minute)
+
+	blockedSup := srv.supervisorRegistry.getOrCreate(blockedRoot)
+	require.NotNil(t, blockedSup)
+	installBlockingWorkerFactory(blockedSup.manager)
+	seedTerminalOperatorAttentionWorker(t, blockedSup.manager, blockedRoot, "worker-20260707T000005-oa", terminalAt)
+	blockedDesired := DefaultWorkerDesiredState(blockedRoot)
+	blockedDesired.DesiredCount = 1
+	blockedDesired.DefaultSpec.OpaquePassthrough = true
+	blockedDesired.UpdatedAt = terminalAt.Add(-time.Minute)
+	require.NoError(t, writeDesiredStateForTest(blockedSup, blockedDesired))
+
+	goodSup := srv.supervisorRegistry.getOrCreate(goodRoot)
+	require.NotNil(t, goodSup)
+	installBlockingWorkerFactory(goodSup.manager)
+	goodDesired := DefaultWorkerDesiredState(goodRoot)
+	goodDesired.DesiredCount = 1
+	goodDesired.DefaultSpec.OpaquePassthrough = true
+	require.NoError(t, writeDesiredStateForTest(goodSup, goodDesired))
+
+	srv.RegisterProject(blockedRoot)
+	srv.RegisterProject(goodRoot)
+
+	require.NoError(t, srv.supervisorRegistry.ReconcileAll())
+	assert.Zero(t, runningManagedWorkerCount(t, blockedSup.manager, blockedRoot))
+	require.Eventually(t, func() bool {
+		return runningManagedWorkerCount(t, goodSup.manager, goodRoot) == 1
+	}, 2*time.Second, 20*time.Millisecond)
+}
+
 func TestServer_MultiProjectSupervisorPicksUpNewProjects(t *testing.T) {
 	workDir := setupTestDir(t)
 	srv := New(":0", workDir)

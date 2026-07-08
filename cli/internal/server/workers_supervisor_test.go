@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -242,6 +243,74 @@ func TestSupervisor_HistoricalOperatorAttentionDoesNotBlockFreshDesiredStateAcro
 	require.Eventually(t, func() bool {
 		return runningManagedWorkerCount(t, m, root) == 1
 	}, 2*time.Second, 20*time.Millisecond)
+}
+
+func TestWorkerSupervisor_DoesNotPermanentlyBlockOnStaleOperatorAttentionTerminal(t *testing.T) {
+	root := t.TempDir()
+	runGit(t, "init", root)
+	runGit(t, "-C", root, "config", "user.email", "test@test.com")
+	runGit(t, "-C", root, "config", "user.name", "Test User")
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	installBlockingWorkerFactory(m)
+	t.Cleanup(func() {
+		stopProjectWorkers(t, m, root)
+	})
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-10 * time.Minute)
+	seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260707T000003-oa", terminalAt)
+
+	supervisor := NewWorkerSupervisor(m)
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.UpdatedAt = terminalAt.Add(-time.Minute)
+	require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+	require.NoError(t, supervisor.ReconcileAt(now))
+	require.Eventually(t, func() bool {
+		return runningManagedWorkerCount(t, m, root) == 1
+	}, 2*time.Second, 20*time.Millisecond)
+}
+
+func TestWorkerSupervisor_CurrentDirtyRootStillBlocksStart(t *testing.T) {
+	root := t.TempDir()
+	runGit(t, "init", root)
+	runGit(t, "-C", root, "config", "user.email", "test@test.com")
+	runGit(t, "-C", root, "config", "user.name", "Test User")
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	installBlockingWorkerFactory(m)
+	t.Cleanup(func() {
+		stopProjectWorkers(t, m, root)
+	})
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "dirty.txt"), []byte("dirty\n"), 0o644))
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-10 * time.Minute)
+	seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260707T000004-oa", terminalAt)
+
+	supervisor := NewWorkerSupervisor(m)
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.UpdatedAt = terminalAt.Add(-time.Minute)
+	require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+	var buf bytes.Buffer
+	restore := redirectStdLogger(&buf)
+	defer restore()
+
+	require.NoError(t, supervisor.ReconcileAt(now))
+	assert.Zero(t, runningManagedWorkerCount(t, m, root))
+	assert.Contains(t, buf.String(), "restart-blocked terminal")
+	assert.Contains(t, buf.String(), "dirty.txt")
 }
 
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
