@@ -432,3 +432,125 @@ func TestWorkResourcePreflight_ReportsBeforeAfterCapacity(t *testing.T) {
 	assert.NotEmpty(t, exhausted["root_checks_after"])
 	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls))
 }
+
+func runResourceExhaustedLoopEvent(t *testing.T, checkResult ExecutionResourceCheckResult, checkErr error) (ExecuteBeadReport, map[string]any, string) {
+	t.Helper()
+	inner, _, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	checker := &staticLoopResourceChecker{result: checkResult, err: checkErr}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run after pre-claim resource exhaustion: %s", beadID)
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	var eventSink bytes.Buffer
+	var logSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Log:             &logSink,
+		EventSink:       &eventSink,
+		Once:            false,
+		ProjectRoot:     t.TempDir(),
+		ResourceChecker: checker,
+		SessionID:       "sess-resource-fd",
+		WorkerID:        "worker-resource",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+
+	var exhausted map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(eventSink.String()), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["type"] == "resource.exhausted" {
+			data, _ := entry["data"].(map[string]any)
+			exhausted = data
+		}
+	}
+	require.NotNil(t, exhausted, "resource.exhausted event must be emitted")
+
+	return result.Results[0], exhausted, logSink.String()
+}
+
+// TestWorkLoopResourceExhaustedEMFILEReportsRestartableWorkerFailure proves
+// that when the resource preflight fails because the worker process hit its
+// open-file-descriptor limit (EMFILE/ENFILE), the work loop reports a
+// structured fd_exhaustion diagnosis marked worker-local/restartable instead
+// of the generic "resource_exhausted after cleanup" message.
+func TestWorkLoopResourceExhaustedEMFILEReportsRestartableWorkerFailure(t *testing.T) {
+	checkResult := ExecutionResourceCheckResult{
+		ProjectRoot: "/project/root",
+		TempRoot:    "/tmp/ddx-exec",
+		RootChecks: []ExecutionResourceRootCheck{
+			{
+				Path:           "/tmp/ddx-exec",
+				Writable:       false,
+				WritableReason: "writability check failed: too many open files",
+				FDExhausted:    true,
+				FDCount:        1024,
+				FDSoftLimit:    1024,
+				FDHardLimit:    4096,
+			},
+		},
+	}
+	checkErr := &ResourceExhaustedError{Detail: "temp root fd exhausted", Result: checkResult}
+
+	report, exhausted, logOutput := runResourceExhaustedLoopEvent(t, checkResult, checkErr)
+
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, report.Status)
+	assert.Equal(t, FDExhaustionStopMessage, report.Detail)
+	assert.Equal(t, ResourceExhaustionDiagnosisFD, report.ResourceExhaustionDiagnosis)
+	assert.True(t, report.ResourceExhaustionRestartable, "fd exhaustion must be reported as restartable")
+
+	assert.Equal(t, ResourceExhaustionDiagnosisFD, exhausted["diagnosis"])
+	assert.Equal(t, true, exhausted["restartable"])
+	assert.Equal(t, true, exhausted["worker_local"])
+	assert.Equal(t, FDExhaustionStopMessage, exhausted["detail"])
+
+	assert.Contains(t, logOutput, FDExhaustionStopMessage)
+	assert.NotContains(t, logOutput, ResourceExhaustedStopMessage)
+}
+
+// TestWorkLoopResourceExhaustedDiskPressureRemainsNonRestartableRootFailure
+// proves that ordinary byte/inode or unwritable-root failures (no fd
+// exhaustion involved) keep the existing generic, non-restartable
+// resource_exhausted behavior.
+func TestWorkLoopResourceExhaustedDiskPressureRemainsNonRestartableRootFailure(t *testing.T) {
+	checkResult := ExecutionResourceCheckResult{
+		ProjectRoot: "/project/root",
+		TempRoot:    "/tmp/ddx-exec",
+		RootChecks: []ExecutionResourceRootCheck{
+			{
+				Path:           "/tmp/ddx-exec",
+				Writable:       false,
+				WritableReason: "no space left on device",
+			},
+		},
+	}
+	checkErr := &ResourceExhaustedError{Detail: "temp root is full", Result: checkResult}
+
+	report, exhausted, logOutput := runResourceExhaustedLoopEvent(t, checkResult, checkErr)
+
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, report.Status)
+	assert.Equal(t, ResourceExhaustedStopMessage, report.Detail)
+	assert.Empty(t, report.ResourceExhaustionDiagnosis)
+	assert.False(t, report.ResourceExhaustionRestartable)
+
+	assert.Empty(t, exhausted["diagnosis"])
+	assert.Equal(t, false, exhausted["restartable"])
+	assert.Equal(t, ResourceExhaustedStopMessage, exhausted["detail"])
+
+	assert.Contains(t, logOutput, ResourceExhaustedStopMessage)
+	assert.NotContains(t, logOutput, FDExhaustionStopMessage)
+}

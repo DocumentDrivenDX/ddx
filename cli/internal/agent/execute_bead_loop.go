@@ -811,6 +811,17 @@ type ExecuteBeadReport struct {
 	// ResourceExhausted carries the execution-root preflight result when the
 	// attempt stopped before the agent could safely continue.
 	ResourceExhausted any `json:"resource_exhausted,omitempty"`
+	// ResourceExhaustionDiagnosis classifies a resource_exhausted report
+	// beyond "some root became unhealthy". Set to ResourceExhaustionDiagnosisFD
+	// ("fd_exhaustion") when the preflight failure was the process/host
+	// open-file-descriptor limit (EMFILE/ENFILE); empty for ordinary
+	// byte/inode or unwritable-root failures.
+	ResourceExhaustionDiagnosis string `json:"resource_exhaustion_diagnosis,omitempty"`
+	// ResourceExhaustionRestartable is true when ResourceExhaustionDiagnosis
+	// is worker-local: a fresh worker process (e.g. after a supervisor
+	// restart) is expected to clear it, unlike root-storage exhaustion which
+	// persists across worker restarts.
+	ResourceExhaustionRestartable bool `json:"resource_exhaustion_restartable,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -2130,18 +2141,28 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				if resourceResult.ProjectRoot == "" && len(resourceResult.RootChecks) == 0 {
 					resourceResult = checkResult
 				}
+				detail := ResourceExhaustedStopMessage
+				diagnosis := ""
+				restartable := false
+				if resourceResult.FDExhausted() {
+					detail = FDExhaustionStopMessage
+					diagnosis = ResourceExhaustionDiagnosisFD
+					restartable = true
+				}
 				report := ExecuteBeadReport{
-					WorkerID:          runtime.WorkerID,
-					Harness:           harness,
-					Model:             model,
-					Status:            ExecuteBeadStatusResourceExhausted,
-					Detail:            ResourceExhaustedStopMessage,
-					Error:             resourceErr.Error(),
-					SessionID:         runtime.SessionID,
-					ResourceExhausted: &resourceResult,
-					Disrupted:         true,
-					DisruptionReason:  ReadinessSystemReasonResourceExhausted,
-					OutcomeReason:     ReadinessSystemReasonResourceExhausted,
+					WorkerID:                      runtime.WorkerID,
+					Harness:                       harness,
+					Model:                         model,
+					Status:                        ExecuteBeadStatusResourceExhausted,
+					Detail:                        detail,
+					Error:                         resourceErr.Error(),
+					SessionID:                     runtime.SessionID,
+					ResourceExhausted:             &resourceResult,
+					ResourceExhaustionDiagnosis:   diagnosis,
+					ResourceExhaustionRestartable: restartable,
+					Disrupted:                     true,
+					DisruptionReason:              ReadinessSystemReasonResourceExhausted,
+					OutcomeReason:                 ReadinessSystemReasonResourceExhausted,
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
@@ -2149,7 +2170,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				setExit("ResourceExhausted", "resource_exhausted")
 				emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
+					_, _ = fmt.Fprintln(runtime.Log, detail)
 				}
 				return executeBeadIterationOutcome{Stop: true}, nil
 			}
@@ -5790,22 +5811,29 @@ func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadL
 			"cleanup_preserved_scratch": result.CleanupSummary.PreservedActiveScratchDirs,
 			"detail":                    report.Detail,
 			"status":                    report.Status,
+			"diagnosis":                 report.ResourceExhaustionDiagnosis,
+			"restartable":               report.ResourceExhaustionRestartable,
+			"worker_local":              report.ResourceExhaustionRestartable,
 		}
 		body, err := json.Marshal(detail)
 		if err != nil {
 			detail = map[string]any{
-				"bead_id": beadID,
-				"detail":  report.Detail,
-				"status":  report.Status,
+				"bead_id":     beadID,
+				"detail":      report.Detail,
+				"status":      report.Status,
+				"diagnosis":   report.ResourceExhaustionDiagnosis,
+				"restartable": report.ResourceExhaustionRestartable,
 			}
 		} else {
 			detail["body"] = string(body)
 		}
 	} else {
 		detail = map[string]any{
-			"bead_id": beadID,
-			"detail":  report.Detail,
-			"status":  report.Status,
+			"bead_id":     beadID,
+			"detail":      report.Detail,
+			"status":      report.Status,
+			"diagnosis":   report.ResourceExhaustionDiagnosis,
+			"restartable": report.ResourceExhaustionRestartable,
 		}
 	}
 	emit("resource.exhausted", detail)
@@ -5816,9 +5844,13 @@ func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadL
 	if err != nil {
 		body = []byte(report.Detail)
 	}
+	summary := report.Detail
+	if summary == "" {
+		summary = ResourceExhaustedStopMessage
+	}
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      "resource-exhausted",
-		Summary:   ResourceExhaustedStopMessage,
+		Summary:   summary,
 		Body:      string(body),
 		Actor:     actor,
 		Source:    "ddx work",
