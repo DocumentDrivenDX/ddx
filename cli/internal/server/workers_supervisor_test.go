@@ -518,6 +518,74 @@ func TestWorkerSupervisor_ExpiredBlockedTerminalFeedsRestartBackoff(t *testing.T
 	})
 }
 
+func TestWorkerSupervisor_ExpiredBlockedTerminalDoesNotSuppressRestartForever(t *testing.T) {
+	t.Run("operator_attention terminal older than TTL becomes restartable despite stale desired.UpdatedAt", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+
+		m := NewWorkerManager(root)
+		defer m.StopWatchdog()
+		installBlockingWorkerFactory(m)
+		t.Cleanup(func() {
+			stopProjectWorkers(t, m, root)
+		})
+
+		now := time.Now().UTC()
+		terminalAt := now.Add(-DefaultTerminalBlockTTL - time.Minute)
+		seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260709T000001-oa", terminalAt)
+
+		supervisor := NewWorkerSupervisor(m)
+		desired := DefaultWorkerDesiredState(root)
+		desired.DesiredCount = 1
+		desired.DefaultSpec.OpaquePassthrough = true
+		// desired.UpdatedAt has NOT advanced past the terminal timestamp, so
+		// the existing freshness-based clear path alone would leave this
+		// block in place forever without TTL expiry.
+		desired.UpdatedAt = terminalAt.Add(-time.Minute)
+		require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+		var buf bytes.Buffer
+		restore := redirectStdLogger(&buf)
+		defer restore()
+
+		require.NoError(t, supervisor.ReconcileAt(now))
+		require.Eventually(t, func() bool {
+			return runningManagedWorkerCount(t, m, root) == 1
+		}, 2*time.Second, 20*time.Millisecond)
+
+		assert.Contains(t, buf.String(), "expired restart-blocked terminal")
+		assert.Contains(t, buf.String(), "operator_attention")
+	})
+
+	t.Run("dirty_root terminal younger than TTL remains non-restartable when desired.UpdatedAt has not advanced", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+
+		m := NewWorkerManager(root)
+		defer m.StopWatchdog()
+		installBlockingWorkerFactory(m)
+		t.Cleanup(func() {
+			stopProjectWorkers(t, m, root)
+		})
+
+		now := time.Now().UTC()
+		terminalAt := now.Add(-time.Minute)
+		seedTerminalDirtyRootWorker(t, m, root, "worker-20260709T000002-dr", terminalAt)
+
+		supervisor := NewWorkerSupervisor(m)
+		desired := DefaultWorkerDesiredState(root)
+		desired.DesiredCount = 1
+		desired.DefaultSpec.OpaquePassthrough = true
+		desired.UpdatedAt = terminalAt.Add(-time.Minute)
+		require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+		require.NoError(t, supervisor.ReconcileAt(now))
+
+		time.Sleep(50 * time.Millisecond)
+		assert.Zero(t, runningManagedWorkerCount(t, m, root))
+	})
+}
+
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-supervisor-stale")

@@ -25,6 +25,13 @@ const (
 	defaultRestartBackoff     = 30 * time.Second
 	defaultRestartBackoffMax  = 10 * time.Minute
 	defaultRestartLimit       = 6
+
+	// DefaultTerminalBlockTTL bounds how long a restart-blocked terminal
+	// record (operator_attention, dirty_root, ...) can suppress restart
+	// eligibility. Without this, a terminal newer than desired.UpdatedAt
+	// would never clear via the freshness path and could block restarts
+	// indefinitely.
+	DefaultTerminalBlockTTL = 10 * time.Minute
 )
 
 // WorkerRestartPolicy controls whether the supervisor should restart
@@ -444,10 +451,33 @@ func (s *WorkerSupervisor) resolveBlockedTerminals(state WorkerDesiredState, now
 	}
 
 	s.clearResolvedTerminalBlocksLocked(state.UpdatedAt, now)
+	s.expireStaleBlockedTerminalsLocked(now)
 	if len(s.blockedTerminals) > 0 {
 		log.Printf("worker supervisor: %d restart-blocked terminal(s) for %s consuming desired slot(s) awaiting desired-state refresh", len(s.blockedTerminals), s.manager.projectRoot)
 	}
 	return len(s.blockedTerminals)
+}
+
+// expireStaleBlockedTerminalsLocked removes blocked-terminal entries older
+// than DefaultTerminalBlockTTL, independent of desired.UpdatedAt freshness.
+// Callers must hold s.mu. It only runs when the current dirty-path check is
+// inconclusive (projectRestartBlockingDirtyPaths returned known=false) —
+// when the worktree is confirmed dirty right now, that live signal, not the
+// block's age, governs whether the block stays active. Without this, a
+// terminal record newer than desired.UpdatedAt would never clear via
+// clearResolvedTerminalBlocksLocked and could suppress restart eligibility
+// forever.
+func (s *WorkerSupervisor) expireStaleBlockedTerminalsLocked(now time.Time) {
+	for id, block := range s.blockedTerminals {
+		if block.TerminalAt.IsZero() {
+			continue
+		}
+		if now.Sub(block.TerminalAt) < DefaultTerminalBlockTTL {
+			continue
+		}
+		s.recordExpiredBlockedTerminalLocked(id, block, now)
+		delete(s.blockedTerminals, id)
+	}
 }
 
 // recordExpiredBlockedTerminalLocked logs the evidence for an expired
