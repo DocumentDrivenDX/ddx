@@ -1,4 +1,8 @@
-package bead
+// Package lifecycle implements the concrete bead lifecycle-watching hub
+// (TD-027 §21). The public bead package exposes this only through
+// NewLifecycleSubscriber, never as a named type, so callers cannot construct
+// or reference the concrete hub directly.
+package lifecycle
 
 import (
 	"context"
@@ -9,8 +13,8 @@ import (
 	"time"
 )
 
-// LifecycleEvent is emitted by a WatcherHub when a bead is created or updated.
-type LifecycleEvent struct {
+// Event is emitted by a Hub when a watched bead is created or updated.
+type Event struct {
 	EventID   string
 	BeadID    string
 	Kind      string // "created", "status_changed", "updated"
@@ -20,27 +24,37 @@ type LifecycleEvent struct {
 	Timestamp time.Time
 }
 
-// StoreFactory creates the bead reader used to watch one project.
-type StoreFactory func(projectID string) (BeadReader, error)
+// BeadSnapshot is the subset of bead fields the hub compares across polls to
+// detect lifecycle changes.
+type BeadSnapshot struct {
+	ID     string
+	Status string
+	Owner  string
+	Title  string
+}
 
-// WatcherHub manages per-project bead readers by polling for changes. It
-// satisfies the BeadLifecycleSubscriber interface used by the GraphQL
-// subscription resolver.
-type WatcherHub struct {
+// Reader lists the current beads for one watched project.
+type Reader interface {
+	ReadAll(ctx context.Context) ([]BeadSnapshot, error)
+}
+
+// Factory creates the Reader used to watch one project.
+type Factory func(projectID string) (Reader, error)
+
+// Hub manages per-project bead readers by polling for changes.
+type Hub struct {
 	mu       sync.Mutex
-	factory  StoreFactory
+	factory  Factory
 	watchers map[string]*projectWatcher
 	interval time.Duration
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
-var _ LifecycleSubscriber = (*WatcherHub)(nil)
-
-// NewWatcherHub creates a hub that polls each watched project at interval.
-func NewWatcherHub(factory StoreFactory, interval time.Duration) *WatcherHub {
+// NewHub creates a hub that polls each watched project at interval.
+func NewHub(factory Factory, interval time.Duration) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &WatcherHub{
+	return &Hub{
 		factory:  factory,
 		watchers: make(map[string]*projectWatcher),
 		interval: interval,
@@ -50,7 +64,7 @@ func NewWatcherHub(factory StoreFactory, interval time.Duration) *WatcherHub {
 }
 
 // Close stops all background watchers.
-func (h *WatcherHub) Close() {
+func (h *Hub) Close() {
 	if h == nil || h.cancel == nil {
 		return
 	}
@@ -60,7 +74,7 @@ func (h *WatcherHub) Close() {
 // SubscribeLifecycle registers for lifecycle events from the project at
 // projectID (the project root directory). A new per-project watcher is
 // started on first Subscribe call. The returned func unsubscribes.
-func (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error) {
+func (h *Hub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan Event, func(), error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -68,7 +82,7 @@ func (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (
 		return nil, nil, err
 	}
 	if h == nil {
-		return nil, nil, fmt.Errorf("bead watcher hub is nil")
+		return nil, nil, fmt.Errorf("bead lifecycle hub is nil")
 	}
 	h.mu.Lock()
 	pw, ok := h.watchers[projectID]
@@ -108,15 +122,15 @@ type beadState struct {
 
 // projectWatcher polls a single bead reader and broadcasts lifecycle events.
 type projectWatcher struct {
-	reader   BeadReader
+	reader   Reader
 	interval time.Duration
 
 	mu       sync.Mutex
-	subs     []chan LifecycleEvent
+	subs     []chan Event
 	snapshot map[string]beadState
 }
 
-func newProjectWatcher(reader BeadReader, interval time.Duration) *projectWatcher {
+func newProjectWatcher(reader Reader, interval time.Duration) *projectWatcher {
 	return &projectWatcher{
 		reader:   reader,
 		interval: interval,
@@ -124,8 +138,8 @@ func newProjectWatcher(reader BeadReader, interval time.Duration) *projectWatche
 	}
 }
 
-func (pw *projectWatcher) subscribe() (<-chan LifecycleEvent, func()) {
-	ch := make(chan LifecycleEvent, 16)
+func (pw *projectWatcher) subscribe() (<-chan Event, func()) {
+	ch := make(chan Event, 16)
 	pw.mu.Lock()
 	pw.subs = append(pw.subs, ch)
 	pw.mu.Unlock()
@@ -143,7 +157,7 @@ func (pw *projectWatcher) subscribe() (<-chan LifecycleEvent, func()) {
 	return ch, unsub
 }
 
-func (pw *projectWatcher) broadcast(evt LifecycleEvent) {
+func (pw *projectWatcher) broadcast(evt Event) {
 	pw.mu.Lock()
 	defer pw.mu.Unlock()
 	for _, ch := range pw.subs {
@@ -181,24 +195,24 @@ func (pw *projectWatcher) poll(ctx context.Context) {
 		prev, exists := pw.snapshot[b.ID]
 		curr := beadState{status: b.Status, owner: b.Owner, title: b.Title}
 
-		var evt *LifecycleEvent
+		var evt *Event
 		switch {
 		case !exists:
-			evt = &LifecycleEvent{
+			evt = &Event{
 				BeadID:    b.ID,
 				Kind:      "created",
 				Summary:   fmt.Sprintf("bead %s created: %s", b.ID, b.Title),
 				Timestamp: now,
 			}
 		case prev.status != curr.status:
-			evt = &LifecycleEvent{
+			evt = &Event{
 				BeadID:    b.ID,
 				Kind:      "status_changed",
 				Summary:   fmt.Sprintf("status changed from %s to %s", prev.status, curr.status),
 				Timestamp: now,
 			}
 		case prev != curr:
-			evt = &LifecycleEvent{
+			evt = &Event{
 				BeadID:    b.ID,
 				Kind:      "updated",
 				Summary:   fmt.Sprintf("bead %s updated", b.ID),

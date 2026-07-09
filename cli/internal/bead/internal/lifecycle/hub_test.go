@@ -1,4 +1,4 @@
-package bead
+package lifecycle
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type scriptedBeadReader struct {
+type scriptedReader struct {
 	calls   atomic.Int32
-	batches [][]Bead
+	batches [][]BeadSnapshot
 }
 
-func (r *scriptedBeadReader) ReadAll(ctx context.Context) ([]Bead, error) {
+func (r *scriptedReader) ReadAll(ctx context.Context) ([]BeadSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -27,41 +27,10 @@ func (r *scriptedBeadReader) ReadAll(ctx context.Context) ([]Bead, error) {
 	if idx >= len(r.batches) {
 		idx = len(r.batches) - 1
 	}
-	return append([]Bead(nil), r.batches[idx]...), nil
+	return append([]BeadSnapshot(nil), r.batches[idx]...), nil
 }
 
-func (r *scriptedBeadReader) ReadAllFiltered(ctx context.Context, pred func(Bead) bool) ([]Bead, error) {
-	beads, err := r.ReadAll(ctx)
-	if err != nil || pred == nil {
-		return beads, err
-	}
-	out := make([]Bead, 0, len(beads))
-	for _, b := range beads {
-		if pred(b) {
-			out = append(out, b)
-		}
-	}
-	return out, nil
-}
-
-func (r *scriptedBeadReader) Get(ctx context.Context, id string) (*Bead, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if len(r.batches) == 0 {
-		return nil, nil
-	}
-	idx := len(r.batches) - 1
-	for i := len(r.batches[idx]) - 1; i >= 0; i-- {
-		if r.batches[idx][i].ID == id {
-			bead := r.batches[idx][i]
-			return &bead, nil
-		}
-	}
-	return nil, nil
-}
-
-func waitForLifecycleEvent(t *testing.T, ch <-chan LifecycleEvent) LifecycleEvent {
+func waitForEvent(t *testing.T, ch <-chan Event) Event {
 	t.Helper()
 	select {
 	case evt, ok := <-ch:
@@ -71,23 +40,19 @@ func waitForLifecycleEvent(t *testing.T, ch <-chan LifecycleEvent) LifecycleEven
 		return evt
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for lifecycle event")
-		return LifecycleEvent{}
+		return Event{}
 	}
 }
 
-func TestWatcherHub_UsesProvidedFactory(t *testing.T) {
-	reader := &scriptedBeadReader{
-		batches: [][]Bead{
-			{
-				{ID: "bx-1", Title: "First bead", Status: StatusOpen},
-			},
-			{
-				{ID: "bx-1", Title: "First bead", Status: StatusClosed},
-			},
+func TestHub_UsesProvidedFactory(t *testing.T) {
+	reader := &scriptedReader{
+		batches: [][]BeadSnapshot{
+			{{ID: "bx-1", Title: "First bead", Status: "open"}},
+			{{ID: "bx-1", Title: "First bead", Status: "closed"}},
 		},
 	}
 	factoryCalls := make(chan string, 1)
-	hub := NewWatcherHub(func(projectID string) (BeadReader, error) {
+	hub := NewHub(func(projectID string) (Reader, error) {
 		select {
 		case factoryCalls <- projectID:
 		default:
@@ -111,7 +76,7 @@ func TestWatcherHub_UsesProvidedFactory(t *testing.T) {
 		return reader.calls.Load() >= 1
 	}, time.Second, 5*time.Millisecond)
 
-	first := waitForLifecycleEvent(t, events)
+	first := waitForEvent(t, events)
 	assert.Equal(t, "bx-1", first.BeadID)
 	assert.Equal(t, "created", first.Kind)
 	assert.Equal(t, "bead bx-1 created: First bead", first.Summary)
@@ -120,15 +85,15 @@ func TestWatcherHub_UsesProvidedFactory(t *testing.T) {
 		return reader.calls.Load() >= 2
 	}, time.Second, 5*time.Millisecond)
 
-	second := waitForLifecycleEvent(t, events)
+	second := waitForEvent(t, events)
 	assert.Equal(t, "bx-1", second.BeadID)
 	assert.Equal(t, "status_changed", second.Kind)
 	assert.Equal(t, "status changed from open to closed", second.Summary)
 }
 
-func TestWatcherHub_PropagatesFactoryErrors(t *testing.T) {
+func TestHub_PropagatesFactoryErrors(t *testing.T) {
 	wantErr := errors.New("factory boom")
-	hub := NewWatcherHub(func(string) (BeadReader, error) {
+	hub := NewHub(func(string) (Reader, error) {
 		return nil, wantErr
 	}, time.Millisecond)
 	t.Cleanup(hub.Close)
