@@ -314,7 +314,16 @@ func (f *CommandFactory) beadWorkspaceRoot() string {
 	return f.WorkingDir
 }
 
-func (f *CommandFactory) beadStore() *bead.Store {
+// beadStore returns the bead.Backend interface for callers that only need
+// the TD-027 composite surface. Callers that need concrete-only members
+// (file/dir paths, migrate/archive helpers not yet promoted to Backend) use
+// beadStoreConcrete instead — that is the documented file-level exception
+// for cmd/bead.go.
+func (f *CommandFactory) beadStore() bead.Backend {
+	return f.beadStoreConcrete()
+}
+
+func (f *CommandFactory) beadStoreConcrete() *bead.Store {
 	storeRoot := f.beadStoreRoot()
 	if storeRoot == "" {
 		return bead.NewStore("")
@@ -330,12 +339,20 @@ func (f *CommandFactory) beadStoreRoot() string {
 	return resolveBeadStoreRoot(workspaceRoot)
 }
 
-func (f *CommandFactory) beadStatusStore(projectRoot string) *bead.Store {
+// beadStatusBackend is the narrowest sub-interface that satisfies both
+// `ddx bead status`'s own counts query and collectActiveWorkSnapshot's
+// activeWorkStore requirement (ClaimLease is not part of bead.Backend).
+type beadStatusBackend interface {
+	bead.Backend
+	ClaimLease(id string) (bead.ClaimLeaseRecord, bool, error)
+}
+
+func (f *CommandFactory) beadStatusStore(projectRoot string) beadStatusBackend {
 	inTree := filepath.Join(projectRoot, ddxroot.DirName)
 	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
 		return bead.NewStore(inTree)
 	}
-	return f.beadStore()
+	return f.beadStoreConcrete()
 }
 
 func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
@@ -344,7 +361,7 @@ func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
 		Short: "Initialize bead storage",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			if err := s.Init(context.Background()); err != nil {
 				return err
 			}
@@ -373,7 +390,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 				return err
 			}
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			b := &bead.Bead{Title: args[0]}
 
 			if v, _ := cmd.Flags().GetString("type"); v != "" {
@@ -565,7 +582,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 		Short: "Show a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			b, err := s.GetWithArchive(cmd.Context(), args[0])
 			if err != nil {
 				return err
@@ -744,7 +761,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 				return err
 			}
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 
 			// --claim and --unclaim use dedicated store methods
 			if claim, _ := cmd.Flags().GetBool("claim"); claim {
@@ -1085,7 +1102,7 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 				return err
 			}
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			sessionID, _ := cmd.Flags().GetString("session")
 			commitSHA, _ := cmd.Flags().GetString("commit")
 
@@ -1186,7 +1203,7 @@ Atomically sets status to open, clears claim fields, optionally appends
 			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 				return err
 			}
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			reason, _ := cmd.Flags().GetString("reason")
 			appendNotes, _ := cmd.Flags().GetString("append-notes")
 			return f.withBeadTrackerWriteLock(func() error {
@@ -1212,7 +1229,7 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 		Aliases: []string{"ls"},
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			status, _ := cmd.Flags().GetString("status")
 			label, _ := cmd.Flags().GetString("label")
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -1284,7 +1301,7 @@ Use --execution to include stale in_progress claims that ddx work can reclaim.`,
 			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 				return err
 			}
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			execution, _ := cmd.Flags().GetBool("execution")
 
 			var beads []bead.Bead
@@ -1533,7 +1550,7 @@ func (f *CommandFactory) resolveNeedsHumanBead(ctx context.Context, id, action, 
 	if note == "" {
 		return fmt.Errorf("--note is required")
 	}
-	s := f.beadStore()
+	s := f.beadStoreConcrete()
 	return f.withBeadTrackerWriteLock(func() error {
 		switch action {
 		case "retry":
@@ -1753,7 +1770,7 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 			apply, _ := cmd.Flags().GetBool("apply")
 			_, _ = cmd.Flags().GetBool("dry-run")
 			asJSON, _ := cmd.Flags().GetBool("json")
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
 			if err != nil {
 				return err
@@ -1991,7 +2008,7 @@ func (f *CommandFactory) newBeadExportCommand() *cobra.Command {
 		Short: "Export beads as JSONL",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			stdout, _ := cmd.Flags().GetBool("stdout")
 
 			if stdout || len(args) == 0 {
@@ -2238,7 +2255,7 @@ func (f *CommandFactory) runBeadClearCooldown(cmd *cobra.Command, _ []string) er
 		return fmt.Errorf("requires --all or --reason <value>")
 	}
 
-	store := f.beadStore()
+	store := f.beadStoreConcrete()
 
 	// Collect IDs first so we can print them alongside the count.
 	allBeads, err := store.ReadAll(context.Background())
@@ -2310,7 +2327,7 @@ Examples:
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, _ := cmd.Flags().GetBool("apply")
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 
 			candidates, err := s.EpicClosureCandidates(context.Background())
 			if err != nil {

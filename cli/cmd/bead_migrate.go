@@ -36,7 +36,7 @@ backend using the importer path. Use --dry-run to inspect the counts,
 import, and --limit N to cap the number of beads imported.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			mig, err := f.beadMigrator(s)
 			if err != nil {
 				return err
