@@ -313,6 +313,48 @@ func TestWorkerSupervisor_CurrentDirtyRootStillBlocksStart(t *testing.T) {
 	assert.Contains(t, buf.String(), "dirty.txt")
 }
 
+func TestWorkerSupervisor_DDXMetricsDirtDoesNotBlockRestart(t *testing.T) {
+	root := t.TempDir()
+	runGit(t, "init", root)
+	runGit(t, "-C", root, "config", "user.email", "test@test.com")
+	runGit(t, "-C", root, "config", "user.name", "Test User")
+	setupBeadStore(t, root)
+
+	locksPath := filepath.Join(root, ddxroot.DirName, "metrics", "locks.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(locksPath), 0o755))
+	require.NoError(t, os.WriteFile(locksPath, []byte("{\"event\":\"seed\"}\n"), 0o644))
+	runGit(t, "-C", root, "add", ".ddx")
+	runGit(t, "-C", root, "commit", "-m", "seed ddx metadata")
+	require.NoError(t, os.WriteFile(locksPath, []byte("{\"event\":\"seed\"}\n{\"event\":\"release\"}\n"), 0o644))
+
+	dirtyPaths, known := projectRestartBlockingDirtyPaths(root)
+	require.True(t, known)
+	assert.Empty(t, dirtyPaths)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	installBlockingWorkerFactory(m)
+	t.Cleanup(func() {
+		stopProjectWorkers(t, m, root)
+	})
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-10 * time.Minute)
+	seedTerminalOperatorAttentionWorker(t, m, root, "worker-20260707T000005-oa", terminalAt)
+
+	supervisor := NewWorkerSupervisor(m)
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.DefaultSpec.OpaquePassthrough = true
+	desired.UpdatedAt = terminalAt.Add(-time.Minute)
+	require.NoError(t, writeDesiredStateForTest(supervisor, desired))
+
+	require.NoError(t, supervisor.ReconcileAt(now))
+	require.Eventually(t, func() bool {
+		return runningManagedWorkerCount(t, m, root) == 1
+	}, 2*time.Second, 20*time.Millisecond)
+}
+
 func TestWorkerSupervisor_ActiveBlockedTerminalConsumesOneDesiredSlot(t *testing.T) {
 	t.Run("does not suppress all starts when desired count exceeds one", func(t *testing.T) {
 		root := t.TempDir()

@@ -508,8 +508,7 @@ func projectRestartBlockingDirtyPaths(projectRoot string) ([]string, bool) {
 
 	var dirtyPaths []string
 	seen := map[string]struct{}{}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(line)
+	for _, line := range strings.Split(string(out), "\n") {
 		if line == "" || len(line) < 4 {
 			continue
 		}
