@@ -3,8 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -3033,15 +3031,7 @@ func loopEventDataByType(events []loopEvent, typ string) []map[string]any {
 }
 
 func claimHeartbeatPathForTest(store *bead.Store, beadID string) string {
-	root := filepath.Clean(filepath.Dir(store.Dir))
-	if abs, err := filepath.Abs(root); err == nil {
-		root = abs
-	}
-	if real, err := filepath.EvalSymlinks(root); err == nil {
-		root = real
-	}
-	sum := sha1.Sum([]byte(root))
-	return filepath.Join(os.TempDir(), "ddx-claim-heartbeats", hex.EncodeToString(sum[:]), beadID+".json")
+	return filepath.Join(bead.ClaimLivenessRoot(store.Dir), beadID+".json")
 }
 
 // errorInjectingStore wraps a real ExecuteBeadLoopStore and allows individual
