@@ -47,6 +47,7 @@ type Report struct {
 	EvidenceRev                 string
 	ProjectRoot                 string
 	PreserveRef                 string
+	NoEvidencePaths             []string
 	RetryAfter                  string
 	NoChangesRationale          string
 	ReviewVerdict               string

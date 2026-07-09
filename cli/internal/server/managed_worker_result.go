@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
@@ -26,12 +27,35 @@ type ManagedWorkerResult struct {
 	// OperatorAttention is true when the loop stopped for a project-level
 	// operator-attention condition (e.g. uncommitted tracked changes).
 	OperatorAttention bool `json:"operator_attention,omitempty"`
+	// LastFailureStatus mirrors ExecuteBeadLoopResult.LastFailureStatus so the
+	// supervisor can block restarts for terminal contract failures even when a
+	// future caller forgets to set OperatorAttention.
+	LastFailureStatus string `json:"last_failure_status,omitempty"`
+	LastFailureDetail string `json:"last_failure_detail,omitempty"`
 }
 
 // IsRestartBlocking reports whether this terminal outcome must suppress an
 // immediate supervisor relaunch (the worker is parked pending operator action).
 func (r ManagedWorkerResult) IsRestartBlocking() bool {
-	return r.OperatorAttention || r.StopCondition == "operator_attention"
+	stop := normalizeManagedWorkerReason(r.StopCondition)
+	status := normalizeManagedWorkerReason(r.LastFailureStatus)
+	return r.OperatorAttention || stop == "operator_attention" || status == "no_evidence_produced"
+}
+
+func normalizeManagedWorkerReason(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.ReplaceAll(v, "-", "_")
+	var out strings.Builder
+	for i, r := range v {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			prev := rune(v[i-1])
+			if prev != '_' && prev != '-' {
+				out.WriteByte('_')
+			}
+		}
+		out.WriteRune(r)
+	}
+	return strings.ToLower(out.String())
 }
 
 // managedWorkerResultDir returns the worker dir that both the subprocess and

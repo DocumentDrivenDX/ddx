@@ -756,9 +756,15 @@ func writeServerManagedResult(cmd *cobra.Command, projectRoot string, result *ag
 	if workerID == "" {
 		return
 	}
+	lastFailureDetail := ""
+	if n := len(result.Results); n > 0 {
+		lastFailureDetail = result.Results[n-1].Detail
+	}
 	_ = serverpkg.WriteManagedWorkerResult(projectRoot, workerID, serverpkg.ManagedWorkerResult{
 		StopCondition:     result.StopCondition,
 		OperatorAttention: result.OperatorAttention != nil,
+		LastFailureStatus: result.LastFailureStatus,
+		LastFailureDetail: lastFailureDetail,
 	})
 }
 

@@ -727,6 +727,9 @@ type ExecuteBeadReport struct {
 	// ProjectRoot is the worktree root ddx try/work operated on for this report.
 	ProjectRoot string `json:"project_root,omitempty"`
 	PreserveRef string `json:"preserve_ref,omitempty"`
+	// NoEvidencePaths names dirty paths preserved when a no-evidence attempt
+	// exited without committing work or writing no_changes_rationale.txt.
+	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
 	// CandidateRef is the project-root git ref pinned before checks and review.
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`
@@ -3656,6 +3659,79 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		})
 		return executeBeadIterationOutcome{Stop: true}, nil
 	}
+	if report.Status == ExecuteBeadStatusNoEvidenceProduced {
+		result.Attempts++
+		result.Results = append(result.Results, report)
+		result.Failures++
+		result.LastFailureStatus = report.Status
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, unclaimErr
+		}
+		at := now().UTC()
+		detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
+		if detail == "" {
+			detail = "agent exited without a commit or no_changes_rationale.txt"
+		}
+		if err := parkNoEvidenceForOperator(w.Store, candidate.ID, assignee, report, detail, at); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("parkNoEvidenceForOperator", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		attention := &OperatorAttentionStop{
+			Reason:      FailureModeNoEvidenceProduced,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			DirtyPaths:  append([]string(nil), report.NoEvidencePaths...),
+			Message:     detail,
+		}
+		result.OperatorAttention = attention
+		setExit("OperatorAttention", "operator_attention")
+		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, at)); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("AppendEvent", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":       attention.Reason,
+			"bead_id":      candidate.ID,
+			"project_root": runtime.ProjectRoot,
+			"dirty_paths":  attention.DirtyPaths,
+			"preserve_ref": report.PreserveRef,
+			"message":      detail,
+		})
+		emit("bead.result", map[string]any{
+			"bead_id":           candidate.ID,
+			"status":            report.Status,
+			"detail":            report.Detail,
+			"session_id":        report.SessionID,
+			"result_rev":        report.ResultRev,
+			"base_rev":          report.BaseRev,
+			"preserve_ref":      report.PreserveRef,
+			"no_evidence_paths": append([]string(nil), report.NoEvidencePaths...),
+			"duration_ms":       now().Sub(runStart).Milliseconds(),
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s produced no evidence; released and parked. %s\n", candidate.ID, detail)
+		}
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
 	if IsResourceExhaustedStatus(report.Status) {
 		result.Attempts++
 		setExit("ResourceExhausted", "resource_exhausted")
@@ -5490,6 +5566,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
 	}
+	if len(report.NoEvidencePaths) > 0 {
+		parts = append(parts, fmt.Sprintf("no_evidence_paths=%s", strings.Join(report.NoEvidencePaths, ",")))
+	}
 	if report.ResultRev != "" {
 		parts = append(parts, fmt.Sprintf("result_rev=%s", report.ResultRev))
 	}
@@ -6344,6 +6423,42 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 			clearNoChangesNextMinPower(b)
 			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
 		},
+	})
+}
+
+func parkNoEvidenceForOperator(store ExecuteBeadLoopStore, beadID, actor string, report ExecuteBeadReport, detail string, at time.Time) error {
+	reason := FailureModeNoEvidenceProduced
+	if strings.TrimSpace(report.PreserveRef) != "" || len(report.NoEvidencePaths) > 0 {
+		reason = "no_evidence_dirty_rescue"
+	}
+	if err := parkToProposedWithOperatorMeta(store, beadID, bead.ParkNoChangesOperatorRequired, ParkToProposedOpts{
+		Reason:          reason,
+		Summary:         "attempt produced dirty rescue but no landed evidence",
+		SuggestedAction: "inspect the dirty rescue patch, commit valid work manually, then move the bead back to open if another automated attempt is needed",
+		Since:           at,
+		CleanupLabels:   false,
+	}); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"reason":            FailureModeNoEvidenceProduced,
+		"bead_id":           beadID,
+		"attempt_id":        report.AttemptID,
+		"detail":            detail,
+		"preserve_ref":      report.PreserveRef,
+		"dirty_paths":       append([]string(nil), report.NoEvidencePaths...),
+		"base_rev":          report.BaseRev,
+		"result_rev":        report.ResultRev,
+		"suggested_action":  "salvage or discard the rescue patch before retrying",
+		"automation_action": "released claim and parked bead to proposed",
+	})
+	return store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   FailureModeNoEvidenceProduced,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
 	})
 }
 

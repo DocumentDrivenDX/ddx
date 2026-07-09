@@ -531,6 +531,71 @@ func TestFormatLoopResult_NoEvidenceShowsContractFailure(t *testing.T) {
 		formatLoopResult(report))
 }
 
+func TestExecuteBeadWorker_NoEvidenceDirtyRescueStopsWatchForOperatorAttention(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{
+				BeadID:          beadID,
+				AttemptID:       "attempt-no-evidence-001",
+				Status:          ExecuteBeadStatusNoEvidenceProduced,
+				Detail:          "agent exited without a commit or no_changes_rationale.txt",
+				PreserveRef:     ".ddx/executions/attempt-no-evidence-001/dirty_rescue.patch",
+				NoEvidencePaths: []string{"cli/internal/agent/foo.go"},
+				BaseRev:         "base-rev",
+				ResultRev:       "base-rev",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Millisecond,
+		ProjectRoot:  t.TempDir(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "watch worker must not retry a no-evidence dirty rescue")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusNoEvidenceProduced, result.LastFailureStatus)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, FailureModeNoEvidenceProduced, result.OperatorAttention.Reason)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+
+	got, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "no-evidence dirty rescue must park instead of staying immediately retryable")
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var sawOperatorAttention, sawExecuteBead bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "operator_attention":
+			sawOperatorAttention = true
+			assert.Equal(t, FailureModeNoEvidenceProduced, ev.Summary)
+			assert.Contains(t, ev.Body, "dirty_rescue.patch")
+			assert.Contains(t, ev.Body, "cli/internal/agent/foo.go")
+		case "execute-bead":
+			if ev.Summary == ExecuteBeadStatusNoEvidenceProduced {
+				sawExecuteBead = true
+				assert.Contains(t, ev.Body, "preserve_ref=.ddx/executions/attempt-no-evidence-001/dirty_rescue.patch")
+				assert.Contains(t, ev.Body, "no_evidence_paths=cli/internal/agent/foo.go")
+			}
+		}
+	}
+	assert.True(t, sawOperatorAttention, "operator_attention event must make the rescue visible")
+	assert.True(t, sawExecuteBead, "execute-bead event must preserve terminal attempt evidence")
+}
+
 func TestFormatLoopResultLine_SuccessUsesSuccessMarker(t *testing.T) {
 	success := ExecuteBeadReport{
 		Status:    ExecuteBeadStatusSuccess,
