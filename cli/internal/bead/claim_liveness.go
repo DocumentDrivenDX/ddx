@@ -129,6 +129,59 @@ func writeAtomicClaimFile(path string, data []byte) error {
 	return nil
 }
 
+// claimLivenessStaleTmpAge is how old an atomic "*.tmp-*" sidecar under
+// ddx-claim-heartbeats must be before cleanup treats it as abandoned rather
+// than a write that could still be in flight. writeAtomicClaimFile renames
+// its temp file into place within milliseconds of creating it, so this stays
+// comfortably above any writer that could plausibly still be active while
+// still reclaiming crash/fill leftovers promptly.
+const claimLivenessStaleTmpAge = 10 * time.Minute
+
+// isClaimLivenessTmpFile reports whether name is an atomic write's temp
+// sidecar (as created by writeAtomicClaimFile) rather than a published
+// heartbeat file.
+func isClaimLivenessTmpFile(name string) bool {
+	return strings.Contains(name, ".tmp-")
+}
+
+// CleanupStaleClaimLivenessTmpFiles removes abandoned atomic "*.tmp-*"
+// sidecars under the claim-liveness root for ddxDir that are older than
+// claimLivenessStaleTmpAge as of now. It never touches published heartbeat
+// files, so live claim leases and cross-worker stale-claim protection are
+// unaffected. It returns the number of files and bytes reclaimed.
+func CleanupStaleClaimLivenessTmpFiles(ddxDir string, now time.Time) (filesRemoved int64, bytesRemoved int64, err error) {
+	root := ClaimLivenessRoot(ddxDir)
+	entries, readErr := os.ReadDir(root)
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			return 0, 0, nil
+		}
+		return 0, 0, fmt.Errorf("bead: read claim liveness dir: %w", readErr)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !isClaimLivenessTmpFile(entry.Name()) {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) < claimLivenessStaleTmpAge {
+			continue
+		}
+		size := info.Size()
+		if removeErr := os.Remove(filepath.Join(root, entry.Name())); removeErr != nil {
+			if os.IsNotExist(removeErr) {
+				continue
+			}
+			return filesRemoved, bytesRemoved, fmt.Errorf("bead: remove stale claim liveness tmp: %w", removeErr)
+		}
+		filesRemoved++
+		bytesRemoved += size
+	}
+	return filesRemoved, bytesRemoved, nil
+}
+
 func (s *Store) writeClaimHeartbeat(rec ClaimLeaseRecord) error {
 	data, err := json.Marshal(rec)
 	if err != nil {

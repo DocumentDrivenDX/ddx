@@ -159,6 +159,54 @@ func TestClaimLeaseIsStale_DeadOwnerPIDReclaimable(t *testing.T) {
 	assert.Equal(t, "worker-b", lease.Owner)
 }
 
+// TestClaimLivenessCleanupRemovesStaleTmpFiles proves stale atomic "*.tmp-*"
+// sidecars under ddx-claim-heartbeats are removed while published (non-tmp)
+// heartbeat files, including a live claim's heartbeat, are left untouched.
+func TestClaimLivenessCleanupRemovesStaleTmpFiles(t *testing.T) {
+	ddxDir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	root := ClaimLivenessRoot(ddxDir)
+	require.NoError(t, os.MkdirAll(root, 0o755))
+
+	stalePath := filepath.Join(root, "ddx-abc123.json.tmp-987654321")
+	require.NoError(t, os.WriteFile(stalePath, []byte("{}"), 0o644))
+	staleTime := time.Now().Add(-1 * time.Hour)
+	require.NoError(t, os.Chtimes(stalePath, staleTime, staleTime))
+
+	livePath := filepath.Join(root, "ddx-live456.json")
+	require.NoError(t, os.WriteFile(livePath, []byte("{}"), 0o644))
+	require.NoError(t, os.Chtimes(livePath, staleTime, staleTime))
+
+	filesRemoved, bytesRemoved, err := CleanupStaleClaimLivenessTmpFiles(ddxDir, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), filesRemoved)
+	assert.Equal(t, int64(len("{}")), bytesRemoved)
+
+	_, statErr := os.Stat(stalePath)
+	assert.True(t, os.IsNotExist(statErr), "expected stale tmp file to be removed")
+
+	_, statErr = os.Stat(livePath)
+	assert.NoError(t, statErr, "expected live heartbeat file to be preserved")
+}
+
+// TestClaimLivenessCleanupKeepsRecentTmpFiles proves a recently created atomic
+// tmp sidecar is preserved, since a writer could still be mid-rename.
+func TestClaimLivenessCleanupKeepsRecentTmpFiles(t *testing.T) {
+	ddxDir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	root := ClaimLivenessRoot(ddxDir)
+	require.NoError(t, os.MkdirAll(root, 0o755))
+
+	recentPath := filepath.Join(root, "ddx-fresh789.json.tmp-123456")
+	require.NoError(t, os.WriteFile(recentPath, []byte("{}"), 0o644))
+
+	filesRemoved, bytesRemoved, err := CleanupStaleClaimLivenessTmpFiles(ddxDir, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), filesRemoved)
+	assert.Equal(t, int64(0), bytesRemoved)
+
+	_, statErr := os.Stat(recentPath)
+	assert.NoError(t, statErr, "expected recent tmp file to be preserved")
+}
+
 func TestClaimLeaseIsStale_ForeignMachineFallsBackToAge(t *testing.T) {
 	s := newTestStore(t)
 	staleAt := time.Now().UTC().Add(-1 * time.Hour)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -147,20 +148,23 @@ type ExecutionCleanupSummary struct {
 	CompleteEvidenceDirs int `json:"complete_evidence_dirs"`
 	ScannedScratchDirs   int `json:"scanned_scratch_dirs"`
 
-	RemovedUnregisteredTempDirs int64 `json:"removed_unregistered_temp_dirs"`
-	RemovedRegisteredWorktrees  int64 `json:"removed_registered_worktrees"`
-	RemovedRunStateFiles        int64 `json:"removed_run_state_files"`
-	RemovedScratchDirs          int64 `json:"removed_scratch_dirs"`
-	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
-	PrunedCandidateRefs         int64 `json:"pruned_candidate_refs"`
-	RemovedEvidenceDirs         int64 `json:"removed_evidence_dirs"`
-	RemovedAgentLogs            int64 `json:"removed_agent_logs"`
-	RemovedWorkerDirs           int64 `json:"removed_worker_dirs"`
+	RemovedUnregisteredTempDirs  int64 `json:"removed_unregistered_temp_dirs"`
+	RemovedRegisteredWorktrees   int64 `json:"removed_registered_worktrees"`
+	RemovedRunStateFiles         int64 `json:"removed_run_state_files"`
+	RemovedScratchDirs           int64 `json:"removed_scratch_dirs"`
+	PreservedActiveScratchDirs   int64 `json:"preserved_active_scratch_dirs"`
+	PrunedCandidateRefs          int64 `json:"pruned_candidate_refs"`
+	RemovedEvidenceDirs          int64 `json:"removed_evidence_dirs"`
+	RemovedAgentLogs             int64 `json:"removed_agent_logs"`
+	RemovedWorkerDirs            int64 `json:"removed_worker_dirs"`
+	RemovedClaimLivenessTmpFiles int64 `json:"removed_claim_liveness_tmp_files"`
 
-	BytesReclaimed         int64 `json:"bytes_reclaimed"`
-	InodesReclaimed        int64 `json:"inodes_reclaimed"`
-	ScratchBytesReclaimed  int64 `json:"scratch_bytes_reclaimed"`
-	ScratchInodesReclaimed int64 `json:"scratch_inodes_reclaimed"`
+	BytesReclaimed               int64 `json:"bytes_reclaimed"`
+	InodesReclaimed              int64 `json:"inodes_reclaimed"`
+	ScratchBytesReclaimed        int64 `json:"scratch_bytes_reclaimed"`
+	ScratchInodesReclaimed       int64 `json:"scratch_inodes_reclaimed"`
+	ClaimLivenessBytesReclaimed  int64 `json:"claim_liveness_bytes_reclaimed"`
+	ClaimLivenessInodesReclaimed int64 `json:"claim_liveness_inodes_reclaimed"`
 
 	Warnings        []ExecutionCleanupWarning        `json:"warnings,omitempty"`
 	Issues          []ExecutionCleanupIssue          `json:"issues,omitempty"`
@@ -570,8 +574,45 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	}
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 	m.cleanupDurableLandedCandidateRefs(&summary)
+	m.cleanupClaimLivenessTmpFiles(&summary, now())
 
 	return summary, nil
+}
+
+// cleanupClaimLivenessTmpFiles reclaims abandoned atomic "*.tmp-*" sidecars
+// under the claim-liveness heartbeat root so crashed writers or a full
+// filesystem don't leave inode-consuming leftovers behind. It never removes
+// published heartbeat files, so cross-worker stale-claim protection is
+// unaffected.
+func (m *ExecutionCleanupManager) cleanupClaimLivenessTmpFiles(summary *ExecutionCleanupSummary, now time.Time) {
+	if m.ProjectRoot == "" {
+		return
+	}
+	ddxDir := ddxroot.JoinProject(m.ProjectRoot)
+	filesRemoved, bytesRemoved, err := bead.CleanupStaleClaimLivenessTmpFiles(ddxDir, now)
+	if err != nil {
+		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+			Path:    bead.ClaimLivenessRoot(ddxDir),
+			Class:   "claim_liveness_tmp_cleanup",
+			Message: err.Error(),
+		})
+		return
+	}
+	if filesRemoved == 0 {
+		return
+	}
+	summary.RemovedClaimLivenessTmpFiles += filesRemoved
+	summary.ClaimLivenessBytesReclaimed += bytesRemoved
+	summary.ClaimLivenessInodesReclaimed += filesRemoved
+	summary.BytesReclaimed += bytesRemoved
+	summary.InodesReclaimed += filesRemoved
+	summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+		Path:    bead.ClaimLivenessRoot(ddxDir),
+		Class:   "removed_claim_liveness_tmp_files",
+		Message: fmt.Sprintf("removed %d stale claim-liveness tmp files", filesRemoved),
+		Bytes:   bytesRemoved,
+		Inodes:  filesRemoved,
+	})
 }
 
 func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summary *ExecutionCleanupSummary, runStates []RunState, registered map[string]struct{}, probe ExecutionCleanupLivenessProbe, now time.Time) error {

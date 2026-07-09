@@ -5639,6 +5639,8 @@ func emitResourcePreflight(emit func(string, map[string]any), phase string, resu
 		"cleanup_registered_trees":  summary.RemovedRegisteredWorktrees,
 		"cleanup_run_state_files":   summary.RemovedRunStateFiles,
 		"cleanup_preserved_scratch": summary.PreservedActiveScratchDirs,
+		"cleanup_claim_liveness_tmp_files_reclaimed": summary.RemovedClaimLivenessTmpFiles,
+		"cleanup_claim_liveness_inodes_reclaimed":    summary.ClaimLivenessInodesReclaimed,
 	})
 }
 

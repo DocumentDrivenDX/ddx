@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -198,6 +199,80 @@ func TestWorkResourcePreflight_RunsCleanupBelowSoftFloor(t *testing.T) {
 	require.NotEmpty(t, result.BeforeRootChecks)
 	require.NotEmpty(t, result.RootChecks)
 	assert.Contains(t, result.BeforeRootChecks[0].Notes, "free bytes 50 < soft cleanup threshold 100")
+}
+
+// postCleanupHookRunner wraps a real executionCleanupRunner and invokes after
+// once the wrapped Cleanup call returns, so tests can flip a RootProbe from
+// unhealthy to healthy exactly when the real cleanup pass has run.
+type postCleanupHookRunner struct {
+	inner executionCleanupRunner
+	after func()
+}
+
+func (h *postCleanupHookRunner) Cleanup(ctx context.Context) (ExecutionCleanupSummary, error) {
+	summary, err := h.inner.Cleanup(ctx)
+	if h.after != nil {
+		h.after()
+	}
+	return summary, err
+}
+
+// TestResourcePreflightReportsClaimLivenessReclaimedInodes proves that when
+// resource preflight runs a cleanup pass (the real ExecutionCleanupManager,
+// not a fake), stale claim-liveness "*.tmp-*" sidecars are reclaimed and the
+// reclaimed file/inode counts surface on the CleanupSummary that feeds
+// resource.preflight events, while the live (non-tmp) heartbeat file is left
+// in place.
+func TestResourcePreflightReportsClaimLivenessReclaimedInodes(t *testing.T) {
+	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := t.TempDir()
+
+	claimLivenessRoot := bead.ClaimLivenessRoot(ddxroot.JoinProject(projectRoot))
+	require.NoError(t, os.MkdirAll(claimLivenessRoot, 0o755))
+
+	staleTmp := filepath.Join(claimLivenessRoot, "ddx-stale111.json.tmp-555")
+	require.NoError(t, os.WriteFile(staleTmp, []byte("{}"), 0o644))
+	staleTime := time.Now().Add(-1 * time.Hour)
+	require.NoError(t, os.Chtimes(staleTmp, staleTime, staleTime))
+
+	liveHeartbeat := filepath.Join(claimLivenessRoot, "ddx-live222.json")
+	require.NoError(t, os.WriteFile(liveHeartbeat, []byte("{}"), 0o644))
+	require.NoError(t, os.Chtimes(liveHeartbeat, staleTime, staleTime))
+
+	checker := NewExecutionResourceChecker(projectRoot, &executionCleanupTestGitOps{})
+	checker.TempRoot = tempRoot
+	checker.SoftMinFreeInodes = 100
+
+	healthy := false
+	checker.RootProbe = func(path string) (ExecutionResourceRootCheck, error) {
+		check := ExecutionResourceRootCheck{
+			Path:       path,
+			Writable:   true,
+			BytesFree:  executionResourceMinFreeBytes + 1,
+			InodesFree: executionResourceMinFreeInodes + 1,
+		}
+		if path == claimLivenessRoot && !healthy {
+			check.InodesFree = 1
+		}
+		return check, nil
+	}
+	checker.CleanupRunner = &postCleanupHookRunner{
+		inner: checker.CleanupRunner,
+		after: func() { healthy = true },
+	}
+
+	result, err := checker.Check(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), result.CleanupSummary.RemovedClaimLivenessTmpFiles)
+	assert.Equal(t, int64(1), result.CleanupSummary.ClaimLivenessInodesReclaimed)
+	assert.Equal(t, int64(len("{}")), result.CleanupSummary.ClaimLivenessBytesReclaimed)
+
+	_, statErr := os.Stat(staleTmp)
+	assert.True(t, os.IsNotExist(statErr), "expected stale claim-liveness tmp file to be reclaimed")
+	_, statErr = os.Stat(liveHeartbeat)
+	assert.NoError(t, statErr, "expected live claim-liveness heartbeat file to be preserved")
 }
 
 type cleanupTogglingRunner struct {
