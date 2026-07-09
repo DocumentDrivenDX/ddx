@@ -42,7 +42,7 @@ func TestWaitForEmptyGitIndex_RecoversFromStaleIndex(t *testing.T) {
 
 	// 100ms is well under any plausible operator-contention window, so
 	// the test exercises the recovery path rather than waiting it out.
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
 		t.Fatalf("waitForEmptyGitIndex did not recover: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestWaitForEmptyGitIndex_RecoversFromStaleIndex(t *testing.T) {
 func TestWaitForEmptyGitIndex_NoChangesReturnsImmediately(t *testing.T) {
 	r := newLandTestRepo(t)
 	start := time.Now()
-	if err := waitForEmptyGitIndex(r.dir, 2*time.Second); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 2*time.Second, false); err != nil {
 		t.Fatalf("clean worktree should not error: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
@@ -76,7 +76,7 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 
 	// Operator-staged work is checkpoint-committed — never refused or
 	// reset — and pre-claim proceeds.
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
 		t.Fatalf("staged operator work should be checkpointed, not refused: %v", err)
 	}
 	content, rerr := os.ReadFile(filepath.Join(r.dir, "operator.txt"))
@@ -108,7 +108,7 @@ func TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := waitForEmptyGitIndex(r.dir, 2*time.Second); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 2*time.Second, false); err != nil {
 		t.Fatalf("staged tracker files must not block pre-claim: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
@@ -137,7 +137,7 @@ func TestWaitForEmptyGitIndex_StagedCodeStillBlocksAlongsideTracker(t *testing.T
 	// The staged code file is checkpoint-committed (tracker files are
 	// excluded from the checkpoint and remain live state), and pre-claim
 	// proceeds.
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
 		t.Fatalf("staged code should be checkpointed, not refused: %v", err)
 	}
 	if log := r.runGit("log", "--all", "--format=%s", "--", "main.go"); !strings.Contains(log, "checkpoint local tree before land") {
@@ -155,11 +155,53 @@ func TestWaitForEmptyGitIndex_RecoversFromCorruptIndex(t *testing.T) {
 	indexPath := filepath.Join(r.dir, ".git", "index")
 	require.NoError(t, os.WriteFile(indexPath, []byte("bad"), 0o644))
 
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
 		t.Fatalf("waitForEmptyGitIndex did not recover corrupt index: %v", err)
 	}
 
 	if got := r.runGit("diff", "--cached", "--name-status"); got != "" {
 		t.Fatalf("index should be clean after recovery, got %q", got)
+	}
+}
+
+// TestLandAdvancer_SelfRecoversDdxOwnedDirtyPaths verifies that the landing
+// advancer checkpoints DDx-owned staged evidence instead of returning a land
+// retry when the landing checkout contains only .ddx/executions/* dirty paths.
+func TestLandAdvancer_SelfRecoversDdxOwnedDirtyPaths(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	r.writeFile(".ddx/executions/20260708T000000-test/kept.json", "kept-old\n")
+	r.writeFile(".ddx/executions/20260708T000000-test/removed.json", "removed-old\n")
+	r.runGit("add", "-f", ".ddx/executions/20260708T000000-test/kept.json", ".ddx/executions/20260708T000000-test/removed.json")
+	r.runGit("commit", "-m", "seed execution evidence")
+
+	baseRev := r.resolveRef("HEAD")
+	r.writeFile(".ddx/executions/20260708T000000-test/kept.json", "kept-new\n")
+	r.runGit("add", "-f", ".ddx/executions/20260708T000000-test/kept.json")
+	r.runGit("rm", "-f", ".ddx/executions/20260708T000000-test/removed.json")
+
+	staged := r.runGit("diff", "--cached", "--name-status")
+	if !strings.Contains(staged, "M\t.ddx/executions/20260708T000000-test/kept.json") || !strings.Contains(staged, "D\t.ddx/executions/20260708T000000-test/removed.json") {
+		t.Fatalf("setup did not reproduce staged evidence dirty paths; staged=%q", staged)
+	}
+
+	resultRev := r.commitOn(baseRev, "worker.txt", "worker output\n", "feat: worker result")
+	landed, err := Land(r.dir, LandRequest{
+		WorktreeDir: r.dir,
+		BaseRev:     baseRev,
+		ResultRev:   resultRev,
+		BeadID:      "ddx-evidence",
+		AttemptID:   "20260708T000000-test",
+	}, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land should self-recover DDx-owned evidence paths: %v", err)
+	}
+	if landed == nil || landed.Status != "landed" {
+		t.Fatalf("expected land to proceed, got %#v", landed)
+	}
+
+	log := r.runGit("log", "--all", "--format=%s", "--", ".ddx/executions/20260708T000000-test/kept.json")
+	if !strings.Contains(log, "checkpoint local tree before land") {
+		t.Fatalf("evidence was not checkpointed; log=%q", log)
 	}
 }

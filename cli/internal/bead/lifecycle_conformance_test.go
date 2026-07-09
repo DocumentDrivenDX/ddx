@@ -302,6 +302,124 @@ func TestLifecycleCancelledDoesNotSatisfyDependents(t *testing.T) {
 	}
 }
 
+// TestReadyExecution_ExcludesUnresolvedPreservedReviewExtraMarkers verifies
+// that a bead carrying an unresolved preserved-review block marker (stamped
+// by the execute-bead loop after the large-deletion gate preserves an
+// attempt) is excluded from ReadyExecution even though it is otherwise open
+// with no dependencies (ddx-ec1c1f89 AC2).
+func TestReadyExecution_ExcludesUnresolvedPreservedReviewExtraMarkers(t *testing.T) {
+	s := newTestStore(t)
+
+	b := &Bead{ID: "ddx-preserved-review-blocked", Title: "preserved review blocked", Priority: 0}
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Update(testCtx(), b.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[ExtraPreservedReviewBlockedAt] = "2026-07-01T00:00:00Z"
+		b.Extra[ExtraPreservedReviewBlockedAttempt] = "attempt-1"
+		b.Extra[ExtraPreservedReviewGate] = PreservedReviewGateLargeDeletion
+	}))
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	for _, entry := range ready {
+		if entry.ID == b.ID {
+			t.Errorf("bead %s with unresolved preserved-review block marker must not appear in ReadyExecution", b.ID)
+		}
+	}
+}
+
+// TestReadyExecution_AllowsPreservedReviewAfterMatchingOperatorUnblockMetadata
+// verifies that stamping a preserved-review-unblocked-at/-attempt pair that
+// matches the blocked attempt and postdates the block timestamp clears the
+// exclusion (ddx-ec1c1f89 AC3).
+func TestReadyExecution_AllowsPreservedReviewAfterMatchingOperatorUnblockMetadata(t *testing.T) {
+	s := newTestStore(t)
+
+	b := &Bead{ID: "ddx-preserved-review-unblocked", Title: "preserved review unblocked", Priority: 0}
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Update(testCtx(), b.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[ExtraPreservedReviewBlockedAt] = "2026-07-01T00:00:00Z"
+		b.Extra[ExtraPreservedReviewBlockedAttempt] = "attempt-1"
+		b.Extra[ExtraPreservedReviewGate] = PreservedReviewGateLargeDeletion
+	}))
+
+	// Still blocked before the operator unblock is recorded.
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	for _, entry := range ready {
+		if entry.ID == b.ID {
+			t.Fatalf("bead %s should still be blocked before operator unblock", b.ID)
+		}
+	}
+
+	// Operator stamps a matching unblock (same attempt, newer timestamp) —
+	// mirrors `ddx bead update --set preserved-review-unblocked-at=... --set
+	// preserved-review-unblocked-attempt=...`.
+	require.NoError(t, s.Update(testCtx(), b.ID, func(b *Bead) {
+		b.Extra[ExtraPreservedReviewUnblockedAt] = "2026-07-02T00:00:00Z"
+		b.Extra[ExtraPreservedReviewUnblockedAttempt] = "attempt-1"
+	}))
+
+	ready, err = s.ReadyExecution()
+	require.NoError(t, err)
+	found := false
+	for _, entry := range ready {
+		if entry.ID == b.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("bead %s should appear in ReadyExecution after a matching operator unblock but was absent", b.ID)
+	}
+}
+
+// TestReadyExecution_DoesNotClearPreservedGateForMismatchedAttemptOrOldTimestamp
+// verifies that an unblock stamp is only honored when it names the exact
+// blocked attempt and postdates the block timestamp — a mismatched attempt id
+// or a stale/earlier unblock timestamp must leave the bead excluded
+// (ddx-ec1c1f89 AC4).
+func TestReadyExecution_DoesNotClearPreservedGateForMismatchedAttemptOrOldTimestamp(t *testing.T) {
+	cases := []struct {
+		name             string
+		unblockedAt      string
+		unblockedAttempt string
+	}{
+		{name: "mismatched attempt", unblockedAt: "2026-07-02T00:00:00Z", unblockedAttempt: "attempt-2"},
+		{name: "unblock timestamp not after block timestamp", unblockedAt: "2026-06-30T00:00:00Z", unblockedAttempt: "attempt-1"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStore(t)
+			b := &Bead{ID: "ddx-preserved-review-mismatch", Title: "preserved review mismatch", Priority: 0}
+			require.NoError(t, s.Create(testCtx(), b))
+			require.NoError(t, s.Update(testCtx(), b.ID, func(b *Bead) {
+				if b.Extra == nil {
+					b.Extra = make(map[string]any)
+				}
+				b.Extra[ExtraPreservedReviewBlockedAt] = "2026-07-01T00:00:00Z"
+				b.Extra[ExtraPreservedReviewBlockedAttempt] = "attempt-1"
+				b.Extra[ExtraPreservedReviewGate] = PreservedReviewGateLargeDeletion
+				b.Extra[ExtraPreservedReviewUnblockedAt] = tc.unblockedAt
+				b.Extra[ExtraPreservedReviewUnblockedAttempt] = tc.unblockedAttempt
+			}))
+
+			ready, err := s.ReadyExecution()
+			require.NoError(t, err)
+			for _, entry := range ready {
+				if entry.ID == b.ID {
+					t.Errorf("bead %s must remain blocked for case %q", b.ID, tc.name)
+				}
+			}
+		})
+	}
+}
+
 // TestStartupGateRefusesUnmigratedQueue verifies that a project whose beads.jsonl
 // contains legacy lifecycle labels and lacks a lifecycle-schema.json marker
 // triggers a migration-required error from DetectLifecycleMigrationRequired.

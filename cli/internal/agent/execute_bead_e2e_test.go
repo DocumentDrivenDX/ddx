@@ -325,6 +325,44 @@ func (r *rationaleTestRunner) Run(opts RunArgs) (*Result, error) {
 	return &Result{ExitCode: 0}, nil
 }
 
+// commitRationaleTestRunner writes a rationale file and commits it, optionally
+// alongside one substantive project file. It exercises the real git diff path
+// used by ExecuteBead's outcome classifier.
+type commitRationaleTestRunner struct {
+	t            *testing.T
+	rationale    string
+	extraPath    string
+	extraContent string
+}
+
+func (r *commitRationaleTestRunner) Run(opts RunArgs) (*Result, error) {
+	attemptID := opts.Correlation["attempt_id"]
+	if attemptID == "" {
+		return &Result{ExitCode: 0}, nil
+	}
+	dir := filepath.Join(opts.WorkDir, ddxroot.DirName, "executions", attemptID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		r.t.Fatalf("mkdir rationale dir: %v", err)
+	}
+	rationaleRel := filepath.Join(ddxroot.DirName, "executions", attemptID, "no_changes_rationale.txt")
+	if err := os.WriteFile(filepath.Join(opts.WorkDir, rationaleRel), []byte(r.rationale), 0o644); err != nil {
+		r.t.Fatalf("write rationale: %v", err)
+	}
+	if r.extraPath != "" {
+		if err := os.WriteFile(filepath.Join(opts.WorkDir, r.extraPath), []byte(r.extraContent), 0o644); err != nil {
+			r.t.Fatalf("write extra file: %v", err)
+		}
+	}
+
+	addArgs := []string{"add", "-f", rationaleRel}
+	if r.extraPath != "" {
+		addArgs = append(addArgs, r.extraPath)
+	}
+	runGitInteg(r.t, opts.WorkDir, addArgs...)
+	runGitInteg(r.t, opts.WorkDir, "commit", "-m", "test: rationale evidence commit")
+	return &Result{ExitCode: 0}, nil
+}
+
 // TestExecuteBead_NoChangesRationalePopulated verifies that when the agent writes
 // a no_changes_rationale.txt file into the execution bundle dir inside the worktree,
 // ExecuteBead reads it and populates ExecuteBeadResult.NoChangesRationale.
@@ -367,6 +405,37 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 	}
 	if res.NoChangesRationale != rationale {
 		t.Errorf("NoChangesRationale mismatch\n got:  %q\nwant: %q", res.NoChangesRationale, rationale)
+	}
+}
+
+// TestExecuteBead_NoChangesRationaleOnlyEvidenceCommitIsNoChanges verifies that
+// a commit containing only the DDx-owned no_changes rationale file is still
+// classified as task_no_changes.
+func TestExecuteBead_NoChangesRationaleOnlyEvidenceCommitIsNoChanges(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	const rationale = "verification_command: true"
+
+	runner := &commitRationaleTestRunner{t: t, rationale: rationale}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, &RealGitOps{})
+	if err != nil {
+		t.Fatalf("ExecuteBead returned error: %v", err)
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskNoChanges {
+		t.Fatalf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskNoChanges, res.Outcome)
+	}
+	if res.Status != ExecuteBeadStatusNoChanges {
+		t.Fatalf("expected status=%s, got %q", ExecuteBeadStatusNoChanges, res.Status)
+	}
+	if res.NoChangesRationale != rationale {
+		t.Fatalf("expected rationale preserved, got %q", res.NoChangesRationale)
+	}
+	if res.ResultRev == res.BaseRev {
+		t.Fatalf("expected result rev to differ from base rev")
+	}
+	if res.Detail != "" && strings.Contains(res.Detail, mixedCommitAndNoChangesRationaleReason) {
+		t.Fatalf("evidence-only rationale commit should not be mixed, got detail %q", res.Detail)
 	}
 }
 
@@ -438,6 +507,42 @@ func TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence(t 
 	}
 	if landing.PreserveRef == "" {
 		t.Fatalf("expected preserve ref for mixed attempt")
+	}
+}
+
+// TestExecuteBead_MixedImplementationAndNoChangesRationaleStillFails verifies
+// that a substantive project change plus a rationale file still fails with the
+// mixed_commit_and_no_changes_rationale classification.
+func TestExecuteBead_MixedImplementationAndNoChangesRationaleStillFails(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	const rationale = "verification_command: true"
+
+	runner := &commitRationaleTestRunner{
+		t:            t,
+		rationale:    rationale,
+		extraPath:    "mixed-change.txt",
+		extraContent: "substantive change\n",
+	}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, &RealGitOps{})
+	if err != nil {
+		t.Fatalf("ExecuteBead returned error: %v", err)
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+		t.Fatalf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskFailed, res.Outcome)
+	}
+	if res.Status != ExecuteBeadStatusExecutionFailed {
+		t.Fatalf("expected status=%s, got %q", ExecuteBeadStatusExecutionFailed, res.Status)
+	}
+	if !strings.Contains(res.Detail, mixedCommitAndNoChangesRationaleReason) {
+		t.Fatalf("expected mixed classification detail, got %q", res.Detail)
+	}
+	if res.NoChangesRationale != rationale {
+		t.Fatalf("expected rationale preserved, got %q", res.NoChangesRationale)
+	}
+	if res.ResultRev == res.BaseRev {
+		t.Fatalf("expected result rev to differ from base rev")
 	}
 }
 

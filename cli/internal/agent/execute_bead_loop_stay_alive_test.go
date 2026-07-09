@@ -49,6 +49,16 @@ func (s *claimSuccessRateWarningStore) claim(id, assignee, session, worktree str
 	}
 }
 
+type releaseCountingStore struct {
+	*claimCountingStore
+	unclaimCalls atomic.Int32
+}
+
+func (s *releaseCountingStore) Unclaim(id string) error {
+	s.unclaimCalls.Add(1)
+	return s.claimCountingStore.Unclaim(id)
+}
+
 // TestLoop_StaysAliveWithEmptyQueue covers watch mode: the loop must
 // NOT exit when nextCandidate returns no
 // eligible bead. It must reset the per-Run attempted/hookFailed maps and
@@ -1001,6 +1011,73 @@ func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
 	assert.Equal(t, "checkpoint_dirty", operatorAttention["reason"])
 	assert.Contains(t, operatorAttention["message"], "commit or clean")
 	require.Len(t, operatorAttention["dirty_paths"], len(dirtyPaths))
+}
+
+func TestWorkLoop_PreDispatchHarnessSessionDirtDoesNotPreserveOrRelease(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	store := &releaseCountingStore{claimCountingStore: &claimCountingStore{Store: bead.NewStore(ddxroot.JoinProject(projectRoot))}}
+
+	const beadID = "ddx-int-0001"
+	harnessRel := filepath.Join(ddxroot.DirName, "harness-sessions", "session-watch.json")
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName, "harness-sessions"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, harnessRel), []byte(`{"attempt_id":"session-watch","kind":"harness-session"}`+"\n"), 0o644))
+
+	executed := make(chan struct{}, 1)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			select {
+			case executed <- struct{}{}:
+			default:
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-watch-harness",
+				ResultRev: "rev-harness",
+			}, nil
+		}),
+		preDispatchDirtyPreserver: func(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error) {
+			t.Fatalf("pre-dispatch dirty preserver must not run for harness session dirt: %v", dirtyPaths)
+			return nil, nil
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-executed
+		time.Sleep(25 * time.Millisecond)
+		cancel()
+	}()
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		ProjectRoot:  projectRoot,
+		SessionID:    "sess-watch-harness",
+		WorkerID:     "worker-watch-harness",
+	})
+
+	require.Error(t, err)
+	require.True(t, errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
+		"worker.Run should stop via context cancellation, got %v", err)
+	require.NotNil(t, result)
+	assert.Nil(t, result.OperatorAttention)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, int32(0), store.unclaimCalls.Load(), "harness session dirt must not release the bead")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "harness session dirt must not force a redispatch claim")
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(harnessRel),
+		"harness session metadata should remain ignored rather than checkpointed or preserved")
 }
 
 func TestLoop_WatchCheckpointDirtyPreserveFailureFallsBackToOperatorAttention(t *testing.T) {

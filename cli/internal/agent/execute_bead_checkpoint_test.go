@@ -185,6 +185,57 @@ func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
 	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, runStateRootRel, runStateAttemptRel)
 }
 
+func TestCheckpointPreDispatchDirtIgnoresLockMetrics(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260708T123351-locks"
+	locksRel := filepath.Join(ddxroot.DirName, "metrics", "locks.jsonl")
+	rotatedRel := filepath.Join(ddxroot.DirName, "metrics", "locks.jsonl.20260708T123351")
+
+	writeCheckpointTestFile(t, projectRoot, locksRel, `{"event":"index_lock"}`+"\n")
+	writeCheckpointTestFile(t, projectRoot, rotatedRel, `{"event":"tracker_lock"}`+"\n")
+	runGitInteg(t, projectRoot, "add", "--force", filepath.ToSlash(locksRel), filepath.ToSlash(rotatedRel))
+	runGitInteg(t, projectRoot, "commit", "-m", "track lock metrics")
+	writeCheckpointTestFile(t, projectRoot, locksRel, `{"event":"index_lock","seq":2}`+"\n")
+	writeCheckpointTestFile(t, projectRoot, rotatedRel, `{"event":"tracker_lock","seq":2}`+"\n")
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(locksRel))
+	assert.NotContains(t, paths, filepath.ToSlash(rotatedRel))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.False(t, committed, "lock metrics must not create a pre-dispatch checkpoint")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+	assert.NotContains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(locksRel)), `"seq":2`)
+	assert.NotContains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(rotatedRel)), `"seq":2`)
+	status := runGitInteg(t, projectRoot, "status", "--porcelain", "--", filepath.ToSlash(locksRel), filepath.ToSlash(rotatedRel))
+	assert.Contains(t, status, " M "+filepath.ToSlash(locksRel))
+	assert.Contains(t, status, " M "+filepath.ToSlash(rotatedRel))
+}
+
+func TestCheckpointPreDispatchDirtIgnoresHarnessSessionFiles(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260515T000001-harness"
+	harnessRel := filepath.Join(ddxroot.DirName, "harness-sessions", attemptID+".json")
+
+	writeCheckpointTestFile(t, projectRoot, harnessRel, `{"attempt_id":"`+attemptID+`","kind":"harness-session"}`+"\n")
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(harnessRel))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.False(t, committed, "harness session metadata should not checkpoint by itself")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+
+	requireHeadMissingPath(t, projectRoot, harnessRel)
+	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, harnessRel)
+}
+
 func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260515T000002-embedded"

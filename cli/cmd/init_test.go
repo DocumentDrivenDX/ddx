@@ -677,6 +677,8 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, ".ddx/run-state/", ".ddx/run-state/ must be ignored")
 	assert.Contains(t, content, ".ddx/dirty-root-guard.json", ".ddx/dirty-root-guard.json must be ignored")
 	assert.Contains(t, content, ".ddx/executions/", "the whole executions tree must be ignored")
+	assert.Contains(t, content, ".ddx/metrics/locks.jsonl", ".ddx/metrics/locks.jsonl must be ignored")
+	assert.Contains(t, content, ".ddx/metrics/locks.jsonl.lock", ".ddx/metrics/locks.jsonl.lock must be ignored")
 
 	// Execution evidence must NEVER be committed: no un-ignore exceptions.
 	assert.NotContains(t, content, "!.ddx/executions", "executions evidence must not be un-ignored")

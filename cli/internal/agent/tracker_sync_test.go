@@ -203,3 +203,145 @@ func TestExecuteLoop_TrackerSyncFailureEmitsOperatorAttention(t *testing.T) {
 	assert.True(t, sawAttention, "persistent tracker push failure must emit loop.operator_attention")
 	assert.Contains(t, logBuf.String(), "continuing with local state")
 }
+
+// TestTrackerSync_UsesRemoteHeadDefaultBranchWhenOriginMainMissing proves that
+// on a master-only remote (no origin/main ref exists at all), pre-claim sync
+// resolves the default branch via refs/remotes/origin/HEAD and merges
+// origin/master instead of failing to reference a nonexistent origin/main.
+func TestTrackerSync_UsesRemoteHeadDefaultBranchWhenOriginMainMissing(t *testing.T) {
+	originDir := t.TempDir()
+	runGitInteg(t, originDir, "init", "--bare", "-b", "master")
+
+	// Seed the remote with an initial commit before workDir clones, so the
+	// fresh clone below observes refs/remotes/origin/HEAD -> origin/master.
+	seedDir := t.TempDir()
+	runGitInteg(t, seedDir, "clone", originDir, ".")
+	runGitInteg(t, seedDir, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, seedDir, "config", "user.name", "DDx Test")
+	seedStore := bead.NewStore(filepath.Join(seedDir, ddxroot.DirName))
+	require.NoError(t, seedStore.Init(context.Background()))
+	seedTrackerBeads(t, seedStore,
+		&bead.Bead{ID: "ddx-x", Title: "closed bead", Priority: 0},
+		&bead.Bead{ID: "ddx-y", Title: "next bead", Priority: 1},
+	)
+	runGitInteg(t, seedDir, "add", ".")
+	runGitInteg(t, seedDir, "commit", "-m", "chore: seed open tracker")
+	runGitInteg(t, seedDir, "push", "-u", "origin", "master")
+
+	workDir := t.TempDir()
+	runGitInteg(t, workDir, "clone", originDir, ".")
+	runGitInteg(t, workDir, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, workDir, "config", "user.name", "DDx Test")
+
+	// Isolate the origin/HEAD resolution path: drop upstream tracking so
+	// resolveTrackerSyncBranch cannot resolve via the current branch's @{u}.
+	runGitInteg(t, workDir, "branch", "--unset-upstream")
+	require.Equal(t, "refs/remotes/origin/master", strings.TrimSpace(runGitInteg(t, workDir, "symbolic-ref", "refs/remotes/origin/HEAD")))
+
+	store := bead.NewStore(filepath.Join(workDir, ddxroot.DirName))
+
+	// Simulate a remote-side close on master, pushed by a second clone.
+	secondDir := t.TempDir()
+	runGitInteg(t, secondDir, "clone", originDir, ".")
+	secondStore := bead.NewStore(filepath.Join(secondDir, ddxroot.DirName))
+	require.NoError(t, secondStore.Close(context.Background(), "ddx-x"))
+	runGitInteg(t, secondDir, "add", ".ddx/beads.jsonl")
+	runGitInteg(t, secondDir, "commit", "-m", "feat: close x remotely")
+	runGitInteg(t, secondDir, "push", "origin", "master")
+
+	var syncLog bytes.Buffer
+	syncTrackerBeforeClaim(context.Background(), workDir, &syncLog, nil)
+
+	assert.NotContains(t, syncLog.String(), "origin/main", "sync must not reference a nonexistent origin/main")
+
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	require.NotEmpty(t, ready)
+	assert.Equal(t, "ddx-y", ready[0].ID, "pre-claim sync must merge origin/master via the origin/HEAD fallback")
+}
+
+// TestTrackerSync_PushesToResolvedDefaultBranch proves publish pushes to
+// HEAD:master on a master-only remote and continues to push HEAD:main on a
+// main-only remote.
+func TestTrackerSync_PushesToResolvedDefaultBranch(t *testing.T) {
+	assertPushRefspec := func(t *testing.T, branch, wantRefspec string) {
+		t.Helper()
+
+		originDir := t.TempDir()
+		runGitInteg(t, originDir, "init", "--bare", "-b", branch)
+
+		workDir := t.TempDir()
+		runGitInteg(t, workDir, "clone", originDir, ".")
+		runGitInteg(t, workDir, "config", "user.email", "test@ddx.test")
+		runGitInteg(t, workDir, "config", "user.name", "DDx Test")
+		seedFile := filepath.Join(workDir, "seed.txt")
+		require.NoError(t, os.WriteFile(seedFile, []byte("seed\n"), 0644))
+		runGitInteg(t, workDir, "add", "seed.txt")
+		runGitInteg(t, workDir, "commit", "-m", "chore: initial seed")
+		runGitInteg(t, workDir, "push", "-u", "origin", branch)
+
+		store := bead.NewStore(filepath.Join(workDir, ddxroot.DirName))
+		require.NoError(t, store.Init(context.Background()))
+		seedTrackerBeads(t, store, &bead.Bead{ID: "ddx-push", Title: "push bead", Priority: 0})
+		runGitInteg(t, workDir, "add", ".")
+		runGitInteg(t, workDir, "commit", "-m", "chore: seed tracker")
+		runGitInteg(t, workDir, "push", "origin", branch)
+
+		require.NoError(t, store.Claim("ddx-push", "worker"))
+
+		var recordedRefspec string
+		prevRunner := trackerSyncGitRunner
+		t.Cleanup(func() { trackerSyncGitRunner = prevRunner })
+		trackerSyncGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+			if len(args) >= 3 && args[0] == "push" {
+				recordedRefspec = args[2]
+			}
+			return internalgit.Command(ctx, gitDir, args...).CombinedOutput()
+		}
+
+		syncTrackerAfterClaim(context.Background(), workDir, "ddx-push", &bytes.Buffer{}, nil)
+
+		assert.Equal(t, wantRefspec, recordedRefspec)
+	}
+
+	t.Run("master-only remote", func(t *testing.T) {
+		assertPushRefspec(t, "master", "HEAD:master")
+	})
+	t.Run("main remote", func(t *testing.T) {
+		assertPushRefspec(t, "main", "HEAD:main")
+	})
+}
+
+// TestTrackerSync_CurrentBranchUpstreamWinsOverFallback proves an explicit
+// upstream branch on the current branch is honored even when it differs from
+// the remote's origin/HEAD-derived default.
+func TestTrackerSync_CurrentBranchUpstreamWinsOverFallback(t *testing.T) {
+	originDir := t.TempDir()
+	runGitInteg(t, originDir, "init", "--bare", "-b", "master")
+
+	seedDir := t.TempDir()
+	runGitInteg(t, seedDir, "clone", originDir, ".")
+	runGitInteg(t, seedDir, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, seedDir, "config", "user.name", "DDx Test")
+	seedFile := filepath.Join(seedDir, "seed.txt")
+	require.NoError(t, os.WriteFile(seedFile, []byte("seed\n"), 0644))
+	runGitInteg(t, seedDir, "add", "seed.txt")
+	runGitInteg(t, seedDir, "commit", "-m", "chore: initial seed")
+	runGitInteg(t, seedDir, "push", "-u", "origin", "master")
+	runGitInteg(t, seedDir, "checkout", "-b", "release")
+	runGitInteg(t, seedDir, "push", "-u", "origin", "release")
+
+	workDir := t.TempDir()
+	runGitInteg(t, workDir, "clone", originDir, ".")
+	runGitInteg(t, workDir, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, workDir, "config", "user.name", "DDx Test")
+	require.Equal(t, "refs/remotes/origin/master", strings.TrimSpace(runGitInteg(t, workDir, "symbolic-ref", "refs/remotes/origin/HEAD")),
+		"remote default branch must resolve to master")
+
+	runGitInteg(t, workDir, "checkout", "release")
+	require.Equal(t, "origin/release", strings.TrimSpace(runGitInteg(t, workDir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")),
+		"current branch must track origin/release")
+
+	branch := resolveTrackerSyncBranch(context.Background(), workDir)
+	assert.Equal(t, "release", branch, "current branch upstream must win over the origin/HEAD-derived default")
+}

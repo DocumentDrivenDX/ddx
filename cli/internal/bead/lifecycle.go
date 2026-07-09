@@ -38,6 +38,11 @@ type LifecycleQueueFacts struct {
 	ExternalBlockerReason   string
 	LegacyLabels            []string
 	LegacyMigrationWarnings []string
+	// PreservedReviewBlocked reports an unresolved preserved-needs-review
+	// block marker (e.g. from the large-deletion safety gate). Ready beads
+	// carrying this fact are excluded from worker readiness until an
+	// operator stamps a matching unblock marker (ddx-ec1c1f89).
+	PreservedReviewBlocked bool
 }
 
 // LifecycleQueueBucket is the derived queue state used by dispatch, review,
@@ -45,18 +50,19 @@ type LifecycleQueueFacts struct {
 type LifecycleQueueBucket string
 
 const (
-	LifecycleBucketReady               LifecycleQueueBucket = "ready"
-	LifecycleBucketWaitingDependencies LifecycleQueueBucket = "waiting_dependencies"
-	LifecycleBucketProposed            LifecycleQueueBucket = "proposed"
-	LifecycleBucketClaimed             LifecycleQueueBucket = "claimed"
-	LifecycleBucketBlockedExternal     LifecycleQueueBucket = "blocked_external"
-	LifecycleBucketClosedTerminal      LifecycleQueueBucket = "closed_terminal"
-	LifecycleBucketCancelledTerminal   LifecycleQueueBucket = "cancelled_terminal"
-	LifecycleBucketRetryCooldown       LifecycleQueueBucket = "retry_cooldown"
-	LifecycleBucketNotEligible         LifecycleQueueBucket = "not_eligible"
-	LifecycleBucketSuperseded          LifecycleQueueBucket = "superseded"
-	LifecycleBucketEpicContainer       LifecycleQueueBucket = "epic_container"
-	LifecycleBucketInvalid             LifecycleQueueBucket = "invalid"
+	LifecycleBucketReady                  LifecycleQueueBucket = "ready"
+	LifecycleBucketWaitingDependencies    LifecycleQueueBucket = "waiting_dependencies"
+	LifecycleBucketProposed               LifecycleQueueBucket = "proposed"
+	LifecycleBucketClaimed                LifecycleQueueBucket = "claimed"
+	LifecycleBucketBlockedExternal        LifecycleQueueBucket = "blocked_external"
+	LifecycleBucketClosedTerminal         LifecycleQueueBucket = "closed_terminal"
+	LifecycleBucketCancelledTerminal      LifecycleQueueBucket = "cancelled_terminal"
+	LifecycleBucketRetryCooldown          LifecycleQueueBucket = "retry_cooldown"
+	LifecycleBucketNotEligible            LifecycleQueueBucket = "not_eligible"
+	LifecycleBucketSuperseded             LifecycleQueueBucket = "superseded"
+	LifecycleBucketEpicContainer          LifecycleQueueBucket = "epic_container"
+	LifecycleBucketInvalid                LifecycleQueueBucket = "invalid"
+	LifecycleBucketPreservedReviewBlocked LifecycleQueueBucket = "preserved_review_blocked"
 )
 
 // LifecycleIssueCode identifies validation findings from pure lifecycle
@@ -221,6 +227,10 @@ func evaluateOpenLifecycleQueue(f LifecycleQueueFacts, decision LifecycleQueueDe
 	}
 	if f.RetryCooldownActive {
 		decision.Bucket = LifecycleBucketRetryCooldown
+		return decision
+	}
+	if f.PreservedReviewBlocked {
+		decision.Bucket = LifecycleBucketPreservedReviewBlocked
 		return decision
 	}
 	if f.ExecutionEligibleKnown && !f.ExecutionEligible {

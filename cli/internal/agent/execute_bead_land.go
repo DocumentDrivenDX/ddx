@@ -315,7 +315,7 @@ func (RealLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
 	return nil
 }
 
-// alwaysSkipSyncPaths lists live-state files governed by bead.Store WithLock.
+// alwaysSkipSyncPaths lists live-state files governed by the tracker backend.
 // The committed worktree version is a stale snapshot of tracker state at claim
 // time; the main-worktree copy is always authoritative and must never be
 // overwritten by SyncWorkTreeToHead regardless of dirty-before-land state.
@@ -646,10 +646,10 @@ func skipLandingCheckpointPath(path string) bool {
 	if trackerpaths.IsManagedTrackerPath(clean) {
 		return true
 	}
-	return clean == ".ddx/metrics/locks.jsonl" || strings.HasPrefix(clean, ".ddx/metrics/locks.jsonl.")
+	return isLockMetricsPath(clean)
 }
 
-func ensureLandingWorktreeReady(dir, targetBranch string) error {
+func ensureLandingWorktreeReady(dir, targetBranch string, checkpointExecutionEvidence bool) error {
 	if !isInsideGitWorktree(dir) {
 		return nil
 	}
@@ -665,7 +665,7 @@ func ensureLandingWorktreeReady(dir, targetBranch string) error {
 	if targetBranch != "" && branch != targetBranch {
 		return fmt.Errorf("landing branch mismatch: on %q, want %q", branch, targetBranch)
 	}
-	return waitForEmptyGitIndex(dir, 2*time.Second)
+	return waitForEmptyGitIndex(dir, 2*time.Second, checkpointExecutionEvidence)
 }
 
 func isInsideGitWorktree(dir string) bool {
@@ -673,7 +673,7 @@ func isInsideGitWorktree(dir string) bool {
 	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 
-func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
+func waitForEmptyGitIndex(dir string, timeout time.Duration, checkpointExecutionEvidence bool) error {
 	deadline := time.Now().Add(timeout)
 	repairedCorruptIndex := false
 	for {
@@ -720,16 +720,28 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 					}
 				}
 			}
-			// A dead/interrupted attempt can leave DDx-managed execution
-			// evidence (.ddx/executions/*) staged-but-uncommitted in the landing
-			// worktree. That is per-machine working state, not real work (the
-			// durable audit trail is .ddx/attachments), so it must not jam the
-			// queue. When every staged path is execution evidence, unstage it —
-			// do not commit it — and re-check. A mixed or code-bearing staged set
-			// is still refused. See ddx-2ab14458.
-			if unstageOrphanedExecutionEvidence(dir) {
-				if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+			// Landing checkpoints may fold DDx-owned execution evidence into
+			// history so the land can proceed without losing per-attempt files.
+			// Pre-claim callers keep the old behavior and simply unstage that
+			// orphaned evidence instead.
+			if checkpointExecutionEvidence {
+				if committed, cpErr := checkpointOrphanedExecutionEvidence(dir); cpErr != nil {
+					return cpErr
+				} else if committed {
 					return nil
+				}
+			} else {
+				// A dead/interrupted attempt can leave DDx-managed execution
+				// evidence (.ddx/executions/*) staged-but-uncommitted in the landing
+				// worktree. That is per-machine working state, not real work (the
+				// durable audit trail is .ddx/attachments), so it must not jam the
+				// queue. When every staged path is execution evidence, unstage it —
+				// do not commit it — and re-check. A mixed or code-bearing staged set
+				// is still refused. See ddx-2ab14458.
+				if unstageOrphanedExecutionEvidence(dir) {
+					if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+						return nil
+					}
 				}
 			}
 			// Real staged work is committed — never reset or refused.
@@ -760,6 +772,31 @@ func isRecoverableLandingIndexCorruption(output string) bool {
 func isExecutionEvidencePath(path string) bool {
 	p := strings.TrimSpace(path)
 	return p == ".ddx/executions" || strings.HasPrefix(p, ".ddx/executions/")
+}
+
+// checkpointOrphanedExecutionEvidence checkpoints staged DDx execution
+// evidence when every staged path lives under .ddx/executions/. Land callers
+// use this to preserve per-attempt evidence in history instead of unstaging it.
+func checkpointOrphanedExecutionEvidence(dir string) (bool, error) {
+	out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("listing staged paths: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var staged []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if p := strings.TrimSpace(line); p != "" {
+			staged = append(staged, p)
+		}
+	}
+	if len(staged) == 0 {
+		return false, nil
+	}
+	for _, p := range staged {
+		if !isExecutionEvidencePath(p) {
+			return false, nil
+		}
+	}
+	return checkpointLandingWorktreeLocalChanges(dir, "staged execution evidence at land boundary")
 }
 
 // unstageOrphanedExecutionEvidence unstages staged .ddx/executions/* evidence
@@ -1053,7 +1090,7 @@ func (RealLandingGitOps) LocalAncestryCheck(dir, targetBranch string) (PreClaimR
 }
 
 func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
-	if err := ensureLandingWorktreeReady(dir, targetBranch); err != nil {
+	if err := ensureLandingWorktreeReady(dir, targetBranch, false); err != nil {
 		return PreClaimResult{}, err
 	}
 
@@ -1075,7 +1112,7 @@ func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, e
 }
 
 func localAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
-	if err := ensureLandingWorktreeReady(dir, targetBranch); err != nil {
+	if err := ensureLandingWorktreeReady(dir, targetBranch, false); err != nil {
 		return PreClaimResult{}, err
 	}
 
@@ -1427,7 +1464,7 @@ func prepareLandTarget(projectRoot, wd string, req LandRequest, gitOps LandingGi
 		targetBranch = br
 	}
 	req.TargetBranch = targetBranch
-	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
+	if err := ensureLandingWorktreeReady(wd, targetBranch, true); err != nil {
 		return nil, nil, err
 	}
 	targetRef := "refs/heads/" + targetBranch
@@ -1756,7 +1793,7 @@ func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, c
 	if err != nil {
 		return nil, fmt.Errorf("preserving %s after large-deletion gate: %w", preserveRef, err)
 	}
-	return buildPreservedResult(req, preserveRef, fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold), contribCount), nil
+	return buildPreservedResult(req, preserveRef, fmt.Sprintf(LargeDeletionGateReasonPrefix+" %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold), contribCount), nil
 }
 
 func largeDeletionLineThreshold(req LandRequest) int {

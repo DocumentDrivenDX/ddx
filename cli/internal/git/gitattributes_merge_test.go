@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRootGitattributesConfiguresUnionMergeForTrackerFiles(t *testing.T) {
+func TestGitAttributes_TrackerJSONLUnionMerge(t *testing.T) {
 	repoRoot := gitattributesRepoRoot(t)
 
 	data, err := os.ReadFile(filepath.Join(repoRoot, ".gitattributes"))
@@ -18,10 +18,10 @@ func TestRootGitattributesConfiguresUnionMergeForTrackerFiles(t *testing.T) {
 
 	attrs := string(data)
 	require.Contains(t, attrs, ".ddx/beads.jsonl merge=union")
-	require.Contains(t, attrs, ".ddx/metrics/locks.jsonl merge=union")
+	require.Contains(t, attrs, ".ddx/metrics/*.jsonl merge=union")
 }
 
-func TestRootGitattributesMergesDivergentBeadAppendsWithoutConflict(t *testing.T) {
+func TestGitAttributes_TrackerJSONLUnionMergeKeepsBothBranches(t *testing.T) {
 	repoRoot := gitattributesRepoRoot(t)
 	attrs := mustReadFile(t, filepath.Join(repoRoot, ".gitattributes"))
 
@@ -55,6 +55,43 @@ func TestRootGitattributesMergesDivergentBeadAppendsWithoutConflict(t *testing.T
 	require.Len(t, lines, 2)
 	require.Contains(t, lines, `{"id":"ddx-branch-a","status":"open"}`)
 	require.Contains(t, lines, `{"id":"ddx-branch-b","status":"open"}`)
+}
+
+func TestGitAttributes_MetricsAttemptsUnionMergeKeepsBothBranches(t *testing.T) {
+	repoRoot := gitattributesRepoRoot(t)
+	attrs := mustReadFile(t, filepath.Join(repoRoot, ".gitattributes"))
+
+	repoDir := t.TempDir()
+	trackerDir := filepath.Join(repoDir, trackerDirName())
+	metricsDir := filepath.Join(trackerDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".gitattributes"), attrs, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), nil, 0o644))
+
+	runGitInDir(t, repoDir, "init")
+	runGitInDir(t, repoDir, "config", "user.email", "test@example.com")
+	runGitInDir(t, repoDir, "config", "user.name", "Test User")
+	runGitInDir(t, repoDir, "add", ".gitattributes", trackerRelFile(filepath.Join("metrics", "attempts.jsonl")))
+	runGitInDir(t, repoDir, "commit", "-m", "base")
+
+	runGitInDir(t, repoDir, "checkout", "-b", "branch-a")
+	appendJSONLLine(t, filepath.Join(metricsDir, "attempts.jsonl"), `{"id":"ddx-attempt-a","status":"open"}`)
+	runGitInDir(t, repoDir, "add", trackerRelFile(filepath.Join("metrics", "attempts.jsonl")))
+	runGitInDir(t, repoDir, "commit", "-m", "branch-a")
+
+	runGitInDir(t, repoDir, "checkout", "-b", "branch-b", "HEAD~1")
+	appendJSONLLine(t, filepath.Join(metricsDir, "attempts.jsonl"), `{"id":"ddx-attempt-b","status":"open"}`)
+	runGitInDir(t, repoDir, "add", trackerRelFile(filepath.Join("metrics", "attempts.jsonl")))
+	runGitInDir(t, repoDir, "commit", "-m", "branch-b")
+
+	runGitInDir(t, repoDir, "checkout", "branch-a")
+	runGitInDir(t, repoDir, "merge", "--no-edit", "branch-b")
+
+	merged := mustReadFile(t, filepath.Join(metricsDir, "attempts.jsonl"))
+	lines := nonEmptyLines(string(merged))
+	require.Len(t, lines, 2)
+	require.Contains(t, lines, `{"id":"ddx-attempt-a","status":"open"}`)
+	require.Contains(t, lines, `{"id":"ddx-attempt-b","status":"open"}`)
 }
 
 func gitattributesRepoRoot(t *testing.T) string {

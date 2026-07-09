@@ -443,6 +443,7 @@ cli/internal/agent/.ddx/
 # the pre-land checkpoint's own lock), so tracking it makes the land checkpoint
 # commit it in a ~1/s loop. Per-machine, untracked. attempts.jsonl stays durable.
 .ddx/metrics/locks.jsonl
+.ddx/metrics/locks.jsonl.lock
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/

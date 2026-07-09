@@ -65,6 +65,7 @@ func TestSupervisor_OperatorAttentionTerminalDoesNotRespawn(t *testing.T) {
 	root := initInTreeProject(t)
 	sup := NewWorkerSupervisor(NewWorkerManager(root))
 	state := DefaultWorkerDesiredState(root)
+	state.DesiredCount = 1
 	now := time.Now().UTC()
 
 	if !sup.canStartMore(state, now) {
@@ -79,7 +80,10 @@ func TestSupervisor_OperatorAttentionTerminalDoesNotRespawn(t *testing.T) {
 		ReapReason: "operator_attention",
 	}}, now)
 
-	if sup.canStartMore(state, now) {
+	// The operator-attention terminal consumes the single desired slot, so
+	// it must still suppress relaunch (respawn thrash) when DesiredCount==1.
+	blocked := sup.resolveBlockedTerminals(state, now)
+	if blocked < state.DesiredCount {
 		t.Fatal("operator-attention terminal must suppress relaunch (respawn thrash)")
 	}
 }

@@ -46,6 +46,14 @@ type startupHousekeepingReport struct {
 	StaleWorkerDirs    int64
 	StaleExecutionDirs int64
 
+	// WorkerSubprocessCount and TempWorktreeCount are non-destructive
+	// observation counts: the total number of worker liveness dirs and temp
+	// worktree dirs currently present, regardless of staleness. They exist
+	// so resource-pressure reporting can see current resource usage without
+	// waiting for the staleness thresholds that gate cleanup eligibility.
+	WorkerSubprocessCount int64
+	TempWorktreeCount     int64
+
 	RemovedRegisteredWorktrees  int64
 	RemovedUnregisteredTempDirs int64
 	RemovedWorkerDirs           int64
@@ -170,6 +178,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {
 			continue
 		}
+		report.TempWorktreeCount++
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -245,6 +254,7 @@ func (r *startupHousekeepingRunner) scanWorkerDirs(ctx context.Context, now time
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-loop-") {
 			continue
 		}
+		report.WorkerSubprocessCount++
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
 				return err

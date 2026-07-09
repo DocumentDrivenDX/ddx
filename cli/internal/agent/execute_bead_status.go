@@ -478,10 +478,16 @@ func IsResourceExhaustedStatus(status string) bool {
 	return status == ExecuteBeadStatusResourceExhausted
 }
 
+// LargeDeletionGateReasonPrefix identifies the large-deletion safety-gate
+// preserve reason so callers can react specifically to that gate (e.g. to
+// stamp durable block markers) as distinct from the syntax-sanity or
+// evidence-commit preserve gates.
+const LargeDeletionGateReasonPrefix = "large-deletion gate:"
+
 func isPreservedNeedsReviewReason(reason string) bool {
 	for _, prefix := range []string{
 		"evidence commit failed:",
-		"large-deletion gate:",
+		LargeDeletionGateReasonPrefix,
 		"syntax sanity gate:",
 		"post-land gate failed:",
 	} {
@@ -490,6 +496,12 @@ func isPreservedNeedsReviewReason(reason string) bool {
 		}
 	}
 	return false
+}
+
+// isLargeDeletionGateDetail reports whether an ExecuteBeadReport.Detail
+// string originated from the large-deletion safety gate (ddx-ec1c1f89).
+func isLargeDeletionGateDetail(detail string) bool {
+	return strings.HasPrefix(strings.TrimSpace(detail), LargeDeletionGateReasonPrefix)
 }
 
 func ExecuteBeadStatusDetail(status, reason, errMsg string) string {

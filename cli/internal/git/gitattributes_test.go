@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGitattributes_UnionMergesAppendOnlyTrackerFiles verifies that the
-// repo-root .gitattributes configures the append-only tracker files for the
-// built-in union merge driver and that a real git merge preserves concurrent
-// appends to .ddx/beads.jsonl without conflict.
-func TestGitattributes_UnionMergesAppendOnlyTrackerFiles(t *testing.T) {
+// TestGitAttributes_TrackerJSONLUnionMergePreservesBeads verifies that the repo-root
+// .gitattributes configures the append-only tracker files for the built-in
+// union merge driver and that a real git merge preserves concurrent appends to
+// .ddx/beads.jsonl without conflict.
+func TestGitAttributes_TrackerJSONLUnionMergePreservesBeads(t *testing.T) {
 	repoDir := t.TempDir()
 
 	runGitInDir(t, repoDir, "init", "-b", "main")
@@ -29,7 +29,7 @@ func TestGitattributes_UnionMergesAppendOnlyTrackerFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, trackerRoot), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".gitattributes"), []byte(
 		".ddx/beads.jsonl merge=union\n"+
-			".ddx/metrics/locks.jsonl merge=union\n",
+			".ddx/metrics/*.jsonl merge=union\n",
 	), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(repoDir, trackerBeads), []byte("{\"id\":\"base\"}\n"), 0o644))
 
@@ -65,6 +65,40 @@ func TestGitattributes_UnionMergesAppendOnlyTrackerFiles(t *testing.T) {
 
 	status := strings.TrimSpace(runGitInDirOutput(t, repoDir, "diff", "--name-only", "--diff-filter=U"))
 	assert.Empty(t, status, "merge should not leave conflict markers")
+}
+
+// TestGitAttributes_RuntimeMetricsJSONLUseUnionMerge verifies that the
+// metrics JSONL files under .ddx/metrics/ inherit union merge behavior for
+// both attempts and locks.
+func TestGitAttributes_RuntimeMetricsJSONLUseUnionMerge(t *testing.T) {
+	repoDir := t.TempDir()
+
+	runGitInDir(t, repoDir, "init", "-b", "main")
+	runGitInDir(t, repoDir, "config", "user.email", "test@example.com")
+	runGitInDir(t, repoDir, "config", "user.name", "Test User")
+
+	trackerRoot := "." + "ddx"
+	attemptsFile := filepath.Join(trackerRoot, "metrics", "attempts.jsonl")
+	locksFile := filepath.Join(trackerRoot, "metrics", "locks.jsonl")
+	attrsPath := filepath.Join(repoDir, ".gitattributes")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, trackerRoot, "metrics"), 0o755))
+	require.NoError(t, os.WriteFile(attrsPath, []byte(
+		".ddx/beads.jsonl merge=union\n"+
+			".ddx/metrics/*.jsonl merge=union\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, attemptsFile), []byte("{\"id\":\"base-attempt\"}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, locksFile), []byte("{\"id\":\"base-lock\"}\n"), 0o644))
+
+	runGitInDir(t, repoDir, "add", ".gitattributes", attemptsFile, locksFile)
+	runGitInDir(t, repoDir, "commit", "-m", "chore: seed metrics merge config")
+
+	attrOut, err := exec.Command("git", "-C", repoDir, "check-attr", "merge", "--", attemptsFile, locksFile).CombinedOutput()
+	require.NoError(t, err, "git check-attr failed:\n%s", attrOut)
+	attrLines := strings.Split(strings.TrimSpace(string(attrOut)), "\n")
+	require.Len(t, attrLines, 2)
+	assert.Contains(t, attrLines[0], attemptsFile+": merge: union")
+	assert.Contains(t, attrLines[1], locksFile+": merge: union")
 }
 
 func appendTrackerLine(t *testing.T, repoDir, line string) {

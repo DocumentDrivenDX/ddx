@@ -33,6 +33,7 @@ var initGitignoreRules = []string{
 	// commit it in a ~1/s loop. Keep it per-machine and untracked. Note
 	// attempts.jsonl stays managed/durable; only locks.jsonl is ephemeral.
 	".ddx/metrics/locks.jsonl",
+	".ddx/metrics/locks.jsonl.lock",
 	".ddx/*.lock",
 	".ddx/*.tmp",
 	".ddx/server.env",

@@ -1,6 +1,8 @@
 package lockmetrics
 
 import (
+	"bufio"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -96,20 +98,74 @@ func TestLockMetrics_DurationMatchesElapsed(t *testing.T) {
 		release.DurationMS, elapsedMS)
 }
 
-// TestLockMetrics_FileSinkRoundTrip asserts the file sink and Load accessor
-// round-trip events through .ddx/metrics/locks.jsonl.
-func TestLockMetrics_FileSinkRoundTrip(t *testing.T) {
+// TestLockMetrics_FileSinkUsesLockedAppend asserts the file sink uses the
+// locked JSONL helper and that concurrent writes still produce valid JSON rows.
+func TestLockMetrics_FileSinkUsesLockedAppend(t *testing.T) {
 	root := t.TempDir()
 	SetSink(FileSink(root))
 	t.Cleanup(func() { SetSink(nil) })
 
-	require.NoError(t, Instrument("tracker.lock", "tracker.commit", func() error { return nil }))
+	const workers = 8
+	const iterations = 24
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errCh := make(chan error, workers)
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			for j := 0; j < iterations; j++ {
+				if err := Instrument("tracker.lock", "tracker.commit", func() error { return nil }); err != nil {
+					errCh <- err
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+
+	f, err := os.Open(Path(root))
+	require.NoError(t, err)
+	defer f.Close() //nolint:errcheck
+
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	lines := 0
+	for sc.Scan() {
+		lines++
+		var ev Event
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &ev))
+		assert.Contains(t, []string{"acquire", "release"}, ev.Event)
+		assert.Equal(t, "tracker.lock", ev.LockName)
+	}
+	require.NoError(t, sc.Err())
+	assert.Equal(t, workers*iterations*2, lines)
 
 	events, err := Load(root)
 	require.NoError(t, err)
-	require.Len(t, events, 2)
-	assert.Equal(t, "acquire", events[0].Event)
-	assert.Equal(t, "release", events[1].Event)
+	require.Len(t, events, lines)
+
+	acquires := 0
+	releases := 0
+	for _, ev := range events {
+		switch ev.Event {
+		case "acquire":
+			acquires++
+		case "release":
+			releases++
+		default:
+			t.Fatalf("unexpected event type %q", ev.Event)
+		}
+	}
+	assert.Equal(t, workers*iterations, acquires)
+	assert.Equal(t, workers*iterations, releases)
 }
 
 // TestLockMetrics_NilSinkIsNoOp asserts that with no sink installed,

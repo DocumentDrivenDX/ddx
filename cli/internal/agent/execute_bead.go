@@ -216,8 +216,8 @@ type AttemptDiagnostic struct {
 }
 
 // BeadEventAppender records append-only evidence events on a bead.
-// Implemented by *bead.Store — kept as a minimal interface so the agent
-// package does not need to import a concrete store type in tests.
+// Kept as a minimal interface so the agent package can consume bead event
+// backends without depending on the concrete tracker type.
 type BeadEventAppender interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 }
@@ -241,9 +241,9 @@ func appendWorkEvent(store BeadEventAppender, beadID, kind, summary string, body
 }
 
 // BeadCancelStore reads/writes the cancel markers on a bead's Extra map.
-// Implemented by *bead.Store. ADR-022 §Cancel SLA: the worker polls
-// IsCancelRequested mid-attempt and on a positive read writes
-// MarkCancelHonored before aborting at the next safe point.
+// ADR-022 §Cancel SLA: the worker polls IsCancelRequested mid-attempt and
+// on a positive read writes MarkCancelHonored before aborting at the next
+// safe point.
 type BeadCancelStore interface {
 	IsCancelRequested(id string) (bool, error)
 	MarkCancelHonored(id string) error
@@ -1428,15 +1428,20 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.NoChangesRationale = rationaleText
 		}
 	}
-	mixedCommitAndRationale := resultRev != baseRev && rationaleText != ""
+	evidenceOnlyNoChangesCommit := false
+	if resultRev != baseRev && rationaleText != "" {
+		if evidenceOnly, diffErr := isEvidenceOnlyNoChangesCommit(wtPath, baseRev, resultRev, artifacts.DirRel); diffErr == nil && evidenceOnly {
+			evidenceOnlyNoChangesCommit = true
+		}
+	}
 	switch {
-	case mixedCommitAndRationale:
+	case resultRev != baseRev && rationaleText != "" && !evidenceOnlyNoChangesCommit:
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 		res.Reason = mixedCommitAndNoChangesRationaleReason
 		res.Error = mixedCommitAndNoChangesRationaleReason
 	case exitCode != 0 || agentReportedError:
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
-	case resultRev == baseRev:
+	case resultRev == baseRev || evidenceOnlyNoChangesCommit:
 		res.Outcome = ExecuteBeadOutcomeTaskNoChanges
 	default:
 		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
@@ -1576,6 +1581,24 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		workspace.KeepOnError = false
 	}
 	return res, nil
+}
+
+func isEvidenceOnlyNoChangesCommit(wtPath, baseRev, resultRev, artifactsDirRel string) (bool, error) {
+	rationalePath := filepath.ToSlash(filepath.Join(artifactsDirRel, "no_changes_rationale.txt"))
+	out, err := internalgit.Command(context.Background(), wtPath, "diff", "--name-only", baseRev, resultRev, "--").CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("checking no_changes rationale commit diff: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var changed []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if p := strings.TrimSpace(line); p != "" {
+			changed = append(changed, filepath.ToSlash(p))
+		}
+	}
+	if len(changed) != 1 {
+		return false, nil
+	}
+	return changed[0] == rationalePath, nil
 }
 
 // dispatchAgentRun is a thin SD-024 wrapper around dispatchViaResolvedConfig
