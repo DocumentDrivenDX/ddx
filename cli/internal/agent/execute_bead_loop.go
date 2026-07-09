@@ -1491,44 +1491,48 @@ func isTransientGitContention(err error) bool {
 }
 
 type executeBeadLoopState struct {
-	now                        func() time.Time
-	assignee                   string
-	preClaimTimeout            time.Duration
-	noProgressCooldown         time.Duration
-	heartbeatInterval          time.Duration
-	harness                    string
-	provider                   string
-	model                      string
-	profile                    string
-	loopMode                   executeloop.Mode
-	idleInterval               time.Duration
-	result                     *ExecuteBeadLoopResult
-	resultsResetIdx            int
-	transientCandidateSkips    map[string]string
-	pausedInfraUntil           time.Time
-	complexityGuard            *work.ComplexityGuard
-	preclaimGuard              *work.PreClaimGuard
-	workLog                    WorkLogRenderer
-	wasIdle                    bool
-	lastIdleQueueSignature     string
-	preClaimIdleDetail         string
-	preClaimIdleStreak         int
-	preClaimIdleFirstAt        time.Time
-	preClaimIdleEscalated      bool
-	liveness                   *work.SidecarLivenessReporter
-	serverOutage               *serverOutageTracker
-	serverUnavailableLogged    bool
-	sawParentBackEdge          bool
-	claimSuccessRateWindowSize int
-	claimSuccessRateThreshold  float64
-	claimSuccessRateWindow     []bool
-	claimSuccessRateSuccesses  int
-	claimSuccessRateWarned     bool
-	preClaimWarnThreshold      int
-	preClaimWarnState          preClaimWarnRepeatState
-	exitReason                 string
-	cleanupLog                 io.Writer
-	attemptStarted             *bool
+	now                         func() time.Time
+	assignee                    string
+	preClaimTimeout             time.Duration
+	noProgressCooldown          time.Duration
+	heartbeatInterval           time.Duration
+	harness                     string
+	provider                    string
+	model                       string
+	profile                     string
+	loopMode                    executeloop.Mode
+	idleInterval                time.Duration
+	result                      *ExecuteBeadLoopResult
+	resultsResetIdx             int
+	transientCandidateSkips     map[string]string
+	pausedInfraUntil            time.Time
+	complexityGuard             *work.ComplexityGuard
+	preclaimGuard               *work.PreClaimGuard
+	workLog                     WorkLogRenderer
+	wasIdle                     bool
+	lastIdleQueueSignature      string
+	preClaimIdleDetail          string
+	preClaimIdleStreak          int
+	preClaimIdleFirstAt         time.Time
+	preClaimIdleEscalated       bool
+	preClaimGitCorruptDetail    string
+	preClaimGitCorruptStreak    int
+	preClaimGitCorruptFirstAt   time.Time
+	preClaimGitCorruptEscalated bool
+	liveness                    *work.SidecarLivenessReporter
+	serverOutage                *serverOutageTracker
+	serverUnavailableLogged     bool
+	sawParentBackEdge           bool
+	claimSuccessRateWindowSize  int
+	claimSuccessRateThreshold   float64
+	claimSuccessRateWindow      []bool
+	claimSuccessRateSuccesses   int
+	claimSuccessRateWarned      bool
+	preClaimWarnThreshold       int
+	preClaimWarnState           preClaimWarnRepeatState
+	exitReason                  string
+	cleanupLog                  io.Writer
+	attemptStarted              *bool
 }
 
 type executeBeadIterationOutcome struct {
@@ -1845,6 +1849,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	preClaimIdleStreak := state.preClaimIdleStreak
 	preClaimIdleFirstAt := state.preClaimIdleFirstAt
 	preClaimIdleEscalated := state.preClaimIdleEscalated
+	preClaimGitCorruptDetail := state.preClaimGitCorruptDetail
+	preClaimGitCorruptStreak := state.preClaimGitCorruptStreak
+	preClaimGitCorruptFirstAt := state.preClaimGitCorruptFirstAt
+	preClaimGitCorruptEscalated := state.preClaimGitCorruptEscalated
 	liveness := state.liveness
 	serverOutage := state.serverOutage
 	serverUnavailableLogged := state.serverUnavailableLogged
@@ -1872,6 +1880,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		state.preClaimIdleStreak = preClaimIdleStreak
 		state.preClaimIdleFirstAt = preClaimIdleFirstAt
 		state.preClaimIdleEscalated = preClaimIdleEscalated
+		state.preClaimGitCorruptDetail = preClaimGitCorruptDetail
+		state.preClaimGitCorruptStreak = preClaimGitCorruptStreak
+		state.preClaimGitCorruptFirstAt = preClaimGitCorruptFirstAt
+		state.preClaimGitCorruptEscalated = preClaimGitCorruptEscalated
 		state.serverUnavailableLogged = serverUnavailableLogged
 		state.sawParentBackEdge = sawParentBackEdge
 		state.claimSuccessRateWindow = claimSuccessRateWindow
@@ -2293,7 +2305,48 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 	}
 	if runtime.TrackerSyncEnabled && runtime.ProjectRoot != "" {
-		syncTrackerBeforeClaim(ctx, runtime.ProjectRoot, runtime.Log, emit)
+		if err := syncTrackerBeforeClaim(ctx, runtime.ProjectRoot, runtime.Log, emit); err != nil {
+			corruptDetail := strings.TrimSpace(err.Error())
+			if corruptDetail == "" {
+				corruptDetail = "project git corruption detected during pre-claim tracker sync"
+			}
+			if corruptDetail == preClaimGitCorruptDetail {
+				preClaimGitCorruptStreak++
+			} else {
+				preClaimGitCorruptDetail = corruptDetail
+				preClaimGitCorruptStreak = 1
+				preClaimGitCorruptFirstAt = now().UTC()
+				preClaimGitCorruptEscalated = false
+			}
+			if preClaimGitCorruptStreak >= 2 && !preClaimGitCorruptEscalated {
+				preClaimGitCorruptEscalated = true
+				elapsed := now().UTC().Sub(preClaimGitCorruptFirstAt)
+				result.OperatorAttention = &OperatorAttentionStop{
+					Reason:      "project_git_corrupt",
+					ProjectRoot: runtime.ProjectRoot,
+					Message:     corruptDetail,
+				}
+				setExit("OperatorAttention", "operator_attention")
+				emit("loop.operator_attention", map[string]any{
+					"reason":       "project_git_corrupt",
+					"project_root": runtime.ProjectRoot,
+					"detail":       corruptDetail,
+					"elapsed_idle": elapsed.String(),
+					"streak_count": preClaimGitCorruptStreak,
+				})
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "operator attention: project git corruption repeated %d times during pre-claim sync (%s); stopping work\n", preClaimGitCorruptStreak, corruptDetail)
+				}
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "pre-claim tracker sync corruption observed; will stop if repeated: %s\n", corruptDetail)
+			}
+		} else {
+			preClaimGitCorruptDetail = ""
+			preClaimGitCorruptStreak = 0
+			preClaimGitCorruptEscalated = false
+		}
 	}
 
 	if runtime.TargetBeadID == "" {
