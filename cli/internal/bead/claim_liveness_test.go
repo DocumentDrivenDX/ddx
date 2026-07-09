@@ -1,11 +1,17 @@
 package bead
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +37,53 @@ func deadPIDForTest(t *testing.T) int {
 
 	t.Fatal("unable to find a dead PID for the test")
 	return 0
+}
+
+func TestClaimLivenessRootUsesConfiguredRuntimeRoot(t *testing.T) {
+	runtimeRoot := t.TempDir()
+	t.Setenv(config.ExecutionWorktreeRootEnv, runtimeRoot)
+
+	ddxDir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	got := ClaimLivenessRoot(ddxDir)
+
+	rawTempFallbackPrefix := filepath.Clean(os.TempDir()) + string(filepath.Separator) + claimLivenessNamespace + string(filepath.Separator)
+	assert.True(t, strings.HasPrefix(got, filepath.Clean(runtimeRoot)+string(filepath.Separator)),
+		"expected claim liveness root under configured runtime root %q, got %q", runtimeRoot, got)
+	assert.False(t, strings.HasPrefix(got, rawTempFallbackPrefix),
+		"claim liveness root should avoid raw os.TempDir() when a runtime root is configured, got %q", got)
+}
+
+func TestClaimLivenessRootPreservesStableProjectScoping(t *testing.T) {
+	runtimeRoot := t.TempDir()
+	t.Setenv(config.ExecutionWorktreeRootEnv, runtimeRoot)
+
+	ddxDirA := filepath.Join(t.TempDir(), ddxroot.DirName)
+	ddxDirB := filepath.Join(t.TempDir(), ddxroot.DirName)
+
+	gotA1 := ClaimLivenessRoot(ddxDirA)
+	gotA2 := ClaimLivenessRoot(ddxDirA)
+	gotB := ClaimLivenessRoot(ddxDirB)
+
+	assert.Equal(t, gotA1, gotA2, "two workers for the same project must resolve the same claim-liveness root")
+	assert.NotEqual(t, gotA1, gotB, "distinct project roots must resolve distinct scoped claim-liveness roots")
+
+	sharedPrefix := filepath.Clean(runtimeRoot) + string(filepath.Separator)
+	assert.True(t, strings.HasPrefix(gotA1, sharedPrefix))
+	assert.True(t, strings.HasPrefix(gotB, sharedPrefix))
+}
+
+func TestClaimLivenessRootFallsBackToOSTempDirWithoutRuntimeRoot(t *testing.T) {
+	t.Setenv(config.ExecutionWorktreeRootEnv, "")
+	t.Setenv("HOME", t.TempDir())
+
+	ddxDir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	got := ClaimLivenessRoot(ddxDir)
+
+	root := canonicalClaimRoot(ddxDir)
+	sum := sha1.Sum([]byte(root))
+	want := filepath.Join(os.TempDir(), claimLivenessNamespace, hex.EncodeToString(sum[:]))
+
+	assert.Equal(t, want, got, "without a configured runtime root, claim liveness must keep using os.TempDir()")
 }
 
 func TestClaimLeaseIsStale_AliveOwnerSameMachineNotStaleDespiteAge(t *testing.T) {

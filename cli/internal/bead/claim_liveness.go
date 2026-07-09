@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 const claimLivenessNamespace = "ddx-claim-heartbeats"
@@ -37,10 +41,38 @@ func claimLivenessPath(ddxDir, id string) string {
 // (e.g. execution resource preflight) must use this instead of
 // reconstructing the path independently, so resource checks and heartbeat
 // writes always agree on the root that needs free inodes/bytes.
+//
+// When a DDx execution/runtime temp root is configured (env override,
+// project config, or global config), heartbeats live under that root so
+// claim liveness shares fate with the rest of DDx's execution resources
+// instead of wedging on unrelated /tmp exhaustion. The project-scoped
+// subdirectory is preserved either way so workers for the same project keep
+// observing each other's stale-claim sidecars.
 func ClaimLivenessRoot(ddxDir string) string {
 	root := canonicalClaimRoot(ddxDir)
 	sum := sha1.Sum([]byte(root))
-	return filepath.Join(os.TempDir(), claimLivenessNamespace, hex.EncodeToString(sum[:]))
+	scope := hex.EncodeToString(sum[:])
+	if runtimeRoot := configuredClaimLivenessRuntimeRoot(root); runtimeRoot != "" {
+		return filepath.Join(runtimeRoot, claimLivenessNamespace, scope)
+	}
+	return filepath.Join(os.TempDir(), claimLivenessNamespace, scope)
+}
+
+// claimLivenessRuntimeRootCache memoizes config.ExecutionWorktreeRoot lookups
+// per canonical project root. Heartbeat writes/reads happen far more often
+// than the configured runtime root can plausibly change within a process
+// lifetime (every HeartbeatInterval tick, sub-second in some deployments), so
+// re-reading and re-parsing config.yaml on each call would add avoidable
+// filesystem latency to a TTL-sensitive liveness path.
+var claimLivenessRuntimeRootCache sync.Map
+
+func configuredClaimLivenessRuntimeRoot(root string) string {
+	if cached, ok := claimLivenessRuntimeRootCache.Load(root); ok {
+		return cached.(string)
+	}
+	resolved := strings.TrimSpace(config.ExecutionWorktreeRoot(root))
+	claimLivenessRuntimeRootCache.Store(root, resolved)
+	return resolved
 }
 
 func canonicalClaimRoot(ddxDir string) string {
@@ -72,9 +104,17 @@ func writeAtomicClaimFile(path string, data []byte) error {
 		return fmt.Errorf("bead: create claim liveness tmp: %w", err)
 	}
 	tmpName := tmp.Name()
+	renamed := false
 	defer func() {
 		_ = tmp.Close()
-		_ = os.Remove(tmpName)
+		// Skip the cleanup unlink once the rename below has already
+		// succeeded: tmpName no longer names anything at that point, so
+		// removing it is unnecessary. See readClaimHeartbeat's retry loop
+		// for the actual (rename-atomicity) hazard this write path can hit
+		// on some networked/virtualized filesystems.
+		if !renamed {
+			_ = os.Remove(tmpName)
+		}
 	}()
 	if _, err := tmp.Write(data); err != nil {
 		return fmt.Errorf("bead: write claim liveness tmp: %w", err)
@@ -85,6 +125,7 @@ func writeAtomicClaimFile(path string, data []byte) error {
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("bead: publish claim liveness: %w", err)
 	}
+	renamed = true
 	return nil
 }
 
@@ -97,8 +138,25 @@ func (s *Store) writeClaimHeartbeat(rec ClaimLeaseRecord) error {
 	return writeAtomicClaimFile(claimLivenessPath(s.Dir, rec.BeadID), data)
 }
 
+// claimHeartbeatNotFoundRetries and claimHeartbeatNotFoundRetryDelay guard
+// against a transient non-atomic rename window observed on some networked or
+// virtualized filesystems (e.g. virtiofs-backed configured execution roots):
+// a concurrent reader can briefly see the destination as absent while a
+// same-named atomic write is renaming its temp file into place. The write
+// itself always succeeds; a short bounded retry here avoids surfacing that
+// sub-millisecond gap as a false "no claim lease" result, which would
+// otherwise weaken cross-worker stale-claim protection.
+const claimHeartbeatNotFoundRetries = 3
+
+var claimHeartbeatNotFoundRetryDelay = time.Millisecond
+
 func (s *Store) readClaimHeartbeat(id string) (ClaimLeaseRecord, bool, error) {
-	data, err := os.ReadFile(claimLivenessPath(s.Dir, id))
+	path := claimLivenessPath(s.Dir, id)
+	data, err := os.ReadFile(path)
+	for attempt := 0; os.IsNotExist(err) && attempt < claimHeartbeatNotFoundRetries; attempt++ {
+		time.Sleep(claimHeartbeatNotFoundRetryDelay)
+		data, err = os.ReadFile(path)
+	}
 	if os.IsNotExist(err) {
 		return ClaimLeaseRecord{}, false, nil
 	}
