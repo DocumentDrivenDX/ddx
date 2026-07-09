@@ -15,3 +15,10 @@ func processAlive(pid int) bool {
 	_, err := os.FindProcess(pid)
 	return err == nil
 }
+
+// livePGID has no Windows equivalent — the platform lacks POSIX process
+// groups. ok is always false so callers skip the PGID-match check rather
+// than treating the absence of the primitive as a mismatch.
+func livePGID(pid int) (int, bool) {
+	return 0, false
+}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"syscall"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -640,6 +642,137 @@ func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	b, err := store.Get(context.Background(), "ddx-supervisor-stale")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status)
+}
+
+// TestWorkerSupervisor_LivenessRejectsPGIDMismatch covers ddx-428fc1e5: a
+// running record whose PID is alive but whose recorded PGID no longer
+// matches the live process group must not be treated as live. This is the
+// signature of PID reuse — the original worker exited and the kernel handed
+// its PID to an unrelated process.
+func TestWorkerSupervisor_LivenessRejectsPGIDMismatch(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	supervisor := NewWorkerSupervisor(m)
+
+	pid := os.Getpid()
+	actualPGID, err := syscall.Getpgid(pid)
+	require.NoError(t, err)
+
+	rec := WorkerRecord{
+		ID:    "worker-pgid-mismatch",
+		Kind:  "work",
+		State: "running",
+		PID:   pid,
+		PGID:  actualPGID + 999999,
+	}
+
+	assert.False(t, supervisor.workerRecordLive(rec, time.Now().UTC()))
+}
+
+// TestWorkerSupervisor_LivenessRejectsStaleSidecar covers ddx-428fc1e5: a
+// running record with a matching, alive PID/PGID is still not live when its
+// liveness sidecar (.ddx/workers/<id>/status.json via workerstatus) has not
+// been touched in over 2*bead.HeartbeatTTL.
+func TestWorkerSupervisor_LivenessRejectsStaleSidecar(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	supervisor := NewWorkerSupervisor(m)
+
+	pid := os.Getpid()
+	pgid, err := syscall.Getpgid(pid)
+	require.NoError(t, err)
+
+	rec := WorkerRecord{
+		ID:    "worker-stale-sidecar",
+		Kind:  "work",
+		State: "running",
+		PID:   pid,
+		PGID:  pgid,
+	}
+
+	now := time.Now().UTC()
+	require.NoError(t, workerstatus.WriteLiveness(root, rec.ID, workerstatus.LivenessRecord{
+		WorkerID:       rec.ID,
+		LastActivityAt: now.Add(-3 * bead.HeartbeatTTL),
+	}))
+
+	assert.False(t, supervisor.workerRecordLive(rec, now))
+}
+
+// TestWorkerSupervisor_LivenessRejectsExpiredRunState covers ddx-428fc1e5: a
+// running record with a matching, alive PID/PGID is still not live when its
+// current attempt's run-state (cli/internal/agent run-state helpers) has
+// expired.
+func TestWorkerSupervisor_LivenessRejectsExpiredRunState(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	supervisor := NewWorkerSupervisor(m)
+
+	pid := os.Getpid()
+	pgid, err := syscall.Getpgid(pid)
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	attemptID := "worker-expired-run-state-a1"
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:    "ddx-liveness-expired",
+		AttemptID: attemptID,
+		StartedAt: now.Add(-time.Hour),
+		ExpiresAt: now.Add(-time.Minute),
+	}))
+
+	rec := WorkerRecord{
+		ID:    "worker-expired-run-state",
+		Kind:  "work",
+		State: "running",
+		PID:   pid,
+		PGID:  pgid,
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: attemptID,
+			BeadID:    "ddx-liveness-expired",
+			Phase:     "running",
+			StartedAt: now.Add(-time.Hour),
+		},
+	}
+
+	assert.False(t, supervisor.workerRecordLive(rec, now))
+}
+
+// TestWorkerSupervisor_LivenessKeepsLiveHandleAuthoritative covers
+// ddx-428fc1e5: when the manager still holds an in-process handle for the
+// worker, that handle is authoritative and liveness is affirmed even though
+// every other signal (PID, PGID) would otherwise fail.
+func TestWorkerSupervisor_LivenessKeepsLiveHandleAuthoritative(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	supervisor := NewWorkerSupervisor(m)
+
+	id := "worker-handle-authoritative"
+	m.mu.Lock()
+	m.workers[id] = &workerHandle{record: WorkerRecord{ID: id, Kind: "work", State: "running"}}
+	m.mu.Unlock()
+
+	rec := WorkerRecord{
+		ID:    id,
+		Kind:  "work",
+		State: "running",
+		PID:   0,
+		PGID:  999999,
+	}
+
+	assert.True(t, supervisor.workerRecordLive(rec, time.Now().UTC()))
 }
 
 func TestSupervisorRegistry_DoesNotSpawnDuplicatesForActiveWorker(t *testing.T) {

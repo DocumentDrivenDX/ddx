@@ -13,8 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
 const (
@@ -264,7 +267,7 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 		projectRoot = s.manager.projectRoot
 	}
 
-	active, running, terminals, staleIDs, err := s.snapshotWorkers(projectRoot)
+	active, running, terminals, staleIDs, err := s.snapshotWorkers(projectRoot, now)
 	if err != nil {
 		return err
 	}
@@ -302,7 +305,7 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 	return nil
 }
 
-func (s *WorkerSupervisor) snapshotWorkers(projectRoot string) (active []WorkerRecord, running []WorkerRecord, terminals []WorkerRecord, staleIDs []string, err error) {
+func (s *WorkerSupervisor) snapshotWorkers(projectRoot string, now time.Time) (active []WorkerRecord, running []WorkerRecord, terminals []WorkerRecord, staleIDs []string, err error) {
 	if s == nil || s.manager == nil {
 		return nil, nil, nil, nil, fmt.Errorf("worker supervisor is not configured")
 	}
@@ -329,11 +332,9 @@ func (s *WorkerSupervisor) snapshotWorkers(projectRoot string) (active []WorkerR
 			continue
 		}
 
-		hasHandle := s.manager.hasWorkerHandle(rec.ID)
-		alive := rec.PID > 0 && processAlive(rec.PID)
 		switch rec.State {
 		case "running", "stopping":
-			if !hasHandle && !alive {
+			if !s.workerRecordLive(rec, now) {
 				staleIDs = append(staleIDs, rec.ID)
 				continue
 			}
@@ -686,4 +687,63 @@ func (m *WorkerManager) hasWorkerHandle(id string) bool {
 	defer m.mu.Unlock()
 	_, ok := m.workers[id]
 	return ok
+}
+
+// workerRecordLive determines whether rec still represents a live worker.
+// An existing in-process handle is authoritative: the manager itself started
+// that worker and still owns its goroutine or subprocess, so no further
+// checks run. Without a handle, a stale or reused PID could otherwise be
+// mistaken for the original worker, so every available freshness signal must
+// agree: the PID must exist, a recorded PGID must still match the live
+// process group, a present liveness sidecar must have been touched within
+// 2*bead.HeartbeatTTL, and a current attempt's run-state must not be
+// expired. Signals that are absent (no sidecar, no run-state) are not
+// treated as failures — only signals that are present and stale reject.
+func (s *WorkerSupervisor) workerRecordLive(rec WorkerRecord, now time.Time) bool {
+	if s == nil || s.manager == nil {
+		return false
+	}
+	if s.manager.hasWorkerHandle(rec.ID) {
+		return true
+	}
+	if rec.PID <= 0 || !processAlive(rec.PID) {
+		return false
+	}
+	if rec.PGID > 0 {
+		if pgid, ok := livePGID(rec.PID); ok && pgid != rec.PGID {
+			return false
+		}
+	}
+	if sidecar, err := workerstatus.ReadLiveness(s.manager.projectRoot, rec.ID); err == nil && !sidecar.LastActivityAt.IsZero() {
+		if now.Sub(sidecar.LastActivityAt) > 2*bead.HeartbeatTTL {
+			return false
+		}
+	}
+	if rec.CurrentAttempt != nil && rec.CurrentAttempt.AttemptID != "" {
+		if expired, found := currentAttemptRunStateExpired(s.manager.projectRoot, rec.CurrentAttempt.AttemptID, now); found && expired {
+			return false
+		}
+	}
+	return true
+}
+
+// currentAttemptRunStateExpired reports whether the run-state record for
+// attemptID has expired as of now. found is false when no run-state record
+// exists for that attempt, in which case expired is meaningless — callers
+// must not reject liveness on absence alone.
+func currentAttemptRunStateExpired(projectRoot, attemptID string, now time.Time) (expired bool, found bool) {
+	states, err := agent.ReadRunStates(projectRoot)
+	if err != nil {
+		return false, false
+	}
+	for _, st := range states {
+		if st.AttemptID != attemptID {
+			continue
+		}
+		if st.ExpiresAt.IsZero() {
+			return false, true
+		}
+		return now.After(st.ExpiresAt), true
+	}
+	return false, false
 }
