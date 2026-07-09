@@ -41,8 +41,8 @@ func TestCLIFlagDesign_DefaultOnCapabilitiesAreDisableable(t *testing.T) {
 // advertises default-on (no opt-out) must both be flagged.
 func TestCLIFlagDesign_CheckCatchesViolations(t *testing.T) {
 	bad := &cobra.Command{Use: "bad"}
-	bad.Flags().Bool("tsnet", true, "Enable the listener")            // RULE 1
-	bad.Flags().Bool("self-refresh", false, "Re-exec (defaults on)")  // RULE 2
+	bad.Flags().Bool("tsnet", true, "Enable the listener")           // RULE 1
+	bad.Flags().Bool("self-refresh", false, "Re-exec (defaults on)") // RULE 2
 
 	got := flagDesignViolations(bad)
 	if len(got) != 2 {

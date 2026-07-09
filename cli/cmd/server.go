@@ -107,6 +107,10 @@ MCP (POST /mcp):
 			// skills or legacy symlinks without blocking server startup.
 			preflightResult := checkProjectRuntimePreflight(projectRoot)
 			emitServerPreflightDiagnostics(cmd.ErrOrStderr(), preflightResult)
+			pressureChecker := buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride)
+			if pressureReport, pressureErr := pressureChecker.Check(cmd.Context()); pressureErr == nil {
+				emitServerResourcePressureDiagnostics(cmd.ErrOrStderr(), pressureReport)
+			}
 
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)

@@ -104,7 +104,6 @@ func TestExecuteBead_NoLandPreservesEvidenceWithoutMainNoise(t *testing.T) {
 // Helpers
 // ----------------------------------------------------------------------------
 
-
 // runGitStatus runs git status --porcelain for dirRel and returns (output, stdout, error).
 func runGitStatus(dir, dirRel string) (string, string, error) {
 	cmd := exec.Command("git", "-C", dir, "status", "--porcelain", "--", dirRel)

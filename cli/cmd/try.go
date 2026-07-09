@@ -538,21 +538,22 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		})
 	}
 	result, runErr := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                   executeloop.ModeOnce,
-		IgnoreCooldown:         forceClaim,
-		CooldownOverrideReason: forceReason,
-		Log:                    cmd.OutOrStdout(),
-		EventSink:              loopSink,
-		WorkerID:               resolveClaimAssignee(),
-		ProjectRoot:            projectRoot,
-		ResourceChecker:        resourceChecker,
-		SessionID:              loopSessionID,
-		PreClaimHook:           buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreDispatchLintHook:    lintHook,
-		PostAttemptTriageHook:  triageHook,
-		ProseEvidenceHook:      proseHook,
-		FinalizeDurableAudit:   f.buildAttemptAuditFinalizer(projectRoot, store),
-		NoReview:               noReview,
+		Mode:                    executeloop.ModeOnce,
+		IgnoreCooldown:          forceClaim,
+		CooldownOverrideReason:  forceReason,
+		Log:                     cmd.OutOrStdout(),
+		EventSink:               loopSink,
+		WorkerID:                resolveClaimAssignee(),
+		ProjectRoot:             projectRoot,
+		ResourceChecker:         resourceChecker,
+		ResourcePressureChecker: buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride),
+		SessionID:               loopSessionID,
+		PreClaimHook:            buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreDispatchLintHook:     lintHook,
+		PostAttemptTriageHook:   triageHook,
+		ProseEvidenceHook:       proseHook,
+		FinalizeDurableAudit:    f.buildAttemptAuditFinalizer(projectRoot, store),
+		NoReview:                noReview,
 	})
 	if runErr != nil {
 		if (errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded)) && result != nil && len(result.Results) > 0 {

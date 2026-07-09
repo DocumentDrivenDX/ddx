@@ -41,11 +41,16 @@ type ExecuteBeadLoopRuntime struct {
 	CleanupLog      io.Writer
 	CleanupRunner   executionCleanupRunner
 	ResourceChecker ExecutionResourceChecker
-	CleanupInterval time.Duration
-	CleanupTickCh   <-chan time.Time
-	EventSink       io.Writer
-	ProgressCh      chan<- ProgressEvent
-	PreClaimHook    func(ctx context.Context) error
+	// ResourcePressureChecker, when non-nil, is checked before claim on every
+	// iteration alongside ResourceChecker. Unlike ResourceChecker, pressure
+	// findings never stop the worker — warn and operator_attention
+	// severities are surfaced as diagnostics only (ddx-e9182ba1).
+	ResourcePressureChecker ResourcePressureChecker
+	CleanupInterval         time.Duration
+	CleanupTickCh           <-chan time.Time
+	EventSink               io.Writer
+	ProgressCh              chan<- ProgressEvent
+	PreClaimHook            func(ctx context.Context) error
 	// PreClaimIntakeHook runs after routing preflight and before Claim. It
 	// classifies the candidate for actionability/scope; only
 	// actionable_atomic proceeds directly to Claim. Non-atomic outcomes
@@ -2128,6 +2133,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			result.LastFailureStatus = budgetReport.Status
 			result.Results = append(result.Results, budgetReport)
 			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+	}
+	if runtime.ResourcePressureChecker != nil {
+		pressureReport, pressureErr := runtime.ResourcePressureChecker.Check(ctx)
+		if pressureErr != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "resource pressure check failed: %v\n", pressureErr)
+			}
+		} else {
+			emitResourcePressure(emit, runtime.Log, "pre-claim", pressureReport)
 		}
 	}
 	if runtime.ResourceChecker != nil {
@@ -5773,6 +5788,46 @@ func logResourcePreflight(log io.Writer, phase string, result ExecutionResourceC
 		result.CleanupSummary.BytesReclaimed+result.CleanupSummary.ScratchBytesReclaimed,
 		result.CleanupSummary.InodesReclaimed+result.CleanupSummary.ScratchInodesReclaimed,
 	)
+}
+
+// emitResourcePressure surfaces a non-blocking FD pressure diagnostic. Warn
+// severity emits "loop.resource_pressure"; operator_attention severity emits
+// "loop.operator_attention" (reason resource_pressure_fd) so the same
+// operator-facing surface used elsewhere in the loop carries the finding.
+// OK severity is not reported — pressure diagnostics only exist to surface
+// approaching exhaustion, not steady-state health.
+func emitResourcePressure(emit func(string, map[string]any), log io.Writer, phase string, report ResourcePressureReport) {
+	if report.Severity != ResourcePressureWarn && report.Severity != ResourcePressureOperatorAttention {
+		return
+	}
+	fields := map[string]any{
+		"phase":                     phase,
+		"severity":                  string(report.Severity),
+		"fd_used":                   report.FDUsed,
+		"fd_limit":                  report.FDLimit,
+		"fd_ratio":                  report.FDRatio,
+		"worker_subprocess_count":   report.WorkerSubprocessCount,
+		"temp_worktree_count":       report.TempWorktreeCount,
+		"stale_execution_dir_count": report.StaleExecutionDirCount,
+	}
+	if emit != nil {
+		if report.Severity == ResourcePressureOperatorAttention {
+			attention := map[string]any{"reason": "resource_pressure_fd"}
+			for k, v := range fields {
+				attention[k] = v
+			}
+			emit("loop.operator_attention", attention)
+		} else {
+			emit("loop.resource_pressure", fields)
+		}
+	}
+	if log != nil {
+		_, _ = fmt.Fprintf(log,
+			"resource pressure (%s) severity=%s fd_used=%d fd_limit=%d fd_ratio=%.2f worker_subprocess_count=%d temp_worktree_count=%d stale_execution_dir_count=%d\n",
+			phase, report.Severity, report.FDUsed, report.FDLimit, report.FDRatio,
+			report.WorkerSubprocessCount, report.TempWorktreeCount, report.StaleExecutionDirCount,
+		)
+	}
 }
 
 func formatResourceRootChecks(checks []ExecutionResourceRootCheck) string {

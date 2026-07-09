@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 func TestSelectStrongestProfile_HighestBandWithAvailableModel(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{

@@ -94,6 +94,10 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
+	// resourcePressureCheckerOverride, when non-nil, replaces the default
+	// resource pressure checker used by ddx try, ddx work, and ddx server.
+	resourcePressureCheckerOverride agent.ResourcePressureChecker
+
 	// workBinaryPathOverride, when non-nil, resolves the installed ddx binary
 	// used for watch-mode self-refresh checks.
 	workBinaryPathOverride func() string

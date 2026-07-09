@@ -341,6 +341,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
+	resourcePressureChecker := buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride)
 	if _, err := resourceChecker.Check(cmd.Context()); err != nil {
 		var resourceErr *agent.ResourceExhaustedError
 		if errors.As(err, &resourceErr) {
@@ -674,25 +675,26 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		progressLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                   spec.Mode,
-		IdleInterval:           spec.IdleInterval.Duration,
-		IgnoreCooldown:         spec.IgnoreCooldown,
-		CooldownOverrideReason: spec.CooldownOverrideReason,
-		Log:                    progressLog,
-		CleanupLog:             cleanupLog,
-		EventSink:              loopSink,
-		WorkerID:               resolveClaimAssignee(),
-		ProjectRoot:            projectRoot,
-		TrackerSyncEnabled:     workTrackerSyncEnabled(cmd),
-		CleanupRunner:          cleanupRunner,
-		ResourceChecker:        resourceChecker,
-		ServerHealthProbe:      serverHealthProbe,
-		BinaryRefreshCheck:     f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
-		ProjectRootDirtyCheck:  agent.CanonicalRootDirtyPaths,
-		SessionID:              loopSessionID,
-		PreClaimHook:           buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:     intakeHook,
-		PreClaimTimeout:        spec.PreClaimTimeout.Duration,
+		Mode:                    spec.Mode,
+		IdleInterval:            spec.IdleInterval.Duration,
+		IgnoreCooldown:          spec.IgnoreCooldown,
+		CooldownOverrideReason:  spec.CooldownOverrideReason,
+		Log:                     progressLog,
+		CleanupLog:              cleanupLog,
+		EventSink:               loopSink,
+		WorkerID:                resolveClaimAssignee(),
+		ProjectRoot:             projectRoot,
+		TrackerSyncEnabled:      workTrackerSyncEnabled(cmd),
+		CleanupRunner:           cleanupRunner,
+		ResourceChecker:         resourceChecker,
+		ResourcePressureChecker: resourcePressureChecker,
+		ServerHealthProbe:       serverHealthProbe,
+		BinaryRefreshCheck:      f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
+		ProjectRootDirtyCheck:   agent.CanonicalRootDirtyPaths,
+		SessionID:               loopSessionID,
+		PreClaimHook:            buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:      intakeHook,
+		PreClaimTimeout:         spec.PreClaimTimeout.Duration,
 		RoutePreflight: func(ctx context.Context, harness, model string) error {
 			if spec.Harness == "" {
 				return nil
