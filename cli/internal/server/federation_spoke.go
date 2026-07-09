@@ -34,6 +34,17 @@ type federationSpoke struct {
 // Both EnableHubMode and EnableSpokeMode may be called on the same server
 // (hub_spoke role).
 func (s *Server) EnableSpokeMode(ctx context.Context, hubURL, selfURL string, opts ...SpokeOption) error {
+	return s.enableSpokeMode(ctx, hubURL, selfURL, false, opts...)
+}
+
+// EnableSpokeModeDegraded enables spoke mode without making a temporarily
+// unreachable hub fatal to server startup. Transport failures are logged and
+// retried by the spoke heartbeat loop; explicit hub rejections still fail.
+func (s *Server) EnableSpokeModeDegraded(ctx context.Context, hubURL, selfURL string, opts ...SpokeOption) error {
+	return s.enableSpokeMode(ctx, hubURL, selfURL, true, opts...)
+}
+
+func (s *Server) enableSpokeMode(ctx context.Context, hubURL, selfURL string, allowDegraded bool, opts ...SpokeOption) error {
 	if s.spoke != nil {
 		return nil
 	}
@@ -74,7 +85,11 @@ func (s *Server) EnableSpokeMode(ctx context.Context, hubURL, selfURL string, op
 			agent.PreviousURL(), selfURL)
 	}
 
-	if err := agent.Start(ctx); err != nil {
+	if allowDegraded {
+		if err := agent.StartDegraded(ctx); err != nil {
+			return fmt.Errorf("federation: spoke register: %w", err)
+		}
+	} else if err := agent.Start(ctx); err != nil {
 		return fmt.Errorf("federation: spoke register: %w", err)
 	}
 

@@ -125,10 +125,10 @@ MCP (POST /mcp):
 				if selfURL == "" {
 					selfURL = "https://" + listenAddr
 				}
-				if err := srv.EnableSpokeMode(cmd.Context(), hubURL, selfURL); err != nil {
+				if err := srv.EnableSpokeModeDegraded(cmd.Context(), hubURL, selfURL); err != nil {
 					return fmt.Errorf("federation spoke registration failed: %w", err)
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "DDx spoke-mode enabled (registered with hub %s as %s)\n", hubURL, selfURL)
+				fmt.Fprintf(cmd.OutOrStdout(), "DDx spoke-mode enabled (hub %s as %s; registration retries if hub is unavailable)\n", hubURL, selfURL)
 			}
 
 			// Build tsnet config. tsnet is on by default — flags override config,
