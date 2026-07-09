@@ -511,6 +511,41 @@ func TestWorkStatusReportsServerUnavailableState(t *testing.T) {
 	assert.Equal(t, "server unreachable: holding queue until /api/health returns", report.Workers[0].Message)
 }
 
+func TestWorkStatus_CorruptGitWorkerNotReportedHealthy(t *testing.T) {
+	projectRoot := t.TempDir()
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:            9191,
+			Command:        "ddx work --watch --project " + projectRoot,
+			ProjectRoot:    projectRoot,
+			StartedAt:      time.Now().Add(-4 * time.Minute).UTC(),
+			Age:            "4m",
+			AgeSeconds:     240,
+			Phase:          "operator_attention",
+			Message:        "project_git_corrupt",
+			LastActivityAt: time.Time{},
+		},
+	}
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	w := report.Workers[0]
+	assert.Equal(t, "operator_attention", w.Phase, "corrupt git stop must not be reported as a healthy running worker")
+	assert.Equal(t, "project_git_corrupt", w.Message)
+	assert.Empty(t, w.LastActivityAt, "corrupt git stop should not present fresh worker activity")
+	assert.NotEqual(t, "running", w.Phase)
+	assert.Contains(t, out, "operator_attention")
+	assert.Contains(t, out, "project_git_corrupt")
+}
+
 func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {
 	projectRoot := t.TempDir()
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
