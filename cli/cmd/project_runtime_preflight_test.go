@@ -122,6 +122,48 @@ func TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill(t *testing.T) {
 	}
 }
 
+// TestWorkPreflightStillWarnsOnLegacySkillSymlinks verifies that legacy DDx
+// skill symlinks still surface through the work/try preflight warning path.
+func TestWorkPreflightStillWarnsOnLegacySkillSymlinks(t *testing.T) {
+	t.Run("work", func(t *testing.T) {
+		env := NewTestEnvironment(t)
+		installLegacySkillSymlinkLayout(t, env.Dir)
+
+		factory := NewCommandFactory(env.Dir)
+		output, _ := executeWithStdoutCapture(t, factory.NewRootCommand(), "work", "--once")
+
+		assert.Contains(t, output, "preflight warning:", "ddx work must still emit the preflight warning")
+		assert.Contains(t, output, "legacy DDx skill symlink under", "ddx work must name the legacy symlink location")
+		assert.NotContains(t, output, "checked:", "healthy lifecycle skills must not be reported missing")
+	})
+
+	t.Run("try", func(t *testing.T) {
+		env := NewTestEnvironment(t)
+		env.CreateDefaultConfig()
+		installLegacySkillSymlinkLayout(t, env.Dir)
+
+		beadID := "ddx-preflight-legacy-try"
+		seedOpenBead(t, env.Dir, beadID)
+
+		factory := NewCommandFactory(env.Dir)
+		factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+		factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(_ context.Context, id string) (agent.ExecuteBeadReport, error) {
+			return agent.ExecuteBeadReport{
+				BeadID:    id,
+				Status:    agent.ExecuteBeadStatusNoChanges,
+				BaseRev:   "abc1234",
+				ResultRev: "abc1234",
+			}, nil
+		})
+
+		output, _ := executeWithStdoutCapture(t, factory.NewRootCommand(), "try", beadID, "--no-review", "--no-review-i-know-what-im-doing")
+
+		assert.Contains(t, output, "preflight warning:", "ddx try must still emit the preflight warning")
+		assert.Contains(t, output, "legacy DDx skill symlink under", "ddx try must name the legacy symlink location")
+		assert.NotContains(t, output, "checked:", "healthy lifecycle skills must not be reported missing")
+	})
+}
+
 // TestServerPreflight_MissingLifecycleSkillStartsDegraded verifies that
 // ddx server surfaces degraded startup diagnostics without blocking server
 // construction/startup solely because bead-lifecycle is missing.
@@ -203,4 +245,21 @@ func TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsUpdateForce(t *tes
 	assert.GreaterOrEqual(t, updateIdx, 0, "output must contain ddx update --force")
 	assert.GreaterOrEqual(t, doctorIdx, 0, "output must contain ddx doctor")
 	assert.Less(t, updateIdx, doctorIdx, "ddx update --force must appear before ddx doctor")
+}
+
+func installLegacySkillSymlinkLayout(t *testing.T, projectRoot string) {
+	t.Helper()
+
+	legacyDDxTarget := filepath.Join(projectRoot, "legacy-skills", "ddx")
+	require.NoError(t, os.MkdirAll(filepath.Join(legacyDDxTarget, "bead-lifecycle"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDDxTarget, "bead-lifecycle", "SKILL.md"), []byte("# bead lifecycle"), 0o644))
+
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "ddx"),
+		filepath.Join(".claude", "skills", "ddx"),
+	} {
+		fullPath := filepath.Join(projectRoot, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+		require.NoError(t, os.Symlink("../../legacy-skills/ddx", fullPath))
+	}
 }

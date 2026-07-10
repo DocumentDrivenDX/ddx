@@ -201,6 +201,13 @@ More information:
 
 	// Store flag values in command context for access by subcommands
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// The provider-launch wrapper is a hot-path exec shim. It must not pay
+		// for config/version/update startup work before it hands control to the
+		// resolved provider binary.
+		if cmd.Name() == agent.ProviderLaunchSubcommand {
+			return nil
+		}
+
 		// Initialize config with the local viper instance
 		f.initConfig(cfgFile, libraryPath)
 
@@ -221,6 +228,10 @@ More information:
 
 	// Display update notification and staleness hints after command completes
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == agent.ProviderLaunchSubcommand {
+			return nil
+		}
+
 		if err := f.displayUpdateNotification(cmd); err != nil {
 			return err
 		}
