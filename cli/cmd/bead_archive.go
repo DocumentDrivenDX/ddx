@@ -30,7 +30,7 @@ removal, and merged-view reads in 'ddx bead show' / 'ddx bead list' hide any
 duplicate that an interrupted run could leave behind.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 
 			threshold := bead.DefaultArchiveSizeThreshold
 			if cmd.Flags().Changed("max-size") {

@@ -50,6 +50,24 @@ type ExecutionResourceCheckResult struct {
 	CleanupSummary   ExecutionCleanupSummary      `json:"cleanup_summary,omitempty"`
 }
 
+// FDExhausted reports whether any root check recorded fd exhaustion
+// (EMFILE/ENFILE) rather than a genuinely unwritable or capacity-exhausted
+// root. Callers use this to distinguish a worker-local, restartable failure
+// from root-storage exhaustion that persists across worker restarts.
+func (r ExecutionResourceCheckResult) FDExhausted() bool {
+	for _, check := range r.RootChecks {
+		if check.FDExhausted {
+			return true
+		}
+	}
+	for _, check := range r.BeforeRootChecks {
+		if check.FDExhausted {
+			return true
+		}
+	}
+	return false
+}
+
 // ResourceExhaustedError signals that execution roots remained unhealthy after
 // a cleanup retry. The caller should stop claiming new work.
 type ResourceExhaustedError struct {

@@ -95,7 +95,7 @@ func TestExecuteLoop_PreClaimSyncFetchesBeforeCandidateSelection(t *testing.T) {
 	runGitInteg(t, secondDir, "push", "origin", "main")
 
 	var syncLog bytes.Buffer
-	syncTrackerBeforeClaim(context.Background(), workDir, &syncLog, nil)
+	_ = syncTrackerBeforeClaim(context.Background(), workDir, &syncLog, nil)
 
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestExecuteLoop_PreClaimSyncDegradesWhenOriginUnreachable(t *testing.T) {
 	}
 
 	var log bytes.Buffer
-	syncTrackerBeforeClaim(context.Background(), workDir, &log, nil)
+	_ = syncTrackerBeforeClaim(context.Background(), workDir, &log, nil)
 
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
@@ -202,6 +202,44 @@ func TestExecuteLoop_TrackerSyncFailureEmitsOperatorAttention(t *testing.T) {
 	}
 	assert.True(t, sawAttention, "persistent tracker push failure must emit loop.operator_attention")
 	assert.Contains(t, logBuf.String(), "continuing with local state")
+}
+
+func TestTrackerSync_PreClaimCorruptGitClassifiesOperatorAttention(t *testing.T) {
+	workDir, _, _ := setupTrackerSyncRepo(t)
+
+	prevRunner := trackerSyncGitRunner
+	t.Cleanup(func() { trackerSyncGitRunner = prevRunner })
+	trackerSyncGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "fetch" {
+			return []byte("fatal: bad object HEAD"), assert.AnError
+		}
+		return internalgit.Command(ctx, gitDir, args...).CombinedOutput()
+	}
+
+	emit, logBuf, events := captureTrackerSyncEvents()
+	err := syncTrackerBeforeClaim(context.Background(), workDir, logBuf, emit)
+	require.Error(t, err)
+
+	require.NotEmpty(t, *events)
+	var sawAttention bool
+	for _, event := range *events {
+		if event["type"] == "loop.operator_attention" && event["reason"] == "project_git_corrupt" {
+			sawAttention = true
+			assert.Equal(t, "pre_claim", event["stage"])
+			assert.Contains(t, event["detail"], "fatal: bad object HEAD")
+		}
+	}
+	assert.True(t, sawAttention, "corrupt git diagnostics must emit loop.operator_attention")
+	assert.Contains(t, logBuf.String(), "continuing with local state")
+
+	cases := []string{
+		"fatal: bad object HEAD",
+		"fatal: invalid sha1 pointer 0000000000000000000000000000000000000000",
+		"error: did not send all necessary objects",
+	}
+	for _, diag := range cases {
+		assert.True(t, isCorruptTrackerSyncError(diag), "diagnostic %q must be classified as corrupt", diag)
+	}
 }
 
 // TestTrackerSync_UsesRemoteHeadDefaultBranchWhenOriginMainMissing proves that
@@ -250,7 +288,7 @@ func TestTrackerSync_UsesRemoteHeadDefaultBranchWhenOriginMainMissing(t *testing
 	runGitInteg(t, secondDir, "push", "origin", "master")
 
 	var syncLog bytes.Buffer
-	syncTrackerBeforeClaim(context.Background(), workDir, &syncLog, nil)
+	_ = syncTrackerBeforeClaim(context.Background(), workDir, &syncLog, nil)
 
 	assert.NotContains(t, syncLog.String(), "origin/main", "sync must not reference a nonexistent origin/main")
 

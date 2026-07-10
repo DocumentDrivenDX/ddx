@@ -41,11 +41,16 @@ type ExecuteBeadLoopRuntime struct {
 	CleanupLog      io.Writer
 	CleanupRunner   executionCleanupRunner
 	ResourceChecker ExecutionResourceChecker
-	CleanupInterval time.Duration
-	CleanupTickCh   <-chan time.Time
-	EventSink       io.Writer
-	ProgressCh      chan<- ProgressEvent
-	PreClaimHook    func(ctx context.Context) error
+	// ResourcePressureChecker, when non-nil, is checked before claim on every
+	// iteration alongside ResourceChecker. Unlike ResourceChecker, pressure
+	// findings never stop the worker — warn and operator_attention
+	// severities are surfaced as diagnostics only (ddx-e9182ba1).
+	ResourcePressureChecker ResourcePressureChecker
+	CleanupInterval         time.Duration
+	CleanupTickCh           <-chan time.Time
+	EventSink               io.Writer
+	ProgressCh              chan<- ProgressEvent
+	PreClaimHook            func(ctx context.Context) error
 	// PreClaimIntakeHook runs after routing preflight and before Claim. It
 	// classifies the candidate for actionability/scope; only
 	// actionable_atomic proceeds directly to Claim. Non-atomic outcomes
@@ -727,6 +732,9 @@ type ExecuteBeadReport struct {
 	// ProjectRoot is the worktree root ddx try/work operated on for this report.
 	ProjectRoot string `json:"project_root,omitempty"`
 	PreserveRef string `json:"preserve_ref,omitempty"`
+	// NoEvidencePaths names dirty paths preserved when a no-evidence attempt
+	// exited without committing work or writing no_changes_rationale.txt.
+	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
 	// CandidateRef is the project-root git ref pinned before checks and review.
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`
@@ -808,6 +816,17 @@ type ExecuteBeadReport struct {
 	// ResourceExhausted carries the execution-root preflight result when the
 	// attempt stopped before the agent could safely continue.
 	ResourceExhausted any `json:"resource_exhausted,omitempty"`
+	// ResourceExhaustionDiagnosis classifies a resource_exhausted report
+	// beyond "some root became unhealthy". Set to ResourceExhaustionDiagnosisFD
+	// ("fd_exhaustion") when the preflight failure was the process/host
+	// open-file-descriptor limit (EMFILE/ENFILE); empty for ordinary
+	// byte/inode or unwritable-root failures.
+	ResourceExhaustionDiagnosis string `json:"resource_exhaustion_diagnosis,omitempty"`
+	// ResourceExhaustionRestartable is true when ResourceExhaustionDiagnosis
+	// is worker-local: a fresh worker process (e.g. after a supervisor
+	// restart) is expected to clear it, unlike root-storage exhaustion which
+	// persists across worker restarts.
+	ResourceExhaustionRestartable bool `json:"resource_exhaustion_restartable,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -1472,44 +1491,48 @@ func isTransientGitContention(err error) bool {
 }
 
 type executeBeadLoopState struct {
-	now                        func() time.Time
-	assignee                   string
-	preClaimTimeout            time.Duration
-	noProgressCooldown         time.Duration
-	heartbeatInterval          time.Duration
-	harness                    string
-	provider                   string
-	model                      string
-	profile                    string
-	loopMode                   executeloop.Mode
-	idleInterval               time.Duration
-	result                     *ExecuteBeadLoopResult
-	resultsResetIdx            int
-	transientCandidateSkips    map[string]string
-	pausedInfraUntil           time.Time
-	complexityGuard            *work.ComplexityGuard
-	preclaimGuard              *work.PreClaimGuard
-	workLog                    WorkLogRenderer
-	wasIdle                    bool
-	lastIdleQueueSignature     string
-	preClaimIdleDetail         string
-	preClaimIdleStreak         int
-	preClaimIdleFirstAt        time.Time
-	preClaimIdleEscalated      bool
-	liveness                   *work.SidecarLivenessReporter
-	serverOutage               *serverOutageTracker
-	serverUnavailableLogged    bool
-	sawParentBackEdge          bool
-	claimSuccessRateWindowSize int
-	claimSuccessRateThreshold  float64
-	claimSuccessRateWindow     []bool
-	claimSuccessRateSuccesses  int
-	claimSuccessRateWarned     bool
-	preClaimWarnThreshold      int
-	preClaimWarnState          preClaimWarnRepeatState
-	exitReason                 string
-	cleanupLog                 io.Writer
-	attemptStarted             *bool
+	now                         func() time.Time
+	assignee                    string
+	preClaimTimeout             time.Duration
+	noProgressCooldown          time.Duration
+	heartbeatInterval           time.Duration
+	harness                     string
+	provider                    string
+	model                       string
+	profile                     string
+	loopMode                    executeloop.Mode
+	idleInterval                time.Duration
+	result                      *ExecuteBeadLoopResult
+	resultsResetIdx             int
+	transientCandidateSkips     map[string]string
+	pausedInfraUntil            time.Time
+	complexityGuard             *work.ComplexityGuard
+	preclaimGuard               *work.PreClaimGuard
+	workLog                     WorkLogRenderer
+	wasIdle                     bool
+	lastIdleQueueSignature      string
+	preClaimIdleDetail          string
+	preClaimIdleStreak          int
+	preClaimIdleFirstAt         time.Time
+	preClaimIdleEscalated       bool
+	preClaimGitCorruptDetail    string
+	preClaimGitCorruptStreak    int
+	preClaimGitCorruptFirstAt   time.Time
+	preClaimGitCorruptEscalated bool
+	liveness                    *work.SidecarLivenessReporter
+	serverOutage                *serverOutageTracker
+	serverUnavailableLogged     bool
+	sawParentBackEdge           bool
+	claimSuccessRateWindowSize  int
+	claimSuccessRateThreshold   float64
+	claimSuccessRateWindow      []bool
+	claimSuccessRateSuccesses   int
+	claimSuccessRateWarned      bool
+	preClaimWarnThreshold       int
+	preClaimWarnState           preClaimWarnRepeatState
+	exitReason                  string
+	cleanupLog                  io.Writer
+	attemptStarted              *bool
 }
 
 type executeBeadIterationOutcome struct {
@@ -1826,6 +1849,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	preClaimIdleStreak := state.preClaimIdleStreak
 	preClaimIdleFirstAt := state.preClaimIdleFirstAt
 	preClaimIdleEscalated := state.preClaimIdleEscalated
+	preClaimGitCorruptDetail := state.preClaimGitCorruptDetail
+	preClaimGitCorruptStreak := state.preClaimGitCorruptStreak
+	preClaimGitCorruptFirstAt := state.preClaimGitCorruptFirstAt
+	preClaimGitCorruptEscalated := state.preClaimGitCorruptEscalated
 	liveness := state.liveness
 	serverOutage := state.serverOutage
 	serverUnavailableLogged := state.serverUnavailableLogged
@@ -1853,6 +1880,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		state.preClaimIdleStreak = preClaimIdleStreak
 		state.preClaimIdleFirstAt = preClaimIdleFirstAt
 		state.preClaimIdleEscalated = preClaimIdleEscalated
+		state.preClaimGitCorruptDetail = preClaimGitCorruptDetail
+		state.preClaimGitCorruptStreak = preClaimGitCorruptStreak
+		state.preClaimGitCorruptFirstAt = preClaimGitCorruptFirstAt
+		state.preClaimGitCorruptEscalated = preClaimGitCorruptEscalated
 		state.serverUnavailableLogged = serverUnavailableLogged
 		state.sawParentBackEdge = sawParentBackEdge
 		state.claimSuccessRateWindow = claimSuccessRateWindow
@@ -2116,6 +2147,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			return executeBeadIterationOutcome{Stop: true}, nil
 		}
 	}
+	if runtime.ResourcePressureChecker != nil {
+		pressureReport, pressureErr := runtime.ResourcePressureChecker.Check(ctx)
+		if pressureErr != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "resource pressure check failed: %v\n", pressureErr)
+			}
+		} else {
+			emitResourcePressure(emit, runtime.Log, "pre-claim", pressureReport)
+		}
+	}
 	if runtime.ResourceChecker != nil {
 		checkResult, checkErr := runtime.ResourceChecker.Check(ctx)
 		emitResourcePreflight(emit, "pre-claim", checkResult, checkErr)
@@ -2127,18 +2168,28 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				if resourceResult.ProjectRoot == "" && len(resourceResult.RootChecks) == 0 {
 					resourceResult = checkResult
 				}
+				detail := ResourceExhaustedStopMessage
+				diagnosis := ""
+				restartable := false
+				if resourceResult.FDExhausted() {
+					detail = FDExhaustionStopMessage
+					diagnosis = ResourceExhaustionDiagnosisFD
+					restartable = true
+				}
 				report := ExecuteBeadReport{
-					WorkerID:          runtime.WorkerID,
-					Harness:           harness,
-					Model:             model,
-					Status:            ExecuteBeadStatusResourceExhausted,
-					Detail:            ResourceExhaustedStopMessage,
-					Error:             resourceErr.Error(),
-					SessionID:         runtime.SessionID,
-					ResourceExhausted: &resourceResult,
-					Disrupted:         true,
-					DisruptionReason:  ReadinessSystemReasonResourceExhausted,
-					OutcomeReason:     ReadinessSystemReasonResourceExhausted,
+					WorkerID:                      runtime.WorkerID,
+					Harness:                       harness,
+					Model:                         model,
+					Status:                        ExecuteBeadStatusResourceExhausted,
+					Detail:                        detail,
+					Error:                         resourceErr.Error(),
+					SessionID:                     runtime.SessionID,
+					ResourceExhausted:             &resourceResult,
+					ResourceExhaustionDiagnosis:   diagnosis,
+					ResourceExhaustionRestartable: restartable,
+					Disrupted:                     true,
+					DisruptionReason:              ReadinessSystemReasonResourceExhausted,
+					OutcomeReason:                 ReadinessSystemReasonResourceExhausted,
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
@@ -2146,7 +2197,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				setExit("ResourceExhausted", "resource_exhausted")
 				emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
+					_, _ = fmt.Fprintln(runtime.Log, detail)
 				}
 				return executeBeadIterationOutcome{Stop: true}, nil
 			}
@@ -2254,7 +2305,48 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 	}
 	if runtime.TrackerSyncEnabled && runtime.ProjectRoot != "" {
-		syncTrackerBeforeClaim(ctx, runtime.ProjectRoot, runtime.Log, emit)
+		if err := syncTrackerBeforeClaim(ctx, runtime.ProjectRoot, runtime.Log, emit); err != nil {
+			corruptDetail := strings.TrimSpace(err.Error())
+			if corruptDetail == "" {
+				corruptDetail = "project git corruption detected during pre-claim tracker sync"
+			}
+			if corruptDetail == preClaimGitCorruptDetail {
+				preClaimGitCorruptStreak++
+			} else {
+				preClaimGitCorruptDetail = corruptDetail
+				preClaimGitCorruptStreak = 1
+				preClaimGitCorruptFirstAt = now().UTC()
+				preClaimGitCorruptEscalated = false
+			}
+			if preClaimGitCorruptStreak >= 2 && !preClaimGitCorruptEscalated {
+				preClaimGitCorruptEscalated = true
+				elapsed := now().UTC().Sub(preClaimGitCorruptFirstAt)
+				result.OperatorAttention = &OperatorAttentionStop{
+					Reason:      "project_git_corrupt",
+					ProjectRoot: runtime.ProjectRoot,
+					Message:     corruptDetail,
+				}
+				setExit("OperatorAttention", "operator_attention")
+				emit("loop.operator_attention", map[string]any{
+					"reason":       "project_git_corrupt",
+					"project_root": runtime.ProjectRoot,
+					"detail":       corruptDetail,
+					"elapsed_idle": elapsed.String(),
+					"streak_count": preClaimGitCorruptStreak,
+				})
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "operator attention: project git corruption repeated %d times during pre-claim sync (%s); stopping work\n", preClaimGitCorruptStreak, corruptDetail)
+				}
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "pre-claim tracker sync corruption observed; will stop if repeated: %s\n", corruptDetail)
+			}
+		} else {
+			preClaimGitCorruptDetail = ""
+			preClaimGitCorruptStreak = 0
+			preClaimGitCorruptEscalated = false
+		}
 	}
 
 	if runtime.TargetBeadID == "" {
@@ -3654,6 +3746,79 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			"message":      checkpointDirty.Message,
 			"detail":       detail,
 		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if report.Status == ExecuteBeadStatusNoEvidenceProduced {
+		result.Attempts++
+		result.Results = append(result.Results, report)
+		result.Failures++
+		result.LastFailureStatus = report.Status
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, unclaimErr
+		}
+		at := now().UTC()
+		detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
+		if detail == "" {
+			detail = "agent exited without a commit or no_changes_rationale.txt"
+		}
+		if err := parkNoEvidenceForOperator(w.Store, candidate.ID, assignee, report, detail, at); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("parkNoEvidenceForOperator", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		attention := &OperatorAttentionStop{
+			Reason:      FailureModeNoEvidenceProduced,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			DirtyPaths:  append([]string(nil), report.NoEvidencePaths...),
+			Message:     detail,
+		}
+		result.OperatorAttention = attention
+		setExit("OperatorAttention", "operator_attention")
+		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, at)); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("AppendEvent", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":       attention.Reason,
+			"bead_id":      candidate.ID,
+			"project_root": runtime.ProjectRoot,
+			"dirty_paths":  attention.DirtyPaths,
+			"preserve_ref": report.PreserveRef,
+			"message":      detail,
+		})
+		emit("bead.result", map[string]any{
+			"bead_id":           candidate.ID,
+			"status":            report.Status,
+			"detail":            report.Detail,
+			"session_id":        report.SessionID,
+			"result_rev":        report.ResultRev,
+			"base_rev":          report.BaseRev,
+			"preserve_ref":      report.PreserveRef,
+			"no_evidence_paths": append([]string(nil), report.NoEvidencePaths...),
+			"duration_ms":       now().Sub(runStart).Milliseconds(),
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s produced no evidence; released and parked. %s\n", candidate.ID, detail)
+		}
 		return executeBeadIterationOutcome{Stop: true}, nil
 	}
 	if IsResourceExhaustedStatus(report.Status) {
@@ -5490,6 +5655,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
 	}
+	if len(report.NoEvidencePaths) > 0 {
+		parts = append(parts, fmt.Sprintf("no_evidence_paths=%s", strings.Join(report.NoEvidencePaths, ",")))
+	}
 	if report.ResultRev != "" {
 		parts = append(parts, fmt.Sprintf("result_rev=%s", report.ResultRev))
 	}
@@ -5675,6 +5843,46 @@ func logResourcePreflight(log io.Writer, phase string, result ExecutionResourceC
 	)
 }
 
+// emitResourcePressure surfaces a non-blocking FD pressure diagnostic. Warn
+// severity emits "loop.resource_pressure"; operator_attention severity emits
+// "loop.operator_attention" (reason resource_pressure_fd) so the same
+// operator-facing surface used elsewhere in the loop carries the finding.
+// OK severity is not reported — pressure diagnostics only exist to surface
+// approaching exhaustion, not steady-state health.
+func emitResourcePressure(emit func(string, map[string]any), log io.Writer, phase string, report ResourcePressureReport) {
+	if report.Severity != ResourcePressureWarn && report.Severity != ResourcePressureOperatorAttention {
+		return
+	}
+	fields := map[string]any{
+		"phase":                     phase,
+		"severity":                  string(report.Severity),
+		"fd_used":                   report.FDUsed,
+		"fd_limit":                  report.FDLimit,
+		"fd_ratio":                  report.FDRatio,
+		"worker_subprocess_count":   report.WorkerSubprocessCount,
+		"temp_worktree_count":       report.TempWorktreeCount,
+		"stale_execution_dir_count": report.StaleExecutionDirCount,
+	}
+	if emit != nil {
+		if report.Severity == ResourcePressureOperatorAttention {
+			attention := map[string]any{"reason": "resource_pressure_fd"}
+			for k, v := range fields {
+				attention[k] = v
+			}
+			emit("loop.operator_attention", attention)
+		} else {
+			emit("loop.resource_pressure", fields)
+		}
+	}
+	if log != nil {
+		_, _ = fmt.Fprintf(log,
+			"resource pressure (%s) severity=%s fd_used=%d fd_limit=%d fd_ratio=%.2f worker_subprocess_count=%d temp_worktree_count=%d stale_execution_dir_count=%d\n",
+			phase, report.Severity, report.FDUsed, report.FDLimit, report.FDRatio,
+			report.WorkerSubprocessCount, report.TempWorktreeCount, report.StaleExecutionDirCount,
+		)
+	}
+}
+
 func formatResourceRootChecks(checks []ExecutionResourceRootCheck) string {
 	if len(checks) == 0 {
 		return ""
@@ -5711,22 +5919,29 @@ func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadL
 			"cleanup_preserved_scratch": result.CleanupSummary.PreservedActiveScratchDirs,
 			"detail":                    report.Detail,
 			"status":                    report.Status,
+			"diagnosis":                 report.ResourceExhaustionDiagnosis,
+			"restartable":               report.ResourceExhaustionRestartable,
+			"worker_local":              report.ResourceExhaustionRestartable,
 		}
 		body, err := json.Marshal(detail)
 		if err != nil {
 			detail = map[string]any{
-				"bead_id": beadID,
-				"detail":  report.Detail,
-				"status":  report.Status,
+				"bead_id":     beadID,
+				"detail":      report.Detail,
+				"status":      report.Status,
+				"diagnosis":   report.ResourceExhaustionDiagnosis,
+				"restartable": report.ResourceExhaustionRestartable,
 			}
 		} else {
 			detail["body"] = string(body)
 		}
 	} else {
 		detail = map[string]any{
-			"bead_id": beadID,
-			"detail":  report.Detail,
-			"status":  report.Status,
+			"bead_id":     beadID,
+			"detail":      report.Detail,
+			"status":      report.Status,
+			"diagnosis":   report.ResourceExhaustionDiagnosis,
+			"restartable": report.ResourceExhaustionRestartable,
 		}
 	}
 	emit("resource.exhausted", detail)
@@ -5737,9 +5952,13 @@ func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadL
 	if err != nil {
 		body = []byte(report.Detail)
 	}
+	summary := report.Detail
+	if summary == "" {
+		summary = ResourceExhaustedStopMessage
+	}
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      "resource-exhausted",
-		Summary:   ResourceExhaustedStopMessage,
+		Summary:   summary,
 		Body:      string(body),
 		Actor:     actor,
 		Source:    "ddx work",
@@ -6344,6 +6563,42 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 			clearNoChangesNextMinPower(b)
 			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
 		},
+	})
+}
+
+func parkNoEvidenceForOperator(store ExecuteBeadLoopStore, beadID, actor string, report ExecuteBeadReport, detail string, at time.Time) error {
+	reason := FailureModeNoEvidenceProduced
+	if strings.TrimSpace(report.PreserveRef) != "" || len(report.NoEvidencePaths) > 0 {
+		reason = "no_evidence_dirty_rescue"
+	}
+	if err := parkToProposedWithOperatorMeta(store, beadID, bead.ParkNoChangesOperatorRequired, ParkToProposedOpts{
+		Reason:          reason,
+		Summary:         "attempt produced dirty rescue but no landed evidence",
+		SuggestedAction: "inspect the dirty rescue patch, commit valid work manually, then move the bead back to open if another automated attempt is needed",
+		Since:           at,
+		CleanupLabels:   false,
+	}); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"reason":            FailureModeNoEvidenceProduced,
+		"bead_id":           beadID,
+		"attempt_id":        report.AttemptID,
+		"detail":            detail,
+		"preserve_ref":      report.PreserveRef,
+		"dirty_paths":       append([]string(nil), report.NoEvidencePaths...),
+		"base_rev":          report.BaseRev,
+		"result_rev":        report.ResultRev,
+		"suggested_action":  "salvage or discard the rescue patch before retrying",
+		"automation_action": "released claim and parked bead to proposed",
+	})
+	return store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   FailureModeNoEvidenceProduced,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
 	})
 }
 

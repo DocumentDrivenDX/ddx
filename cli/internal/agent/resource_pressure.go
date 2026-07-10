@@ -1,5 +1,7 @@
 package agent
 
+import "context"
+
 // ResourcePressureSeverity classifies how close a resource is to exhaustion.
 type ResourcePressureSeverity string
 
@@ -51,4 +53,28 @@ func CheckFDUsage(fdUsed int, fdLimit uint64) ResourcePressureCheck {
 		check.Severity = ResourcePressureOK
 	}
 	return check
+}
+
+// ResourcePressureReport bundles current-process FD pressure with
+// non-destructive resource observation counts so operators can see resource
+// trend data before any threshold trips a hard stop.
+type ResourcePressureReport struct {
+	ResourcePressureCheck
+	WorkerSubprocessCount  int64 `json:"worker_subprocess_count"`
+	TempWorktreeCount      int64 `json:"temp_worktree_count"`
+	StaleExecutionDirCount int64 `json:"stale_execution_dir_count"`
+}
+
+// ResourcePressureChecker reports current resource pressure without
+// performing cleanup or claim-blocking side effects. Implementations must be
+// non-destructive: Check must not remove files or kill processes.
+type ResourcePressureChecker interface {
+	Check(ctx context.Context) (ResourcePressureReport, error)
+}
+
+// CheckProcessFDUsage classifies the current process's open-file-descriptor
+// pressure against its RLIMIT_NOFILE soft limit.
+func CheckProcessFDUsage() ResourcePressureCheck {
+	diag := collectFDDiagnostics()
+	return CheckFDUsage(diag.Count, diag.SoftLimit)
 }

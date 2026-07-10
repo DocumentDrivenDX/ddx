@@ -299,6 +299,29 @@ func (s *Spoke) Start(ctx context.Context) error {
 	if err := s.register(ctx); err != nil {
 		return err
 	}
+	s.startHeartbeat(ctx)
+	return nil
+}
+
+// StartDegraded starts the spoke lifecycle even when the initial hub
+// registration fails for a transport-class error. The heartbeat loop will keep
+// retrying: once the hub is reachable, the first heartbeat receives 404 and
+// re-registers the spoke. Hub rejections and malformed URLs remain fatal.
+func (s *Spoke) StartDegraded(ctx context.Context) error {
+	if err := s.register(ctx); err != nil {
+		if !isTransientSpokeRegisterError(err) {
+			return err
+		}
+		s.mu.Lock()
+		s.hbErr = err
+		s.mu.Unlock()
+		s.logf("federation: initial spoke registration failed; starting degraded and will retry: %v", err)
+	}
+	s.startHeartbeat(ctx)
+	return nil
+}
+
+func (s *Spoke) startHeartbeat(ctx context.Context) {
 	// Persist current URL so the next start can detect a URL change.
 	_ = SaveSpokeState(s.statePath, &SpokeState{
 		NodeID:              s.cfg.NodeID,
@@ -306,7 +329,17 @@ func (s *Spoke) Start(ctx context.Context) error {
 		LastURL:             s.cfg.URL,
 	})
 	go s.heartbeatLoop(ctx)
-	return nil
+}
+
+func isTransientSpokeRegisterError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+		return true
+	}
+	var urlErr *url.Error
+	return errors.As(err, &urlErr)
 }
 
 // Shutdown stops the heartbeat loop and sends a best-effort deregister.

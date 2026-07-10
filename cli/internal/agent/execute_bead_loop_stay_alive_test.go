@@ -17,6 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,6 +197,50 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 	assert.Contains(t, out, "systemic; leaving beads untouched")
 	assert.Contains(t, out, "pre-claim hook blocked queue:")
 	assert.Equal(t, 1, strings.Count(out, "systemic; leaving beads untouched"))
+}
+
+func TestExecuteLoop_PreClaimCorruptGitStopsServerManagedWorker(t *testing.T) {
+	workDir, _, store := setupTrackerSyncRepo(t)
+
+	prevRunner := trackerSyncGitRunner
+	t.Cleanup(func() { trackerSyncGitRunner = prevRunner })
+	trackerSyncGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "fetch" {
+			return []byte("fatal: bad object HEAD"), assert.AnError
+		}
+		return internalgit.Command(ctx, gitDir, args...).CombinedOutput()
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run while corrupt git pre-claim sync is repeating")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var eventSink, logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:               executeloop.ModeWatch,
+		IdleInterval:       time.Millisecond,
+		Log:                &logBuf,
+		EventSink:          &eventSink,
+		ProjectRoot:        workDir,
+		TrackerSyncEnabled: true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "project_git_corrupt", result.OperatorAttention.Reason)
+	assert.Contains(t, logBuf.String(), "stopping work")
+	assert.Contains(t, eventSink.String(), "\"reason\":\"project_git_corrupt\"")
 }
 
 // TestPreClaimWarnSameFingerprintEscalatesAfterThreshold verifies that the

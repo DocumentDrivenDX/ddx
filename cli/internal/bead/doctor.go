@@ -35,8 +35,12 @@ type DoctorFinding struct {
 
 // DoctorReport is the output of BeadDoctor — an ordered list of findings.
 type DoctorReport struct {
-	Path     string
-	Findings []DoctorFinding
+	Path               string
+	Findings           []DoctorFinding
+	BackupPath         string   `json:"backup_path,omitempty"`
+	FixedFindingsCount int      `json:"fixed_findings_count,omitempty"`
+	FixedBeadIDs       []string `json:"fixed_bead_ids,omitempty"`
+	RepairArtifacts    []string `json:"repair_artifacts,omitempty"`
 }
 
 // Clean is true when there are no findings.
@@ -367,11 +371,18 @@ func BeadDoctorFix(path string, now func() time.Time) (DoctorReport, error) {
 	if err := os.WriteFile(backupPath, src, 0o644); err != nil {
 		return report, fmt.Errorf("bead doctor: write backup %s: %w", backupPath, err)
 	}
+	report.BackupPath = backupPath
+	report.FixedFindingsCount = len(report.Findings)
 
 	findingsByBead := make(map[string][]DoctorFinding)
 	for _, f := range report.Findings {
 		findingsByBead[f.BeadID] = append(findingsByBead[f.BeadID], f)
 	}
+	report.FixedBeadIDs = make([]string, 0, len(findingsByBead))
+	for beadID := range findingsByBead {
+		report.FixedBeadIDs = append(report.FixedBeadIDs, beadID)
+	}
+	sort.Strings(report.FixedBeadIDs)
 
 	lines := bytes.Split(src, []byte{'\n'})
 	var out bytes.Buffer
@@ -399,11 +410,12 @@ func BeadDoctorFix(path string, now func() time.Time) (DoctorReport, error) {
 		}
 
 		repairDir := filepath.Join(ddxDir, "executions", id, "repair-"+ts)
-		repaired, err := repairBead(raw, beadFindings, repairDir, ddxDir, now().UTC())
+		repaired, artifactRefs, err := repairBead(raw, beadFindings, repairDir, ddxDir, now().UTC())
 		if err != nil {
 			return report, err
 		}
 		if repaired {
+			report.RepairArtifacts = append(report.RepairArtifacts, artifactRefs...)
 			encoded, err := json.Marshal(raw)
 			if err != nil {
 				return report, fmt.Errorf("bead doctor: re-encode %s: %w", id, err)
@@ -429,7 +441,7 @@ func BeadDoctorFix(path string, now func() time.Time) (DoctorReport, error) {
 // repairBead applies per-field truncation and dependency-edge removals. It
 // updates raw in place and returns whether any changes were made plus a list of
 // audit references to include in the repair event body.
-func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir string, ts time.Time) (bool, error) {
+func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir string, ts time.Time) (bool, []string, error) {
 	artifactRefs := make([]string, 0, len(findings))
 	changed := false
 
@@ -442,7 +454,7 @@ func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir 
 	}
 	if needsFieldRepair {
 		if err := os.MkdirAll(repairDir, 0o755); err != nil {
-			return false, fmt.Errorf("bead doctor: mkdir repair dir: %w", err)
+			return false, nil, fmt.Errorf("bead doctor: mkdir repair dir: %w", err)
 		}
 	}
 
@@ -468,7 +480,7 @@ func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir 
 	}
 
 	if !changed {
-		return false, nil
+		return false, nil, nil
 	}
 
 	events, _ := raw["events"].([]any)
@@ -482,7 +494,7 @@ func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir 
 	})
 	raw["events"] = events
 	raw["updated_at"] = ts.Format(time.RFC3339Nano)
-	return true, nil
+	return true, artifactRefs, nil
 }
 
 // applyFieldRepair replaces raw[field] with a capped version and writes the

@@ -67,17 +67,22 @@ func trackerSyncOriginHeadBranch(ctx context.Context, projectRoot string) string
 	return strings.TrimPrefix(ref, prefix)
 }
 
-func syncTrackerBeforeClaim(ctx context.Context, projectRoot string, log io.Writer, emit func(string, map[string]any)) {
+func syncTrackerBeforeClaim(ctx context.Context, projectRoot string, log io.Writer, emit func(string, map[string]any)) error {
 	if strings.TrimSpace(projectRoot) == "" {
-		return
+		return nil
 	}
 	if err := commitTrackerLocked(projectRoot); err != nil {
 		emitTrackerSyncAttention(log, emit, "pre_claim", "", "tracker_sync_commit_failed", err.Error())
-		return
+		return err
 	}
 	if err := trackerSyncFetchAndMerge(ctx, projectRoot, log, emit, "pre_claim"); err != nil {
+		if isCorruptTrackerSyncError(err.Error()) {
+			emitTrackerSyncAttention(log, emit, "pre_claim", "", "project_git_corrupt", err.Error())
+			return err
+		}
 		emitTrackerSyncAttention(log, emit, "pre_claim", "", "tracker_sync_merge_failed", err.Error())
 	}
+	return nil
 }
 
 func syncTrackerAfterClaim(ctx context.Context, projectRoot, beadID string, log io.Writer, emit func(string, map[string]any)) {
@@ -106,13 +111,21 @@ func trackerSyncFetchAndMerge(ctx context.Context, projectRoot string, log io.Wr
 		return nil
 	}
 	if out, err := trackerSyncGitRunner(ctx, projectRoot, "fetch", "origin"); err != nil {
-		emitTrackerSyncWarning(log, emit, stage, "fetch_failed", strings.TrimSpace(string(out)))
+		outText := strings.TrimSpace(string(out))
+		if isCorruptTrackerSyncError(outText) {
+			return fmt.Errorf("git fetch origin: %s: %w", outText, err)
+		}
+		emitTrackerSyncWarning(log, emit, stage, "fetch_failed", outText)
 		return nil
 	}
 	branch := resolveTrackerSyncBranch(ctx, projectRoot)
 	if out, err := trackerSyncGitRunner(ctx, projectRoot, "merge", "--no-ff", "-m", "chore: sync origin/"+branch, "origin/"+branch); err != nil {
 		_, _ = trackerSyncGitRunner(ctx, projectRoot, "merge", "--abort")
-		emitTrackerSyncWarning(log, emit, stage, "merge_failed", strings.TrimSpace(string(out)))
+		outText := strings.TrimSpace(string(out))
+		if isCorruptTrackerSyncError(outText) {
+			return fmt.Errorf("git merge --no-ff origin/%s: %s: %w", branch, outText, err)
+		}
+		emitTrackerSyncWarning(log, emit, stage, "merge_failed", outText)
 		return err
 	}
 	return nil
@@ -191,5 +204,20 @@ func emitTrackerSyncAttention(log io.Writer, emit func(string, map[string]any), 
 			payload["detail"] = detail
 		}
 		emit("loop.operator_attention", payload)
+	}
+}
+
+func isCorruptTrackerSyncError(detail string) bool {
+	if detail == "" {
+		return false
+	}
+	lower := strings.ToLower(detail)
+	switch {
+	case strings.Contains(lower, "fatal: bad object"),
+		strings.Contains(lower, "invalid sha1 pointer"),
+		strings.Contains(lower, "did not send all necessary objects"):
+		return true
+	default:
+		return false
 	}
 }

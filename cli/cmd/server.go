@@ -107,6 +107,10 @@ MCP (POST /mcp):
 			// skills or legacy symlinks without blocking server startup.
 			preflightResult := checkProjectRuntimePreflight(projectRoot)
 			emitServerPreflightDiagnostics(cmd.ErrOrStderr(), preflightResult)
+			pressureChecker := buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride)
+			if pressureReport, pressureErr := pressureChecker.Check(cmd.Context()); pressureErr == nil {
+				emitServerResourcePressureDiagnostics(cmd.ErrOrStderr(), pressureReport)
+			}
 
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
@@ -125,10 +129,10 @@ MCP (POST /mcp):
 				if selfURL == "" {
 					selfURL = "https://" + listenAddr
 				}
-				if err := srv.EnableSpokeMode(cmd.Context(), hubURL, selfURL); err != nil {
+				if err := srv.EnableSpokeModeDegraded(cmd.Context(), hubURL, selfURL); err != nil {
 					return fmt.Errorf("federation spoke registration failed: %w", err)
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "DDx spoke-mode enabled (registered with hub %s as %s)\n", hubURL, selfURL)
+				fmt.Fprintf(cmd.OutOrStdout(), "DDx spoke-mode enabled (hub %s as %s; registration retries if hub is unavailable)\n", hubURL, selfURL)
 			}
 
 			// Build tsnet config. tsnet is on by default — flags override config,

@@ -66,6 +66,41 @@ func TestServerManagedWorker_WritesOperatorAttentionResult(t *testing.T) {
 	}
 }
 
+func TestServerManagedWorker_WritesLastFailureStatus(t *testing.T) {
+	const workerID = "worker-no-evidence"
+	root := projectWithWorkerDir(t, workerID)
+	cmd := newServerManagedCmd(t, workerID)
+
+	result := &agent.ExecuteBeadLoopResult{
+		StopCondition:     "OperatorAttention",
+		LastFailureStatus: agent.ExecuteBeadStatusNoEvidenceProduced,
+		Results: []agent.ExecuteBeadReport{{
+			Status: agent.ExecuteBeadStatusNoEvidenceProduced,
+			Detail: "agent exited without a commit or no_changes_rationale.txt",
+		}},
+	}
+	writeServerManagedResult(cmd, root, result)
+
+	path := filepath.Join(ddxroot.JoinProject(root, "workers"), workerID, "result.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected result.json to be written: %v", err)
+	}
+	var got serverpkg.ManagedWorkerResult
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal result.json: %v", err)
+	}
+	if got.LastFailureStatus != agent.ExecuteBeadStatusNoEvidenceProduced {
+		t.Fatalf("missing last failure status: %+v", got)
+	}
+	if got.LastFailureDetail == "" {
+		t.Fatalf("missing last failure detail: %+v", got)
+	}
+	if !got.IsRestartBlocking() {
+		t.Fatal("no-evidence result must classify as restart-blocking")
+	}
+}
+
 func TestServerManagedWorker_NoResultWhenFlagAbsent(t *testing.T) {
 	const workerID = "worker-none"
 	root := projectWithWorkerDir(t, workerID)

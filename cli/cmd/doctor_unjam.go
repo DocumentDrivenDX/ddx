@@ -9,7 +9,10 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +23,19 @@ type doctorUnjamReport struct {
 	RemovedWorktrees  []doctorUnjamWorktree `json:"removed_worktrees"`
 	PrunedWorktrees   int                   `json:"pruned_worktrees"`
 	Actions           []doctorUnjamAction   `json:"actions"`
+	BeadDoctorRepair  *doctorUnjamRepair    `json:"bead_doctor_repair,omitempty"`
+	ReleasedClaims    []string              `json:"released_claims,omitempty"`
+	PreservedClaims   []string              `json:"preserved_claims,omitempty"`
+}
+
+type doctorUnjamRepair struct {
+	Path               string   `json:"path"`
+	Clean              bool     `json:"clean"`
+	FindingsCount      int      `json:"findings_count"`
+	FixedFindingsCount int      `json:"fixed_findings_count"`
+	FixedBeadIDs       []string `json:"fixed_bead_ids,omitempty"`
+	BackupPath         string   `json:"backup_path,omitempty"`
+	RepairArtifacts    []string `json:"repair_artifacts,omitempty"`
 }
 
 type doctorUnjamWorktree struct {
@@ -46,10 +62,51 @@ func (f *CommandFactory) runDoctorUnjam(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	repairReport, err := unjamExecuteBeadRepair(cmd.Context(), projectRoot)
+	if err != nil {
+		return err
+	}
+	report.BeadDoctorRepair = repairReport
+	if repairReport != nil && !repairReport.Clean {
+		report.Actions = append(report.Actions, doctorUnjamAction{
+			Kind:  "bead_doctor_fix",
+			Path:  repairReport.Path,
+			Count: repairReport.FixedFindingsCount,
+		})
+	}
+	claimReport, err := unjamExecuteBeadClaims(cmd.Context(), projectRoot)
+	if err != nil {
+		return err
+	}
+	report.ReleasedClaims = claimReport.ReleasedClaims
+	report.PreservedClaims = claimReport.PreservedClaims
 
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
 	return enc.Encode(report)
+}
+
+func unjamExecuteBeadClaims(ctx context.Context, projectRoot string) (server.WorkerClaimCleanupReport, error) {
+	manager := server.NewWorkerManager(projectRoot)
+	return manager.UnjamStaleClaims(ctx)
+}
+
+func unjamExecuteBeadRepair(ctx context.Context, projectRoot string) (*doctorUnjamRepair, error) {
+	_ = ctx
+	path := ddxroot.JoinProject(projectRoot, "beads.jsonl")
+	report, err := bead.BeadDoctorFix(path, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &doctorUnjamRepair{
+		Path:               report.Path,
+		Clean:              report.Clean(),
+		FindingsCount:      len(report.Findings),
+		FixedFindingsCount: report.FixedFindingsCount,
+		FixedBeadIDs:       append([]string(nil), report.FixedBeadIDs...),
+		BackupPath:         report.BackupPath,
+		RepairArtifacts:    append([]string(nil), report.RepairArtifacts...),
+	}, nil
 }
 
 func unjamExecuteBeadWorktrees(ctx context.Context, projectRoot string) (doctorUnjamReport, error) {

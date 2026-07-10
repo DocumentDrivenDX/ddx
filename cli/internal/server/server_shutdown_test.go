@@ -14,15 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// spyBeadHub wraps a real WatcherHub and records whether Close was called.
+// spyBeadHub wraps a real lifecycle subscriber and records whether Close was
+// called.
 type spyBeadHub struct {
-	*bead.WatcherHub
+	beadHubCloser
 	closeCalled bool
 }
 
 func (s *spyBeadHub) Close() {
 	s.closeCalled = true
-	s.WatcherHub.Close()
+	s.beadHubCloser.Close()
 }
 
 // TC-SERVER-SHUTDOWN-001: Shutdown stops server-owned workers before closing
@@ -41,9 +42,10 @@ func TestServerShutdownCallsWorkerManagerShutdown(t *testing.T) {
 	srv.EnableManagedWorkers()
 
 	// Inject a spy so we can observe the Close() call.
-	spy := &spyBeadHub{WatcherHub: bead.NewWatcherHub(func(projectID string) (bead.BeadReader, error) {
+	hub := bead.NewLifecycleSubscriber(func(projectID string) (bead.BeadReader, error) {
 		return bead.NewStore(ddxroot.JoinProject(projectID)), nil
-	}, 250*time.Millisecond)}
+	}, 250*time.Millisecond).(beadHubCloser)
+	spy := &spyBeadHub{beadHubCloser: hub}
 	srv.beadHub = spy
 
 	// Prime one coordinator so StopAll has an entry to clear.

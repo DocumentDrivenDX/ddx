@@ -3,6 +3,7 @@ package bead
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // RawBackend is the low-level storage contract — read/write the entire bead
@@ -110,6 +111,18 @@ type ReadOnlyBackend interface {
 	BeadQueries
 	BeadDependencyReader
 	BeadInterchangeReader
+}
+
+// LifecycleEvent is emitted by a LifecycleSubscriber when a bead is created
+// or updated.
+type LifecycleEvent struct {
+	EventID   string
+	BeadID    string
+	Kind      string // "created", "status_changed", "updated"
+	Summary   string
+	Body      string
+	Actor     string
+	Timestamp time.Time
 }
 
 // LifecycleSubscriber is the parallel subscription surface from TD-027.

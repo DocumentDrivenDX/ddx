@@ -91,6 +91,46 @@ func TestSpokeRegistersOnStart(t *testing.T) {
 	}
 }
 
+func TestEnableSpokeModeDegradedSurvivesInitialHubTimeout(t *testing.T) {
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+	}))
+	hub.Close()
+
+	dir := setupTestDir(t)
+	spoke := New(":0", dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := &http.Client{Timeout: 10 * time.Millisecond}
+	statePath := spokeStatePath(t)
+	err := spoke.EnableSpokeModeDegraded(ctx, hub.URL, "https://spoke-self:9000",
+		WithSpokeStatePath(statePath),
+		WithSpokeHeartbeatInterval(time.Hour),
+		WithSpokeHTTPClient(client),
+		WithSpokeNodeID("spoke-degraded"),
+	)
+	if err != nil {
+		t.Fatalf("EnableSpokeModeDegraded should keep the server up on transport failure: %v", err)
+	}
+	if !spoke.SpokeMode {
+		t.Fatalf("Server.SpokeMode should be true after degraded startup")
+	}
+	if spoke.SpokeAgent() == nil {
+		t.Fatalf("spoke agent should be retained so heartbeat can retry registration")
+	}
+	if spoke.SpokeAgent().LastHeartbeatError() == nil {
+		t.Fatalf("initial registration error should be visible for diagnostics")
+	}
+	st, err := federation.LoadSpokeState(statePath)
+	if err != nil {
+		t.Fatalf("LoadSpokeState: %v", err)
+	}
+	if st.LastURL != "https://spoke-self:9000" {
+		t.Fatalf("degraded startup should still persist spoke URL, got %q", st.LastURL)
+	}
+}
+
 // AC: Re-start with same node_id is idempotent (replaces, not duplicates).
 func TestSpokeLifecycle_Register_Idempotent(t *testing.T) {
 	hub := newHubServer(t, false)

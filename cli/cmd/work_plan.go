@@ -81,7 +81,7 @@ func (f *CommandFactory) runWorkPlan(cmd *cobra.Command, _ []string) error {
 
 	// Use beadStore() so that linked-worktree invocations resolve to the
 	// primary worktree's canonical store (same path as bead show/list/export).
-	store := f.beadStore()
+	store := f.beadStoreConcrete()
 
 	filters := agent.PickerFilters{
 		LabelFilter:  labelFilter,

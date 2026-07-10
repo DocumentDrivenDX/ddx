@@ -160,6 +160,11 @@ type WorkerExecutionResult struct {
 	RetryAfter        string `json:"retry_after,omitempty"`
 }
 
+type WorkerClaimCleanupReport struct {
+	ReleasedClaims  []string `json:"released_claims,omitempty"`
+	PreservedClaims []string `json:"preserved_claims,omitempty"`
+}
+
 type workerHandle struct {
 	record  WorkerRecord
 	cancel  context.CancelFunc
@@ -1475,6 +1480,107 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 		BeadID:    beadID,
 	})
 	return m.writeRecord(dir, rec)
+}
+
+func (m *WorkerManager) UnjamStaleClaims(ctx context.Context) (WorkerClaimCleanupReport, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	report := WorkerClaimCleanupReport{
+		ReleasedClaims:  []string{},
+		PreservedClaims: []string{},
+	}
+	seen := map[string]struct{}{}
+
+	entries, err := os.ReadDir(m.rootDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return report, err
+	}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return report, err
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		id := entry.Name()
+		dir := filepath.Join(m.rootDir, id)
+		rec, err := m.readRecord(dir)
+		if err != nil {
+			continue
+		}
+		if rec.State != "running" && rec.State != "stopping" {
+			continue
+		}
+		beadID := ""
+		if rec.CurrentAttempt != nil {
+			beadID = rec.CurrentAttempt.BeadID
+		}
+		if beadID == "" {
+			beadID = rec.CurrentBead
+		}
+		if beadID == "" {
+			continue
+		}
+		if _, ok := seen[beadID]; ok {
+			continue
+		}
+		seen[beadID] = struct{}{}
+
+		projectRoot := rec.ProjectRoot
+		if projectRoot == "" {
+			projectRoot = m.projectRoot
+		}
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+		if staleDiskEntryCanReleaseClaim(store, beadID) {
+			if err := m.stopStaleDiskEntry(id); err != nil {
+				return report, err
+			}
+			report.ReleasedClaims = append(report.ReleasedClaims, beadID)
+			continue
+		}
+		report.PreservedClaims = append(report.PreservedClaims, beadID)
+	}
+
+	claimRoot := bead.ClaimLivenessRoot(ddxroot.JoinProject(m.projectRoot))
+	claimEntries, err := os.ReadDir(claimRoot)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return report, err
+	}
+	for _, entry := range claimEntries {
+		if err := ctx.Err(); err != nil {
+			return report, err
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		beadID := strings.TrimSuffix(entry.Name(), ".json")
+		if _, ok := seen[beadID]; ok {
+			continue
+		}
+		seen[beadID] = struct{}{}
+		store := bead.NewStore(ddxroot.JoinProject(m.projectRoot))
+		if staleDiskEntryCanReleaseClaim(store, beadID) {
+			if err := store.Unclaim(beadID); err != nil {
+				return report, err
+			}
+			now := time.Now().UTC()
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.stopped",
+				Summary:   "stop (unjam)",
+				Body:      "reason=doctor-unjam",
+				Actor:     "ddx",
+				Source:    "doctor-unjam",
+				CreatedAt: now,
+			})
+			report.ReleasedClaims = append(report.ReleasedClaims, beadID)
+			continue
+		}
+		report.PreservedClaims = append(report.PreservedClaims, beadID)
+	}
+
+	return report, nil
 }
 
 // staleDiskEntryCanReleaseClaim reports whether stopStaleDiskEntry may safely

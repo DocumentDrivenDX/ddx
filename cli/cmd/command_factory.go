@@ -94,6 +94,10 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
+	// resourcePressureCheckerOverride, when non-nil, replaces the default
+	// resource pressure checker used by ddx try, ddx work, and ddx server.
+	resourcePressureCheckerOverride agent.ResourcePressureChecker
+
 	// workBinaryPathOverride, when non-nil, resolves the installed ddx binary
 	// used for watch-mode self-refresh checks.
 	workBinaryPathOverride func() string
@@ -197,6 +201,13 @@ More information:
 
 	// Store flag values in command context for access by subcommands
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// The provider-launch wrapper is a hot-path exec shim. It must not pay
+		// for config/version/update startup work before it hands control to the
+		// resolved provider binary.
+		if cmd.Name() == agent.ProviderLaunchSubcommand {
+			return nil
+		}
+
 		// Initialize config with the local viper instance
 		f.initConfig(cfgFile, libraryPath)
 
@@ -217,6 +228,10 @@ More information:
 
 	// Display update notification and staleness hints after command completes
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == agent.ProviderLaunchSubcommand {
+			return nil
+		}
+
 		if err := f.displayUpdateNotification(cmd); err != nil {
 			return err
 		}

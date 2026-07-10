@@ -91,7 +91,7 @@ Examples:
   ddx bead validate-ready --threshold 0.75`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			s := f.beadStoreConcrete()
 			beads, err := s.ReadyExecution()
 			if err != nil {
 				return fmt.Errorf("ready-execution: %w", err)

@@ -86,6 +86,17 @@ const (
 // queue.
 const ResourceExhaustedStopMessage = "resource exhausted after cleanup; stopping work loop"
 
+// FDExhaustionStopMessage replaces ResourceExhaustedStopMessage when the
+// resource preflight determined the failure is worker-local open-file
+// descriptor exhaustion (EMFILE/ENFILE) rather than genuine root-storage
+// exhaustion. A fresh worker process gets a fresh fd table, so this failure
+// is restartable rather than a persistent storage blocker.
+const FDExhaustionStopMessage = "resource exhausted: worker file-descriptor limit reached; worker-local and restartable"
+
+// ResourceExhaustionDiagnosisFD is the ExecuteBeadReport.ResourceExhaustionDiagnosis
+// value used when the preflight failure was fd exhaustion.
+const ResourceExhaustionDiagnosisFD = "fd_exhaustion"
+
 // ClassifyFailureMode derives a failure_mode for a worker-level result from
 // its outcome, exit code, and error message. Returns "" when the outcome is
 // task_succeeded (success carries no failure mode). task_no_changes always

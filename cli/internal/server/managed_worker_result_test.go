@@ -50,6 +50,16 @@ func TestManagedWorkerResult_RoundTripAndClassification(t *testing.T) {
 		t.Fatal("operator-attention result must be restart-blocking")
 	}
 
+	camel := ManagedWorkerResult{StopCondition: "OperatorAttention"}
+	if !camel.IsRestartBlocking() {
+		t.Fatal("camel-case operator attention stop must be restart-blocking")
+	}
+
+	noEvidence := ManagedWorkerResult{LastFailureStatus: "no_evidence_produced"}
+	if !noEvidence.IsRestartBlocking() {
+		t.Fatal("no-evidence worker result must be restart-blocking")
+	}
+
 	// A normal drain must not be restart-blocking.
 	drained := ManagedWorkerResult{StopCondition: "drained"}
 	if drained.IsRestartBlocking() {
