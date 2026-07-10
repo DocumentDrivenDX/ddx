@@ -333,6 +333,73 @@ func TestImporter_Apply_WritesToPostgres(t *testing.T) {
 	assert.Equal(t, "ddx-mta-arch1", events[3].EventOf)
 }
 
+// TestImporter_Apply_PreservesArchiveState covers AC2: archived source rows
+// (from beads-archive.jsonl, carrying archived_at) must remain distinguishable
+// from active source rows (from beads.jsonl, no archived_at) after import,
+// when read back through the Axon-backed Store's read surface.
+func TestImporter_Apply_PreservesArchiveState(t *testing.T) {
+	axonStore, _, _ := loadMigrateToAxonFixture(t)
+
+	_, err := axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+
+	all, err := axonStore.ReadAll(testCtx())
+	require.NoError(t, err)
+	byID := make(map[string]Bead, len(all))
+	for _, b := range all {
+		byID[b.ID] = b
+	}
+
+	for _, id := range []string{"ddx-mta-active1", "ddx-mta-active2", "ddx-mta-active3"} {
+		b, ok := byID[id]
+		require.True(t, ok, "active bead %s must be imported", id)
+		_, hasArchivedAt := b.Extra["archived_at"]
+		assert.False(t, hasArchivedAt, "active bead %s must not carry archived_at", id)
+	}
+
+	for _, id := range []string{"ddx-mta-arch1", "ddx-mta-arch2"} {
+		b, ok := byID[id]
+		require.True(t, ok, "archived bead %s must be imported", id)
+		archivedAt, hasArchivedAt := b.Extra["archived_at"]
+		assert.True(t, hasArchivedAt, "archived bead %s must carry archived_at", id)
+		assert.NotEmpty(t, archivedAt)
+	}
+}
+
+// TestImporter_Apply_WritesInlineEvents covers AC3: inline events attached to
+// source beads must be persisted alongside their imported bead records and
+// readable back through Store.Events for both active and archived beads.
+func TestImporter_Apply_WritesInlineEvents(t *testing.T) {
+	axonStore, _, _ := loadMigrateToAxonFixture(t)
+
+	_, err := axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+
+	events, err := axonStore.Events("ddx-mta-active2")
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, "alice claimed", events[0].Summary)
+	assert.Equal(t, "progress note", events[1].Summary)
+
+	events, err = axonStore.Events("ddx-mta-active3")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "shipped", events[0].Summary)
+
+	events, err = axonStore.Events("ddx-mta-arch1")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "closed by bob", events[0].Summary)
+
+	events, err = axonStore.Events("ddx-mta-arch2")
+	require.NoError(t, err)
+	assert.Len(t, events, 0)
+
+	events, err = axonStore.Events("ddx-mta-active1")
+	require.NoError(t, err)
+	assert.Len(t, events, 0)
+}
+
 func TestImporter_Apply_Idempotent_OnReRun(t *testing.T) {
 	axonStore, transport, _ := loadMigrateToAxonFixture(t)
 	stats, err := axonStore.migrateToAxon(testCtx())
