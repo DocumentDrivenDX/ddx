@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,14 +19,25 @@ import (
 )
 
 type doctorUnjamTestReport struct {
-	ProjectRoot       string                `json:"project_root"`
-	Clean             bool                  `json:"clean"`
-	PrunableWorktrees []doctorUnjamWorktree `json:"prunable_worktrees"`
-	RemovedWorktrees  []doctorUnjamWorktree `json:"removed_worktrees"`
-	PrunedWorktrees   int                   `json:"pruned_worktrees"`
-	Actions           []doctorUnjamAction   `json:"actions"`
-	ReleasedClaims    []string              `json:"released_claims,omitempty"`
-	PreservedClaims   []string              `json:"preserved_claims,omitempty"`
+	ProjectRoot       string                 `json:"project_root"`
+	Clean             bool                   `json:"clean"`
+	PrunableWorktrees []doctorUnjamWorktree  `json:"prunable_worktrees"`
+	RemovedWorktrees  []doctorUnjamWorktree  `json:"removed_worktrees"`
+	PrunedWorktrees   int                    `json:"pruned_worktrees"`
+	Actions           []doctorUnjamAction    `json:"actions"`
+	BeadDoctorRepair  *doctorUnjamRepairView `json:"bead_doctor_repair,omitempty"`
+	ReleasedClaims    []string               `json:"released_claims,omitempty"`
+	PreservedClaims   []string               `json:"preserved_claims,omitempty"`
+}
+
+type doctorUnjamRepairView struct {
+	Path               string   `json:"path"`
+	Clean              bool     `json:"clean"`
+	FindingsCount      int      `json:"findings_count"`
+	FixedFindingsCount int      `json:"fixed_findings_count"`
+	FixedBeadIDs       []string `json:"fixed_bead_ids,omitempty"`
+	BackupPath         string   `json:"backup_path,omitempty"`
+	RepairArtifacts    []string `json:"repair_artifacts,omitempty"`
 }
 
 func TestDoctorUnjam_PrunesStaleWorktrees(t *testing.T) {
@@ -137,11 +149,132 @@ func TestDoctorUnjam_ClaimLeaseReleaseIsIdempotent(t *testing.T) {
 	assert.Empty(t, readBeadEvents(t, projectRoot, beadID)[1:])
 }
 
+func TestDoctorUnjam_PrunesPhantomDeps(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	activePath := filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl")
+	realTargetID := "ddx-real-target"
+	referrerID := "ddx-referrer"
+	writeTrackerRows(t, activePath, []string{
+		mustBeadJSON(t, map[string]any{"id": realTargetID, "title": "real target", "status": "open", "priority": 1, "issue_type": bead.IssueTypeOperatorPrompt}),
+		mustBeadJSON(t, map[string]any{
+			"id":         referrerID,
+			"title":      "referrer",
+			"status":     "open",
+			"priority":   1,
+			"issue_type": bead.IssueTypeOperatorPrompt,
+			"dependencies": []map[string]any{
+				{"issue_id": referrerID, "depends_on_id": "ddx-missing-target", "type": "blocks"},
+				{"issue_id": referrerID, "depends_on_id": realTargetID, "type": "blocks"},
+			},
+		}),
+	})
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	require.NotNil(t, report.BeadDoctorRepair)
+	assert.False(t, report.BeadDoctorRepair.Clean)
+	assert.Greater(t, report.BeadDoctorRepair.FixedFindingsCount, 0)
+	assert.Contains(t, report.BeadDoctorRepair.FixedBeadIDs, referrerID)
+	assert.NotEmpty(t, report.BeadDoctorRepair.BackupPath)
+	require.NotEmpty(t, report.Actions)
+	assert.Equal(t, "bead_doctor_fix", report.Actions[0].Kind)
+
+	rewritten := readTrackerRows(t, activePath)
+	require.Len(t, rewritten, 2)
+	referrer := decodeBeadRecord(t, rewritten[1])
+	require.Len(t, referrer.Dependencies, 1)
+	assert.Equal(t, realTargetID, referrer.Dependencies[0].DependsOnID)
+}
+
+func TestDoctorUnjam_PreservesArchivedDependencyTargets(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	activePath := filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl")
+	archivePath := filepath.Join(projectRoot, ddxroot.DirName, "beads-archive.jsonl")
+	archivedID := "ddx-archived-target"
+	referrerID := "ddx-archive-referrer"
+	writeTrackerRows(t, archivePath, []string{
+		mustBeadJSON(t, map[string]any{"id": archivedID, "title": "archived target", "status": "closed", "priority": 1, "issue_type": bead.IssueTypeOperatorPrompt}),
+	})
+	writeTrackerRows(t, activePath, []string{
+		mustBeadJSON(t, map[string]any{
+			"id":         referrerID,
+			"title":      "archive referrer",
+			"status":     "open",
+			"priority":   1,
+			"issue_type": bead.IssueTypeOperatorPrompt,
+			"dependencies": []map[string]any{
+				{"issue_id": referrerID, "depends_on_id": archivedID, "type": "blocks"},
+			},
+		}),
+	})
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	require.NotNil(t, report.BeadDoctorRepair)
+	assert.True(t, report.BeadDoctorRepair.Clean)
+	assert.Zero(t, report.BeadDoctorRepair.FixedFindingsCount)
+	assert.Empty(t, report.BeadDoctorRepair.BackupPath)
+
+	rewritten := readTrackerRows(t, activePath)
+	require.Len(t, rewritten, 1)
+	referrer := decodeBeadRecord(t, rewritten[0])
+	require.Len(t, referrer.Dependencies, 1)
+	assert.Equal(t, archivedID, referrer.Dependencies[0].DependsOnID)
+}
+
+func TestDoctorUnjam_BeadDoctorRepairSummaryAndIdempotency(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	activePath := filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl")
+	referrerID := "ddx-summary-referrer"
+	writeTrackerRows(t, activePath, []string{
+		mustBeadJSON(t, map[string]any{
+			"id":         referrerID,
+			"title":      "summary referrer",
+			"status":     "open",
+			"priority":   1,
+			"issue_type": bead.IssueTypeOperatorPrompt,
+			"dependencies": []map[string]any{
+				{"issue_id": referrerID, "depends_on_id": "ddx-summary-missing", "type": "blocks"},
+			},
+		}),
+	})
+
+	factory := NewCommandFactory(projectRoot)
+	firstOutput, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+	firstReport := decodeDoctorUnjamReport(t, firstOutput)
+	require.NotNil(t, firstReport.BeadDoctorRepair)
+	assert.False(t, firstReport.BeadDoctorRepair.Clean)
+	assert.Equal(t, 1, firstReport.BeadDoctorRepair.FixedFindingsCount)
+	assert.Contains(t, firstReport.BeadDoctorRepair.FixedBeadIDs, referrerID)
+	assert.NotEmpty(t, firstReport.BeadDoctorRepair.BackupPath)
+	require.NotEmpty(t, firstReport.Actions)
+	assert.Equal(t, "bead_doctor_fix", firstReport.Actions[0].Kind)
+	assert.Equal(t, 1, firstReport.Actions[0].Count)
+
+	secondOutput, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+	secondReport := decodeDoctorUnjamReport(t, secondOutput)
+	require.NotNil(t, secondReport.BeadDoctorRepair)
+	assert.True(t, secondReport.BeadDoctorRepair.Clean)
+	assert.Zero(t, secondReport.BeadDoctorRepair.FixedFindingsCount)
+	assert.Empty(t, secondReport.BeadDoctorRepair.BackupPath)
+	assert.Empty(t, secondReport.Actions, "clean second run must not report repair actions")
+}
+
 func setupDoctorUnjamRepo(t *testing.T) string {
 	t.Helper()
 
 	projectRoot := t.TempDir()
 	initGitRepo(t, projectRoot)
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl"), nil, 0o644))
 	return projectRoot
 }
 
@@ -238,4 +371,40 @@ func decodeDoctorUnjamReport(t *testing.T, output string) doctorUnjamTestReport 
 	var report doctorUnjamTestReport
 	require.NoError(t, json.Unmarshal([]byte(output), &report), output)
 	return report
+}
+
+func writeTrackerRows(t *testing.T, path string, rows []string) {
+	t.Helper()
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	content := strings.Join(rows, "\n") + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func mustBeadJSON(t *testing.T, beadData map[string]any) string {
+	t.Helper()
+
+	data, err := json.Marshal(beadData)
+	require.NoError(t, err)
+	return string(data)
+}
+
+func readTrackerRows(t *testing.T, path string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	rows := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(rows) == 1 && rows[0] == "" {
+		return nil
+	}
+	return rows
+}
+
+func decodeBeadRecord(t *testing.T, row string) bead.Bead {
+	t.Helper()
+
+	var b bead.Bead
+	require.NoError(t, json.Unmarshal([]byte(row), &b))
+	return b
 }
