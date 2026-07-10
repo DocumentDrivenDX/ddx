@@ -104,6 +104,15 @@ func TestWork_WatchKillingWorkerReapsProviderChildWithin5s(t *testing.T) {
 	buildDDx.Stderr = os.Stderr
 	require.NoError(t, buildDDx.Run(), "build ddx binary for shim wrapper")
 
+	// Run the worker from a project root polluted with legacy DDx skill
+	// symlinks (bead ddx-42655139): the provider-launch wrapper must
+	// stay a minimal exec shim and reap the provider child within 5s
+	// even when project runtime preflight/doctor diagnostics would
+	// otherwise fire for this working tree.
+	projectRoot := filepath.Join(tmp, "project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	installLegacySkillSymlinkLayout(t, projectRoot)
+
 	// Plant a stub `codex` that records its PID then sleeps. It must
 	// live in its own dir so we can prepend it to PATH and have it
 	// found before any real codex on the host.
@@ -121,6 +130,7 @@ func TestWork_WatchKillingWorkerReapsProviderChildWithin5s(t *testing.T) {
 	require.NoError(t, os.WriteFile(workerScript, []byte(worker), 0o755))
 
 	workerCmd := exec.Command(workerScript)
+	workerCmd.Dir = projectRoot
 	// The worker must be its own process group leader so SIGKILL of
 	// the worker alone does not collaterally tear down the test
 	// runner's process group (which would defeat the assertion).
