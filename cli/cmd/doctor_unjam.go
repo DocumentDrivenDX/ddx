@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,8 @@ type doctorUnjamReport struct {
 	RemovedWorktrees  []doctorUnjamWorktree `json:"removed_worktrees"`
 	PrunedWorktrees   int                   `json:"pruned_worktrees"`
 	Actions           []doctorUnjamAction   `json:"actions"`
+	ReleasedClaims    []string              `json:"released_claims,omitempty"`
+	PreservedClaims   []string              `json:"preserved_claims,omitempty"`
 }
 
 type doctorUnjamWorktree struct {
@@ -46,10 +49,21 @@ func (f *CommandFactory) runDoctorUnjam(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	claimReport, err := unjamExecuteBeadClaims(cmd.Context(), projectRoot)
+	if err != nil {
+		return err
+	}
+	report.ReleasedClaims = claimReport.ReleasedClaims
+	report.PreservedClaims = claimReport.PreservedClaims
 
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
 	return enc.Encode(report)
+}
+
+func unjamExecuteBeadClaims(ctx context.Context, projectRoot string) (server.WorkerClaimCleanupReport, error) {
+	manager := server.NewWorkerManager(projectRoot)
+	return manager.UnjamStaleClaims(ctx)
 }
 
 func unjamExecuteBeadWorktrees(ctx context.Context, projectRoot string) (doctorUnjamReport, error) {
