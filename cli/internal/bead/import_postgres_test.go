@@ -271,6 +271,9 @@ func TestImporter_PreservesExtras(t *testing.T) {
 	assert.Equal(t, "FEAT-042", got.Extra["spec-id"])
 	assert.Equal(t, true, got.Extra["execution-eligible"])
 	assert.Equal(t, "custom-val", got.Extra["custom-key"])
+	_, hasEvents := sourceBead.Extra["events"]
+	assert.False(t, hasEvents, "import must not mutate the source bead extras map")
+	assert.Equal(t, 3, len(sourceBead.Extra))
 }
 
 func TestImporter_MigratesAttachments(t *testing.T) {
