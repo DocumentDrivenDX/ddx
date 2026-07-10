@@ -418,6 +418,38 @@ func TestImporter_Apply_Idempotent_OnReRun(t *testing.T) {
 	assert.Equal(t, eventsBefore, eventsAfter, "second migration must not duplicate event rows")
 }
 
+func TestImporter_Apply_Idempotent_DoesNotRewriteMatchingRows(t *testing.T) {
+	axonStore, transport, _ := loadMigrateToAxonFixture(t)
+	_, err := axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+
+	beadsBefore, _ := transport.snapshot()
+	require.NotEmpty(t, beadsBefore)
+	versionsBefore := make(map[string]int, len(beadsBefore))
+	updatedAtBefore := make(map[string]time.Time, len(beadsBefore))
+	for _, b := range beadsBefore {
+		versionsBefore[b.ID] = b.Version
+		updatedAtBefore[b.ID] = b.UpdatedAt
+	}
+
+	_, err = axonStore.migrateToAxon(testCtx())
+	require.NoError(t, err)
+
+	beadsAfter, _ := transport.snapshot()
+	require.Len(t, beadsAfter, len(beadsBefore), "second migration must not add or remove target rows")
+	for _, b := range beadsAfter {
+		assert.Equal(t, versionsBefore[b.ID], b.Version, "rerun must not rewrite matching target row %s", b.ID)
+		assert.Equal(t, updatedAtBefore[b.ID], b.UpdatedAt, "rerun must not touch write timestamp for matching target row %s", b.ID)
+	}
+}
+
+func TestStoreMigrateToAxonWithOptions_UsesImporter(t *testing.T) {
+	s, _, _ := loadMigrateToAxonFixture(t)
+	stats, err := s.migrateToAxonWithOptions(testCtx(), MigrateAxonOptions{Limit: 2})
+	require.NoError(t, err)
+	assert.Equal(t, 2, stats.BeadsMigrated, "migrateToAxonWithOptions must forward the supplied options to importJSONLCorpusToAxon")
+}
+
 func TestImporter_PreservesEventOrdering(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
