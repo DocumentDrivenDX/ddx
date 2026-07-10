@@ -126,6 +126,65 @@ func TestImporter_DryRun_CountsOnly(t *testing.T) {
 	assert.Equal(t, snapshotBefore, snapshotAfter)
 }
 
+func TestImporter_Source_LoadsActiveAndArchiveJSONL(t *testing.T) {
+	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
+	now := time.Date(2026, time.January, 7, 12, 15, 0, 0, time.UTC)
+	active := []Bead{
+		{
+			ID:        "ddx-src-1",
+			Title:     "active only",
+			Status:    StatusOpen,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		{
+			ID:        "ddx-src-dup",
+			Title:     "active version wins",
+			Status:    StatusOpen,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	archive := []Bead{
+		{
+			ID:        "ddx-src-dup",
+			Title:     "archive version loses",
+			Status:    StatusClosed,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		{
+			ID:        "ddx-src-archived",
+			Title:     "archive only",
+			Status:    StatusClosed,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	writeAxonImportCorpus(t, sourceDir, active, archive)
+
+	loaded, err := loadImportCorpusForAxon(sourceDir)
+	require.NoError(t, err)
+	require.Len(t, loaded, 3)
+
+	byID := make(map[string]Bead, len(loaded))
+	for _, b := range loaded {
+		byID[b.ID] = b
+	}
+	assert.Contains(t, byID, "ddx-src-1")
+	assert.Contains(t, byID, "ddx-src-archived")
+	require.Contains(t, byID, "ddx-src-dup")
+	assert.Equal(t, "active version wins", byID["ddx-src-dup"].Title, "active copy must win over archive on duplicate ID")
+}
+
 func TestImporter_Apply_RespectsLimit(t *testing.T) {
 	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	now := time.Date(2026, time.January, 7, 12, 30, 0, 0, time.UTC)
