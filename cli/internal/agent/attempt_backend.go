@@ -108,8 +108,19 @@ func (WorktreeAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPre
 		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", err)
 	}
 	if err := gitOps.WorktreeAdd(req.ProjectRoot, wtPath, req.BaseRev); err != nil {
+		if !isStaleWorktreeRegistrationError(err) {
+			_ = os.RemoveAll(wtPath)
+			return nil, fmt.Errorf("creating isolated worktree: %w", err)
+		}
+		// A prior attempt died without a clean `git worktree remove`, leaving a
+		// registration whose gitdir no longer resolves. Prune it and retry once
+		// before giving up (ddx-2e9679ba).
+		_ = gitOps.WorktreePrune(req.ProjectRoot)
 		_ = os.RemoveAll(wtPath)
-		return nil, fmt.Errorf("creating isolated worktree: %w", err)
+		if err := gitOps.WorktreeAdd(req.ProjectRoot, wtPath, req.BaseRev); err != nil {
+			_ = os.RemoveAll(wtPath)
+			return nil, fmt.Errorf("creating isolated worktree: %w", err)
+		}
 	}
 	return &AttemptWorkspace{
 		Backend:     AttemptBackendWorktree,
@@ -128,6 +139,21 @@ func (WorktreeAttemptBackend) Run(ctx context.Context, req AttemptBackendRunRequ
 
 func (WorktreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
 	return nil
+}
+
+// isStaleWorktreeRegistrationError reports whether err from `git worktree add`
+// indicates a leftover registration for the target path (e.g. a prior
+// attempt that died and was never cleaned up with `git worktree remove`)
+// rather than a genuine resource or permission failure. These are safe to
+// clear with `git worktree prune` and retry (ddx-2e9679ba).
+func isStaleWorktreeRegistrationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "already registered") ||
+		strings.Contains(msg, "missing but already registered") ||
+		strings.Contains(msg, "gitdir file points to non-existent location")
 }
 
 func (WorktreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) error {
