@@ -55,6 +55,9 @@ func TestSystemdInstall_RestartsActiveServiceAfterUnitRewrite(t *testing.T) {
 	if !strings.Contains(unit, "StandardOutput=append:"+cfg.LogPath) {
 		t.Fatalf("unit missing user-scoped log path %q:\n%s", cfg.LogPath, unit)
 	}
+	if !strings.Contains(unit, "SuccessExitStatus=130") {
+		t.Fatalf("unit must classify graceful signal cancellation as success:\n%s", unit)
+	}
 }
 
 func TestSystemdInstall_StartsInactiveServiceWithoutDoubleRestart(t *testing.T) {
