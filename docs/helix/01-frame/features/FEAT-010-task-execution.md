@@ -63,6 +63,18 @@ pass.
 Tracker instructions, merge-policy, and safety rules in AGENTS.md are
 load-bearing in every mode and are never overridden by mode selection.
 
+### Uniform Worker Coordination
+
+`ddx try`, `ddx work`, and server-managed workers use the same reconnecting
+coordination client. If the project-scoped server is reachable, claims,
+tracker transitions, and landing are serialized by its per-project
+coordinator. If it is unreachable, execution continues against durable local
+state under cross-process locks and records an ordered offline mutation
+journal. The worker periodically retries discovery and reconciles the journal
+idempotently before returning to server-coordinated writes. Server management
+changes process lifetime only: managed workers terminate with the server;
+manual workers survive and operate offline.
+
 ### Lifecycle Migration Startup Gate
 
 `ddx work`, `ddx try`, server-managed workers, GraphQL worker starts, REST/MCP

@@ -99,12 +99,24 @@ transcript/progress/session rendering for its agent events; DDx only surfaces
 its own worker state and any opaque forwarded Fizeau payloads alongside it.
 DDx does not parse transcript semantics to derive worker state or turn
 Fizeau session logs into worker progress output.
-The host+user daemon is the single
-point of coordination for all long-running DDx worker activity on the
-machine. The supervisor exposes worker state through the same project-scoped
-API surface used for beads and executions, and worker records persist under
-the project's own `.ddx/workers/` directory so preservation and cleanup stay
-scoped per project.
+The host+user daemon is the preferred single point of coordination for all
+DDx worker activity on the machine, including workers started manually with
+`ddx work` or `ddx try`. Every worker continuously discovers the project-scoped
+server. While connected, coordination-sensitive mutations (claim/lease,
+tracker transitions, and landing) are serialized through the server. When the
+server is unreachable, the worker continues against the same durable bead
+store and git repository, records an ordered offline mutation journal, and
+periodically retries. Reconnection reconciles journaled operations
+idempotently before the worker resumes server-coordinated mutations. The
+supervisor exposes worker state through the same project-scoped API surface
+used for beads and executions, and worker records persist under the project's
+own `.ddx/workers/` directory so preservation and cleanup stay scoped per
+project.
+
+Manual and server-managed workers use this same coordination protocol. Their
+only lifecycle difference is ownership: a manual worker may outlive a server
+outage, while a server-managed worker is a child of the server and terminates
+with it.
 
 When multiple machines each run `ddx-server` against the same project, each
 machine runs its own land coordinator against its local clone. The shared git

@@ -490,20 +490,26 @@ prompt-injection threat model, and allowed-mutation scope are captured in
 
 ## Worker Contract (per ADR-022)
 
-Workers are **autonomous against the bead store**. They have one mode of
-operation: read the bead store, pick the next eligible bead via the
-worker-side picker, claim it atomically, execute via `try.Attempt`, write
-evidence locally, and close the bead through the store. **All of this
-happens regardless of whether `ddx-server` is running.** The bead store is
-the source of truth; the server is an optional, value-added coordinator
-that provides centralized observability — never a dependency for correct
-worker operation.
+Workers are **autonomous but server-preferred**. They always read durable
+project state and can execute without a server, but continuously discover the
+project-scoped `ddx-server`. While connected, every coordination-sensitive
+mutation—claim/lease, tracker transition, and landing—goes through the server's
+single per-project coordinator. While disconnected, the worker uses the same
+local implementations under cross-process locks, appends each mutation to an
+ordered durable journal, and continues working. On reconnect it reconciles
+that journal idempotently before sending new mutations through the server.
 
-ADR-022 (rev 5, commit `484b9a08`) is the governing decision. Earlier
-revisions (1–3) explored a server-orchestrates direction in which
-workers were long-lived API clients of the server; rev 4 reversed that,
-and rev 5 finalized the autonomous-default + best-effort-mirror design
-described here.
+The bead store and git history remain the durable sources of truth. The server
+does not replace them with a parallel claim table; it serializes operations
+against them. Manual and server-managed workers use the same client and
+protocol. A manual worker survives a server outage; a server-managed worker is
+owned by the server process tree and exits when the server exits.
+
+ADR-022 rev 6 is the governing decision. Rev 5 implemented continuous
+discovery and event backfill but stopped at observability, leaving manual and
+server-managed commands with separate process-local land coordinators. Rev 6
+extends that state machine to coordination mutations without sacrificing
+offline operation.
 
 ### Server probe goroutine
 
@@ -516,21 +522,27 @@ consecutive failures back the rate off to 5min, resetting to 30s on the
 next success. A 410 unknown_worker reply triggers re-registration within
 the same cycle.
 
-### Best-effort mirror
+### Coordination and event mirror
 
-When the worker is in the Connected state it mirrors bead events and
-results to the server's ingestion endpoints best-effort. Mirror failures
-(timeout, connection refused, 5xx) are logged locally and the worker
-continues; the bead's local event log is the authoritative copy. The
-worker-server boundary collapses to a small set of endpoints, all backed
-by `requireTrusted` (per ADR-006):
+When the worker is Connected it sends coordination mutations to the server and
+mirrors lifecycle events best-effort. A coordination transport failure causes
+an explicit Connected → NotConnected transition: the worker journals the
+operation, completes it locally under the same idempotency key, and continues.
+Event-only mirror failures are buffered without blocking work. All endpoints
+are project-scoped and backed by `requireTrusted` (per ADR-006):
 
 - `POST /api/workers/register` — emitted on every NotConnected → Connected
   transition (not only at startup). Body is a thin identity envelope
   (`project_root`, `harness`, `model`, `executor_pid`, `executor_host`,
-  `started_at`); response carries a correlation `worker_id`. There is no
-  session token, no claim lease, no heartbeat — none of those concepts
-  exist because the worker does not depend on the server.
+  `started_at`); response carries a correlation `worker_id` and the
+  coordination protocol version.
+- `POST /api/projects/<project>/coordination/mutations` — submit one
+  idempotent claim, tracker-transition, or landing mutation to the
+  server-side per-project coordinator.
+- `POST /api/projects/<project>/coordination/reconcile` — submit the ordered
+  offline mutation journal. The server returns an outcome for every
+  idempotency key (`applied`, `already_applied`, or `conflict`) and the worker
+  retains unresolved conflicts as operator-attention evidence.
 - `POST /api/workers/<id>/event` — best-effort mirror of any bead event
   the worker would already write to the local event log; uses the
   existing bead event `kind`/`body` shape. 204 on success.
@@ -544,8 +556,9 @@ by `requireTrusted` (per ADR-006):
 
 ### Freshness states
 
-The server's view of workers is **derived** from these reports —
-eventually consistent, never authoritative. The server-side workers panel
+The server's observational view of workers is **derived** from these reports —
+eventually consistent, never authoritative. Coordination outcomes are instead
+grounded in the bead store and git history. The server-side workers panel
 surfaces three freshness states based on `last_event_at` relative to the
 probe interval:
 
@@ -580,11 +593,13 @@ the marker at the next safe point:
 
 ### Restart and crash behavior
 
-- **Server restart or crash.** The worker's next mirror POST fails;
-  worker logs the transition and continues working. On the next
-  successful probe it re-registers and resumes mirroring; the in-memory
-  ring buffer feeds backfill. No in-flight work is at risk because the
-  worker never depended on the server.
+- **Server restart or crash, manual worker.** The worker's next request fails;
+  it transitions offline, journals coordination mutations, and continues. On
+  the next successful probe it re-registers, reconciles the mutation journal,
+  and resumes server coordination and event backfill.
+- **Server restart or crash, server-managed worker.** The server-owned worker
+  process tree terminates with the server. Durable attempt evidence and claim
+  leases drive recovery after the supervisor restarts it.
 - **Worker exit.** No reclaim machinery is needed: the bead store's
   atomic claim is the only claim primitive. Other workers contend on
   the same store-level CAS that has worked correctly for as long as DDx
@@ -606,13 +621,12 @@ deprecated once the doctor migrates to the server's derived view. The
 server's append-only event log lives at `.ddx/server/worker-events.jsonl`.
 
 The attempt-orchestration responsibilities listed under "DDx-side
-responsibilities" above (worktree creation, base-revision pinning,
-result landing, evidence capture) all execute inside the worker process.
-The server, when present, observes; it does not run agents itself, hold
-authoritative claim state, gate worker startup, or assign beads to
-workers. See ADR-022 for the full contract, picker rationale,
-freshness/state tables, threat model, compatibility analysis, and
-implementation roadmap.
+responsibilities" above (worktree creation, base-revision pinning, agent
+execution, and evidence capture) execute inside the worker process. The
+server, when present, serializes coordination-sensitive mutations against the
+same durable bead and git state; it does not run the agent or become a parallel
+source of truth. See ADR-022 for the full transport, offline journal,
+reconciliation, picker, freshness, and lifecycle contracts.
 
 ## Migration status
 
