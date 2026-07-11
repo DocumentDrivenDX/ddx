@@ -12,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/stretchr/testify/assert"
@@ -304,6 +305,57 @@ func TestDoctorUnjam_PrunesAfterCleanup(t *testing.T) {
 	assert.NotContains(t, worktreeList, foreignWorktreePath, "git worktree prune must clear the orphaned foreign-prefixed worktree entry")
 }
 
+func TestDoctorUnjam_RemovesOrphanedExecuteWorktreeDirs(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	orphanPath := seedOrphanedExecuteBeadWorktreeDir(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	assert.NoDirExists(t, orphanPath, "doctor --unjam must remove the orphaned execute-bead worktree directory")
+
+	action := findDoctorUnjamAction(report.Actions, "orphan_worktree_remove")
+	require.NotNil(t, action, "expected an orphan_worktree_remove action in the JSON summary")
+	assert.Equal(t, orphanPath, action.Path)
+	assert.Contains(t, []string{"missing_gitdir", "missing_worktree_git"}, action.Reason)
+
+	require.Len(t, report.RemovedWorktrees, 1)
+	assert.Equal(t, orphanPath, report.RemovedWorktrees[0].Path)
+	assert.Contains(t, []string{"missing_gitdir", "missing_worktree_git"}, report.RemovedWorktrees[0].Reason)
+	assert.Equal(t, 1, report.PrunedWorktrees)
+}
+
+func TestDoctorUnjam_PreservesActiveAndNonDDxWorktrees(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	tempRoot := config.ExecutionTempRoot(projectRoot)
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	activeWorktreePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-unjam-active-20260711T090500-cafefeed")
+	runGit(t, projectRoot, "worktree", "add", "--detach", activeWorktreePath, "HEAD")
+
+	nonDDxPath := filepath.Join(tempRoot, "not-a-ddx-worktree")
+	require.NoError(t, os.MkdirAll(nonDDxPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nonDDxPath, "keepme.txt"), []byte("unrelated sibling content\n"), 0o644))
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	assert.Empty(t, report.PrunableWorktrees)
+	assert.Nil(t, findDoctorUnjamAction(report.Actions, "orphan_worktree_remove"))
+
+	assert.DirExists(t, activeWorktreePath, "active execute-bead worktree must remain untouched")
+	worktreeList := runGitCapture(t, projectRoot, "worktree", "list", "--porcelain")
+	assert.Contains(t, worktreeList, activeWorktreePath)
+
+	content, err := os.ReadFile(filepath.Join(nonDDxPath, "keepme.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "unrelated sibling content\n", string(content), "non-DDx sibling directory must remain untouched")
+}
+
 func TestDoctorUnjam_ReleasesStaleClaimLease(t *testing.T) {
 	projectRoot := setupDoctorUnjamRepo(t)
 	beadID := seedStaleClaimedBead(t, projectRoot)
@@ -490,6 +542,11 @@ func setupDoctorUnjamRepo(t *testing.T) string {
 	initGitRepo(t, projectRoot)
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl"), nil, 0o644))
+
+	// Isolate the execute-bead worktree root so orphan-directory scanning
+	// never touches this machine's real, possibly concurrently-in-use,
+	// $XDG_CACHE_HOME/ddx/exec-wt directory.
+	t.Setenv(config.ExecutionWorktreeRootEnv, filepath.Join(t.TempDir(), "ddx-exec-wt-root"))
 	return projectRoot
 }
 
@@ -513,6 +570,17 @@ func seedStaleForeignPrefixWorktree(t *testing.T, projectRoot string) string {
 	runGit(t, projectRoot, "worktree", "add", "--detach", worktreePath, "HEAD")
 	require.NoError(t, os.RemoveAll(worktreePath))
 	return worktreePath
+}
+
+func seedOrphanedExecuteBeadWorktreeDir(t *testing.T, projectRoot string) string {
+	t.Helper()
+
+	tempRoot := config.ExecutionTempRoot(projectRoot)
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	orphanPath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-unjam-orphan-20260711T090000-deadbeef")
+	require.NoError(t, os.MkdirAll(orphanPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanPath, "leftover.txt"), []byte("orphaned attempt payload\n"), 0o644))
+	return orphanPath
 }
 
 func seedStaleClaimedBead(t *testing.T, projectRoot string) string {
