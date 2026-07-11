@@ -31,6 +31,12 @@ const (
 	ReadinessSystemReasonResourceExhausted = "resource_exhausted"
 	ReadinessSystemReasonRepoConcurrency   = "repo_concurrency"
 	ReadinessSystemReasonTimeout           = "timeout"
+	// ReadinessSystemReasonEnvironmentRepairable classifies a failure caused by
+	// stale local execution state (e.g. a leftover git worktree registration
+	// from a prior attempt that died without cleanup) that a fresh attempt can
+	// clear and retry. Distinct from resource_exhausted, which implies a disk
+	// or memory quota problem requiring operator intervention (ddx-2e9679ba).
+	ReadinessSystemReasonEnvironmentRepairable = "environment_repairable"
 )
 
 // ReadinessClassificationResult is the deterministic bridge between the
@@ -196,6 +202,12 @@ func classifyReadinessSystemReason(detail string, reasons []string) string {
 	case IsLockContentionError(combined):
 		return ReadinessSystemReasonRepoConcurrency
 	case containsAny(combined,
+		"stat worktree .git",
+		"already registered",
+		"missing but already registered",
+		"gitdir file points to non-existent location"):
+		return ReadinessSystemReasonEnvironmentRepairable
+	case containsAny(combined,
 		"resource_exhausted",
 		"resource exhausted",
 		"enospc",
@@ -268,7 +280,8 @@ func triageClassificationForSystemReason(systemReason string) string {
 	case ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
 		ReadinessSystemReasonTimeout,
-		ReadinessSystemReasonUnavailable:
+		ReadinessSystemReasonUnavailable,
+		ReadinessSystemReasonEnvironmentRepairable:
 		return "recoverable"
 	default:
 		return ""
