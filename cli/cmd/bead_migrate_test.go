@@ -206,6 +206,37 @@ func TestBeadMigrate_ToAxonVerifyRoutesToImporter(t *testing.T) {
 	assert.True(t, capture.opts.CopyAttachments)
 }
 
+// TestBeadMigrateAxon_DryRun covers the ddx-59f7db53 operator-facing dry-run
+// contract: --to-axon --dry-run must report accurate counts without writing
+// anything under .ddx/axon. Unlike TestBeadMigrate_ToAxonDryRunRoutesToImporter
+// (which only checks that the flag reaches a mocked Migrator), this exercises
+// the real migrator end to end against an axon-backed store.
+func TestBeadMigrateAxon_DryRun(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Setenv("DDX_BEAD_BACKEND", "axon")
+	factory := newBeadTestRoot(t, workingDir)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
+	now := time.Now().UTC().Format(time.RFC3339)
+	rows := strings.Join([]string{
+		`{"id":"ddx-ax1","title":"one","status":"open","priority":2,"issue_type":"task","created_at":"` + now + `","updated_at":"` + now + `"}`,
+		`{"id":"ddx-ax2","title":"two","status":"closed","priority":2,"issue_type":"task","created_at":"` + now + `","updated_at":"` + now + `","closing_commit_sha":"deadbeef"}`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to-axon", "--dry-run", "--json")
+	require.NoError(t, err)
+
+	var stats struct {
+		BeadsMigrated int `json:"BeadsMigrated"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.Equal(t, 2, stats.BeadsMigrated)
+
+	_, statErr := os.Stat(filepath.Join(workingDir, ddxroot.DirName, "axon"))
+	assert.True(t, os.IsNotExist(statErr), "--dry-run must not create the .ddx/axon directory")
+}
+
 func TestMigrateCommandDryRun(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
