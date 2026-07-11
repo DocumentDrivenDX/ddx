@@ -11,6 +11,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// serviceNew resolves the platform service backend. Overridable for testing.
+var serviceNew = service.New
+
 // envKeysForService are forwarded from the current environment into the
 // installed service's environment so agent harnesses work out of the box.
 var envKeysForService = []string{
@@ -45,12 +48,25 @@ func buildServerServiceConfig(execPath, projectRoot string) service.Config {
 func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 	var workDir string
 	var execPath string
+	defaultPolicy := service.DefaultResourcePolicy()
+	var cpuQuotaPercent int
+	var cpuWeight int
+	var nice int
 
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install ddx server as a user service (systemd on Linux, launchd on macOS)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend, err := service.New()
+			resourcePolicy := service.ResourcePolicy{
+				CPUQuotaPercent: cpuQuotaPercent,
+				CPUWeight:       cpuWeight,
+				Nice:            nice,
+			}
+			if err := resourcePolicy.Validate(); err != nil {
+				return fmt.Errorf("invalid resource budget: %w", err)
+			}
+
+			backend, err := serviceNew()
 			if err != nil {
 				return err
 			}
@@ -74,11 +90,16 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 				return fmt.Errorf("cannot determine project root; specify --workdir")
 			}
 			resolvedWork = gitpkg.FindProjectRoot(resolvedWork)
-			return backend.Install(buildServerServiceConfig(resolvedExec, resolvedWork))
+			cfg := buildServerServiceConfig(resolvedExec, resolvedWork)
+			cfg.ResourcePolicy = resourcePolicy
+			return backend.Install(cfg)
 		},
 	}
 	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root registered on server startup (default: current directory); service cwd is XDG-scoped")
 	cmd.Flags().StringVar(&execPath, "exec", "", "Path to ddx binary (default: auto-detected)")
+	cmd.Flags().IntVar(&cpuQuotaPercent, "cpu-quota-percent", defaultPolicy.CPUQuotaPercent, "Aggregate CPU quota for the server and its managed workers/providers/builds, as a percentage of one core (0 = unbounded)")
+	cmd.Flags().IntVar(&cpuWeight, "cpu-weight", defaultPolicy.CPUWeight, "CPU scheduling weight for the server-owned execution tree (1-10000, 0 = systemd default)")
+	cmd.Flags().IntVar(&nice, "nice", defaultPolicy.Nice, "Scheduling priority (nice value, -20 to 19) for the server-owned execution tree")
 	return cmd
 }
 
@@ -87,7 +108,7 @@ func (f *CommandFactory) newServerUninstallCommand() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove the ddx server user service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend, err := service.New()
+			backend, err := serviceNew()
 			if err != nil {
 				return err
 			}
@@ -101,7 +122,7 @@ func (f *CommandFactory) newServerStartCommand() *cobra.Command {
 		Use:   "start",
 		Short: "Start the ddx server service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend, err := service.New()
+			backend, err := serviceNew()
 			if err != nil {
 				return err
 			}
@@ -115,7 +136,7 @@ func (f *CommandFactory) newServerStopCommand() *cobra.Command {
 		Use:   "stop",
 		Short: "Stop the ddx server service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend, err := service.New()
+			backend, err := serviceNew()
 			if err != nil {
 				return err
 			}
@@ -129,7 +150,7 @@ func (f *CommandFactory) newServerStatusCommand() *cobra.Command {
 		Use:   "status",
 		Short: "Show ddx server service status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend, err := service.New()
+			backend, err := serviceNew()
 			if err != nil {
 				return err
 			}
