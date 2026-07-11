@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/stretchr/testify/require"
 )
 
@@ -179,4 +180,276 @@ func readProviderOrphanPID(t *testing.T, path string) int {
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	require.NoError(t, err)
 	return pid
+}
+
+// buildDdxBinaryForProcessGroupTest compiles the real ddx binary so the
+// process-group regression tests below can exec the production
+// `__provider-launch` wrapper end to end, rather than calling
+// BuildProviderLaunchCmd (a construction helper the production PATH-shim
+// path never uses).
+func buildDdxBinaryForProcessGroupTest(t *testing.T, dir string) string {
+	t.Helper()
+	ddxBin := filepath.Join(dir, "ddx")
+	build := exec.Command("go", "build", "-o", ddxBin, "github.com/DocumentDrivenDX/ddx")
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	require.NoError(t, build.Run(), "build ddx binary for provider-launch process-group regression test")
+	return ddxBin
+}
+
+// waitForProcessGroupTestPidFile polls until path exists (a stub process
+// has written its own $$ or $! to it) and returns the parsed PID.
+func waitForProcessGroupTestPidFile(t *testing.T, path string) int {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}, 10*time.Second, 50*time.Millisecond, "pid file %s was not written within 10s", path)
+	return readProviderOrphanPID(t, path)
+}
+
+// TestProviderLaunchTimeoutDoesNotSignalWorkerProcessGroup proves the fix
+// for ddx-fb293c2b: the production `ddx __provider-launch` wrapper puts
+// itself into a brand-new process group (providerLaunchPrepare in
+// provider_launch_linux.go calls setpgid(0, 0) before the PR_SET_PDEATHSIG
+// prctl and the final execve). A worker script models the `ddx work`
+// process by becoming its own process-group leader, then backgrounds the
+// provider-launch wrapper as a plain forked child — job control is off in
+// a non-interactive shell script, so that background child inherits the
+// worker's process group at fork time, exactly like a harness runner
+// spawning "codex" without isolating it first. If providerLaunchPrepare's
+// setpgid did not run, "the provider's process group" and "the worker's
+// process group" would be the same group, and a lifecycle-timeout cleanup
+// scoped to the provider would also kill the worker.
+func TestProviderLaunchTimeoutDoesNotSignalWorkerProcessGroup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+
+	tmp := t.TempDir()
+	ddxBin := buildDdxBinaryForProcessGroupTest(t, tmp)
+
+	pidFile := filepath.Join(tmp, "provider.pid")
+	stubPath := filepath.Join(tmp, "codex-stub")
+	stub := fmt.Sprintf("#!/bin/sh\necho $$ > %q\nexec sleep 300\n", pidFile)
+	require.NoError(t, os.WriteFile(stubPath, []byte(stub), 0o755))
+
+	workerScript := filepath.Join(tmp, "worker.sh")
+	worker := fmt.Sprintf("#!/bin/sh\nset -eu\n%q __provider-launch %q &\nwhile :; do sleep 1; done\n", ddxBin, stubPath)
+	require.NoError(t, os.WriteFile(workerScript, []byte(worker), 0o755))
+
+	workerCmd := exec.Command(workerScript)
+	workerCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	workerCmd.Stdout = os.Stdout
+	workerCmd.Stderr = os.Stderr
+	require.NoError(t, workerCmd.Start())
+	workerPGID := workerCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-workerPGID, syscall.SIGKILL)
+	})
+
+	providerPID := waitForProcessGroupTestPidFile(t, pidFile)
+	require.NoError(t, syscall.Kill(providerPID, 0), "provider stub must be alive before the simulated timeout")
+
+	providerPGID, err := syscall.Getpgid(providerPID)
+	require.NoError(t, err)
+	require.NotEqual(t, workerPGID, providerPGID, "provider must not remain in the worker's process group")
+	require.Equal(t, providerPID, providerPGID, "provider must be the leader of its own new process group")
+
+	// Simulate the upstream lifecycle timeout cleaning up "the provider
+	// process group" via kill(-pgid, ...), exactly as cmdKillProcessGroup
+	// does for a Cmd it owns.
+	require.NoError(t, syscall.Kill(-providerPGID, syscall.SIGTERM))
+
+	require.Eventually(t, func() bool {
+		return errors.Is(syscall.Kill(providerPID, 0), syscall.ESRCH)
+	}, 5*time.Second, 50*time.Millisecond, "provider stub must be terminated by the group-scoped timeout kill")
+
+	require.NoError(t, syscall.Kill(workerCmd.Process.Pid, 0), "worker process must remain alive after the provider-only timeout kill")
+}
+
+// TestProviderLaunchTimeoutReapsProviderOnly proves that a timeout cleanup
+// scoped to the provider's process group (kill(-providerPGID, ...)) reaps
+// the provider and its descendants while leaving an unrelated process that
+// stayed in the worker's original process group untouched.
+func TestProviderLaunchTimeoutReapsProviderOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+
+	tmp := t.TempDir()
+	ddxBin := buildDdxBinaryForProcessGroupTest(t, tmp)
+
+	providerPidFile := filepath.Join(tmp, "provider.pid")
+	descendantPidFile := filepath.Join(tmp, "descendant.pid")
+	stubPath := filepath.Join(tmp, "codex-stub")
+	stub := fmt.Sprintf(
+		"#!/bin/sh\necho $$ > %q\nsleep 300 &\necho $! > %q\nexec sleep 300\n",
+		providerPidFile, descendantPidFile,
+	)
+	require.NoError(t, os.WriteFile(stubPath, []byte(stub), 0o755))
+
+	unrelatedPidFile := filepath.Join(tmp, "unrelated.pid")
+	workerScript := filepath.Join(tmp, "worker.sh")
+	worker := fmt.Sprintf(
+		"#!/bin/sh\nset -eu\n%q __provider-launch %q &\nsleep 300 &\necho $! > %q\nwhile :; do sleep 1; done\n",
+		ddxBin, stubPath, unrelatedPidFile,
+	)
+	require.NoError(t, os.WriteFile(workerScript, []byte(worker), 0o755))
+
+	workerCmd := exec.Command(workerScript)
+	workerCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	workerCmd.Stdout = os.Stdout
+	workerCmd.Stderr = os.Stderr
+	require.NoError(t, workerCmd.Start())
+	workerPGID := workerCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-workerPGID, syscall.SIGKILL)
+	})
+
+	providerPID := waitForProcessGroupTestPidFile(t, providerPidFile)
+	descendantPID := waitForProcessGroupTestPidFile(t, descendantPidFile)
+	unrelatedPID := waitForProcessGroupTestPidFile(t, unrelatedPidFile)
+
+	require.NoError(t, syscall.Kill(providerPID, 0), "provider stub must be alive before the simulated timeout")
+	require.NoError(t, syscall.Kill(descendantPID, 0), "provider descendant must be alive before the simulated timeout")
+	require.NoError(t, syscall.Kill(unrelatedPID, 0), "unrelated worker-group process must be alive before the simulated timeout")
+
+	providerPGID, err := syscall.Getpgid(providerPID)
+	require.NoError(t, err)
+	require.Equal(t, providerPID, providerPGID, "provider must be the leader of its own new process group")
+
+	descendantPGID, err := syscall.Getpgid(descendantPID)
+	require.NoError(t, err)
+	require.Equal(t, providerPGID, descendantPGID, "descendant must inherit the provider's dedicated process group")
+
+	unrelatedPGID, err := syscall.Getpgid(unrelatedPID)
+	require.NoError(t, err)
+	require.Equal(t, workerPGID, unrelatedPGID, "unrelated process must remain in the worker's original process group")
+
+	// Simulate the upstream lifecycle timeout cleaning up only the
+	// provider's process group.
+	require.NoError(t, syscall.Kill(-providerPGID, syscall.SIGKILL))
+
+	require.Eventually(t, func() bool {
+		return errors.Is(syscall.Kill(providerPID, 0), syscall.ESRCH) &&
+			errors.Is(syscall.Kill(descendantPID, 0), syscall.ESRCH)
+	}, 5*time.Second, 50*time.Millisecond, "provider and its descendant must be reaped by the group-scoped timeout kill")
+
+	require.NoError(t, syscall.Kill(unrelatedPID, 0), "unrelated process in the parent group must survive the provider-only timeout kill")
+	require.NoError(t, syscall.Kill(workerCmd.Process.Pid, 0), "worker process must remain alive after the provider-only timeout kill")
+}
+
+// TestShimProbeHelperProcess is not a real test. It is re-executed as a
+// standalone subprocess (via `-test.run=^TestShimProbeHelperProcess$`) by
+// TestProviderLaunchExecsProviderInDedicatedProcessGroup below, using the
+// classic os/exec_test.go "TestHelperProcess" pattern.
+// agent.EnsureProviderShimOnPATH caches its installed shim dir for the
+// lifetime of the OS process (see providerShimDirPath in
+// internal/agent/provider_spawn.go) — calling it directly inside the
+// shared `go test` binary would silently reuse whatever shim state an
+// earlier, unrelated test in this package happened to install first,
+// making the PATH-resolution assertion depend on test execution order. A
+// fresh subprocess gets pristine package-level state.
+//
+// Re-executing this same test binary re-runs TestMain, which (via
+// isolateCmdTestTempRoot in testutils_test.go) prepends its own hermetic
+// fake-provider bin dir onto PATH for every cmd-package test. That runs
+// after the parent already set PATH for this subprocess, so it would
+// shadow the specific "codex" stub the caller wants resolved. Re-prepend
+// DDX_SHIMPROBE_REALBINDIR here so it wins regardless.
+func TestShimProbeHelperProcess(t *testing.T) {
+	if os.Getenv("DDX_SHIMPROBE_HELPER") != "1" {
+		return
+	}
+	ddxBin := os.Getenv("DDX_SHIMPROBE_DDXBIN")
+	realBinDir := os.Getenv("DDX_SHIMPROBE_REALBINDIR")
+	if err := os.Setenv("PATH", realBinDir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	shimDir, _, err := agent.EnsureProviderShimOnPATH(ddxBin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	shimPath, err := exec.LookPath(stubHarnessName)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println(shimDir)
+	fmt.Println(shimPath)
+	os.Exit(0)
+}
+
+// TestProviderLaunchExecsProviderInDedicatedProcessGroup proves that the
+// production PATH-shim/wrapper call path — EnsureProviderShimOnPATH's
+// installed shim, resolved via exec.LookPath the same way Fizeau resolves
+// "codex" — gives the provider a PGID distinct from the worker's PGID.
+// BuildProviderLaunchCmd already has group-isolation coverage
+// (TestExecutor_ProviderSpawnSetsPdeathsigAndSetpgid); the production
+// provider path never calls it, so this test exercises the actual shim
+// chain instead.
+func TestProviderLaunchExecsProviderInDedicatedProcessGroup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+
+	tmp := t.TempDir()
+	ddxBin := buildDdxBinaryForProcessGroupTest(t, tmp)
+
+	realBinDir := filepath.Join(tmp, "realbin")
+	require.NoError(t, os.MkdirAll(realBinDir, 0o755))
+	pidFile := filepath.Join(tmp, "provider.pid")
+	realStubPath := filepath.Join(realBinDir, stubHarnessName)
+	stub := fmt.Sprintf("#!/bin/sh\necho $$ > %q\nexec sleep 300\n", pidFile)
+	require.NoError(t, os.WriteFile(realStubPath, []byte(stub), 0o755))
+
+	helperPATH := realBinDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	probe := exec.Command(os.Args[0], "-test.run=^TestShimProbeHelperProcess$")
+	probe.Env = append(os.Environ(),
+		"DDX_SHIMPROBE_HELPER=1",
+		"DDX_SHIMPROBE_DDXBIN="+ddxBin,
+		"DDX_SHIMPROBE_REALBINDIR="+realBinDir,
+		"PATH="+helperPATH,
+	)
+	var probeStdout, probeStderr bytes.Buffer
+	probe.Stdout = &probeStdout
+	probe.Stderr = &probeStderr
+	require.NoError(t, probe.Run(), "shim-probe helper process failed: %s", probeStderr.String())
+
+	probeLines := strings.Split(strings.TrimSpace(probeStdout.String()), "\n")
+	require.Len(t, probeLines, 2, "expected shimDir and shimPath lines from shim-probe helper, got: %q", probeStdout.String())
+	shimDir, shimPath := probeLines[0], probeLines[1]
+	t.Cleanup(func() {
+		_ = os.RemoveAll(shimDir)
+	})
+	require.True(t, strings.HasPrefix(shimPath, shimDir), "PATH lookup must resolve to the installed shim ahead of the real stub binary")
+
+	// Worker: becomes its own process-group leader, then backgrounds the
+	// resolved shim as a plain forked child (no extra setpgid of our
+	// own) — mirroring how a harness runner execs a PATH-resolved binary
+	// without isolating its group up front.
+	workerScript := filepath.Join(tmp, "worker.sh")
+	worker := fmt.Sprintf("#!/bin/sh\nset -eu\n%q &\nwhile :; do sleep 1; done\n", shimPath)
+	require.NoError(t, os.WriteFile(workerScript, []byte(worker), 0o755))
+
+	workerCmd := exec.Command(workerScript)
+	workerCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	workerCmd.Stdout = os.Stdout
+	workerCmd.Stderr = os.Stderr
+	require.NoError(t, workerCmd.Start())
+	workerPGID := workerCmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-workerPGID, syscall.SIGKILL)
+	})
+
+	providerPID := waitForProcessGroupTestPidFile(t, pidFile)
+	require.NoError(t, syscall.Kill(providerPID, 0), "provider process must be alive after the shim chain execs")
+
+	providerPGID, err := syscall.Getpgid(providerPID)
+	require.NoError(t, err)
+	require.NotEqual(t, workerPGID, providerPGID, "provider PGID must differ from the worker PGID")
+	require.Equal(t, providerPID, providerPGID, "provider must be the leader of its own new process group")
 }
