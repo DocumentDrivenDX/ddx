@@ -185,7 +185,7 @@ func TestImporter_Source_LoadsActiveAndArchiveJSONL(t *testing.T) {
 	assert.Equal(t, "active version wins", byID["ddx-src-dup"].Title, "active copy must win over archive on duplicate ID")
 }
 
-func TestImporter_Apply_RespectsLimit(t *testing.T) {
+func TestBeadMigrateAxon_Limit(t *testing.T) {
 	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	now := time.Date(2026, time.January, 7, 12, 30, 0, 0, time.UTC)
 	beads := []Bead{
@@ -313,7 +313,7 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 	assert.Equal(t, string(want), string(got))
 }
 
-func TestImporter_Verify_DetectsDrift(t *testing.T) {
+func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
 	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	now := time.Date(2026, time.January, 7, 15, 0, 0, 0, time.UTC)
 	sourceBeads := []Bead{
