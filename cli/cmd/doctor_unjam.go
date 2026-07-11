@@ -24,6 +24,7 @@ type doctorUnjamReport struct {
 	RemovedWorktrees     []doctorUnjamWorktree  `json:"removed_worktrees"`
 	ReportOnlyDirtyPaths []doctorUnjamDirtyPath `json:"report_only_dirty_paths,omitempty"`
 	PrunedWorktrees      int                    `json:"pruned_worktrees"`
+	PruneInvocations     int                    `json:"prune_invocations"`
 	Actions              []doctorUnjamAction    `json:"actions"`
 	BeadDoctorRepair     *doctorUnjamRepair     `json:"bead_doctor_repair,omitempty"`
 	ReleasedClaims       []string               `json:"released_claims,omitempty"`
@@ -515,9 +516,6 @@ func unjamExecuteBeadWorktrees(ctx context.Context, projectRoot string) (doctorU
 		return report, err
 	}
 	report.PrunableWorktrees = staleWorktrees
-	if len(staleWorktrees) == 0 {
-		return report, nil
-	}
 
 	for _, wt := range staleWorktrees {
 		out, err := gitpkg.Command(ctx, projectRoot, "worktree", "remove", "--force", wt.Path).CombinedOutput()
@@ -531,14 +529,21 @@ func unjamExecuteBeadWorktrees(ctx context.Context, projectRoot string) (doctorU
 		})
 	}
 
+	// git worktree prune always runs, even when no registered-prunable
+	// worktrees matched our execute-bead filter above, so orphaned worktree
+	// administrative data never lingers past a successful unjam pass.
 	if err := gitpkg.Command(ctx, projectRoot, "worktree", "prune").Run(); err != nil {
 		return report, fmt.Errorf("git worktree prune: %w", err)
 	}
-	report.PrunedWorktrees = len(staleWorktrees)
-	report.Actions = append(report.Actions, doctorUnjamAction{
-		Kind:  "worktree_prune",
-		Count: len(staleWorktrees),
-	})
+	report.PruneInvocations = 1
+
+	if len(staleWorktrees) > 0 {
+		report.PrunedWorktrees = len(staleWorktrees)
+		report.Actions = append(report.Actions, doctorUnjamAction{
+			Kind:  "worktree_prune",
+			Count: len(staleWorktrees),
+		})
+	}
 	return report, nil
 }
 
