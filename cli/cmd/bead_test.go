@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -115,4 +116,95 @@ func TestBeadUpdate_BlockedByRef_Validation(t *testing.T) {
 			assert.Equal(t, "upstream-123", ref["bead"])
 		})
 	}
+}
+
+func TestBeadRecheckBlockersCommand(t *testing.T) {
+	root := t.TempDir()
+	blockedRoot := filepath.Join(root, "blocked")
+	upstreamRoot := filepath.Join(root, "upstream")
+
+	require.NoError(t, os.MkdirAll(blockedRoot, 0o755))
+	require.NoError(t, os.MkdirAll(upstreamRoot, 0o755))
+	writeBlockedByRefConfig(t, blockedRoot)
+
+	factory := newBeadTestRoot(t, blockedRoot)
+	blockedStore := bead.NewStore(filepath.Join(blockedRoot, ddxroot.DirName))
+	require.NoError(t, blockedStore.Init(context.Background()))
+	upstreamStore := bead.NewStore(filepath.Join(upstreamRoot, ddxroot.DirName))
+	require.NoError(t, upstreamStore.Init(context.Background()))
+
+	closedID := "upstream-closed"
+	require.NoError(t, upstreamStore.Create(context.Background(), &bead.Bead{
+		ID:    closedID,
+		Title: "closed target",
+	}))
+	require.NoError(t, upstreamStore.Close(context.Background(), closedID))
+
+	reopenedID := "blocked-recheck-one"
+	reopenedRef, err := bead.NewCrossRepoBlockerRef("upstream", closedID)
+	require.NoError(t, err)
+	require.NoError(t, blockedStore.Create(context.Background(), &bead.Bead{
+		ID:     reopenedID,
+		Title:  "needs upstream",
+		Status: bead.StatusBlocked,
+		Extra: map[string]any{
+			bead.ExtraLifecycleExternalBlockerReason: "waiting on upstream",
+			bead.ExtraLifecycleCrossRepoBlockerRef:   reopenedRef,
+		},
+	}))
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "recheck-blockers", "--id", reopenedID, "--json")
+	require.NoError(t, err)
+
+	var firstRows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &firstRows))
+	require.Len(t, firstRows, 1)
+	assert.Equal(t, reopenedID, firstRows[0]["bead_id"])
+	assert.Equal(t, "open", firstRows[0]["status"])
+	assert.Equal(t, "reopened", firstRows[0]["outcome"])
+
+	showOut, err := executeCommand(factory.NewRootCommand(), "bead", "show", reopenedID, "--json")
+	require.NoError(t, err)
+	var reopened map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &reopened))
+	assert.Equal(t, "open", reopened["status"])
+	assert.NotContains(t, reopened, bead.ExtraLifecycleExternalBlockerReason)
+	assert.NotContains(t, reopened, bead.ExtraLifecycleCrossRepoBlockerRef)
+
+	openID := "upstream-open"
+	require.NoError(t, upstreamStore.Create(context.Background(), &bead.Bead{
+		ID:    openID,
+		Title: "still open",
+	}))
+
+	blockedID := "blocked-recheck-two"
+	blockedRef, err := bead.NewCrossRepoBlockerRef("upstream", openID)
+	require.NoError(t, err)
+	require.NoError(t, blockedStore.Create(context.Background(), &bead.Bead{
+		ID:     blockedID,
+		Title:  "still waiting",
+		Status: bead.StatusBlocked,
+		Extra: map[string]any{
+			bead.ExtraLifecycleExternalBlockerReason: "waiting on upstream",
+			bead.ExtraLifecycleCrossRepoBlockerRef:   blockedRef,
+		},
+	}))
+
+	out, err = executeCommand(factory.NewRootCommand(), "bead", "recheck-blockers", "--json")
+	require.NoError(t, err)
+
+	var secondRows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &secondRows))
+	require.Len(t, secondRows, 1)
+	assert.Equal(t, blockedID, secondRows[0]["bead_id"])
+	assert.Equal(t, "blocked", secondRows[0]["status"])
+	assert.Equal(t, "blocked", secondRows[0]["outcome"])
+
+	showOut, err = executeCommand(factory.NewRootCommand(), "bead", "show", blockedID, "--json")
+	require.NoError(t, err)
+	var stillBlocked map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &stillBlocked))
+	assert.Equal(t, "blocked", stillBlocked["status"])
+	assert.Contains(t, stillBlocked, bead.ExtraLifecycleExternalBlockerReason)
+	assert.Contains(t, stillBlocked, bead.ExtraLifecycleCrossRepoBlockerRef)
 }

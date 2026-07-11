@@ -94,6 +94,7 @@ Examples:
 	cmd.AddCommand(f.newBeadClearCooldownCommand())
 	cmd.AddCommand(f.newBeadReconcileCommand())
 	cmd.AddCommand(f.newBeadReconcileAttachmentsCommand())
+	cmd.AddCommand(f.newBeadRecheckBlockersCommand())
 	cmd.AddCommand(f.newBeadMigrateCommand())
 	cmd.AddCommand(f.newBeadArchiveCommand())
 	cmd.AddCommand(f.newBeadAcCheckCommand())
