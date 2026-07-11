@@ -90,6 +90,48 @@
       },
       "additionalProperties": false
     },
+    "known_repos": {
+      "type": "object",
+      "description": "Named repository aliases DDx can resolve for cross-repo references",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Local filesystem path for the repository"
+          },
+          "node_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Federation node_id for the repository"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Federation project_id for the repository"
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["path"],
+            "not": {
+              "anyOf": [
+                {"required": ["node_id"]},
+                {"required": ["project_id"]}
+              ]
+            }
+          },
+          {
+            "required": ["node_id", "project_id"],
+            "not": {
+              "required": ["path"]
+            }
+          }
+        ]
+      }
+    },
     "bead-quality": {
       "type": "object",
       "description": "Bead quality gates that run before dispatch",

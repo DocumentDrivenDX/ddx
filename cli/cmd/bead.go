@@ -837,7 +837,33 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 
 			statusValue, _ := cmd.Flags().GetString("status")
 			statusChanged := cmd.Flags().Changed("status")
-			statusOpts := beadTransitionOptionsFromSetFlags(statusValue, setFlags, "ddx bead update")
+			externalBlockerReason, _ := cmd.Flags().GetString("external-blocker-reason")
+			blockedByRefRaw, _ := cmd.Flags().GetString("blocked-by-ref")
+			blockedByRefChanged := cmd.Flags().Changed("blocked-by-ref")
+
+			var blockedByRef bead.CrossRepoBlockerRef
+			if blockedByRefChanged {
+				if !statusChanged || statusValue != bead.StatusBlocked {
+					return fmt.Errorf("--blocked-by-ref requires --status blocked")
+				}
+				ref, err := parseBlockedByRefFlag(blockedByRefRaw)
+				if err != nil {
+					return err
+				}
+				cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
+				if err != nil {
+					return fmt.Errorf("load config for --blocked-by-ref: %w", err)
+				}
+				if cfg.KnownRepos == nil {
+					return fmt.Errorf("unknown known-repo %q in --blocked-by-ref", ref.Repo)
+				}
+				if _, ok := cfg.KnownRepos[ref.Repo]; !ok {
+					return fmt.Errorf("unknown known-repo %q in --blocked-by-ref", ref.Repo)
+				}
+				blockedByRef = ref
+			}
+
+			statusOpts := beadTransitionOptionsFromSetFlags(statusValue, setFlags, externalBlockerReason, "ddx bead update")
 
 			applyUpdateFields := func(b *bead.Bead) error {
 				if v, _ := cmd.Flags().GetString("title"); cmd.Flags().Changed("title") {
@@ -903,6 +929,12 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						}
 					}
 				}
+				if blockedByRefChanged {
+					if b.Extra == nil {
+						b.Extra = make(map[string]any)
+					}
+					b.Extra[bead.ExtraLifecycleCrossRepoBlockerRef] = blockedByRef
+				}
 				return nil
 			}
 
@@ -934,6 +966,8 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	cmd.Flags().Int("priority", 0, "New priority")
 	cmd.Flags().String("labels", "", "New labels (comma-separated)")
 	cmd.Flags().String("acceptance", "", "New acceptance criteria")
+	cmd.Flags().String("external-blocker-reason", "", "Reason required when status=blocked")
+	cmd.Flags().String("blocked-by-ref", "", "Structured blocked-by reference (<repo>#<bead-id>)")
 	cmd.Flags().String("assignee", "", "New assignee or claim assignee fallback")
 	cmd.Flags().String("parent", "", "New parent bead ID")
 	cmd.Flags().String("description", "", "New description")
@@ -1003,12 +1037,16 @@ func beadHasLegacyLifecycleInputs(b bead.Bead) bool {
 	return false
 }
 
-func beadTransitionOptionsFromSetFlags(status string, setFlags []string, source string) bead.LifecycleTransitionOptions {
+func beadTransitionOptionsFromSetFlags(status string, setFlags []string, externalBlockerReason string, source string) bead.LifecycleTransitionOptions {
 	opts := bead.LifecycleTransitionOptions{
 		Reason: "set lifecycle status",
 		Source: source,
 	}
 	if status == bead.StatusBlocked {
+		if reason := strings.TrimSpace(externalBlockerReason); reason != "" {
+			opts.ExternalBlockerReason = reason
+			return opts
+		}
 		for _, kv := range setFlags {
 			k, v, ok := strings.Cut(kv, "=")
 			if ok && k == bead.ExtraLifecycleExternalBlockerReason {
@@ -1018,6 +1056,22 @@ func beadTransitionOptionsFromSetFlags(status string, setFlags []string, source 
 		}
 	}
 	return opts
+}
+
+func parseBlockedByRefFlag(raw string) (bead.CrossRepoBlockerRef, error) {
+	if strings.Count(raw, "#") != 1 {
+		return bead.CrossRepoBlockerRef{}, fmt.Errorf("invalid --blocked-by-ref %q: expected <repo>#<bead-id>", raw)
+	}
+	repo, beadID, _ := strings.Cut(raw, "#")
+	repo = strings.TrimSpace(repo)
+	beadID = strings.TrimSpace(beadID)
+	if repo == "" {
+		return bead.CrossRepoBlockerRef{}, fmt.Errorf("invalid --blocked-by-ref %q: repo is required", raw)
+	}
+	if beadID == "" {
+		return bead.CrossRepoBlockerRef{}, fmt.Errorf("invalid --blocked-by-ref %q: bead id is required", raw)
+	}
+	return bead.NewCrossRepoBlockerRef(repo, beadID)
 }
 
 func (f *CommandFactory) newBeadEvidenceCommand() *cobra.Command {

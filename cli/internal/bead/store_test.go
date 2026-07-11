@@ -469,6 +469,22 @@ func TestUpdate(t *testing.T) {
 	assert.Equal(t, "me", got.Owner)
 }
 
+func TestCrossRepoBlockerRef_RoundTrip(t *testing.T) {
+	ref, err := NewCrossRepoBlockerRef("upstream", "bx-123")
+	require.NoError(t, err)
+
+	data, err := json.Marshal(ref)
+	require.NoError(t, err)
+
+	var got CrossRepoBlockerRef
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, ref, got)
+
+	parsed, ok := ParseCrossRepoBlockerRef(map[string]any{"repo": "upstream", "bead": "bx-123"})
+	require.True(t, ok)
+	assert.Equal(t, ref, parsed)
+}
+
 func TestUpdateNotFound(t *testing.T) {
 	s := newTestStore(t)
 	err := s.Update(testCtx(), "nonexistent", func(b *Bead) {})

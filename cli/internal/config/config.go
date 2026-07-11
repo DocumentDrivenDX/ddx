@@ -285,6 +285,50 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for repoName, repoCfg := range c.KnownRepos {
+		repoName = strings.TrimSpace(repoName)
+		path := strings.TrimSpace(repoCfg.Path)
+		nodeID := strings.TrimSpace(repoCfg.NodeID)
+		projectID := strings.TrimSpace(repoCfg.ProjectID)
+
+		if repoName == "" {
+			errors = append(errors, &ConfigError{
+				Field:      "known_repos",
+				Message:    "known repo key is required",
+				Suggestion: "use a non-empty repository alias",
+			})
+			continue
+		}
+
+		hasPath := path != ""
+		hasNode := nodeID != ""
+		hasProject := projectID != ""
+		switch {
+		case hasPath && (hasNode || hasProject):
+			errors = append(errors, &ConfigError{
+				Field:      "known_repos." + repoName,
+				Message:    "path is mutually exclusive with node_id/project_id",
+				Suggestion: "set either path or node_id/project_id for the repo alias",
+			})
+		case hasPath:
+			// Local path entries are valid.
+		case hasNode != hasProject:
+			errors = append(errors, &ConfigError{
+				Field:      "known_repos." + repoName,
+				Message:    "node_id and project_id must both be set",
+				Suggestion: "set both node_id and project_id, or use path instead",
+			})
+		case hasNode && hasProject:
+			// Federation entries are valid.
+		default:
+			errors = append(errors, &ConfigError{
+				Field:      "known_repos." + repoName,
+				Message:    "path or node_id/project_id is required",
+				Suggestion: "set path for a local repo or node_id/project_id for a federated repo",
+			})
+		}
+	}
+
 	if c.Triage != nil {
 		for mode, actions := range c.Triage.Policies {
 			if _, err := triage.ParseFailureMode(mode); err != nil {

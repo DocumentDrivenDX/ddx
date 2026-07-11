@@ -19,21 +19,22 @@ const (
 // NewConfig represents the simplified DDx configuration structure
 // This aligns with the schema defined in ADR-005 and SD-003
 type NewConfig struct {
-	Version         string              `yaml:"version" json:"version"`
-	Library         *LibraryConfig      `yaml:"library" json:"library"`
-	Bead            *BeadConfig         `yaml:"bead,omitempty" json:"bead,omitempty"`
-	BeadQuality     *BeadQualityConfig  `yaml:"bead-quality,omitempty" json:"bead-quality,omitempty"`
-	System          *SystemConfig       `yaml:"system,omitempty" json:"system,omitempty"`
-	PersonaBindings map[string]string   `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
-	UpdateCheck     *UpdateCheckConfig  `yaml:"update_check,omitempty" json:"update_check,omitempty"`
-	Agent           *AgentConfig        `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Git             *GitConfig          `yaml:"git,omitempty" json:"git,omitempty"`
-	Server          *ServerConfig       `yaml:"server,omitempty" json:"server,omitempty"`
-	Executions      *ExecutionsConfig   `yaml:"executions,omitempty" json:"executions,omitempty"`
-	Cost            *CostConfig         `yaml:"cost,omitempty" json:"cost,omitempty"`
-	Workers         *WorkersConfig      `yaml:"workers,omitempty" json:"workers,omitempty"`
-	EvidenceCaps    *EvidenceCapsConfig `yaml:"evidence_caps,omitempty" json:"evidence_caps,omitempty"`
-	Prose           *ProseConfig        `yaml:"prose,omitempty" json:"prose,omitempty"`
+	Version         string                     `yaml:"version" json:"version"`
+	Library         *LibraryConfig             `yaml:"library" json:"library"`
+	KnownRepos      map[string]KnownRepoConfig `yaml:"known_repos,omitempty" json:"known_repos,omitempty"`
+	Bead            *BeadConfig                `yaml:"bead,omitempty" json:"bead,omitempty"`
+	BeadQuality     *BeadQualityConfig         `yaml:"bead-quality,omitempty" json:"bead-quality,omitempty"`
+	System          *SystemConfig              `yaml:"system,omitempty" json:"system,omitempty"`
+	PersonaBindings map[string]string          `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
+	UpdateCheck     *UpdateCheckConfig         `yaml:"update_check,omitempty" json:"update_check,omitempty"`
+	Agent           *AgentConfig               `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Git             *GitConfig                 `yaml:"git,omitempty" json:"git,omitempty"`
+	Server          *ServerConfig              `yaml:"server,omitempty" json:"server,omitempty"`
+	Executions      *ExecutionsConfig          `yaml:"executions,omitempty" json:"executions,omitempty"`
+	Cost            *CostConfig                `yaml:"cost,omitempty" json:"cost,omitempty"`
+	Workers         *WorkersConfig             `yaml:"workers,omitempty" json:"workers,omitempty"`
+	EvidenceCaps    *EvidenceCapsConfig        `yaml:"evidence_caps,omitempty" json:"evidence_caps,omitempty"`
+	Prose           *ProseConfig               `yaml:"prose,omitempty" json:"prose,omitempty"`
 	// ReviewMaxRetries caps reviewer attempts per committed result_rev before
 	// the work emits a terminal `review-manual-required` event and
 	// parks the bead (FEAT-022 §14). Zero or unset uses the binary default
@@ -565,6 +566,15 @@ type BeadConfig struct {
 type RepositoryConfig struct {
 	URL    string `yaml:"url" json:"url"`
 	Branch string `yaml:"branch" json:"branch"`
+}
+
+// KnownRepoConfig names a repository alias DDx can resolve for cross-repo
+// references. A repo entry must choose either a local path or a federation
+// node/project pair, not both.
+type KnownRepoConfig struct {
+	Path      string `yaml:"path,omitempty" json:"path,omitempty"`
+	NodeID    string `yaml:"node_id,omitempty" json:"node_id,omitempty"`
+	ProjectID string `yaml:"project_id,omitempty" json:"project_id,omitempty"`
 }
 
 // UpdateCheckConfig represents update checking settings
