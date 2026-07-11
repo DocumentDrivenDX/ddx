@@ -53,9 +53,10 @@ type doctorUnjamWorktree struct {
 }
 
 type doctorUnjamAction struct {
-	Kind  string `json:"kind"`
-	Path  string `json:"path,omitempty"`
-	Count int    `json:"count,omitempty"`
+	Kind        string `json:"kind"`
+	Path        string `json:"path,omitempty"`
+	Count       int    `json:"count,omitempty"`
+	PreserveRef string `json:"preserve_ref,omitempty"`
 }
 
 func (f *CommandFactory) runDoctorUnjam(cmd *cobra.Command) error {
@@ -72,9 +73,17 @@ func (f *CommandFactory) runDoctorUnjam(cmd *cobra.Command) error {
 		return err
 	}
 
+	preserveActions, err := unjamPreserveRefDerivedDirt(cmd.Context(), projectRoot)
+	if err != nil {
+		return err
+	}
+
 	report, err := unjamExecuteBeadWorktrees(cmd.Context(), projectRoot)
 	if err != nil {
 		return err
+	}
+	if len(preserveActions) > 0 {
+		report.Actions = append(preserveActions, report.Actions...)
 	}
 	if checkpoint != nil {
 		report.DDXStateCheckpoint = checkpoint
@@ -207,6 +216,203 @@ func splitNonEmptyLines(output string) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+const (
+	doctorUnjamPreserveRefStashActionKind    = "preserve_ref_stash"
+	doctorUnjamPreserveRefStashMessagePrefix = "ddx doctor --unjam preserve "
+)
+
+// unjamPreserveRefDerivedDirt stashes dirty project-root paths that overlap a
+// preserved iteration ref so a leaked checkout fragment can be recovered after
+// the main unjam pass completes.
+func unjamPreserveRefDerivedDirt(ctx context.Context, projectRoot string) ([]doctorUnjamAction, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := gitpkg.Command(ctx, projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return nil, nil
+	}
+
+	dirtyPaths, err := unjamProjectDirtyPaths(ctx, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(dirtyPaths) == 0 {
+		return nil, nil
+	}
+
+	preserveRefs, err := listPreserveIterationRefs(ctx, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(preserveRefs) == 0 {
+		return nil, nil
+	}
+
+	remaining := append([]string(nil), dirtyPaths...)
+	actions := make([]doctorUnjamAction, 0, len(preserveRefs))
+	for _, preserveRef := range preserveRefs {
+		if len(remaining) == 0 {
+			break
+		}
+
+		treePaths, err := listPreserveRefTreePaths(ctx, projectRoot, preserveRef)
+		if err != nil {
+			return nil, err
+		}
+
+		matchedPaths := matchPreserveRefDirtyPaths(remaining, treePaths)
+		if len(matchedPaths) == 0 {
+			continue
+		}
+
+		if err := stashPreserveRefDirtyPaths(ctx, projectRoot, preserveRef, matchedPaths); err != nil {
+			return nil, err
+		}
+
+		actions = append(actions, doctorUnjamAction{
+			Kind:        doctorUnjamPreserveRefStashActionKind,
+			Path:        matchedPaths[0],
+			Count:       len(matchedPaths),
+			PreserveRef: preserveRef,
+		})
+		remaining = removeDirtyPaths(remaining, matchedPaths)
+	}
+
+	return actions, nil
+}
+
+func unjamProjectDirtyPaths(ctx context.Context, projectRoot string) ([]string, error) {
+	out, err := gitpkg.Command(ctx, projectRoot, "status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching", "--", ".").Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing project dirt: %w", err)
+	}
+	return parseDDXStateCheckpointDirtyPaths(string(out)), nil
+}
+
+func listPreserveIterationRefs(ctx context.Context, projectRoot string) ([]string, error) {
+	out, err := gitpkg.Command(ctx, projectRoot, "for-each-ref", "--sort=-refname", "--format=%(refname)", "refs/ddx/iterations").Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing preserve iteration refs: %w", err)
+	}
+	refs := splitNonEmptyLines(string(out))
+	filtered := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if strings.Contains(filepath.Base(ref), "-") {
+			filtered = append(filtered, ref)
+		}
+	}
+	return filtered, nil
+}
+
+func listPreserveRefTreePaths(ctx context.Context, projectRoot, preserveRef string) ([]string, error) {
+	out, err := gitpkg.Command(ctx, projectRoot, "ls-tree", "--full-tree", "-r", "--name-only", preserveRef).Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing paths for preserve ref %s: %w", preserveRef, err)
+	}
+	return splitNonEmptyLines(string(out)), nil
+}
+
+func matchPreserveRefDirtyPaths(dirtyPaths, treePaths []string) []string {
+	if len(dirtyPaths) == 0 || len(treePaths) == 0 {
+		return nil
+	}
+
+	matched := make([]string, 0, len(dirtyPaths))
+	seen := make(map[string]bool, len(dirtyPaths))
+	for _, dirtyPath := range dirtyPaths {
+		dirtyPath = normalizeDoctorUnjamPath(dirtyPath)
+		if dirtyPath == "" || seen[dirtyPath] {
+			continue
+		}
+		for _, treePath := range treePaths {
+			if dirtyPathMatchesTreePath(dirtyPath, treePath) {
+				seen[dirtyPath] = true
+				matched = append(matched, dirtyPath)
+				break
+			}
+		}
+	}
+	return matched
+}
+
+func dirtyPathMatchesTreePath(dirtyPath, treePath string) bool {
+	dirtyPath = normalizeDoctorUnjamPath(dirtyPath)
+	treePath = normalizeDoctorUnjamPath(treePath)
+	if dirtyPath == "" || treePath == "" || dirtyPath == "." || treePath == "." {
+		return false
+	}
+	if dirtyPath == treePath {
+		return true
+	}
+	if strings.HasPrefix(treePath, dirtyPath+"/") {
+		return true
+	}
+	return strings.HasPrefix(dirtyPath, treePath+"/")
+}
+
+func normalizeDoctorUnjamPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Clean(path))
+}
+
+func removeDirtyPaths(paths, remove []string) []string {
+	if len(paths) == 0 || len(remove) == 0 {
+		return append([]string(nil), paths...)
+	}
+	removeSet := make(map[string]bool, len(remove))
+	for _, path := range remove {
+		removeSet[normalizeDoctorUnjamPath(path)] = true
+	}
+	remaining := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if !removeSet[normalizeDoctorUnjamPath(path)] {
+			remaining = append(remaining, path)
+		}
+	}
+	return remaining
+}
+
+func stashPreserveRefDirtyPaths(ctx context.Context, projectRoot, preserveRef string, dirtyPaths []string) error {
+	if len(dirtyPaths) == 0 {
+		return nil
+	}
+
+	message := doctorUnjamPreserveRefStashMessagePrefix + preserveRef
+	args := []string{"stash", "push", "--all", "--message", message, "--"}
+	args = append(args, dirtyPaths...)
+	out, err := gitpkg.Command(ctx, projectRoot, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("stashing preserve-derived dirt for %s: %s: %w", preserveRef, strings.TrimSpace(string(out)), err)
+	}
+
+	remaining, err := unjamProjectDirtyPathsForPaths(ctx, projectRoot, dirtyPaths)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("stashing preserve-derived dirt for %s left dirty paths: %s", preserveRef, strings.Join(remaining, ", "))
+	}
+	return nil
+}
+
+func unjamProjectDirtyPathsForPaths(ctx context.Context, projectRoot string, paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+
+	args := []string{"status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching", "--"}
+	args = append(args, paths...)
+	out, err := gitpkg.Command(ctx, projectRoot, args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("checking preserve-derived dirt after stash: %w", err)
+	}
+	return parseDDXStateCheckpointDirtyPaths(string(out)), nil
 }
 
 func unjamExecuteBeadClaims(ctx context.Context, projectRoot string) (server.WorkerClaimCleanupReport, error) {

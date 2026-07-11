@@ -127,6 +127,48 @@ func TestDoctorUnjam_CheckpointSummaryListsCommittedPaths(t *testing.T) {
 	assert.Equal(t, 2, report.Actions[0].Count)
 }
 
+func TestDoctorUnjam_StashesPreserveDerivedPaths(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	preserveRef, dirtyRel := seedDoctorUnjamPreserveRefDirtyPath(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	action := findDoctorUnjamAction(report.Actions, doctorUnjamPreserveRefStashActionKind)
+	require.NotNil(t, action, "expected a preserve-ref stash action in the JSON summary")
+	assert.Equal(t, preserveRef, action.PreserveRef)
+	assert.Equal(t, 1, action.Count)
+	assert.Equal(t, dirtyRel, action.Path)
+
+	stashList := runGitCapture(t, projectRoot, "stash", "list")
+	assert.Contains(t, stashList, preserveRef)
+
+	secondOutput, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+	secondReport := decodeDoctorUnjamReport(t, secondOutput)
+	assert.Nil(t, findDoctorUnjamAction(secondReport.Actions, doctorUnjamPreserveRefStashActionKind))
+
+	stashList = runGitCapture(t, projectRoot, "stash", "list")
+	assert.Equal(t, 1, strings.Count(stashList, preserveRef), "rerunning doctor --unjam must not create a duplicate preserve-ref stash")
+}
+
+func TestDoctorUnjam_StashCleansPreserveDerivedPath(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	_, dirtyRel := seedDoctorUnjamPreserveRefDirtyPath(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	require.NotNil(t, findDoctorUnjamAction(report.Actions, doctorUnjamPreserveRefStashActionKind))
+
+	status := runGitCapture(t, projectRoot, "status", "--porcelain", "--", dirtyRel)
+	assert.Empty(t, status, "doctor --unjam must leave the leaked preserve-derived path clean")
+}
+
 func runGitCapture(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -477,4 +519,31 @@ func decodeBeadRecord(t *testing.T, row string) bead.Bead {
 	var b bead.Bead
 	require.NoError(t, json.Unmarshal([]byte(row), &b))
 	return b
+}
+
+func seedDoctorUnjamPreserveRefDirtyPath(t *testing.T, projectRoot string) (string, string) {
+	t.Helper()
+
+	dirtyRel := filepath.ToSlash(filepath.Join("preserve", "leaked.txt"))
+	dirtyPath := filepath.Join(projectRoot, filepath.FromSlash(dirtyRel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(dirtyPath), 0o755))
+	require.NoError(t, os.WriteFile(dirtyPath, []byte("preserve-ref v1\n"), 0o644))
+
+	runGit(t, projectRoot, "add", "--", dirtyRel)
+	runGit(t, projectRoot, "commit", "-m", "seed preserve ref source")
+
+	preserveRef := "refs/ddx/iterations/ddx-unjam-preserve/20260711T040733Z-deadbeefcafe"
+	runGit(t, projectRoot, "update-ref", preserveRef, "HEAD")
+
+	require.NoError(t, os.WriteFile(dirtyPath, []byte("preserve-ref v2\n"), 0o644))
+	return preserveRef, dirtyRel
+}
+
+func findDoctorUnjamAction(actions []doctorUnjamAction, kind string) *doctorUnjamAction {
+	for i := range actions {
+		if actions[i].Kind == kind {
+			return &actions[i]
+		}
+	}
+	return nil
 }
