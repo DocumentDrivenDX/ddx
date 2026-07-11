@@ -41,6 +41,8 @@ var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-land-wt-",
 	"ddx-push-recover-",
 	"ddx-conflict-recover-",
+	"ddx-home-",
+	"ddx-fixture-bin-",
 }
 
 // ExecutionCleanupLiveness records the refreshable liveness signal attached to
