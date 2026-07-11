@@ -760,6 +760,71 @@ func transitionLifecycleInPlace(b *Bead, status string, opts LifecycleTransition
 
 const ExtraLifecycleExternalBlockerReason = "lifecycle-external-blocker-reason"
 
+// ExtraLifecycleCrossRepoBlockerRef stores the structured cross-repo blocker
+// target as JSON {"repo":"<known-repos key>","bead":"<bead-id>"}.
+const ExtraLifecycleCrossRepoBlockerRef = "lifecycle-cross-repo-blocker-ref"
+
+// CrossRepoBlockerRef names the repo alias and bead ID a blocked bead is
+// waiting on.
+type CrossRepoBlockerRef struct {
+	Repo string `json:"repo"`
+	Bead string `json:"bead"`
+}
+
+// NewCrossRepoBlockerRef validates and constructs a structured blocker ref.
+func NewCrossRepoBlockerRef(repo, beadID string) (CrossRepoBlockerRef, error) {
+	ref, ok := crossRepoBlockerRefFromStrings(repo, beadID)
+	if !ok {
+		return CrossRepoBlockerRef{}, fmt.Errorf("cross-repo blocker ref requires non-empty repo and bead id")
+	}
+	return ref, nil
+}
+
+// ParseCrossRepoBlockerRef attempts to decode a structured blocker ref from an
+// extra-field value or raw JSON object.
+func ParseCrossRepoBlockerRef(v any) (CrossRepoBlockerRef, bool) {
+	switch value := v.(type) {
+	case nil:
+		return CrossRepoBlockerRef{}, false
+	case CrossRepoBlockerRef:
+		return crossRepoBlockerRefFromStrings(value.Repo, value.Bead)
+	case *CrossRepoBlockerRef:
+		if value == nil {
+			return CrossRepoBlockerRef{}, false
+		}
+		return crossRepoBlockerRefFromStrings(value.Repo, value.Bead)
+	case map[string]any:
+		return crossRepoBlockerRefFromStrings(extraStringVal(value, "repo"), extraStringVal(value, "bead"))
+	case map[string]string:
+		return crossRepoBlockerRefFromStrings(value["repo"], value["bead"])
+	case json.RawMessage:
+		var ref CrossRepoBlockerRef
+		if err := json.Unmarshal(value, &ref); err != nil {
+			return CrossRepoBlockerRef{}, false
+		}
+		return crossRepoBlockerRefFromStrings(ref.Repo, ref.Bead)
+	case []byte:
+		var ref CrossRepoBlockerRef
+		if err := json.Unmarshal(value, &ref); err != nil {
+			return CrossRepoBlockerRef{}, false
+		}
+		return crossRepoBlockerRefFromStrings(ref.Repo, ref.Bead)
+	default:
+		return CrossRepoBlockerRef{}, false
+	}
+}
+
+func crossRepoBlockerRefFromStrings(repo, beadID string) (CrossRepoBlockerRef, bool) {
+	ref := CrossRepoBlockerRef{
+		Repo: strings.TrimSpace(repo),
+		Bead: strings.TrimSpace(beadID),
+	}
+	if ref.Repo == "" || ref.Bead == "" {
+		return CrossRepoBlockerRef{}, false
+	}
+	return ref, true
+}
+
 // ExtraConsecutiveWedgeMarker is the bead Extra key holding the consecutive-wedge
 // count recorded by the execute-bead loop. It is cleared at the store layer on
 // any transition to StatusOpen so that operator-reopened beads get a fresh
@@ -794,6 +859,7 @@ func applyLifecycleTransitionMetadata(b *Bead, from, status string, opts Lifecyc
 		}
 	} else {
 		delete(b.Extra, ExtraLifecycleExternalBlockerReason)
+		delete(b.Extra, ExtraLifecycleCrossRepoBlockerRef)
 	}
 	// Clear stale consecutive-wedge marker on operator reopen (proposed/blocked →
 	// open) so the execute-bead loop gets a fresh attempt rather than re-parking

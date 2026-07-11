@@ -1,8 +1,11 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // TestWorkersConfigResolvers covers SD-024 Stage 1: the worker-facing
@@ -185,4 +188,41 @@ func TestApplyDefaultsRetainDays(t *testing.T) {
 			t.Fatalf("RetainDays = %d, want 0", got)
 		}
 	})
+}
+
+func TestConfig_KnownRepos_Unmarshal(t *testing.T) {
+	raw := `version: "1.0"
+known_repos:
+  upstream:
+    path: ../upstream
+  federated:
+    node_id: node-123
+    project_id: proj-456
+`
+
+	var cfg NewConfig
+	if err := yaml.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+
+	if got := cfg.KnownRepos["upstream"]; got.Path != "../upstream" || got.NodeID != "" || got.ProjectID != "" {
+		t.Fatalf("upstream = %#v, want local path only", got)
+	}
+	if got := cfg.KnownRepos["federated"]; got.NodeID != "node-123" || got.ProjectID != "proj-456" || got.Path != "" {
+		t.Fatalf("federated = %#v, want node/project only", got)
+	}
+
+	roundTripped, err := yaml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+
+	var got NewConfig
+	if err := yaml.Unmarshal(roundTripped, &got); err != nil {
+		t.Fatalf("round-trip yaml.Unmarshal: %v", err)
+	}
+
+	if !reflect.DeepEqual(cfg.KnownRepos, got.KnownRepos) {
+		t.Fatalf("KnownRepos round-trip mismatch:\n got: %#v\nwant: %#v", got.KnownRepos, cfg.KnownRepos)
+	}
 }
