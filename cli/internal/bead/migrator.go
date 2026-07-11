@@ -22,8 +22,17 @@ type MigratorOptions struct {
 	Dir string
 }
 
+type migratorStore interface {
+	migrateLifecycle(apply bool, now time.Time) (LifecycleMigrationStats, error)
+	migrateDryRun() (MigrateStats, error)
+	migrateFromHelix() (int, bool, error)
+	migrateToAxonWithOptions(ctx context.Context, opts MigrateAxonOptions) (MigrateAxonStats, error)
+	detectLifecycleMigrationRequired() (LifecycleMigrationGateStatus, error)
+	reconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePlan, error)
+}
+
 type storeMigrator struct {
-	store *Store
+	store migratorStore
 }
 
 // Compile-time assertion: *storeMigrator satisfies Migrator.
