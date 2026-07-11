@@ -19,15 +19,16 @@ import (
 )
 
 type doctorUnjamTestReport struct {
-	ProjectRoot       string                 `json:"project_root"`
-	Clean             bool                   `json:"clean"`
-	PrunableWorktrees []doctorUnjamWorktree  `json:"prunable_worktrees"`
-	RemovedWorktrees  []doctorUnjamWorktree  `json:"removed_worktrees"`
-	PrunedWorktrees   int                    `json:"pruned_worktrees"`
-	Actions           []doctorUnjamAction    `json:"actions"`
-	BeadDoctorRepair  *doctorUnjamRepairView `json:"bead_doctor_repair,omitempty"`
-	ReleasedClaims    []string               `json:"released_claims,omitempty"`
-	PreservedClaims   []string               `json:"preserved_claims,omitempty"`
+	ProjectRoot        string                 `json:"project_root"`
+	Clean              bool                   `json:"clean"`
+	DDXStateCheckpoint *doctorUnjamCheckpoint `json:"ddx_state_checkpoint,omitempty"`
+	PrunableWorktrees  []doctorUnjamWorktree  `json:"prunable_worktrees"`
+	RemovedWorktrees   []doctorUnjamWorktree  `json:"removed_worktrees"`
+	PrunedWorktrees    int                    `json:"pruned_worktrees"`
+	Actions            []doctorUnjamAction    `json:"actions"`
+	BeadDoctorRepair   *doctorUnjamRepairView `json:"bead_doctor_repair,omitempty"`
+	ReleasedClaims     []string               `json:"released_claims,omitempty"`
+	PreservedClaims    []string               `json:"preserved_claims,omitempty"`
 }
 
 type doctorUnjamRepairView struct {
@@ -64,6 +65,75 @@ func TestDoctorUnjam_PrunesStaleWorktrees(t *testing.T) {
 	assert.Equal(t, 1, report.PrunedWorktrees)
 
 	runGit(t, projectRoot, "worktree", "add", "--detach", worktreePath, "HEAD")
+}
+
+func TestDoctorUnjam_CheckpointsDDXOwnedState(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	execPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", "20260710T000000-deadbeef", "result.json")
+	metricsPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(execPath), 0o755))
+	require.NoError(t, os.WriteFile(execPath, []byte(`{"status":"done"}`+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"attempt_id":"test"}`+"\n"), 0o644))
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	require.NotNil(t, report.DDXStateCheckpoint)
+	assert.NotEmpty(t, report.DDXStateCheckpoint.CommitSHA)
+
+	head := runGitCapture(t, projectRoot, "rev-parse", "HEAD")
+	assert.Equal(t, head, report.DDXStateCheckpoint.CommitSHA)
+
+	subject := runGitCapture(t, projectRoot, "log", "-1", "--format=%s")
+	assert.Equal(t, ddxStateCheckpointCommitMessage, subject)
+
+	status := runGitCapture(t, projectRoot, "status", "--porcelain", "--", ".ddx/executions", ".ddx/metrics")
+	assert.Empty(t, status, "checkpoint must leave .ddx/executions and .ddx/metrics clean")
+
+	secondOutput, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+	secondReport := decodeDoctorUnjamReport(t, secondOutput)
+	assert.Nil(t, secondReport.DDXStateCheckpoint, "rerun with nothing new dirty must not create another checkpoint")
+
+	secondHead := runGitCapture(t, projectRoot, "rev-parse", "HEAD")
+	assert.Equal(t, head, secondHead, "rerun must not add a duplicate checkpoint commit")
+}
+
+func TestDoctorUnjam_CheckpointSummaryListsCommittedPaths(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	execPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", "20260710T000000-deadbeef", "result.json")
+	metricsPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(execPath), 0o755))
+	require.NoError(t, os.WriteFile(execPath, []byte(`{"status":"done"}`+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"attempt_id":"test"}`+"\n"), 0o644))
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	require.NotNil(t, report.DDXStateCheckpoint)
+	assert.ElementsMatch(t, []string{
+		".ddx/executions/20260710T000000-deadbeef/result.json",
+		".ddx/metrics/attempts.jsonl",
+	}, report.DDXStateCheckpoint.CommittedPaths)
+
+	require.NotEmpty(t, report.Actions)
+	assert.Equal(t, "ddx_state_checkpoint", report.Actions[0].Kind)
+	assert.Equal(t, 2, report.Actions[0].Count)
+}
+
+func runGitCapture(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	return strings.TrimSpace(string(out))
 }
 
 func TestDoctorUnjam_Idempotent(t *testing.T) {
