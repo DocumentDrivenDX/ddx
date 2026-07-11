@@ -26,6 +26,7 @@ type doctorUnjamTestReport struct {
 	RemovedWorktrees     []doctorUnjamWorktree  `json:"removed_worktrees"`
 	ReportOnlyDirtyPaths []doctorUnjamDirtyPath `json:"report_only_dirty_paths,omitempty"`
 	PrunedWorktrees      int                    `json:"pruned_worktrees"`
+	PruneInvocations     int                    `json:"prune_invocations"`
 	Actions              []doctorUnjamAction    `json:"actions"`
 	BeadDoctorRepair     *doctorUnjamRepairView `json:"bead_doctor_repair,omitempty"`
 	ReleasedClaims       []string               `json:"released_claims,omitempty"`
@@ -286,6 +287,23 @@ func TestDoctorUnjam_Idempotent(t *testing.T) {
 	assert.Zero(t, secondReport.PrunedWorktrees)
 }
 
+func TestDoctorUnjam_PrunesAfterCleanup(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	foreignWorktreePath := seedStaleForeignPrefixWorktree(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	assert.Empty(t, report.PrunableWorktrees, "foreign-prefixed worktree must not be treated as an execute-bead worktree")
+	assert.Empty(t, report.RemovedWorktrees)
+	assert.Equal(t, 1, report.PruneInvocations, "git worktree prune must run even when no registered prunable execute-bead worktrees were found")
+
+	worktreeList := runGitCapture(t, projectRoot, "worktree", "list", "--porcelain")
+	assert.NotContains(t, worktreeList, foreignWorktreePath, "git worktree prune must clear the orphaned foreign-prefixed worktree entry")
+}
+
 func TestDoctorUnjam_ReleasesStaleClaimLease(t *testing.T) {
 	projectRoot := setupDoctorUnjamRepo(t)
 	beadID := seedStaleClaimedBead(t, projectRoot)
@@ -480,6 +498,17 @@ func seedStaleExecuteBeadWorktree(t *testing.T, projectRoot string) string {
 
 	tempRoot := filepath.Join(t.TempDir(), ".ddx-exec-wt")
 	worktreePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-unjam-20260708T072228-deadbeef")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	runGit(t, projectRoot, "worktree", "add", "--detach", worktreePath, "HEAD")
+	require.NoError(t, os.RemoveAll(worktreePath))
+	return worktreePath
+}
+
+func seedStaleForeignPrefixWorktree(t *testing.T, projectRoot string) string {
+	t.Helper()
+
+	tempRoot := filepath.Join(t.TempDir(), ".ddx-exec-wt")
+	worktreePath := filepath.Join(tempRoot, "other-worktree-prefix-ddx-unjam-20260711T075916-deadbeef")
 	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
 	runGit(t, projectRoot, "worktree", "add", "--detach", worktreePath, "HEAD")
 	require.NoError(t, os.RemoveAll(worktreePath))
