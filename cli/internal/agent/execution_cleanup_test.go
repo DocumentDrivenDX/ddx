@@ -721,6 +721,105 @@ func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_scratch_dir"))
 }
 
+func TestExecutionCleanupManager_ReclaimsStaleDDXHomeScratch(t *testing.T) {
+	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	staleHome := filepath.Join(scratchRoot, "ddx-home-2540911535")
+	staleFixtureBin := filepath.Join(scratchRoot, "ddx-fixture-bin-1a2b3c4d")
+	liveHome := filepath.Join(scratchRoot, "ddx-home-5670577261")
+	nonDDXPath := filepath.Join(scratchRoot, "plain-old-dir")
+
+	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(staleHome, "go", "pkg", "mod", "cache"), map[string]string{
+		"entry.txt": strings.Repeat("x", 32),
+	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(staleHome, ".cache", "go-build"), map[string]string{
+		"build.o": strings.Repeat("y", 16),
+	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, staleFixtureBin, map[string]string{
+		"ddx": "binary-payload",
+	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(liveHome, "go", "pkg", "mod", "cache"), map[string]string{
+		"entry.txt": "fresh\n",
+	})
+	require.NoError(t, os.MkdirAll(nonDDXPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nonDDXPath, "keep.txt"), []byte("keep\n"), 0o644))
+
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(staleHome, old, old))
+	require.NoError(t, os.Chtimes(staleFixtureBin, old, old))
+	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
+	// liveHome is fresh (created just now), so it stays under the scratch min age.
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, staleHome)
+	assert.NoDirExists(t, staleFixtureBin)
+	assert.DirExists(t, liveHome)
+	assert.DirExists(t, nonDDXPath)
+	assert.Equal(t, int64(2), summary.RemovedScratchDirs)
+}
+
+func TestExecutionCleanupSummary_ReportsScratchReclaimedInodes(t *testing.T) {
+	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	staleHome := filepath.Join(scratchRoot, "ddx-home-9998887770")
+	staleFixtureBin := filepath.Join(scratchRoot, "ddx-fixture-bin-deadbeef")
+
+	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(staleHome, "go", "pkg", "mod"), map[string]string{
+		"a.txt": strings.Repeat("a", 64),
+		"b.txt": strings.Repeat("b", 64),
+	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, staleFixtureBin, map[string]string{
+		"ddx": strings.Repeat("c", 128),
+	})
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(staleHome, old, old))
+	require.NoError(t, os.Chtimes(staleFixtureBin, old, old))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(2), summary.RemovedScratchDirs, "removed path count for stale ddx-home-*/ddx-fixture-bin-* scratch trees")
+	assert.Greater(t, summary.ScratchBytesReclaimed, int64(0))
+	assert.Greater(t, summary.ScratchInodesReclaimed, int64(0))
+
+	removedObservations := 0
+	var totalObservedInodes int64
+	for _, obs := range summary.Observations {
+		if obs.Class != "removed_scratch_dir" {
+			continue
+		}
+		if obs.Path != staleHome && obs.Path != staleFixtureBin {
+			continue
+		}
+		removedObservations++
+		assert.Greater(t, obs.Inodes, int64(0), "observation for %s must report reclaimed inode count", obs.Path)
+		assert.Greater(t, obs.Bytes, int64(0), "observation for %s must report reclaimed byte count", obs.Path)
+		totalObservedInodes += obs.Inodes
+	}
+	assert.Equal(t, 2, removedObservations)
+	assert.Equal(t, summary.ScratchInodesReclaimed, totalObservedInodes)
+}
+
 func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
