@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/server"
@@ -64,6 +66,7 @@ type doctorUnjamDirtyPath struct {
 type doctorUnjamAction struct {
 	Kind        string `json:"kind"`
 	Path        string `json:"path,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 	Count       int    `json:"count,omitempty"`
 	PreserveRef string `json:"preserve_ref,omitempty"`
 }
@@ -529,6 +532,22 @@ func unjamExecuteBeadWorktrees(ctx context.Context, projectRoot string) (doctorU
 		})
 	}
 
+	orphanDirs, err := listOrphanedExecuteBeadWorktreeDirs(ctx, projectRoot)
+	if err != nil {
+		return report, err
+	}
+	for _, orphan := range orphanDirs {
+		if err := os.RemoveAll(orphan.Path); err != nil {
+			return report, fmt.Errorf("removing orphaned execute-bead worktree dir %s: %w", orphan.Path, err)
+		}
+		report.RemovedWorktrees = append(report.RemovedWorktrees, orphan)
+		report.Actions = append(report.Actions, doctorUnjamAction{
+			Kind:   "orphan_worktree_remove",
+			Path:   orphan.Path,
+			Reason: orphan.Reason,
+		})
+	}
+
 	// git worktree prune always runs, even when no registered-prunable
 	// worktrees matched our execute-bead filter above, so orphaned worktree
 	// administrative data never lingers past a successful unjam pass.
@@ -537,14 +556,95 @@ func unjamExecuteBeadWorktrees(ctx context.Context, projectRoot string) (doctorU
 	}
 	report.PruneInvocations = 1
 
-	if len(staleWorktrees) > 0 {
-		report.PrunedWorktrees = len(staleWorktrees)
+	totalRemoved := len(staleWorktrees) + len(orphanDirs)
+	if totalRemoved > 0 {
+		report.PrunedWorktrees = totalRemoved
 		report.Actions = append(report.Actions, doctorUnjamAction{
 			Kind:  "worktree_prune",
-			Count: len(staleWorktrees),
+			Count: totalRemoved,
 		})
 	}
 	return report, nil
+}
+
+// listOrphanedExecuteBeadWorktreeDirs scans the configured execute-bead
+// worktree root for directories that git no longer tracks at all (their
+// `git worktree list --porcelain` registration is gone, unlike the
+// still-registered-but-prunable case listPrunableExecuteBeadWorktrees
+// handles). Without this pass such a directory lingers forever: git does not
+// know about it, so `git worktree prune` cannot remove it either.
+func listOrphanedExecuteBeadWorktreeDirs(ctx context.Context, projectRoot string) ([]doctorUnjamWorktree, error) {
+	tempRoot := config.ExecutionTempRoot(projectRoot)
+	if tempRoot == "" {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(tempRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading execute-bead worktree root: %w", err)
+	}
+
+	registered := map[string]bool{}
+	if paths, listErr := (&agent.RealGitOps{}).WorktreeList(projectRoot); listErr == nil {
+		for _, path := range paths {
+			registered[filepath.Clean(path)] = true
+		}
+	}
+
+	var orphans []doctorUnjamWorktree
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {
+			continue
+		}
+		path := filepath.Join(tempRoot, entry.Name())
+		if registered[filepath.Clean(path)] {
+			continue
+		}
+		reason := classifyOrphanedExecuteBeadWorktreeDir(path)
+		if reason == "" {
+			continue
+		}
+		orphans = append(orphans, doctorUnjamWorktree{Path: path, Reason: reason})
+	}
+	return orphans, nil
+}
+
+// classifyOrphanedExecuteBeadWorktreeDir returns "missing_gitdir" when path
+// has no .git file at all, "missing_worktree_git" when the .git file points
+// at a gitdir target that no longer exists, or "" when the directory still
+// has valid git linkage (and so is left untouched, e.g. a non-worktree
+// directory that merely shares the execute-bead prefix by coincidence).
+func classifyOrphanedExecuteBeadWorktreeDir(path string) string {
+	gitPath := filepath.Join(path, ".git")
+	info, err := os.Lstat(gitPath)
+	if err != nil {
+		return "missing_gitdir"
+	}
+	if !info.Mode().IsRegular() {
+		return ""
+	}
+
+	data, err := os.ReadFile(gitPath)
+	if err != nil {
+		return "missing_gitdir"
+	}
+	content := strings.TrimSpace(string(data))
+	const gitdirPrefix = "gitdir: "
+	if !strings.HasPrefix(content, gitdirPrefix) {
+		return "missing_gitdir"
+	}
+
+	gitdir := strings.TrimSpace(strings.TrimPrefix(content, gitdirPrefix))
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(path, gitdir)
+	}
+	if _, err := os.Stat(gitdir); err != nil {
+		return "missing_worktree_git"
+	}
+	return ""
 }
 
 func listPrunableExecuteBeadWorktrees(ctx context.Context, projectRoot string) ([]doctorUnjamWorktree, error) {
