@@ -19,16 +19,17 @@ import (
 )
 
 type doctorUnjamTestReport struct {
-	ProjectRoot        string                 `json:"project_root"`
-	Clean              bool                   `json:"clean"`
-	DDXStateCheckpoint *doctorUnjamCheckpoint `json:"ddx_state_checkpoint,omitempty"`
-	PrunableWorktrees  []doctorUnjamWorktree  `json:"prunable_worktrees"`
-	RemovedWorktrees   []doctorUnjamWorktree  `json:"removed_worktrees"`
-	PrunedWorktrees    int                    `json:"pruned_worktrees"`
-	Actions            []doctorUnjamAction    `json:"actions"`
-	BeadDoctorRepair   *doctorUnjamRepairView `json:"bead_doctor_repair,omitempty"`
-	ReleasedClaims     []string               `json:"released_claims,omitempty"`
-	PreservedClaims    []string               `json:"preserved_claims,omitempty"`
+	ProjectRoot          string                 `json:"project_root"`
+	Clean                bool                   `json:"clean"`
+	DDXStateCheckpoint   *doctorUnjamCheckpoint `json:"ddx_state_checkpoint,omitempty"`
+	PrunableWorktrees    []doctorUnjamWorktree  `json:"prunable_worktrees"`
+	RemovedWorktrees     []doctorUnjamWorktree  `json:"removed_worktrees"`
+	ReportOnlyDirtyPaths []doctorUnjamDirtyPath `json:"report_only_dirty_paths,omitempty"`
+	PrunedWorktrees      int                    `json:"pruned_worktrees"`
+	Actions              []doctorUnjamAction    `json:"actions"`
+	BeadDoctorRepair     *doctorUnjamRepairView `json:"bead_doctor_repair,omitempty"`
+	ReleasedClaims       []string               `json:"released_claims,omitempty"`
+	PreservedClaims      []string               `json:"preserved_claims,omitempty"`
 }
 
 type doctorUnjamRepairView struct {
@@ -152,6 +153,90 @@ func TestDoctorUnjam_StashesPreserveDerivedPaths(t *testing.T) {
 
 	stashList = runGitCapture(t, projectRoot, "stash", "list")
 	assert.Equal(t, 1, strings.Count(stashList, preserveRef), "rerunning doctor --unjam must not create a duplicate preserve-ref stash")
+}
+
+func TestDoctorUnjam_ReportsUnknownDirtyPathsOnly(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	dirtyFiles := seedDoctorUnjamUnknownDirtyPaths(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	assert.False(t, report.Clean)
+
+	expected := make([]doctorUnjamDirtyPath, 0, len(dirtyFiles))
+	for rel := range dirtyFiles {
+		expected = append(expected, doctorUnjamDirtyPath{Path: rel, Untouched: true})
+	}
+	assert.ElementsMatch(t, expected, report.ReportOnlyDirtyPaths)
+
+	for rel, want := range dirtyFiles {
+		got, err := os.ReadFile(filepath.Join(projectRoot, filepath.FromSlash(rel)))
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got), "doctor --unjam must not modify report-only path %s", rel)
+		status := runGitCapture(t, projectRoot, "status", "--porcelain", "--", rel)
+		assert.Contains(t, status, "?? "+rel, "report-only path %s must remain dirty", rel)
+	}
+}
+
+func TestDoctorUnjam_PreservesExecuteBeadWorktreeCleanup(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	dirtyFiles := seedDoctorUnjamUnknownDirtyPaths(t, projectRoot)
+	worktreePath := seedStaleExecuteBeadWorktree(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	assert.False(t, report.Clean)
+	require.Len(t, report.PrunableWorktrees, 1)
+	assert.Equal(t, worktreePath, report.PrunableWorktrees[0].Path)
+	require.Len(t, report.RemovedWorktrees, 1)
+	assert.Equal(t, worktreePath, report.RemovedWorktrees[0].Path)
+	assert.Equal(t, 1, report.PrunedWorktrees)
+	require.NotNil(t, findDoctorUnjamAction(report.Actions, "worktree_remove"))
+	require.NotNil(t, findDoctorUnjamAction(report.Actions, "worktree_prune"))
+
+	expected := make([]doctorUnjamDirtyPath, 0, len(dirtyFiles))
+	for rel := range dirtyFiles {
+		expected = append(expected, doctorUnjamDirtyPath{Path: rel, Untouched: true})
+	}
+	assert.ElementsMatch(t, expected, report.ReportOnlyDirtyPaths)
+
+	for rel, want := range dirtyFiles {
+		got, err := os.ReadFile(filepath.Join(projectRoot, filepath.FromSlash(rel)))
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got), "doctor --unjam must not modify report-only path %s", rel)
+		status := runGitCapture(t, projectRoot, "status", "--porcelain", "--", rel)
+		assert.Contains(t, status, "?? "+rel, "report-only path %s must remain dirty", rel)
+	}
+
+	worktreeList := runGitCapture(t, projectRoot, "worktree", "list", "--porcelain")
+	assert.NotContains(t, worktreeList, worktreePath)
+}
+
+func TestDoctorUnjam_ReportOnlySummaryMarksUntouchedPaths(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	dirtyFiles := seedDoctorUnjamUnknownDirtyPaths(t, projectRoot)
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+
+	report := decodeDoctorUnjamReport(t, output)
+	require.Len(t, report.ReportOnlyDirtyPaths, len(dirtyFiles))
+	for _, path := range report.ReportOnlyDirtyPaths {
+		assert.True(t, path.Untouched, "report-only paths must be marked untouched")
+	}
+
+	expected := make([]doctorUnjamDirtyPath, 0, len(dirtyFiles))
+	for rel := range dirtyFiles {
+		expected = append(expected, doctorUnjamDirtyPath{Path: rel, Untouched: true})
+	}
+	assert.ElementsMatch(t, expected, report.ReportOnlyDirtyPaths)
 }
 
 func TestDoctorUnjam_StashCleansPreserveDerivedPath(t *testing.T) {
@@ -537,6 +622,21 @@ func seedDoctorUnjamPreserveRefDirtyPath(t *testing.T, projectRoot string) (stri
 
 	require.NoError(t, os.WriteFile(dirtyPath, []byte("preserve-ref v2\n"), 0o644))
 	return preserveRef, dirtyRel
+}
+
+func seedDoctorUnjamUnknownDirtyPaths(t *testing.T, projectRoot string) map[string]string {
+	t.Helper()
+
+	files := map[string]string{
+		filepath.ToSlash(filepath.Join("cli", "cmd", "report-only.go")): "package cmd\n\nconst reportOnlySentinel = 1\n",
+		filepath.ToSlash(filepath.Join("docs", "report-only.md")):       "# report-only\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(projectRoot, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	return files
 }
 
 func findDoctorUnjamAction(actions []doctorUnjamAction, kind string) *doctorUnjamAction {

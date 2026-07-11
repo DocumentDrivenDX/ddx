@@ -17,16 +17,17 @@ import (
 )
 
 type doctorUnjamReport struct {
-	ProjectRoot        string                 `json:"project_root"`
-	Clean              bool                   `json:"clean"`
-	DDXStateCheckpoint *doctorUnjamCheckpoint `json:"ddx_state_checkpoint,omitempty"`
-	PrunableWorktrees  []doctorUnjamWorktree  `json:"prunable_worktrees"`
-	RemovedWorktrees   []doctorUnjamWorktree  `json:"removed_worktrees"`
-	PrunedWorktrees    int                    `json:"pruned_worktrees"`
-	Actions            []doctorUnjamAction    `json:"actions"`
-	BeadDoctorRepair   *doctorUnjamRepair     `json:"bead_doctor_repair,omitempty"`
-	ReleasedClaims     []string               `json:"released_claims,omitempty"`
-	PreservedClaims    []string               `json:"preserved_claims,omitempty"`
+	ProjectRoot          string                 `json:"project_root"`
+	Clean                bool                   `json:"clean"`
+	DDXStateCheckpoint   *doctorUnjamCheckpoint `json:"ddx_state_checkpoint,omitempty"`
+	PrunableWorktrees    []doctorUnjamWorktree  `json:"prunable_worktrees"`
+	RemovedWorktrees     []doctorUnjamWorktree  `json:"removed_worktrees"`
+	ReportOnlyDirtyPaths []doctorUnjamDirtyPath `json:"report_only_dirty_paths,omitempty"`
+	PrunedWorktrees      int                    `json:"pruned_worktrees"`
+	Actions              []doctorUnjamAction    `json:"actions"`
+	BeadDoctorRepair     *doctorUnjamRepair     `json:"bead_doctor_repair,omitempty"`
+	ReleasedClaims       []string               `json:"released_claims,omitempty"`
+	PreservedClaims      []string               `json:"preserved_claims,omitempty"`
 }
 
 // doctorUnjamCheckpoint records a checkpoint commit made to absorb dirty
@@ -50,6 +51,13 @@ type doctorUnjamRepair struct {
 type doctorUnjamWorktree struct {
 	Path   string `json:"path"`
 	Reason string `json:"reason,omitempty"`
+}
+
+// doctorUnjamDirtyPath records a dirty path that doctor --unjam reports but
+// intentionally leaves untouched.
+type doctorUnjamDirtyPath struct {
+	Path      string `json:"path"`
+	Untouched bool   `json:"untouched"`
 }
 
 type doctorUnjamAction struct {
@@ -110,6 +118,15 @@ func (f *CommandFactory) runDoctorUnjam(cmd *cobra.Command) error {
 	}
 	report.ReleasedClaims = claimReport.ReleasedClaims
 	report.PreservedClaims = claimReport.PreservedClaims
+
+	reportOnlyDirtyPaths, err := unjamReportOnlyDirtyPaths(cmd.Context(), projectRoot)
+	if err != nil {
+		return err
+	}
+	report.ReportOnlyDirtyPaths = reportOnlyDirtyPaths
+	if len(reportOnlyDirtyPaths) > 0 {
+		report.Clean = false
+	}
 
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
@@ -290,6 +307,48 @@ func unjamProjectDirtyPaths(ctx context.Context, projectRoot string) ([]string, 
 		return nil, fmt.Errorf("listing project dirt: %w", err)
 	}
 	return parseDDXStateCheckpointDirtyPaths(string(out)), nil
+}
+
+func unjamReportOnlyDirtyPaths(ctx context.Context, projectRoot string) ([]doctorUnjamDirtyPath, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := gitpkg.Command(ctx, projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return nil, nil
+	}
+
+	dirtyPaths, err := unjamProjectDirtyPaths(ctx, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(dirtyPaths) == 0 {
+		return nil, nil
+	}
+
+	reportOnly := make([]doctorUnjamDirtyPath, 0, len(dirtyPaths))
+	for _, dirtyPath := range dirtyPaths {
+		normalized := normalizeDoctorUnjamPath(dirtyPath)
+		if isDoctorUnjamDDXOwnedPath(normalized) {
+			continue
+		}
+		reportOnly = append(reportOnly, doctorUnjamDirtyPath{
+			Path:      normalized,
+			Untouched: true,
+		})
+	}
+	return reportOnly, nil
+}
+
+func isDoctorUnjamDDXOwnedPath(path string) bool {
+	path = normalizeDoctorUnjamPath(path)
+	if path == "" {
+		return false
+	}
+	if path == ".ddx.yml" || path == ".ddx.yaml" {
+		return true
+	}
+	return path == ".ddx" || strings.HasPrefix(path, ".ddx/")
 }
 
 func listPreserveIterationRefs(ctx context.Context, projectRoot string) ([]string, error) {
