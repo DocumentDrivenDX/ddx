@@ -106,6 +106,19 @@ Durable-audit commit collision-safety contract: lock-acquire timeout and git-sub
   with `--no-merge` or a failing gate and assert hidden refs under
   `refs/ddx/iterations/<bead-id>/` are unique when attempts start within the
   same second.
+- `TestIntegration_WorkersCoordinateThroughReachableServer`: start a real DDx
+  server plus manual `ddx try`, manual `ddx work`, and server-managed worker
+  subprocesses against one real fixture. Assert every coordination mutation is
+  serialized by the server and exactly one claimant/landing wins without a
+  process-local coordinator race.
+- `TestIntegration_ManualWorkerContinuesOfflineAndReconciles`: stop the real
+  server after a manual worker registers. Assert the worker remains alive,
+  applies work under the cross-process offline lock, records an ordered durable
+  mutation journal, reconnects after restart, receives idempotent reconciliation
+  outcomes, and leaves no duplicate tracker event or landing commit.
+- `TestIntegration_ManagedWorkerDiesWithServer`: start a server-managed worker
+  with a live provider child, stop the server, and assert the entire managed
+  process tree exits while durable claim/attempt evidence remains recoverable.
 
 ### Performance
 
@@ -159,6 +172,9 @@ Durable-audit commit collision-safety contract: lock-acquire timeout and git-sub
 - Concurrent worker tests prove no lock is held across harness wait, no operator
   bead command fails with tracker-lock timeout, and no terminal attempt evidence
   is missing required bundle files.
+- Online/offline coordination tests prove manual and server-managed workers use
+  the same coordination protocol, manual workers reconcile idempotently after a
+  server outage, and managed workers terminate with the server.
 - Worktree prepare/cleanup and pre-dispatch lock windows have numeric budgets
   that fail deterministically on the local fixture before they become user-facing
   multi-worker stalls.

@@ -12,9 +12,25 @@ ddx:
 ---
 # ADR-022: Worker Client–Server Architecture
 
-**Status:** Proposed (rev 5 — fold codex rev 4 review feedback)
-**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2-5)
+**Status:** Accepted (rev 6 — server-preferred coordination with offline reconciliation)
+**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2-5) / 2026-07-11 (rev 6)
 **Authors:** TD bead `ddx-076147ee`
+
+**Rev 6 amendments (incident-driven operator clarification):**
+- Preserves autonomous workers and continuous server discovery, but extends
+  the Connected state from observability-only reporting to coordination of
+  claim/lease, tracker-transition, and landing mutations.
+- Keeps the bead store and git history authoritative. The server is the
+  preferred serializer for those durable stores, not a parallel source of
+  truth and not a server-side picker.
+- Adds a durable ordered offline mutation journal. Manual workers continue
+  locally when disconnected and reconcile idempotently before resuming online
+  mutations.
+- Makes manual and server-managed workers use one coordination client and
+  state machine. Their only difference is process ownership: a server-managed
+  worker terminates with the server; a manual worker survives the outage.
+- Replaces process-local “single writer” claims with one server coordinator
+  while connected and a cross-process project lock while offline.
 
 **Rev 5 amendments (per codex review of rev 4):**
 - Resolved "No worker registration" banner contradiction: it's "no
@@ -178,54 +194,57 @@ agreed first.
 
 ## Decision
 
-**Workers are always autonomous. There is no "--local mode" — the
-worker has one mode (autonomous) and detects a server continuously. If
-a server is reachable, the worker emits events and results to it
-best-effort. If no server is reachable (none running, partition, never
-configured), the worker proceeds with its work and tries again later.
-The bead store is the source of truth; the server is an optional
-observability + coordination target.**
+**Workers are always autonomous and server-preferred. There is no separate
+manual/server execution mode. Every worker detects a project-scoped server
+continuously. When connected, it sends coordination-sensitive mutations to
+the server's per-project coordinator. When disconnected, it operates against
+the same durable bead store and git repository under cross-process locks,
+journals mutations, and periodically retries. Reconnection reconciles the
+journal idempotently before new online writes.**
 
 Concretely:
 
-1. A worker process (`ddx work`) reads the bead store directly, picks
-   the next eligible bead per the current picker logic (priority asc,
-   optional queue-rank within power band, then FIFO), claims it atomically,
-   executes via `try.Attempt`,
-   writes evidence locally, and reports the result by writing the bead's
-   event log + closing the bead via the store.
-2. **All of #1 happens regardless of whether a server is running.**
-   This is the existing autonomous behavior; the worker has no
-   dependency on a server for correctness.
-3. **In parallel**, a small "server probe" goroutine inside the worker
+1. A worker process (`ddx work`) reads the bead store directly and picks the
+   next eligible bead per the current worker-side picker. Picking remains
+   local; mutation coordination is transport-aware.
+2. **Connected:** claim/lease, tracker transitions, and landing go through the
+   project-scoped server. The server serializes them against the bead store and
+   git repository with durable idempotency keys. Agent execution, worktree
+   changes, and evidence capture remain inside the worker.
+3. **NotConnected:** the worker performs the same mutations locally under a
+   cross-process project coordination lock and appends their request,
+   idempotency key, and observed outcome to an ordered durable journal. Lack of
+   a server never prevents ordinary work.
+4. **In parallel**, a small "server probe" goroutine inside the worker
    periodically (every N seconds, default 30) checks
    `~/.local/share/ddx/server.addr` (XDG-compliant, matches current code) for a reachable server. State transitions:
    - **NotConnected → Connected:** server appeared; worker POSTs
      `register` with a thin identity envelope (project root, harness,
      executor pid/host); on success, worker stores the `worker_id` and
-     starts mirroring events to the server best-effort.
+     reconciles any offline mutation journal, then starts sending coordination
+     mutations and mirroring events to the server.
    - **Connected → Connected:** server still reachable; continue
      mirroring.
    - **Connected → NotConnected:** server unreachable (crash,
-     partition, stopped); worker logs the transition, stops trying to
-     mirror events, retains its bead-store-local event log, continues
-     working.
+     partition, stopped); worker logs the transition, retains local evidence,
+     switches coordination mutations to the journaled offline path, and
+     continues working.
    - **NotConnected → NotConnected:** still no server; nothing to do.
-4. When in Connected state, the worker mirrors bead events + final
+5. When in Connected state, the worker mirrors bead events + final
    results to `/api/workers/<id>/event` and the bead-close result to
    the same endpoint best-effort. Failures (server crash mid-POST,
    partition, 5xx) are logged locally and ignored — the bead's local
    event log is authoritative.
-5. The server's view (which workers exist, which beads are running,
+6. The server's observational view (which workers exist, which beads are running,
    recent events) is **derived from worker reports** — eventually
    consistent, NOT authoritative. The server's value is centralized
    observability, cross-worker dashboards, operator UI, and
    server-initiated cancel (which writes a marker to the bead store
    that workers honor on next iteration).
-6. Server restart drops the in-memory derived view; on next probe cycle
-   the worker re-registers (or notices the server is gone). No
-   in-flight work is at risk because workers don't depend on the
-   server.
+7. A manual worker survives server restart, falls back offline, and reconciles
+   after re-registration. A server-managed worker is part of the server-owned
+   process tree and terminates with the server; desired-state supervision
+   restarts it from durable attempt/claim state.
 
 **`--local` flag is removed.** Today's `--local` semantics are the
 default behavior; there's nothing to opt into. Operators who pass
@@ -235,29 +254,26 @@ operators wanting to suppress the probe can stop the server). After one
 alpha release with the deprecation warning, the flag is deleted. The
 breaking-changes section documents this.
 
-This is **Proposal B-shaped** (server is passive observer) with one
-addition: the server can write back to the bead store to influence
-worker decisions (e.g., cancel a bead by setting an extra field; set
-queue-rank overrides inside a priority bucket, or explicitly change
-priority). Workers see those changes on next bead-store read.
+This keeps Proposal B's autonomous worker and durable local truth, but the
+server is an active serializer while reachable rather than a passive observer.
+It can also write to the bead store to influence worker decisions (for example,
+cancel or queue-rank changes), which workers see on the next read.
 
 ### Why autonomous-default workers
 
 - **Workers don't depend on the server for correctness.** Any server
   restart, partition, crash, or just "no server running" is a no-op for
   the worker's primary job (executing beads).
-- **Same code path for every invocation.** `ddx work` and `ddx work
-  --local` differ only in whether they bother trying to reach a server.
-  No in-process API server, no Transport interface, no test-mode
-  fixture — the existing unit-test setup (no server) is the autonomous
-  case.
-- **Server is opt-in observability.** Operators who want centralized
-  dashboards run a server; operators who don't, don't. Either is
-  correct.
-- **No claim coordination races.** The bead store's atomic claim is the
-  only claim primitive. Two workers contending for the same bead use
-  the same store-level CAS that exists today; there is no parallel
-  server-side claim table to race against.
+- **Same code path for every invocation.** `ddx try`, `ddx work`, and
+  server-managed workers use one coordination client. Tests exercise both its
+  server transport and offline implementation against the same behavioral
+  contract.
+- **Server availability is optional, coordination is not duplicated.** The
+  server provides host-level serialization while connected; offline work uses
+  the same operations and idempotency keys under a cross-process lock.
+- **No parallel claim truth.** The bead store's atomic claim remains the claim
+  primitive. The server invokes it on behalf of connected workers; offline
+  workers invoke it locally and later reconcile the recorded outcome.
 - **Project boundaries enforced by the existing per-project bead store.**
   Each `.ddx/beads.jsonl` is a project; workers operate against one
   project's store; the cross-project leak class (`ddx-4c51d33e`) is
@@ -308,37 +324,34 @@ When the server is reachable, the worker mirrors the
 ingestion endpoint so operators can see them in the UI. When no server,
 the events still land in the bead's local event stream.
 
-### Why not centralized server-side picker (the rev 1-3 design)
+### Why not centralized server-side picker
 
 - Workers don't need it for correctness — the bead store's atomic claim
   is sufficient. Adding a server-side claim table creates a parallel
   source of truth that has to be reconciled.
-- Server-side picker requires workers to depend on the server, which
-  contradicts the autonomous-default decision.
+- Centralizing mutation serialization does not require centralizing selection.
+  Keeping the picker in the worker preserves offline operation and avoids a
+  long-poll scheduling dependency.
 - Diagnostic events from commit `80f51574` already make starvation
   observable; centralization didn't add visibility we lacked.
 
-### Why not Proposal A (server orchestrates, in-process API for --local)
+### Why not server-required orchestration
 
 (Earlier revisions chose this; rev 4 reverses.)
 
-- The in-process API server for `--local` was complexity in service of a
-  uniformity that the user explicitly doesn't need. `--local` working
-  *without* a server is the natural and operator-expected behavior.
-- "Server is the source of truth for runtime state" requires server
-  restart recovery, claim reconciliation, partition handling, and a
-  long-poll back-pressure regime — none of which are needed when the
-  bead store is the source of truth.
-- Workers being long-lived clients of a server requires the server to be
-  available for the worker to function, which the user explicitly
-  rejected.
+- The server is not the source of truth and is not required to execute an
+  attempt. Requiring it would turn a control-plane outage into a work outage.
+- The shared client therefore has a real offline implementation, not an
+  in-process fake server. The local implementation is contract-tested against
+  the HTTP implementation and records enough journal state to reconcile.
 
-## Worker-server interface (best-effort reporting)
+## Worker-server interface (coordination + best-effort reporting)
 
-The worker-server boundary is small. There is no HTTP API for claim
-coordination, no long-poll, no heartbeat lease, no in-process server.
-There are exactly two endpoints, both used best-effort by workers and
-both backed by `requireTrusted` (loopback or ts-net per ADR-006):
+The worker-server boundary separates coordination requests from event
+reporting. Coordination requests are project-scoped, idempotent, and return a
+durable outcome. Event reports remain best-effort. There is no long-poll picker
+and no parallel server claim database. Endpoints are backed by `requireTrusted`
+(loopback or ts-net per ADR-006).
 
 ### POST /api/workers/register
 
@@ -363,15 +376,33 @@ discovery. Body is a small identity envelope:
 Response:
 
 ```json
-{ "worker_id": "wkr-9f3a..." }
+{ "worker_id": "wkr-9f3a...", "coordination_protocol": 1 }
 ```
 
-The worker uses `worker_id` as a correlation key in subsequent event
-reports. If registration fails (no server, network error, 5xx), the
-worker proceeds without a `worker_id` and skips event mirroring. No
-session token, no heartbeat, no claim lease — none of those concepts
-exist in the worker-server protocol because the worker doesn't depend
-on the server.
+The worker uses `worker_id` as a correlation key in subsequent event and
+coordination requests. If registration fails, it enters NotConnected and uses
+the journaled offline coordinator. A successful registration must be followed
+by offline-journal reconciliation before the worker sends new online
+coordination mutations.
+
+### POST /api/projects/<project>/coordination/mutations
+
+Submits one coordination mutation with `worker_id`, `operation`,
+`idempotency_key`, project-relative payload, and the worker's last observed
+bead/git version. V1 operations are `claim`, `renew_claim`, `release_claim`,
+`tracker_transition`, and `land`. The server invokes the same bead-store and
+landing implementations used offline, serialized by its per-project
+coordinator. The response is `applied`, `already_applied`, or `conflict`, plus
+the resulting durable version or revision.
+
+### POST /api/projects/<project>/coordination/reconcile
+
+Submits the worker's ordered offline journal after reconnect. The server checks
+each idempotency key and durable bead/git state in order. Already-observed
+operations are acknowledged without replay; safe missing operations are
+applied; incompatible state is returned as a structured conflict and retained
+as operator-attention evidence. Reconciliation is bounded and resumable: the
+response includes the highest contiguous journal sequence acknowledged.
 
 ### POST /api/workers/<id>/event
 
@@ -405,6 +436,9 @@ Once the server has a derived view of who's reporting:
   surfaced via existing GraphQL and the workers panel.
 - **Cross-worker correlation**: see all workers across all projects in
   one place; useful for multi-project hosts.
+- **Host-local serialization**: coordinate claim/lease, tracker transitions,
+  and landing across both manual and server-managed workers without creating a
+  parallel source of truth.
 - **Operator UI**: queue beads, cancel beads (via writing markers to the
   bead store that workers honor on next iteration), view bead history.
 - **Server-initiated cancel**: not a direct API call to the worker;
@@ -445,18 +479,18 @@ rejection to the operator.
 - It does not gate worker startup or operation (workers run without it).
 - It does not hold session tokens or enforce per-worker auth (a future
   hardening; v1 trusts the requireTrusted boundary).
-- It does not need to survive worker death gracefully (workers are
-  independent; server's derived view is replayable from the bead
-  stores at any time).
+- It does not own manual-worker lifetime. It does own managed-worker process
+  trees, which terminate on server shutdown.
 - In managed-node mode, the hub does not become an authoritative worker
   scheduler. It sends commands to the managed node; local authority still wins.
 
 ### Server crash / restart behavior
 
-Server crashes: workers' next event POST fails; workers log + continue.
-Server restarts: workers' next event POST succeeds (or 410 if the
-server didn't recover the worker_id, in which case the worker
-re-registers and resumes). No in-flight work is at risk.
+On a server crash, manual workers' next request fails and they switch to the
+journaled offline coordinator. Server-managed workers terminate with the
+server. After restart, a surviving manual worker re-registers, reconciles the
+offline journal, then resumes online coordination. Desired-state supervision
+restarts managed workers from durable claim and attempt evidence.
 
 ### Probe + freshness state model
 
@@ -467,7 +501,7 @@ table. The server-probe goroutine:
 |---|---|---|
 | Worker process start | immediate (0s) | Probe `~/.local/share/ddx/server.addr`; on success, register |
 | Probe interval (steady state) | 30s default; 10s min; 5min max; jittered ±20% | Re-check reachability; emit register if NotConnected→Connected; nothing if Connected→Connected |
-| Connected POST fails (timeout, conn refused, 5xx) | immediate | Worker enters NotConnected; logs locally; continues working |
+| Connected coordination POST fails or has unknown outcome | immediate | Worker enters NotConnected; journals the idempotent mutation; resolves it locally under the project lock |
 | 5 consecutive probe failures | ~2.5 min default | Worker reduces probe rate to 5min (backoff); resets to 30s on next success |
 | Server replies 410 unknown_worker | immediate | Worker re-registers within same probe cycle |
 | Worker process exit (graceful) | immediate | Best-effort POST disconnect; not required for correctness |
@@ -501,6 +535,17 @@ from missing those events:
   consult bead-local logs.
 - Backfill is best-effort: a 5xx during backfill leaves the buffer
   intact; worker tries again on next NotConnected → Connected.
+
+### Offline coordination journal
+
+Event backfill is not sufficient for coordination. Before applying any offline
+coordination mutation, the worker appends a durable journal entry containing a
+monotonic sequence, operation, idempotency key, request payload hash, and
+precondition. After applying it locally, the worker appends the observed
+outcome and resulting bead/git version. The journal is project-scoped and
+protected by the same cross-process lock as the mutation. It is compacted only
+after the server acknowledges a contiguous sequence. A conflict never causes
+automatic replay or rollback; it produces durable operator-attention evidence.
 
 ### Cancel SLA
 
@@ -625,63 +670,49 @@ rule because nothing about the worker state machine changes.
 - **`ddx-50da9674` (clean fixture repo)** — supports rev 4's acceptance
   test; independent.
 
-## Implementation roadmap
+## Rev 6 implementation roadmap
 
-Rev 5 expands from rev 4's 5 beads to 9, after codex flagged missing
-UI/doctor/FEAT-006/server-spawn-migration/backfill scope.
+1. **Shared coordination client and offline journal** — extend continuous
+   discovery with a transport-neutral coordination interface, durable ordered
+   journal, cross-process offline lock, and contract tests shared by the local
+   and HTTP implementations.
+2. **Server coordination endpoints** — expose project-scoped idempotent
+   mutation and reconcile endpoints backed by the existing bead store and
+   per-project land coordinator.
+3. **Uniform worker wiring** — route `ddx try`, manual `ddx work`, and
+   `ddx work --server-managed` through the shared client. Remove unconditional
+   process-local land coordinators from command construction.
+4. **Real integration proof** — run real server, manual worker, and managed
+   worker processes against one real git/bead fixture; exercise online
+   contention, server loss, offline progress, restart, reconciliation, and
+   managed-process death without mocks.
 
-1. **server: ingestion endpoints** — implement `POST /api/workers/register` + `POST /api/workers/<id>/event` + `POST /api/workers/<id>/backfill`; in-memory derived view backed by append-only `.ddx/server/worker-events.jsonl`; freshness state machine (connected/stale/disconnected); requireTrusted boundary. ~300 LOC.
-
-2. **worker: server-probe goroutine + best-effort event mirror** — periodic reachability check on `~/.local/share/ddx/server.addr` (XDG-compliant, matches current code) with jittered 30s interval, immediate first probe, exponential backoff on consecutive failures; transitions emit register/disconnect; in-memory ring buffer for backfill (200-event cap); event POSTs are best-effort. ~250 LOC.
-
-3. **server: operator-cancel** — `/api/beads/<id>/cancel` writes `extra.cancel-requested: true`; worker mid-attempt poll (10s default) checks bead `extra` and aborts at next safe point with `preserved_for_review` reason `operator_cancel`; idempotency via `cancel-honored: true`. ~150 LOC.
-
-4. **CLI: deprecate `--local`** — flag becomes no-op with deprecation warning; update CLAUDE.md, AGENTS.md, getting-started, and the cobra help text. Existing tests asserting `--local`-specific behavior get rewritten or deleted. (Codex notes the sweep is larger than 50 LOC: `cli/cmd/work_test.go`, `agent_execute_loop_test.go`, `zero_config_work_test.go`, `skills/ddx/reference/work.md`, demos.) ~150 LOC + doc edits.
-
-5. **server: derived-view GraphQL + UI workers panel** — schema fields: `workers { id, project, harness, state, last_event_at, mirror_failures_count, had_dropped_backfill, current_bead, current_attempt }`; UI surfaces freshness indicators + duplicate-worker display + the "trusted-peer reported, not authoritative" labeling. Existing workers panel migrated. ~400 LOC frontend + ~100 LOC backend.
-
-6. **worker diagnostics migration** — read worker state from server's runtime registry when available; fall back to `.ddx/workers/` on-disk files when no server. The on-disk format stays as the fallback-source-of-truth for one alpha release lag, then deprecated. ~150 LOC.
-
-7. **server-spawn path migration** — `cli/internal/server/workers.go` and `handleStartExecuteLoopWorker` switch from hand-marshalled spec to `exec ddx work` with env-vars. The legacy spec serialization deletes when this lands. ~200 LOC + test updates.
-
-8. **FEAT-006 amendment** — replace the rev 3 worker-contract section with rev 5's autonomous-default + best-effort-mirror description. Drop session-token/heartbeat/`next-bead`/result/disconnect contract; add register/event/backfill/cancel + freshness state. ~200 lines docs.
-
-9. **acceptance + soak** — uses `ddx-50da9674` clean fixture repo. Multi-worker drain WITH server; restart server mid-flight; verify worker continues + reconnects + backfills. Then drain with NO server; verify identical behavior. Operator-cancel test (write marker, observe `preserved_for_review` with `operator_cancel` reason within SLA). Soak: ≥1 week of normal operator use. Final bead.
-
-Plus one COORDINATION bead, NOT new work but a parking-lot for the
-C7 conflict:
-
-10. **coordinate: C7 (Guard contract, delete attempted map) with rev 5 worker** — either C7 lands first and rev 5 implementation uses Guard-derived exclusion, OR C7 stays parked until rev 5's worker code defines its replacement for the per-Run attempted map. Decision documented; no LOC.
-
-Total estimated effort: 2-4 weeks (vs 1-2 weeks for rev 4's understated 5-bead roadmap, vs 8-10 weeks for rev 3's design).
+Rev 5's event ingestion, probe, freshness, cancel, UI, and diagnostics work
+remains valid and becomes the observability half of the shared client.
 
 ## Consequences
 
-- **Workers don't depend on the server.** The headline operator
-  requirement (server restart preserves in-flight work) is satisfied
-  by construction: workers don't notice server restarts as anything
-  more than transient mirror failures.
+- **Manual workers don't depend on the server.** They survive a server outage,
+  switch to durable offline coordination, and reconcile after restart.
+- **Managed workers share semantics, not lifetime.** They use the same
+  coordination client but terminate with the server-owned process tree.
 - **No `--local` flag.** Removed from the CLI surface. Behavior of
   today's `--local` becomes the always-on default. Backward compat
   preserved for one release via a no-op flag with deprecation warning.
-- **Server is opt-in observability.** Operators who don't run a server
-  see no behavior change from today. Operators who do see
-  centralized event aggregation, cross-worker visibility, and an
-  operator UI. Both are correct configurations.
+- **Server is preferred coordination plus observability.** Operators who do
+  not run a server retain correct offline behavior. Operators who do get one
+  host-local serialization point and centralized visibility.
 - **`ExecuteLoopSpec` unification still happens.** Per `ddx-29058e2a` —
   the spec is a worker-side struct, not a wire format. The drop class
   is closed by single-struct discipline; it just doesn't need to cross
   a network boundary.
-- **No claim coordination races.** Bead store's atomic claim is the
-  only claim primitive. Two workers contending use the same store
-  CAS that has worked correctly for as long as DDx has had a bead
-  store.
-- **No "kill server → workers exit" tests left valid.** Any test that
-  relied on this behavior gets updated to assert "kill server →
-  workers continue working autonomously."
-- **Server restart loses derived view briefly.** The server's view of
-  who's working what comes back within one probe cycle (default 30s)
-  as workers re-register. No in-flight work is at risk.
+- **No parallel claim authority.** The bead-store CAS remains the claim
+  primitive whether invoked by the server or the offline client.
+- **Server death has two explicit outcomes.** Manual workers continue offline;
+  server-managed workers exit and are restarted by desired-state supervision.
+- **Server restart loses derived view briefly.** Manual workers restore it by
+  registration, event backfill, and coordination reconciliation. Managed
+  workers restore it when the supervisor relaunches them.
 - **Operator UX for cancel changes slightly.** Today operators kill
   worker subprocesses or wait. After: operators send cancel via the
   server (or write the marker to the bead store directly); worker

@@ -78,13 +78,14 @@ In scope:
   agent children.
 - Containerized end-to-end tests that prove cleanup leaves no managed worker or
   agent child processes behind.
-- Migration path for current manual workers: stop tmux/shell workers, then
-  re-create equivalent server-managed workers.
+- A shared reconnecting coordination client used by both manual and
+  server-managed workers; no migration or shutdown of manual workers is
+  required merely to prevent coordination conflicts.
 
 Out of scope:
 
-- Making the server authoritative for bead claiming. The bead store remains the
-  source of truth for claims and close events.
+- Replacing the bead store or git history with server-only claim/landing state.
+  The server serializes mutations against those durable sources of truth.
 - Adopting arbitrary already-running external `ddx work` processes into full
   management. The server may report them as external, but cannot promise stop or
   restart unless it started them or they register a managed control channel in a
@@ -158,8 +159,10 @@ tick and on explicit wake:
 - If a stale `.ddx/workers/<id>/status.json` says `running` but the worker is
   not in memory, mark it stale/stopped and release any bead claim.
 
-This preserves autonomous `ddx work` as an escape hatch while making
-server-managed workers the routine path.
+This preserves autonomous `ddx work` while making connected manual and managed
+workers participate in the same server-side coordination stream. Offline
+manual workers journal mutations and reconcile on reconnect; managed workers
+terminate with the server and are recovered by desired-state supervision.
 
 ### Process Ownership
 
@@ -221,9 +224,11 @@ ddx worker reconcile --project <path|id>
 ddx worker cleanup --project <path|id>
 ```
 
-`ddx work` remains a direct autonomous worker command. For routine operator
-mode, docs and UI should point to `ddx worker set --count N` or the Workers page
-instead of telling operators to start tmux windows.
+`ddx work` remains a direct autonomous worker command, but not a separate
+coordination mode: it uses the server while connected and durable offline
+coordination while disconnected. For routine operator mode, docs and UI should
+still point to `ddx worker set --count N` or the Workers page instead of telling
+operators to start tmux windows.
 
 ### UI
 
@@ -431,10 +436,11 @@ sessions versus managed worker descendants.
 - **Docker availability.** Docker may not be installed on every developer host.
   Mitigation: skip locally with a clear message, but require Docker in release
   CI for this feature.
-- **ADR-022 tension.** ADR-022 states workers are autonomous and the server is
-  value-added coordination. This plan preserves autonomous `ddx work`, but makes
-  server-supervised workers the recommended operator mode. ADR-022 needs an
-  amendment or successor ADR during implementation.
+- **Online/offline reconciliation.** A server can disappear after a worker has
+  prepared a coordination request but before it observes the response.
+  Mitigation: every mutation carries a durable idempotency key; reconnect sends
+  the ordered journal and the server classifies each item as applied,
+  already-applied, or conflict against bead/git truth.
 - **Reviewer hangs.** Claude review can hang even when trivial prompts work.
   Mitigation: review dispatch must be supervised by the same timeout and process
   cleanup machinery as implementation workers, and stalled review attempts must
