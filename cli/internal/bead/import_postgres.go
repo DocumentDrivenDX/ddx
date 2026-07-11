@@ -154,6 +154,7 @@ func prepareImportedAxonCorpus(sourceDir string, sourceBeads []Bead) ([]Bead, in
 			return nil, 0, 0, err
 		}
 		cp := bead
+		cp.Extra = cloneStringAnyMap(cp.Extra)
 		if cp.Extra == nil {
 			cp.Extra = make(map[string]any)
 		}
@@ -388,6 +389,7 @@ func sampledBeadIDs(sourceBeads []Bead) []string {
 func canonicalizeImportedBeadForVerify(sourceDir string, bead Bead) (Bead, error) {
 	cp := bead
 	cp.SchemaVersion = 0
+	cp.Extra = cloneStringAnyMap(cp.Extra)
 	if cp.Extra == nil {
 		return cp, nil
 	}

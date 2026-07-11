@@ -1271,10 +1271,10 @@ Five Go analyzers under `cli/tools/lints/` (filed as bead `ddx-e91a45c0` / LINT)
 - `direct-bead-jsonl-io` — flags new file I/O against `beads.jsonl` outside allowlist. **Permanent.**
 - `no-new-rawbackend-impls` — flags new types implementing `RawBackend` outside allowlist. **Permanent.**
 - `typed-context-accessors-only` — flags untyped `ctx.Value` in `cli/internal/bead/`. **Permanent.**
-- `concrete-store-methods` — flags new files holding `*bead.Store` as struct field. **Transitional** — removed at BL (Go's `internal/` rule enforces the same property at the compiler level).
-- `no-internal-store-construction` — flags `bead.NewStore(...)` calls outside test packages and factory. **Transitional** — removed at BL.
+- `concrete-store-methods` — flagged new files holding `*bead.Store` as struct field. **Removed.** Enforced now by Go's `internal/` rule at the compiler level plus `TestModuleBoundary_NoInternalImportsOutsideBead`.
+- `no-internal-store-construction` — flagged `bead.NewStore(...)` calls outside test packages and factory. **Removed.** Enforced now by Go's `internal/` rule at the compiler level plus `TestModuleBoundary_NoInternalImportsOutsideBead`.
 
-Through Phase 2 (per-concern beads) and Phase 3 (Axon cluster), all five analyzers run in CI. After BL completes, the lint suite drops the two transitional analyzers.
+Through Phase 2 (per-concern beads) and Phase 3 (Axon cluster), all five analyzers ran in CI. After BL landed, the lint suite dropped the two transitional analyzers; the boundary is enforced by the compiler (`internal/` visibility) and the AST-based `TestModuleBoundary_NoInternalImportsOutsideBead` regression test.
 
 ---
 

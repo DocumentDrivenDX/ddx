@@ -104,3 +104,21 @@ func TestExternalBackendOpensBeadsArchiveWithFallback(t *testing.T) {
 	assert.Equal(t, want.ID, got[0].ID)
 	assert.Equal(t, want.Title, got[0].Title)
 }
+
+func TestStorageFactory_NewStoreReturnsBackend(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
+
+	var backend Backend = NewStore(dir)
+	require.NotNil(t, backend)
+
+	require.NoError(t, backend.Init(context.Background()))
+	beads, err := backend.ReadAll(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, beads)
+}
+
+func TestStorageBackendConformance(t *testing.T) {
+	var _ Backend = (*Store)(nil)
+	var backend Backend = NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
+	require.NotNil(t, backend)
+}
