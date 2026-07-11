@@ -22,6 +22,10 @@ ExecStart={{.ExecPath}} server
 WorkingDirectory={{.WorkDir}}
 Restart=on-failure
 RestartSec=5
+# DDx maps a graceful SIGINT/SIGTERM cancellation to the conventional shell
+# status 130. Treat that as a clean service exit so an operator stop is not
+# reported as a server crash.
+SuccessExitStatus=130
 StandardOutput=append:{{.LogPath}}
 StandardError=append:{{.LogPath}}
 {{if .EnvFile}}EnvironmentFile={{.EnvFile}}
