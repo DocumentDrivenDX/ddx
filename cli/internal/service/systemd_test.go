@@ -60,6 +60,45 @@ func TestSystemdInstall_RestartsActiveServiceAfterUnitRewrite(t *testing.T) {
 	}
 }
 
+func TestSystemdInstall_RendersAggregateResourceBudget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	prev := runSystemctl
+	runSystemctl = func(args ...string) error { return nil }
+	t.Cleanup(func() { runSystemctl = prev })
+
+	cfg := Config{
+		ExecPath: "/usr/local/bin/ddx",
+		WorkDir:  home,
+		LogPath:  filepath.Join(home, ".local", "share", "ddx", "logs", "ddx-server.log"),
+		ResourcePolicy: ResourcePolicy{
+			CPUQuotaPercent: 250,
+			CPUWeight:       42,
+			Nice:            15,
+		},
+	}
+	if err := (systemdBackend{}).Install(cfg); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	unitPath := filepath.Join(home, ".config", "systemd", "user", unitName)
+	body, err := os.ReadFile(unitPath)
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	unit := string(body)
+	if !strings.Contains(unit, "CPUQuota=250%") {
+		t.Fatalf("unit missing CPUQuota=250%%:\n%s", unit)
+	}
+	if !strings.Contains(unit, "CPUWeight=42") {
+		t.Fatalf("unit missing CPUWeight=42:\n%s", unit)
+	}
+	if !strings.Contains(unit, "Nice=15") {
+		t.Fatalf("unit missing Nice=15:\n%s", unit)
+	}
+}
+
 func TestSystemdInstall_StartsInactiveServiceWithoutDoubleRestart(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

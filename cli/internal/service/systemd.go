@@ -26,6 +26,9 @@ RestartSec=5
 # status 130. Treat that as a clean service exit so an operator stop is not
 # reported as a server crash.
 SuccessExitStatus=130
+{{if .CPUQuotaPercent}}CPUQuota={{.CPUQuotaPercent}}%
+{{end}}{{if .CPUWeight}}CPUWeight={{.CPUWeight}}
+{{end}}Nice={{.Nice}}
 StandardOutput=append:{{.LogPath}}
 StandardError=append:{{.LogPath}}
 {{if .EnvFile}}EnvironmentFile={{.EnvFile}}
@@ -37,10 +40,13 @@ WantedBy=default.target
 type systemdBackend struct{}
 
 type systemdUnitParams struct {
-	ExecPath string
-	WorkDir  string
-	LogPath  string
-	EnvFile  string
+	ExecPath        string
+	WorkDir         string
+	LogPath         string
+	EnvFile         string
+	CPUQuotaPercent int
+	CPUWeight       int
+	Nice            int
 }
 
 var runSystemctl = systemctl
@@ -54,6 +60,10 @@ func systemdServiceDir() (string, error) {
 }
 
 func (systemdBackend) Install(cfg Config) error {
+	if err := cfg.ResourcePolicy.Validate(); err != nil {
+		return fmt.Errorf("invalid resource policy: %w", err)
+	}
+
 	wasActive := runSystemctl("is-active", "--quiet", unitName) == nil
 
 	serviceDir, err := systemdServiceDir()
@@ -89,10 +99,13 @@ func (systemdBackend) Install(cfg Config) error {
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, systemdUnitParams{
-		ExecPath: cfg.ExecPath,
-		WorkDir:  cfg.WorkDir,
-		LogPath:  cfg.LogPath,
-		EnvFile:  envFile,
+		ExecPath:        cfg.ExecPath,
+		WorkDir:         cfg.WorkDir,
+		LogPath:         cfg.LogPath,
+		EnvFile:         envFile,
+		CPUQuotaPercent: cfg.ResourcePolicy.CPUQuotaPercent,
+		CPUWeight:       cfg.ResourcePolicy.CPUWeight,
+		Nice:            cfg.ResourcePolicy.Nice,
 	}); err != nil {
 		return err
 	}
