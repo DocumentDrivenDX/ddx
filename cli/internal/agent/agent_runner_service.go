@@ -106,16 +106,14 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	// orphan provider subprocesses when the worker dies abnormally
 	// (bead ddx-01b89378). Best-effort: if the shim fails to install
 	// we still proceed; the orphan reaper remains as a backstop.
-	if ddxBinary, err := os.Executable(); err == nil {
-		if _, _, shimErr := EnsureProviderShimOnPATH(ddxBinary); shimErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
-		}
+	if _, _, shimErr := installProviderShimOnPATH(); shimErr != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
 	}
 
 	// Construct the service. Reuses NewServiceFromWorkDir so provider/model
 	// routing data lands on the agent the same way every other DDx command
 	// constructs it (see serviceconfig.go).
-	svc, err := NewServiceFromWorkDir(wd)
+	svc, err := ResolveServiceFromWorkDir(wd)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}

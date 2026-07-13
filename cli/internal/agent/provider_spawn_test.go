@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"os"
 	"syscall"
 	"testing"
 
@@ -29,4 +30,24 @@ func TestExecutor_ProviderSpawnSetsPdeathsigAndSetpgid(t *testing.T) {
 	require.NotNil(t, cmd.SysProcAttr, "SysProcAttr must be set so the kernel reaps the wrapper on parent death")
 	require.True(t, cmd.SysProcAttr.Setpgid, "Setpgid must be true so cmdKillProcessGroup can reach descendants via kill(-pgid)")
 	require.Equal(t, syscall.SIGKILL, cmd.SysProcAttr.Pdeathsig, "Pdeathsig must be SIGKILL to prevent orphan codex/claude processes when the worker dies")
+}
+
+func TestProviderShimExecutableResolver_RejectsGoTestBinary(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	beforePATH := os.Getenv("PATH")
+	originalLookup := providerShimExecutableLookup
+	providerShimExecutableLookup = func() (string, error) {
+		return "/tmp/agent.test", nil
+	}
+	t.Cleanup(func() { providerShimExecutableLookup = originalLookup })
+
+	dir, cleanup, err := installProviderShimOnPATH()
+	require.Error(t, err)
+	require.Empty(t, dir)
+	require.NotNil(t, cleanup)
+	require.Contains(t, err.Error(), "/tmp/agent.test")
+	require.Equal(t, beforePATH, os.Getenv("PATH"))
+	require.Empty(t, providerShimDirPath)
 }
