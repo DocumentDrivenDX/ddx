@@ -48,14 +48,52 @@ func scanProviderChildProcessesImpl(ctx context.Context, rootPID int, now time.T
 		if r.ElapsedSeconds >= 0 {
 			started = now.Add(-time.Duration(r.ElapsedSeconds) * time.Second)
 		}
+		ownerPID, ownerProvider := nearestProviderAncestor(row, rootPID, pid)
 		out2 = append(out2, providerChildProcess{
-			PID:       pid,
-			Provider:  provider,
-			Command:   r.Command,
-			StartedAt: started,
+			PID:              pid,
+			PPID:             r.PPID,
+			Provider:         provider,
+			Command:          r.Command,
+			StartedAt:        started,
+			OwnerProviderPID: ownerPID,
+			OwnerProvider:    ownerProvider,
 		})
 	}
 	return out2, nil
+}
+
+// nearestProviderAncestor walks pid's PPID chain (via row, the full process
+// table — not just provider-classified processes) up to but not including
+// rootPID, and returns the PID and provider name of the first ancestor that
+// is itself classified as a provider CLI. It returns (0, "") if no such
+// ancestor exists before the chain reaches rootPID, is missing from row (the
+// parent already exited or is untracked), or a cycle is detected.
+func nearestProviderAncestor(row map[int]providerPSRow, rootPID, pid int) (int, string) {
+	visited := map[int]struct{}{pid: {}}
+	current := pid
+	for i := 0; i <= len(row); i++ {
+		r, ok := row[current]
+		if !ok {
+			return 0, ""
+		}
+		parent := r.PPID
+		if parent <= 0 || parent == rootPID || parent == current {
+			return 0, ""
+		}
+		if _, seen := visited[parent]; seen {
+			return 0, ""
+		}
+		visited[parent] = struct{}{}
+		pr, ok := row[parent]
+		if !ok {
+			return 0, ""
+		}
+		if prov := providerForCommand(pr.Command); prov != "" {
+			return parent, prov
+		}
+		current = parent
+	}
+	return 0, ""
 }
 
 type providerPSRow struct {

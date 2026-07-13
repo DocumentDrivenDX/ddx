@@ -236,6 +236,112 @@ func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	}
 }
 
+// TestRunningProviderChildGuard_PreservesActiveHarnessDescendantProviders
+// constructs worker -> active Codex harness -> Claude fixture ancestry (the
+// shape of a Codex-run pre-commit/test suite spawning Claude as a fixture,
+// per ddx-44e89575) and proves the running guard neither signals nor labels
+// the fixture as a non-route leak, instead reporting it as harness-owned.
+func TestRunningProviderChildGuard_PreservesActiveHarnessDescendantProviders(t *testing.T) {
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skipf("sh not available: %v", err)
+	}
+	sleepPath, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+	dir := t.TempDir()
+	codexBin := filepath.Join(dir, "codex")
+	if err := os.Symlink(shPath, codexBin); err != nil {
+		t.Fatalf("symlink fake codex: %v", err)
+	}
+	claudeBin := filepath.Join(dir, "claude")
+	if err := os.Symlink(sleepPath, claudeBin); err != nil {
+		t.Fatalf("symlink fake claude: %v", err)
+	}
+	pidFile := filepath.Join(dir, "claude.pid")
+
+	// The active Codex harness backgrounds a Claude fixture as its own child
+	// (the pre-commit/test-suite shape) and waits on it, so the fixture stays
+	// parented under the live codex process for the duration of the test.
+	cmd := exec.Command(codexBin, "-c", `"$1" 120 & echo $! > "$2"; wait`, "codex", claudeBin, pidFile)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start fake codex harness: %v", err)
+	}
+	codexPID := cmd.Process.Pid
+	go func() { _, _ = cmd.Process.Wait() }()
+	t.Cleanup(func() { _ = syscall.Kill(-codexPID, syscall.SIGKILL) })
+
+	claudePID := waitForPIDFile(t, pidFile)
+	waitForProviderChildren(t, os.Getpid(), codexPID, claudePID)
+
+	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "", "codex", "running", time.Now().UTC())
+
+	if !signalProcessAlive(claudePID) {
+		t.Fatalf("running guard reaped active-harness-descendant claude fixture %d", claudePID)
+	}
+	for _, r := range reaped {
+		if r.PID == claudePID {
+			t.Fatalf("claude fixture %d recorded as reaped: %+v", claudePID, r)
+		}
+	}
+
+	var claudeChild workerstatus.ProviderChild
+	var found bool
+	for _, c := range children {
+		if c.PID == claudePID {
+			claudeChild = c
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("claude fixture missing from status view: %+v", children)
+	}
+	if claudeChild.NonRoute {
+		t.Fatalf("claude fixture must not be labeled non-route: %+v", claudeChild)
+	}
+	if !claudeChild.HarnessOwned || claudeChild.RouteOwner == "" {
+		t.Fatalf("claude fixture must be labeled harness-owned with a route owner: %+v", claudeChild)
+	}
+}
+
+// TestRunningProviderChildGuard_ReapsDirectNonRouteProvider proves a direct
+// non-route provider — one with no active-route provider anywhere in its
+// ancestry, i.e. not a fixture spawned under the harness — remains terminated
+// within one guard interval.
+func TestRunningProviderChildGuard_ReapsDirectNonRouteProvider(t *testing.T) {
+	dir := t.TempDir()
+	geminiPID := startFakeProviderChild(t, dir, "gemini")
+	waitForProviderChildren(t, os.Getpid(), geminiPID)
+
+	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "", "codex", "running", time.Now().UTC())
+
+	assertProcessGone(t, geminiPID)
+
+	var reapedGemini bool
+	for _, r := range reaped {
+		if r.PID == geminiPID {
+			reapedGemini = true
+			if r.Reason != reasonRunningPhaseGuard {
+				t.Fatalf("unexpected reap reason for direct non-route provider: %q", r.Reason)
+			}
+		}
+	}
+	if !reapedGemini {
+		t.Fatalf("direct non-route provider %d was not reaped: %+v", geminiPID, reaped)
+	}
+
+	for _, c := range children {
+		if c.PID != geminiPID {
+			continue
+		}
+		if !c.NonRoute || c.HarnessOwned || c.RouteOwner != "" || c.Diagnostic == "" {
+			t.Fatalf("direct non-route provider must report non-route, not harness-owned: %+v", c)
+		}
+	}
+}
+
 func TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup(t *testing.T) {
 	shPath, err := exec.LookPath("sh")
 	if err != nil {

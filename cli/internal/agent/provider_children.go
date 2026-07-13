@@ -42,9 +42,25 @@ var providerCLINames = map[string]struct{}{
 
 type providerChildProcess struct {
 	PID       int
+	PPID      int
 	Provider  string
 	Command   string
 	StartedAt time.Time
+
+	// OwnerProvider is the nearest provider-classified ancestor's name found
+	// while walking this process's PPID chain up to (but not including) the
+	// worker root, or "" if no such ancestor exists (the process is a direct
+	// or sibling child of the worker rather than a descendant of another
+	// provider CLI). OwnerProviderPID is that ancestor's PID, or 0.
+	//
+	// This distinguishes a provider CLI launched by the active route's own
+	// harness process (e.g. a Claude fixture a Codex-run test suite spawns)
+	// from a provider CLI launched directly by worker lifecycle or
+	// model-discovery paths — the former is legitimate work-in-progress under
+	// the active route and must survive the running-phase guard; the latter
+	// is exactly the leak the guard exists to reap (ddx-44e89575).
+	OwnerProviderPID int
+	OwnerProvider    string
 }
 
 type providerChildReapRecord struct {
@@ -137,10 +153,13 @@ func scanProviderChildrenForStatus(ctx context.Context, rootPID int, routeLabel,
 }
 
 // providerChildStatus renders one scanned provider process as a status entry,
-// marking it route-owned (RouteOwner set) or, when the active route is known
-// and the provider does not match it, non-route with an operator-facing
-// diagnostic. Non-route children observed without a known route are reported
-// plain so an early scan never mislabels a child the guard cannot yet judge.
+// marking it route-owned (RouteOwner set) when its own provider matches the
+// active route, harness-owned (RouteOwner + HarnessOwned set) when its
+// nearest provider-classified ancestor matches the active route instead, or,
+// when the active route is known and neither holds, non-route with an
+// operator-facing diagnostic. Non-route children observed without a known
+// route are reported plain so an early scan never mislabels a child the
+// guard cannot yet judge.
 func providerChildStatus(proc providerChildProcess, routeLabel, harness, activeOwner, phase string, now time.Time) workerstatus.ProviderChild {
 	child := workerstatus.ProviderChild{
 		PID:        proc.PID,
@@ -151,6 +170,11 @@ func providerChildStatus(proc providerChildProcess, routeLabel, harness, activeO
 	}
 	if routeOwnsProvider(proc.Provider, routeLabel, harness) {
 		child.RouteOwner = activeOwner
+		return child
+	}
+	if routeOwnsProvider(proc.OwnerProvider, routeLabel, harness) {
+		child.RouteOwner = activeOwner
+		child.HarnessOwned = true
 		return child
 	}
 	if activeOwner != "" {
@@ -179,12 +203,16 @@ func nonRouteProviderDiagnostic(provider, owner string) string {
 
 // runningProviderChildGuard performs one running-phase sweep of the worker's
 // provider-CLI descendants. Children whose provider matches the active
-// route/harness are preserved and reported as route-owned; every other provider
-// CLI is terminated by process group (taking grandchildren such as Gemini's
-// Node worker with it) and reported as non-route with an operator-attention
-// diagnostic. When the active route is not yet known (route and harness both
-// empty) the guard observes without reaping, so it never quarantines a child it
-// cannot yet attribute. Returns the status view and the reap evidence records.
+// route/harness are preserved and reported as route-owned; children that are
+// instead descendants of the active route's own process (e.g. a provider CLI
+// a Codex-run pre-commit/test suite spawns as a fixture) are likewise
+// preserved and reported as harness-owned. Every other provider CLI — a
+// direct or sibling non-route leak — is terminated by process group (taking
+// grandchildren such as Gemini's Node worker with it) and reported as
+// non-route with an operator-attention diagnostic. When the active route is
+// not yet known (route and harness both empty) the guard observes without
+// reaping, so it never quarantines a child it cannot yet attribute. Returns
+// the status view and the reap evidence records.
 func runningProviderChildGuard(ctx context.Context, rootPID int, routeLabel, harness, phase string, now time.Time) ([]workerstatus.ProviderChild, []providerChildReapRecord) {
 	procs, err := providerChildScanner(ctx, rootPID, now)
 	if err != nil || len(procs) == 0 {

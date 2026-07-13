@@ -41,18 +41,25 @@ type LiveWorker struct {
 //
 // RouteOwner is set when the child's provider matches the worker's active
 // route/harness; such a child is legitimate route work and is never reaped.
+// HarnessOwned is set when the child's own provider differs from the active
+// route but the nearest provider-classified ancestor between it and the
+// worker root is the active route/harness — e.g. a Claude fixture spawned by
+// a Codex-run test suite's pre-commit checks. Such a descendant is also
+// preserved by the running-phase guard, distinctly from a direct route match.
 // NonRoute is set on a provider CLI whose provider does not match the active
-// route — an unrelated harness the running-phase guard terminates — and
-// Diagnostic carries an operator-facing explanation for that quarantine.
+// route and is not owned by it through ancestry either — a direct or sibling
+// leak the running-phase guard terminates — and Diagnostic carries an
+// operator-facing explanation for that quarantine.
 type ProviderChild struct {
-	PID        int     `json:"pid"`
-	Provider   string  `json:"provider"`
-	Harness    string  `json:"harness,omitempty"`
-	RouteOwner string  `json:"route_owner,omitempty"`
-	Phase      string  `json:"phase,omitempty"`
-	AgeSeconds float64 `json:"age_seconds"`
-	NonRoute   bool    `json:"non_route,omitempty"`
-	Diagnostic string  `json:"diagnostic,omitempty"`
+	PID          int     `json:"pid"`
+	Provider     string  `json:"provider"`
+	Harness      string  `json:"harness,omitempty"`
+	RouteOwner   string  `json:"route_owner,omitempty"`
+	HarnessOwned bool    `json:"harness_owned,omitempty"`
+	Phase        string  `json:"phase,omitempty"`
+	AgeSeconds   float64 `json:"age_seconds"`
+	NonRoute     bool    `json:"non_route,omitempty"`
+	Diagnostic   string  `json:"diagnostic,omitempty"`
 }
 
 // Scanner discovers live ddx worker processes on the host.
