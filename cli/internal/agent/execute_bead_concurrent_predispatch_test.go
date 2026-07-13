@@ -15,6 +15,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// hermeticNoopAgentRunner is a bounded fake AgentRunner that stays entirely
+// local: it only writes the no_changes rationale file needed for the worker
+// to classify the attempt as no_changes and never shells out to a provider.
+type hermeticNoopAgentRunner struct {
+	rationale string
+	calls     int
+}
+
+func (r *hermeticNoopAgentRunner) Run(opts RunArgs) (*Result, error) {
+	r.calls++
+	attemptID := strings.TrimSpace(opts.Correlation["attempt_id"])
+	if attemptID == "" || opts.WorkDir == "" {
+		return &Result{ExitCode: 0}, nil
+	}
+
+	bundleDir := filepath.Join(opts.WorkDir, ddxroot.DirName, "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		return &Result{ExitCode: 1, Error: err.Error()}, nil
+	}
+	rationale := r.rationale
+	if rationale == "" {
+		rationale = "already satisfied in base"
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "no_changes_rationale.txt"), []byte(rationale), 0o644); err != nil {
+		return &Result{ExitCode: 1, Error: err.Error()}, nil
+	}
+	return &Result{ExitCode: 0}, nil
+}
+
 // TestExecuteBead_ConcurrentWorkers_NoHEADRefRace is the regression test for
 // concurrent `ddx work` against the same project hitting
 // "fatal: cannot lock ref 'HEAD': is at X but expected Y" CAS failures during
@@ -46,9 +75,13 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 	// Build runners up front so worker goroutines do not share construction-time
 	// setup.
 	runners := make([]AgentRunner, n)
+	runnerRefs := make([]*hermeticNoopAgentRunner, n)
 	rcfgs := make([]config.ResolvedConfig, n)
 	for i := 0; i < n; i++ {
-		runners[i] = NewRunner(Config{})
+		runnerRefs[i] = &hermeticNoopAgentRunner{
+			rationale: fmt.Sprintf("already satisfied in base (%d)", i+1),
+		}
+		runners[i] = runnerRefs[i]
 		rcfgs[i] = config.NewTestConfigForBead(config.TestBeadConfigOpts{
 			Harness: "script",
 			Model:   dirFiles[i],
@@ -113,6 +146,10 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 		seenBaseRevs[r.BaseRev] = true
 	}
 
+	for i, runner := range runnerRefs {
+		require.Equalf(t, 1, runner.calls, "worker %d did not use the hermetic runner exactly once", i)
+	}
+
 	// All n attempts ran serially through the lock — at least one tracker
 	// commit and one checkpoint commit advanced main per first-acquirer.
 	// Subsequent acquirers either no-op'd (dirt already committed) or
@@ -123,6 +160,27 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 	assert.GreaterOrEqualf(t, commitCount, 3,
 		"main must have advanced past initial seed + bead seed (got %d commits)",
 		commitCount)
+}
+
+func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace_UsesHermeticRunner(t *testing.T) {
+	runner := &hermeticNoopAgentRunner{rationale: "already satisfied in base"}
+
+	workDir := t.TempDir()
+	res, err := runner.Run(RunArgs{
+		WorkDir: workDir,
+		Correlation: map[string]string{
+			"attempt_id": "attempt-1",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, 0, res.ExitCode)
+	assert.Equal(t, 1, runner.calls)
+
+	rationalePath := filepath.Join(workDir, ddxroot.DirName, "executions", "attempt-1", "no_changes_rationale.txt")
+	data, err := os.ReadFile(rationalePath)
+	require.NoError(t, err)
+	assert.Equal(t, "already satisfied in base", strings.TrimSpace(string(data)))
 }
 
 // TestRun_LockScopeIncludesSynthesizeCommit pins the contract: the locked
