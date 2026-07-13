@@ -163,24 +163,44 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 }
 
 func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace_UsesHermeticRunner(t *testing.T) {
-	runner := &hermeticNoopAgentRunner{rationale: "already satisfied in base"}
+	const beadID = "ddx-int-0001"
 
-	workDir := t.TempDir()
-	res, err := runner.Run(RunArgs{
-		WorkDir: workDir,
-		Correlation: map[string]string{
-			"attempt_id": "attempt-1",
+	fakeBin := t.TempDir()
+	sentinel := filepath.Join(t.TempDir(), "provider-leak.txt")
+	writeExecutable(t, filepath.Join(fakeBin, "claude"), "#!/bin/sh\nprintf 'provider-leak' >\"$PROVIDER_LEAK_SENTINEL\"\nexit 99\n")
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PROVIDER_LEAK_SENTINEL", sentinel)
+
+	projectRoot := setupArtifactTestProjectRoot(t)
+	gitOps := &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     "deadbeef00000002",
+		resultRev:   "deadbeef00000002",
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
 		},
-	})
+	}
+
+	runner := &hermeticNoopAgentRunner{rationale: "already satisfied in base"}
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Model: "claude-test-model",
+	}).Resolve(config.CLIOverrides{Harness: "claude"})
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, cfg, ExecuteBeadRuntime{
+		AgentRunner: runner,
+	}, gitOps)
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, 0, res.ExitCode)
+	require.NotEmpty(t, res.AttemptID)
 	assert.Equal(t, 1, runner.calls)
 
-	rationalePath := filepath.Join(workDir, ddxroot.DirName, "executions", "attempt-1", "no_changes_rationale.txt")
+	rationalePath := filepath.Join(projectRoot, ExecuteBeadArtifactDir, res.AttemptID, "no_changes_rationale.txt")
 	data, err := os.ReadFile(rationalePath)
 	require.NoError(t, err)
 	assert.Equal(t, "already satisfied in base", strings.TrimSpace(string(data)))
+
+	_, err = os.Stat(sentinel)
+	assert.ErrorIs(t, err, os.ErrNotExist, "provider binary should never run when AgentRunner is injected")
 }
 
 // TestRun_LockScopeIncludesSynthesizeCommit pins the contract: the locked
