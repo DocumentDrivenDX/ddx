@@ -34,7 +34,7 @@ func NewLifecycleSubscriber(factory StoreFactory, interval time.Duration) Lifecy
 		}
 		return beadReaderAdapter{reader: reader}, nil
 	}
-	return &lifecycleSubscriber{hub: lifecycle.NewHub(adapted, interval)}
+	return &lifecycleSubscriber{hub: lifecycle.NewWatcherHub(adapted, interval)}
 }
 
 // beadReaderAdapter narrows a BeadReader down to the internal lifecycle
@@ -56,11 +56,11 @@ func (a beadReaderAdapter) ReadAll(ctx context.Context) ([]lifecycle.BeadSnapsho
 	return out, nil
 }
 
-// lifecycleSubscriber adapts *lifecycle.Hub to the public LifecycleSubscriber
+// lifecycleSubscriber adapts *lifecycle.WatcherHub to the public LifecycleSubscriber
 // surface. It also exposes Close so callers that own the hub's lifetime can
 // stop the background watchers without naming the concrete hub type.
 type lifecycleSubscriber struct {
-	hub *lifecycle.Hub
+	hub *lifecycle.WatcherHub
 }
 
 var _ LifecycleSubscriber = (*lifecycleSubscriber)(nil)

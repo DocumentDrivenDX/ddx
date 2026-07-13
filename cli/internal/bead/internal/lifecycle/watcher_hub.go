@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Event is emitted by a Hub when a watched bead is created or updated.
+// Event is emitted by a WatcherHub when a watched bead is created or updated.
 type Event struct {
 	EventID   string
 	BeadID    string
@@ -41,8 +41,8 @@ type Reader interface {
 // Factory creates the Reader used to watch one project.
 type Factory func(projectID string) (Reader, error)
 
-// Hub manages per-project bead readers by polling for changes.
-type Hub struct {
+// WatcherHub manages per-project bead readers by polling for changes.
+type WatcherHub struct {
 	mu       sync.Mutex
 	factory  Factory
 	watchers map[string]*projectWatcher
@@ -51,10 +51,10 @@ type Hub struct {
 	cancel   context.CancelFunc
 }
 
-// NewHub creates a hub that polls each watched project at interval.
-func NewHub(factory Factory, interval time.Duration) *Hub {
+// NewWatcherHub creates a hub that polls each watched project at interval.
+func NewWatcherHub(factory Factory, interval time.Duration) *WatcherHub {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Hub{
+	return &WatcherHub{
 		factory:  factory,
 		watchers: make(map[string]*projectWatcher),
 		interval: interval,
@@ -64,7 +64,7 @@ func NewHub(factory Factory, interval time.Duration) *Hub {
 }
 
 // Close stops all background watchers.
-func (h *Hub) Close() {
+func (h *WatcherHub) Close() {
 	if h == nil || h.cancel == nil {
 		return
 	}
@@ -74,7 +74,7 @@ func (h *Hub) Close() {
 // SubscribeLifecycle registers for lifecycle events from the project at
 // projectID (the project root directory). A new per-project watcher is
 // started on first Subscribe call. The returned func unsubscribes.
-func (h *Hub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan Event, func(), error) {
+func (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan Event, func(), error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

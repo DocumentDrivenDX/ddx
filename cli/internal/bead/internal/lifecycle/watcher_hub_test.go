@@ -44,7 +44,7 @@ func waitForEvent(t *testing.T, ch <-chan Event) Event {
 	}
 }
 
-func TestHub_UsesProvidedFactory(t *testing.T) {
+func TestWatcherHub_SubscribeLifecycle(t *testing.T) {
 	reader := &scriptedReader{
 		batches: [][]BeadSnapshot{
 			{{ID: "bx-1", Title: "First bead", Status: "open"}},
@@ -52,7 +52,7 @@ func TestHub_UsesProvidedFactory(t *testing.T) {
 		},
 	}
 	factoryCalls := make(chan string, 1)
-	hub := NewHub(func(projectID string) (Reader, error) {
+	hub := NewWatcherHub(func(projectID string) (Reader, error) {
 		select {
 		case factoryCalls <- projectID:
 		default:
@@ -91,9 +91,9 @@ func TestHub_UsesProvidedFactory(t *testing.T) {
 	assert.Equal(t, "status changed from open to closed", second.Summary)
 }
 
-func TestHub_PropagatesFactoryErrors(t *testing.T) {
+func TestWatcherHub_PropagatesFactoryErrors(t *testing.T) {
 	wantErr := errors.New("factory boom")
-	hub := NewHub(func(string) (Reader, error) {
+	hub := NewWatcherHub(func(string) (Reader, error) {
 		return nil, wantErr
 	}, time.Millisecond)
 	t.Cleanup(hub.Close)
