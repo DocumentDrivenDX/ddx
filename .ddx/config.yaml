@@ -3,6 +3,9 @@ library:
     repository:
         url: https://github.com/easel/ddx-library
         branch: main
+known_repos:
+    fizeau:
+        path: /home/erik/Projects/fizeau
 #
 # bead_tracker.backend: axon
 # bead_tracker:
