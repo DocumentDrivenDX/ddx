@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +28,54 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	os.Exit(m.Run())
+
+	providerShimRoot, err := os.MkdirTemp("", "ddx-test-cli-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "TestMain: create fake ddx CLI:", err)
+		os.Exit(1)
+	}
+	fakeDDX := filepath.Join(providerShimRoot, "ddx")
+	fakeDDXScript := "#!/bin/sh\nif [ \"$1\" = \"__provider-launch\" ]; then\n  shift\n  exec \"$@\"\nfi\nexit 0\n"
+	if err := os.WriteFile(fakeDDX, []byte(fakeDDXScript), 0o755); err != nil {
+		_ = os.RemoveAll(providerShimRoot)
+		fmt.Fprintln(os.Stderr, "TestMain: write fake ddx CLI:", err)
+		os.Exit(1)
+	}
+	trueBin, err := exec.LookPath("true")
+	if err != nil {
+		_ = os.RemoveAll(providerShimRoot)
+		fmt.Fprintln(os.Stderr, "TestMain: locate true binary:", err)
+		os.Exit(1)
+	}
+	// Keep the complete package suite hermetic. The fake ddx wrapper above is
+	// intentionally pass-through so provider-wrapper behavior remains realistic,
+	// but every known provider name must therefore resolve to a harmless fixture
+	// rather than a developer-machine Codex/Claude binary.
+	for _, provider := range providerShimNames {
+		fakeProvider := filepath.Join(providerShimRoot, provider)
+		if err := os.Symlink(trueBin, fakeProvider); err != nil {
+			_ = os.RemoveAll(providerShimRoot)
+			fmt.Fprintf(os.Stderr, "TestMain: link fake %s provider: %v\n", provider, err)
+			os.Exit(1)
+		}
+	}
+	originalPATH := os.Getenv("PATH")
+	if err := os.Setenv("PATH", providerShimRoot+string(os.PathListSeparator)+originalPATH); err != nil {
+		_ = os.RemoveAll(providerShimRoot)
+		fmt.Fprintln(os.Stderr, "TestMain: install fake provider PATH:", err)
+		os.Exit(1)
+	}
+	originalLookup := providerShimExecutableLookup
+	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
+
+	resetProviderShimStateForTest()
+	code := m.Run()
+
+	resetProviderShimStateForTest()
+	providerShimExecutableLookup = originalLookup
+	_ = os.Setenv("PATH", originalPATH)
+	_ = os.RemoveAll(providerShimRoot)
+	os.Exit(code)
 }
 
 // --- Mock executor ---

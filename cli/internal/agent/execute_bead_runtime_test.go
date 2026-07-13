@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/easel/fizeau"
+	"github.com/stretchr/testify/require"
 )
 
 // capturingAgentRunner records the RunArgs passed to Run so the
@@ -182,6 +184,35 @@ func TestLifecycleClearRoutingPinsRequiresExplicitAutonomousRouteEvidence(t *tes
 	if result.Harness != "codex" || result.Model != "gpt-5.4-mini" {
 		t.Fatalf("replacement route = %s/%s, want codex/gpt-5.4-mini", result.Harness, result.Model)
 	}
+}
+
+func TestDispatchViaResolvedConfig_UsesProviderShimExecutableResolver(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	stub := &passthroughTestService{}
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		return stub, nil
+	})
+	t.Cleanup(func() { SetServiceRunFactory(nil) })
+
+	fakeDDX := filepath.Join(t.TempDir(), "ddx")
+	writeExecutable(t, fakeDDX, "#!/bin/sh\nexit 0\n")
+	originalLookup := providerShimExecutableLookup
+	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
+	t.Cleanup(func() { providerShimExecutableLookup = originalLookup })
+
+	initialPATH := os.Getenv("PATH")
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "haiku"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "agent"})
+
+	_, err := dispatchViaResolvedConfig(context.Background(), t.TempDir(), nil, nil, rcfg, AgentRunRuntime{
+		Prompt: "test",
+	})
+	require.NoError(t, err)
+	require.True(t, stub.executeCalled, "dispatchViaResolvedConfig must still reach the service adapter")
+	require.NotEqual(t, initialPATH, os.Getenv("PATH"), "dispatchViaResolvedConfig must install a provider PATH shim")
+	require.Contains(t, os.Getenv("PATH"), "ddx-provider-shim-", "dispatchViaResolvedConfig must prepend the provider shim dir")
 }
 
 func TestPinnedWorkerProviderChildEvidence(t *testing.T) {

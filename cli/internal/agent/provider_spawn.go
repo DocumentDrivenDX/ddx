@@ -65,6 +65,48 @@ var (
 	providerShimDirPath string
 )
 
+// providerShimExecutableLookup resolves the running ddx executable.
+// Tests override this so service-path coverage can inject an explicit fake or
+// built CLI binary instead of the go test wrapper.
+var providerShimExecutableLookup = os.Executable
+
+// resolveProviderShimExecutable returns the ddx CLI binary that should be
+// embedded into PATH shim scripts. It refuses Go test executables so package
+// tests do not accidentally re-exec the test binary as `ddx __provider-launch`.
+func resolveProviderShimExecutable() (string, error) {
+	ddxBinary, err := providerShimExecutableLookup()
+	if err != nil {
+		return "", fmt.Errorf("provider-shim: resolve executable: %w", err)
+	}
+	if err := validateProviderShimExecutable(ddxBinary); err != nil {
+		return "", err
+	}
+	return ddxBinary, nil
+}
+
+// validateProviderShimExecutable rejects executables that should never be used
+// as the provider-launch wrapper target.
+func validateProviderShimExecutable(ddxBinary string) error {
+	trimmed := strings.TrimSpace(ddxBinary)
+	if trimmed == "" {
+		return fmt.Errorf("provider-shim: refusing empty ddx executable path")
+	}
+	if strings.HasSuffix(filepath.Base(trimmed), ".test") {
+		return fmt.Errorf("provider-shim: refusing Go test executable %q as provider wrapper; build the ddx CLI binary and point the shim at that executable instead", trimmed)
+	}
+	return nil
+}
+
+// installProviderShimOnPATH resolves the ddx executable, validates it, and
+// installs the provider PATH shims in one step.
+func installProviderShimOnPATH() (dir string, cleanup func(), err error) {
+	ddxBinary, err := resolveProviderShimExecutable()
+	if err != nil {
+		return "", func() {}, err
+	}
+	return EnsureProviderShimOnPATH(ddxBinary)
+}
+
 // EnsureProviderShimOnPATH installs wrapper scripts for each known provider
 // binary in a tempdir, prepends that tempdir to the calling process's PATH,
 // and returns the shim directory plus a cleanup function. Subsequent calls
