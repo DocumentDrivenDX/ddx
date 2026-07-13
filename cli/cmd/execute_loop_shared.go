@@ -526,7 +526,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
 			defer cancel()
-			models, listErr := svc.ListModels(modelCtx, modelFilter)
+			models, listErr := agent.ListModelsWithProbeContainment(modelCtx, svc, modelFilter)
 			if listErr != nil {
 				return
 			}
