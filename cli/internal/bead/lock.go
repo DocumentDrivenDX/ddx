@@ -6,12 +6,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 // StaleLockAge is the duration after which a lock is considered stale
 // and can be forcibly broken. Default: 2 hours.
 var StaleLockAge = 2 * time.Hour
+
+var staleLockTombstoneSeq uint64
 
 // LockSample carries timing metrics for one Store.WithLock acquire/release cycle.
 type LockSample struct {
@@ -91,8 +94,7 @@ func breakStaleLockDir(lockDir string) bool {
 		pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
 		if err == nil && pid > 0 && pid != os.Getpid() {
 			if !processAlive(pid) {
-				os.RemoveAll(lockDir)
-				return true
+				return renameStaleLockDir(lockDir)
 			}
 		}
 	}
@@ -101,12 +103,31 @@ func breakStaleLockDir(lockDir string) bool {
 	if err == nil {
 		acquired, err := time.Parse(time.RFC3339, strings.TrimSpace(string(acquiredData)))
 		if err == nil && time.Since(acquired) > StaleLockAge {
-			os.RemoveAll(lockDir)
-			return true
+			return renameStaleLockDir(lockDir)
 		}
 	}
 
 	return false
+}
+
+func renameStaleLockDir(lockDir string) bool {
+	tombstoneDir := tombstoneLockDir(lockDir)
+	if tombstoneDir == "" {
+		return false
+	}
+	if err := os.Rename(lockDir, tombstoneDir); err != nil {
+		return false
+	}
+	_ = os.RemoveAll(tombstoneDir)
+	return true
+}
+
+func tombstoneLockDir(lockDir string) string {
+	if lockDir == "" {
+		return ""
+	}
+	suffix := fmt.Sprintf("%d-%d-%d", os.Getpid(), time.Now().UnixNano(), atomic.AddUint64(&staleLockTombstoneSeq, 1))
+	return filepath.Join(filepath.Dir(lockDir), filepath.Base(lockDir)+".tombstone."+suffix)
 }
 
 func (s *Store) releaseLock() {
