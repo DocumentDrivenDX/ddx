@@ -87,7 +87,6 @@ project-scoped tabs in the global navigation, in this order:
 | Personas | `personas` | Persona browser + role bindings (US-097) |
 | Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
 | Commits | `commits` | Project git commit log (US-093, FEAT-021) |
-| Efficacy | `efficacy` | Model efficacy + comparisons (US-096) |
 
 **Sessions and Executions are retired as top-level activity tabs**
 (Story 8). The unified Runs tab carries the shared layer-aware tab
@@ -103,31 +102,37 @@ show. The shared detail tabs are:
 The shared run-detail page is the canonical deep surface for anything exposed
 through the Runs tab.
 
-- Trust boundary: anyone with project read access can inspect the raw prompt,
-  response, stderr, and tool-call arguments attached to visible `try` and
-  `run` records. The page does not redact those fields inside the project
-  boundary.
+- Trust boundary: anyone with project read access can inspect DDx-owned prompt,
+  repository-result, gate, landing, and evidence fields. Fizeau-owned response,
+  stderr, session, and tool details are shown only as opaque attachments or
+  retained live public display events observed during `Execute`; DDx does not
+  query history or parse or normalize native logs. The
+  page applies project access control but does not become a second session-log
+  authority.
 - Evidence browser whitelist: the Evidence tab renders only `*.txt`, `*.md`,
   `manifest.json`, `prompt.md`, and `result.json` inline, and only when the
   file is 64 KB or smaller. Other files remain download-only. The evidence
   browser does not render Markdown as HTML.
 
-- `layer=run` rows expand to AgentSession transcript / billing / cached
-  tokens / stderr (the old Sessions detail).
+- `layer=run` rows expand to the Fizeau immediate/final envelope, public
+  `FinalText`, opaque session-log reference, and any public Fizeau read
+  projections. Any
+  legacy `AgentSession` row is an opaque migration attachment, not the current
+  session schema.
 - `layer=try` rows expand to the `.ddx/executions/<attempt-id>/` bundle
   metadata, check results, and verdict (the old Executions detail).
 - `layer=work` rows expand to queue inputs and child run links.
 
 **URL deprecation policy.** During the deprecation window, the legacy
 URLs respond with **302 redirects (NOT 301)** to the matching filtered
-Runs URL with all query params preserved, plus a `Sunset` response
+Runs URL with supported DDx-owned query parameters preserved, plus a `Sunset` response
 header that names the cutoff date for the redirects:
 
 | Legacy URL | Redirect target |
 |---|---|
 | `/sessions` | `/runs?layer=run` |
 | `/sessions#<id>` | `/runs?layer=run&session=<id>` |
-| `/executions[?bead=&verdict=&harness=&q=&after=]` | `/runs?layer=try` with the original query string preserved verbatim |
+| `/executions[?bead=&verdict=&q=&after=]` | `/runs?layer=try` with supported DDx-owned query parameters preserved; deprecated `harness`, `provider`, and `model` parameters are discarded |
 | `/executions/[id]` | `/runs/[runId]?bundle=true` |
 
 302 (not 301) is intentional: bookmarks and external link aggregators
@@ -285,17 +290,21 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
 4. **Agent log monitor**
    - Live-updating list of agent invocations (newest first)
-   - Columns: timestamp, harness, model, tokens, duration, exit code
-   - Click to expand: DDx metadata, native session/trace references, and any
-     DDx-owned detail available for that invocation
-   - Filter by harness, time range, exit code
-   - Token usage summary (provider-native or DDx-observed, depending on source)
+   - Columns: timestamp, DDx role/work correlation, usage, duration, and
+     terminal outcome
+   - Click to expand: DDx request/correlation metadata, native Fizeau
+     session/trace references, per-run `RoutingActual` audit fields, and
+     DDx-owned repository evidence
+   - Filter by DDx role, work item, time range, and exit code
+   - Usage summary aggregated from public Fizeau usage fields by DDx role, work
+     item, requested `MinPower`, and day; DDx does not parse provider/native
+     session logs or group by returned route identity
    - Auto-refresh on configurable interval (or subscription in v2)
 
 5. **Layer-aware run history and detail**
    - List DDx run records from the unified substrate with explicit layer chips:
      `work`, `try`, and `run`
-   - Filter by layer, status, harness, provider, model, bead id, artifact id,
+   - Filter by layer, status, role, requested `MinPower`, bead id, artifact id,
      and time range without introducing a run-type catalog beyond the three
      layers
    - Free-text search across bead id, bead title, and output excerpt; multi-
@@ -318,12 +327,15 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
        `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record.
        The detail panel exposes `overview`, `prompt`, `response`, `tools`,
        and `evidence`.
-     - `layer=run` row expands to prompt/config summary, power bounds,
-       selected harness/provider/model, token + cached-token + cost +
-       duration signals, output, stderr, and evidence links — sourced
-       losslessly from the joined `AgentSession` row (FEAT-010 §"Layer-to-
-       substrate mapping for the Runs UI"). The detail panel exposes
-       `overview`, `prompt`, `response`, `session`, `tools`, and `evidence`.
+     - `layer=run` row expands to DDx request facts, requested `MinPower`,
+       unchanged operator constraints, Fizeau-returned actual route and typed
+       usage/final facts, `FinalText`, the opaque session-log reference, and DDx
+       evidence links. DDx does not join or normalize a
+       second `AgentSession` schema. `response` may display `FinalText`, and
+       `session` may link to the opaque `SessionLogPath`; current Fizeau has no
+       historical session/tool read API, so DDx neither queries nor reconstructs
+       that content. A `tools` projection remains unavailable until a pinned
+       public Fizeau contract supplies one.
    - Drill-down links preserve hierarchy in both directions:
      `work` -> `try` -> `run`, with breadcrumbs back to parent records
    - Artifact-producing runs show `produces_artifact`; artifact pages link back
@@ -334,12 +346,15 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
        confirmation dialog prefilled with the original config; the client
        generates the `idempotencyKey` and sends it with the
        `runRequeue` mutation (FEAT-010).
-     - `layer=run` rows show `Re-queue` only when prompt / harness / model are
-       replayable; re-queueing a successful run requires double-confirmation.
+     - `layer=run` rows show `Re-queue` when the DDx request is replayable;
+       only explicit original operator pins may be prefilled. Fizeau-returned
+       actual harness/provider/model facts never become new request pins.
+       Re-queueing a successful run requires double-confirmation.
      - `layer=work` rows show **`Start worker from this drain`** (different
        label from "Re-queue"; same dispatch path) prefilled with the
-       original queue inputs, stop condition, selected beads, and harness /
-       profile from the original work run.
+       original queue inputs, stop condition, selected beads, abstract power
+       intent, and explicit operator passthrough only. DDx never infers routing
+       pins from the prior run.
      - Re-queue against a closed bead is disabled and surfaces a
        "Reopen bead first" link.
      - Every successful re-queue emits a `run_requeue` audit event on the
@@ -369,13 +384,15 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      | `failed` | red |
 
    - Clicking a worker card expands to show the `recent_phases` timeline from
-     `GET /api/projects/:project/workers/:id`. The expanded view also shows
-     elapsed time, harness/model identity, cumulative token counts, and a link
-     to the full execution evidence bundle for completed attempts.
+     `GET /api/projects/:project/workers/:id`. While running, the expanded view
+     shows only DDx-owned phase and elapsed time. After the public final event,
+     it may show Fizeau-returned actual-route and usage facts as per-run audit
+     evidence plus a link to the completed execution evidence bundle.
    - For in-flight workers, the card auto-refreshes using the `workerProgress`
-     subscription. The UI updates the phase badge, elapsed time, and token count from
-     each progress event without re-fetching the full worker record. When the terminal
-     phase event arrives, the stream closes and the card switches to a static completed state.
+     subscription and updates DDx-owned phase/elapsed fields only. DDx does not
+     decode non-terminal routing, usage, native-session, or provider payloads.
+     When the public final event arrives, the stream closes and the card
+     switches to a static completed state.
 
 7. **Epic execution view**
    - Lists open epics separately from single-ticket ready work
@@ -385,59 +402,20 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Allows the user to inspect the final epic merge candidate and merge-gate
      results before the merge commit is created
 
-8. **Provider / Harness Dashboard**
+8. **Fizeau runtime handoff**
 
-   A dedicated page — separate from the status dashboard, agent log monitor,
-   and worker progress view — that gives operators a clear picture of
-   configured providers and the routing signals DDx uses to make harness
-   decisions.
+   DDx does not expose or proxy a provider/harness/model catalog, route-candidate
+   dashboard, quota probe, or provider-health read model. Those detailed runtime
+   diagnostics belong in Fizeau's own operator surfaces. DDx run detail may show
+   only the public terminal audit facts returned for that run: actual
+   harness/provider/model, abstract actual power, usage/cost, duration, status,
+   and the opaque session-log reference.
 
-   **Provider list panel (left/top):**
-   - One row per configured harness (claude, codex, opencode, gemini, …)
-   - Columns: harness name, display name, availability badge (`available` |
-     `unavailable` | `unknown`), auth state badge, quota/headroom pill
-     (`ok` | `blocked` | `unknown`), cost class, freshness timestamp
-   - Searchable by harness name, model, status, or cost class
-   - Sortable by any column; default sort by availability, then name
-   - Filter chips: availability status, auth state, quota state, signal source
-   - All data fetched from `GET /api/providers` on load; auto-refreshes on a
-     configurable interval (default 60 s)
-
-   **Provider detail panel (right/bottom, shown on row click):**
-   - Full routing signal snapshot for the selected harness
-   - Per-model quota/headroom with source attribution and `unknown` when no
-     stable live source exists
-   - Historical usage table: 7-day and 30-day windows for input/output/total
-     tokens and cost; `unknown` rendered as `—` not `0`
-   - Burn estimate row: daily token rate, subscription burn class, confidence
-     label (`high` / `medium` / `low`), freshness timestamp
-   - Performance signals: p50/p95 latency, success rate, sample count, window
-   - Signal source provenance list: which sources contributed to this snapshot
-     (e.g. `stats-cache`, `native-session-jsonl`, `ddx-metrics`, `none`)
-   - Data fetched from `GET /api/providers/:harness` on panel open
-
-   **Unknown-state semantics:**
-   - `unknown` values are rendered with an explicit `—` or "unknown" label
-     and a tooltip explaining why (e.g., "no stable non-PTY quota source
-     confirmed for Claude")
-   - Fields from provider-native sources are labeled "provider-reported"
-   - Fields derived by DDx from observed metrics are labeled "DDx-estimated"
-   - Fields that are genuinely absent carry a `?` badge, not a synthesized `0`
-
-   **Relationship to other views:**
-   - Provider dashboard is host+user global (not project-scoped); it is
-     accessible from the top-level navigation bar alongside the project picker
-   - The status dashboard worker cards link to worker detail and the agent log
-     monitor — not to the provider dashboard
-   - The agent log monitor session detail links to the provider dashboard for
-     the harness used in that invocation (via harness name)
-   - The provider dashboard does NOT embed worker progress, bead state, or
-     execution history; those live in their own dedicated views
-
-   **Reporting and export:**
-   - "Copy JSON" action on the detail panel copies the `GET /api/providers/:harness`
-     response verbatim — useful for bug reports and operator audits
-   - Time-window selector (7d / 30d / custom) scopes the historical usage table
+   The DDx UI provides a clearly labeled handoff to the configured Fizeau
+   diagnostics surface when one is available. It does not copy Fizeau routing
+   state into DDx storage, add DDx attempt metrics to provider state, or feed
+   diagnostic data into request construction, retry, review, or queue policy.
+   Unknown terminal fields render as `—`, never as inferred values.
 
 9. **Persona viewer**
    - Browse personas with descriptions and tags
@@ -609,10 +587,13 @@ default fixture (10 projects × 500 beads). These are the locked, final numbers.
 
 **Acceptance Criteria:**
 - Given a bead has execution runs, when I open its detail, then I see a list
-  of runs with status, harness, duration, and timestamp
-- Given I click a run, then I see structured results and raw log output
-- Given a bead has linked agent activity, then I see runtime summaries and any
-  available native session references
+  of runs with DDx attempt status, duration, usage/outcome summary, and timestamp;
+  concrete route facts remain confined to the individual run audit detail
+- Given I click a run, then I see DDx-owned structured repository results plus
+  the opaque Fizeau `SessionLogPath` and any retained live public display text;
+  DDx performs no historical session query
+- Given a bead has linked agent activity, then I see typed runtime summaries and
+  available opaque Fizeau session-log paths without DDx parsing native logs
 - Given I expand a run and then click back, then the bead detail is still
   open showing the same run list
 
@@ -746,90 +727,72 @@ default fixture (10 projects × 500 beads). These are the locked, final numbers.
   when each phase started (timestamp and elapsed since attempt began)
 - Given the worker reaches a terminal phase (`done`, `preserved`, or `failed`),
   then the card updates to the terminal badge color and stops live-updating
-- Given I look at a worker card, then I can see harness, model, and bead title
-  without expanding the card
+- Given I look at a running worker card, then I see bead title and DDx-owned
+  phase only; concrete harness/model fields appear only after the public final
+  result supplies them as per-run audit facts
 - Given I expand a worker card for a completed attempt, then I see a link to
   the execution evidence bundle for that attempt
 
 **E2E Test:** `workers.spec.ts` — full workflow: open workers view with a running worker → verify phase badge and elapsed time → observe badge transition via subscription → expand card → verify phases timeline → wait for terminal phase → verify card stops updating → follow evidence link
 
-### US-087: Operator Inspects Provider Availability and Routing Signals
-**As an** operator about to queue a batch of agent work
-**I want** to see configured providers with their availability, auth state,
-  and quota/headroom at a glance
-**So that** I can choose which harnesses are viable before dispatching
+### US-087: Operator Hands Off to Fizeau Runtime Diagnostics
+**As an** operator investigating provider availability, quota, or routing
+**I want** DDx to send me to Fizeau's diagnostics surface
+**So that** DDx never acquires a second provider/catalog/routing read model
 
 **Acceptance Criteria:**
-- Given providers are configured, when I open the Provider Dashboard, then I
-  see one row per harness with availability, auth state, and quota/headroom badges
-- Given a provider's quota/headroom has no stable live source, then the badge
-  shows "unknown" with a tooltip — not a fabricated `ok` or `blocked` value
-- Given I click a row, then the detail panel opens showing the full routing
-  signal snapshot with source attribution and freshness timestamp
-- Given I click the harness link in the agent log monitor for an invocation,
-  then I navigate to that harness's detail in the Provider Dashboard
-- Given I navigate back from the provider detail, then I return to the provider
-  list with the same sort and filter state
+- Given a Fizeau diagnostics URL is configured, then DDx shows one clearly
+  labeled external handoff link in run detail and settings
+- Given no diagnostics URL is configured, then DDx shows setup guidance and does
+  not fabricate provider, quota, catalog, or route status
+- Given a completed run has public `RoutingActual` fields, then run detail may
+  render those per-run audit facts and unknown values as `—`
+- DDx has no `/api/providers` or `/api/providers/:harness` proxy, cache, fixture,
+  or GraphQL provider-status read model
 
-**E2E Test:** `providers.spec.ts` — full workflow (using fixture scenarios): open provider list → verify availability/auth/quota badges per fixture scenario → click row → verify detail panel → hover unknown badge → verify tooltip text → click harness link from agent log → verify navigation to provider detail → navigate back
+**E2E Test:** `fizeau-handoff.spec.ts` — open run detail → verify per-run audit
+facts → click configured Fizeau diagnostics link → verify external handoff;
+repeat without a configured link and verify setup guidance plus no synthesized
+provider state
 
-### US-088: Operator Reviews Provider Utilization and Burn Rate
-**As an** operator tracking subscription usage
-**I want** to see historical token consumption, burn rate, and confidence level
-  for each configured provider
-**So that** I can balance load across providers and anticipate quota pressure
-
-**Acceptance Criteria:**
-- Given a provider has DDx-observed or provider-native usage history, when I
-  view its detail panel, then I see a 7-day and 30-day usage table with
-  input/output/total tokens and cost where known
-- Given a token or cost field has no trustworthy source, then it renders as `—`
-  not `0` or a fabricated value
-- Given a burn estimate exists, then the detail panel shows the daily token rate,
-  subscription burn class, confidence label, and the timestamp of the last
-  contributing signal
-- Given I want to share a provider's signal state with a colleague, then I can
-  use "Copy JSON" to get the raw API response for the selected harness
-
-**E2E Test:** `providers.spec.ts` — full workflow (using fixture scenarios): open provider detail → verify 7d/30d usage tables → verify `—` for missing values → verify burn estimate row → click Copy JSON → verify clipboard contents match API response → change time window → verify table updates
-
-### US-088b: Operator Distinguishes Source Types in Provider Detail
-**As an** operator debugging a routing decision
-**I want** to know whether each signal field came from the provider directly,
-  DDx estimation, or is unknown
-**So that** I can trust or question the data DDx is routing on
+### US-088: Operator Reviews DDx Usage Without Provider State
+**As an** operator tracking DDx work cost
+**I want** per-run and aggregate usage/cost from typed Fizeau final fields
+**So that** I can enforce DDx budgets without DDx modeling provider quota or
+routing
 
 **Acceptance Criteria:**
-- Given a field came from a provider-native source (e.g. `stats-cache`), then
-  a "provider-reported" label or badge is shown
-- Given a field was derived by DDx from observed invocation metrics, then a
-  "DDx-estimated" label is shown
-- Given no source exists for a field, then a `?` badge appears — no `0` or
-  inferred value is displayed
-- Given I hover a `?` or "unknown" badge, then a tooltip explains why the
-  value is unavailable (e.g., "no stable non-PTY quota source confirmed")
+- Given Fizeau reported usage/cost for DDx runs, then the DDx usage view
+  aggregates those typed fields by run, attempt, bead, and drain
+- Given a token or cost field is absent, then it renders as `—`, not `0` or an
+  estimate derived from model identity
+- The view does not show provider availability, quota/headroom, route candidates,
+  or native provider signal provenance
 
-**E2E Test:** `providers.spec.ts` — full workflow (using fixture scenarios 2 and 5): open provider detail → find provider-reported field → verify badge label → find DDx-estimated field → verify badge → hover `?` badge → verify tooltip text matches expected explanation
+**E2E Test:** `usage.spec.ts` — open usage view → verify typed run aggregation →
+verify `—` for unknown cost → verify no provider/catalog/routing fields exist
 
 ### US-086: Developer Monitors Agent Activity in Real Time
 **As a** developer running agents against my project
-**I want** to see agent invocations as they happen with routing metadata and
-available session references
+**I want** to see agent invocations as they happen with available session
+references and completed-run audit facts
 **So that** I can diagnose issues and track token usage without DDx duplicating
 provider logs
 
 **Acceptance Criteria:**
 - Given agents have been invoked, when I open the agent log view, then I see
   recent invocations sorted by time
-- Given I click an invocation, then I see DDx runtime metadata plus native
-  session or trace references and any available DDx-owned detail
-- Given I filter by harness, then only invocations for that harness are shown
-- Given I look at the summary, then I see total tokens consumed by harness and
-  by day where a signal source exists
-- Given I click the harness name in an invocation row, then I navigate to that
-  harness's detail in the Provider Dashboard
+- Given I click an invocation, then I see DDx request/correlation metadata plus
+  opaque Fizeau session or trace references, public final/usage facts, and
+  DDx-owned repository evidence; DDx does not parse the native session log
+- Given I filter by DDx role or work item, then only matching invocations are shown
+- Given I look at the summary, then I see Fizeau-reported usage aggregated by
+  DDx role, work item, requested `MinPower`, and day where a public usage signal exists
+- Given I click the completed run's harness audit fact and a Fizeau diagnostics
+  URL is configured, then I follow the external Fizeau handoff; DDx does not
+  open a local provider detail view
 
-**E2E Test:** `workers.spec.ts` — full workflow: open agent log view → verify invocations sorted by time → click invocation → verify metadata and session references → apply harness filter → verify filtered list → click harness name → verify navigation to Provider Dashboard
+**E2E Test:** `workers.spec.ts` — full workflow: open agent log view → verify invocations sorted by time → apply DDx-role filter → click invocation → verify metadata, opaque session-log path, and per-run audit section → click external Fizeau handoff
 
 ### US-086b: Operator Drills Through Work, Try, and Run Evidence
 **As an** operator auditing queue-drain behavior
@@ -850,8 +813,10 @@ provider logs
   checks, child layer-1 run records, and the `overview` / `prompt` /
   `response` / `tools` / `evidence` tabs
 - Given I click a layer-1 `run` record, then I navigate to its detail showing
-  prompt/config summary, power bounds, selected harness/provider/model,
-  duration, token and cost signals, output, evidence links, and the
+  prompt/config summary, requested `MinPower`, unchanged operator constraints,
+  Fizeau-returned actual route facts, typed duration/usage/cost signals,
+  `FinalText`, the opaque session-log reference,
+  DDx evidence links, and the
   `overview` / `prompt` / `response` / `session` / `tools` / `evidence`
   tabs
 - Given I open the Evidence tab on a `try` or `run` detail, then whitelisted
@@ -880,17 +845,21 @@ provider logs
 **Acceptance Criteria:**
 - Given I am on a `layer=try` row whose originating bead is open and has
   no active try, then a `Re-queue` button is visible. Clicking it opens a
-  confirmation dialog prefilled with the original `(bead, harness, model)`
-  config; the client generates an `idempotencyKey` and submits it with the
+  confirmation dialog prefilled with the bead, abstract power intent, and only
+  those harness/provider/model pins explicitly supplied by the original
+  operator. Fizeau-returned actual route facts remain display-only. The client
+  generates an `idempotencyKey` and submits it with the
   `runRequeue` mutation (FEAT-010); on success the originating bead is
   reopened and a `run_requeue` audit event appears on the bead
-- Given I am on a `layer=run` row with replayable `(prompt, harness,
-  model)`, then `Re-queue` is visible. If the run terminated with
+- Given I am on a `layer=run` row with a replayable DDx request, then
+  `Re-queue` is visible. The dialog leaves routing unconstrained unless the
+  original request carried explicit operator passthrough. If the run terminated with
   success, the dialog requires explicit double-confirmation
 - Given I am on a `layer=work` row, then a **`Start worker from this
   drain`** action is visible (instead of `Re-queue`). Confirming it
   dispatches a new worker prefilled with the original queue inputs, stop
-  condition, selected beads, and harness/profile
+  condition, selected beads, abstract power intent, and explicit original
+  operator passthrough only
 - Given the originating bead is closed, then the `Re-queue` button is
   disabled and a "Reopen bead first" link is shown in its place
 - Given a duplicate submission (double-click race or accidental retry)
@@ -1039,12 +1008,12 @@ provider logs
 
 **Acceptance Criteria:**
 - Given a worker is in a running phase for a bead, when I open the worker
-  detail, then a "Live response" panel shows accumulated response text,
-  updating as the `workerProgress` subscription delivers `text_delta`
-  frames
-- Given the response contains tool calls, then each tool call is rendered
-  as a collapsible card showing the tool name, inputs, and (once returned)
-  the output, interleaved with text in delivery order
+  detail, then a "Live response" panel forwards Fizeau-provided human-display
+  text or typed projection without DDx parsing native harness output
+- Given CONTRACT-003 supplies a typed tool-call read projection, then each tool
+  call can be rendered as a collapsible card from that projection. Without that
+  Fizeau surface, the UI shows only the opaque session-log link and does not
+  infer tool calls from logs
 - Given the worker reaches a terminal phase, then the live-response panel
   freezes at its final content with a "Completed at HH:MM:SS" timestamp
   and a link to the execution evidence bundle
@@ -1052,7 +1021,7 @@ provider logs
   "Reconnecting…" and the panel auto-resumes on reconnect without losing
   the text received so far
 
-**E2E Test:** `workers.spec.ts` — full workflow: open running worker detail → verify live response panel updates → verify tool call card rendered → wait for terminal phase → verify panel frozen with timestamp → verify evidence bundle link → simulate disconnect → verify reconnecting banner → verify text preserved after reconnect
+**E2E Test:** `workers.spec.ts` — full workflow: open running worker detail backed by a Fizeau display projection → verify live response panel updates → verify projected tool call card rendered → wait for terminal outcome → verify panel frozen with timestamp → verify evidence bundle link → simulate disconnect → verify reconnecting banner → verify text preserved after reconnect
 
 ### US-095: Operator Initiates Work from the UI
 **As an** operator managing a project without context-switching to a
@@ -1082,33 +1051,15 @@ provider logs
 
 **E2E Test:** `actions.spec.ts` — full workflow: open project view → verify Actions panel → click Drain queue → verify confirmation dialog with bead count → confirm → verify worker appears in Workers list within 1s → verify button becomes worker link → click disabled action → verify tooltip explains prerequisite
 
-### US-096: Operator Views Model Efficacy and Runs Comparisons
-**As an** operator pursuing the cost-awareed throughput-per-dollar goal
-**I want** to see per-model completion rates, cost, and latency, and run
-  A/B comparisons between prompts or models
-**So that** I can steer the system toward the models and prompts that
-  actually work
+### US-096: Operator Views Run Efficacy and Runs Comparisons — Deferred
 
-**Acceptance Criteria:**
-- Given closed beads carry `kind:cost` + `kind:routing` evidence events,
-  when I open the `Efficacy` view, then a table lists every distinct
-  `(harness, provider, model)` tuple used in the last N days with:
-  success count, attempt count, completion rate, median tokens in/out,
-  median duration, median cost (or `—` when no cost signal)
-- Given I filter by power class / label / spec-id, then the table refilters
-  live; URL encodes the filter for bookmarking
-- Given I click `Compare`, then a dialog lets me pick N `(model, prompt)`
-  pairs; on submit, DDx dispatches the `compare-prompts` workflow and the resulting
-  `ComparisonRecord` appears under `Comparisons` with per-arm outputs,
-  diffs, and (if configured) grader scores
-- Given a model's completion rate crosses the configured adaptive-min-power
-  floor (trailing-window success rate < threshold), then a warning badge
-  appears on that row with a tooltip linking to the routing metrics doc
-- Given I click a row, then a detail panel shows the last 10 attempts
-  with per-attempt outcome, evidence links, and links to the execution
-  bundles; click-through to the bead that originated each attempt
-
-**E2E Test:** `actions.spec.ts` — full workflow: open Efficacy view → verify model table with all columns → apply label filter → verify URL encodes filter → hover warning badge → verify tooltip → click row → verify detail panel with attempts → click bead link → verify navigation to bead detail → press Back → verify detail panel still open
+This FEAT-008 UI story is retired by the Phase 2 contradiction-ledger decision
+because the shipped `comparisonDispatch` path fabricates queued results that no
+worker drains. FEAT-008 does not expose an Efficacy navigation surface or a
+comparison dispatcher. If the feature is reactivated, FEAT-019 and SD-023 are
+the governing route-neutral contracts: arms vary prompts, rubrics, work facts,
+or abstract `MinPower`; Fizeau selects each concrete route independently; and
+returned route identity remains per-run audit evidence only.
 
 ### US-097: Developer Browses and Binds Personas
 **As a** developer configuring a project for consistent agent behavior
@@ -1184,94 +1135,20 @@ provider logs
 
 **E2E Test:** `command-palette.spec.ts` — full workflow: press Cmd+K → verify palette opens with focus → type document title → verify result appears → press Enter → verify navigation and palette closed → reopen → press Escape → verify palette closed → navigate to bead detail → press Cmd+K → verify bead-specific actions at top of list → trigger Claim action → verify bead claimed
 
-## Provider Dashboard: Playwright Fixture Scenarios
+## Fizeau Handoff: Playwright Fixtures
 
-The provider dashboard has deterministic fixture data requirements so that
-Playwright tests can cover all meaningful display states without live provider
-credentials. The fixture layer is a static JSON handler mounted at
-`/api/providers` and `/api/providers/:harness` during test runs. Each scenario
-below defines the fixture variant and the expected rendered state.
+The DDx frontend has two deterministic fixture cases:
 
-### Fixture Scenarios
+1. a completed run whose public final fields include usage/cost and
+   `RoutingActual`, plus a configured external Fizeau diagnostics URL; and
+2. a completed run with absent optional final fields and no configured
+   diagnostics URL.
 
-**Scenario 1 — all-healthy (green path)**
-
-Provider list returns two harnesses, both `available` + `authenticated` +
-`quota_headroom: ok`. Detail panel shows populated 7d/30d usage, burn estimate
-with `confidence: high`, and `signal_sources: ["native-session-jsonl", "ddx-metrics"]`.
-Expected: all badges green, no `?` badges, no unknown labels.
-
-```json
-[
-  {
-    "harness": "codex", "status": "available", "auth_state": "authenticated",
-    "quota_headroom": "ok", "cost_class": "subscription",
-    "signal_sources": ["native-session-jsonl", "ddx-metrics"],
-    "freshness_ts": "2026-04-14T05:00:00Z",
-    "recent_success_rate": 0.99, "recent_latency_p50_ms": 3100
-  },
-  {
-    "harness": "claude", "status": "available", "auth_state": "authenticated",
-    "quota_headroom": "ok", "cost_class": "subscription",
-    "signal_sources": ["stats-cache", "ddx-metrics"],
-    "freshness_ts": "2026-04-14T05:00:00Z",
-    "recent_success_rate": 0.97, "recent_latency_p50_ms": 4200
-  }
-]
-```
-
-**Scenario 2 — quota unknown (common real-world state for Claude)**
-
-Claude harness has `quota_headroom: unknown` because no stable non-PTY quota
-source exists. Codex is `quota_headroom: ok`. Expected: Claude row shows an
-"unknown" pill with tooltip "no stable non-PTY quota source confirmed". All
-other state fields are populated.
-
-**Scenario 3 — provider unavailable**
-
-One harness has `status: unavailable` and `auth_state: unauthenticated`.
-Expected: row shows red "unavailable" badge and gray "unauthenticated" badge.
-Detail panel shows empty usage tables with `—` cells and a signal source list
-of `["none"]`.
-
-**Scenario 4 — stale signals / low-confidence burn**
-
-Provider is available and authenticated, but `freshness_ts` is 48 hours ago
-and `burn_estimate.confidence` is `low`. Expected: freshness timestamp renders
-with a "stale" indicator; burn estimate row shows `confidence: low` label.
-
-**Scenario 5 — all unknown (offline / fresh install)**
-
-Provider list returns one harness with `status: unknown`, `auth_state: unknown`,
-`quota_headroom: unknown`, `signal_sources: ["none"]`. Expected: every badge
-shows "unknown" or `—`; no zeros appear in usage tables; tooltip text explains
-each unknown field.
-
-**Scenario 6 — search and filter**
-
-Provider list returns five harnesses with mixed statuses. Test: entering a
-search term filters the list in real time (client-side); selecting a filter
-chip for `status: available` hides unavailable rows; clearing chips restores
-the full list.
-
-### Fixture File Layout
-
-```
-cli/internal/server/frontend/
-└── src/
-    └── testing/
-        └── fixtures/
-            └── providers/
-                ├── all-healthy.json
-                ├── quota-unknown.json
-                ├── provider-unavailable.json
-                ├── stale-signals.json
-                └── all-unknown.json
-```
-
-Playwright tests mount the appropriate fixture via request interceptors before
-each scenario. The fixture format matches the `/api/providers` and
-`/api/providers/:harness` response shapes defined in FEAT-002.
+The first case proves per-run audit rendering and external handoff. The second
+proves unknown values render as `—` and the UI shows setup guidance without
+inventing provider state. No fixture mounts a DDx provider/catalog/route-status
+endpoint or includes provider availability, auth, quota, candidate, native-log,
+or model-catalog data.
 
 ## Implementation Notes
 
@@ -1366,8 +1243,9 @@ ddx/
 - FEAT-006 (Agent service) — for agent activity and invocation detail
 - FEAT-010 (Task Execution) — for unified `work` / `try` / `run` records and the
   narrow `artifactRegenerate` write surface
-- FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
-  signal model consumed by the provider dashboard
+- FEAT-014 (Agent Usage, Cost, and Runtime Projections) — governs typed
+  Fizeau-reported usage/cost, DDx aggregation, and the prohibition on DDx
+  provider/catalog/routing state
 - FEAT-021 (Dashboard UI) — defines URL scheme and navigation patterns
 - ADR-021 (Operator-Prompt Beads as the Web Write Path) — trust contract,
   audit-as-bead, multi-node delegation, prompt-injection threat model, and
@@ -1405,10 +1283,10 @@ outcome, including navigation back.
 | `artifacts.spec.ts` | US-080, US-081b, US-083, US-083a, US-084, US-081a | Browse library → open artifact → render by media type → edit + save → search → follow intra-repo links |
 | `graph.spec.ts` | US-081, US-081c | Open graph → pan/zoom → identify stale nodes → click node → navigate back; graph cross-link from artifact detail; integrity issue expand → apply fix → verify graph reload; non-repairable issue tooltip; stale-issue error |
 | `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-082h, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, proposed bead resolution, create/manage, worker progress, delete |
-| `workers.spec.ts` | US-085b, US-086, US-086a | Worker list, live phase updates via subscription, streaming response text with tool calls |
+| `workers.spec.ts` | US-085b, US-086, US-086a | Worker list, live phase updates via subscription, Fizeau-provided display/projection forwarding without native-log parsing |
 | `runs.spec.ts` | US-086b, US-086c | Navigate to runs → filter by layer → drill work→try→run → verify fields at each level → breadcrumb back to list; re-queue try/run/work flows incl. idempotency dedupe and closed-bead block |
-| `providers.spec.ts` | US-087, US-088, US-088b | Provider list with fixture scenarios → detail panel → unknown semantics → Copy JSON → harness cross-link |
-| `actions.spec.ts` | US-095, US-096 | Initiate work from UI → dispatch worker → efficacy table → model comparison |
+| `fizeau-handoff.spec.ts` / `usage.spec.ts` | US-087, US-088 | Per-run terminal audit rendering → external diagnostics handoff or setup guidance; typed usage aggregation with no provider/catalog state |
+| `actions.spec.ts` | US-095 | Initiate supported work from UI and verify disabled prerequisites; no comparison dispatcher or Efficacy route |
 | `personas.spec.ts` | US-097 | Browse personas → view detail → bind to role → handle conflict |
 | `plugins.spec.ts` | US-098 | Browse registry → install → observe progress → view manifest → uninstall |
 | `command-palette.spec.ts` | US-099 | Open palette → search → navigate → context-aware bead actions |

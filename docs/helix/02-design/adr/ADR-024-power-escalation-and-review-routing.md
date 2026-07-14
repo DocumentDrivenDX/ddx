@@ -7,9 +7,9 @@ ddx:
     - FEAT-014
     - FEAT-022
 ---
-# ADR-024: Power Escalation and Review Routing Policy
+# ADR-024: Power Escalation and Review Capability Policy
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-07-13
 **Date:** 2026-05-06
 **Authors:** bead `ddx-5f1eac4f`
 
@@ -17,9 +17,17 @@ ddx:
 
 The escalation and auto-recovery design is anchored by five explicit principles:
 
-- **P1 — Cheapest first:** DDx always dispatches the lowest-power model that can plausibly handle the work. Power escalation is a recovery step, not a default operating mode.
+- **P1 — Abstract power first:** DDx requests an initial abstract `MinPower`
+  appropriate to the work. It never chooses the cheapest model, harness,
+  provider, profile, or route; Fizeau makes that decision from its routing
+  evidence. Power escalation is a recovery step, not a concrete routing
+  instruction.
 - **P2 — Escalate on failure:** When a capability-sensitive failure class is detected, DDx raises `MinPower` for the next attempt. It does not alter harness, provider, or model values; Fizeau resolves the concrete route.
-- **P3 — Reviewer always stronger:** The adversarial pre-close reviewer's `MinPower` floor is always set higher than the implementer's actual reported power. A reviewer may not run at a weaker power than the implementer it is reviewing.
+- **P3 — Reviewer always stronger:** The adversarial pre-close review request
+  uses a higher abstract `MinPower` floor than the implementer's actual reported
+  power whenever the Fizeau power scale has headroom; an implementation already
+  at the contract maximum is reviewed at that maximum. DDx never translates
+  this strength request into a harness, provider, model, profile, or route.
 - **P4 — Reframe then decompose on persistent failure:** When a bead's escalation ladder is exhausted on consecutive drain cycles, DDx first attempts a strong-power reframer pass. If reframing fails or produces no change, DDx attempts a strong-power decomposer pass. Only after both fail does DDx park the bead at `status=proposed`.
 - **P5 — No human in the loop for routing or budget:** DDx stops at `status=proposed` or at a configured budget cap; it never silently retries indefinitely or makes content-aware routing decisions. Operator action is a terminal state reached only after automated escalation and auto-recovery have been exhausted.
 
@@ -40,8 +48,8 @@ terms of DDx-owned evidence and abstract power bounds, not concrete model names.
 
 Earlier planning used older routing and profile language. That vocabulary is now
 migration debt when it implies DDx choosing a provider, model, or fallback chain.
-The stable contract is `MinPower` / `MaxPower` plus opaque passthrough
-constraints.
+The stable contract is DDx-selected `MinPower` plus an unchanged,
+operator-supplied `MaxPower` and opaque passthrough constraints when present.
 
 ## Decision
 
@@ -70,11 +78,13 @@ merge/land conflicts that need human judgment, command-not-found setup failures,
 and any failure where retry would require DDx to inspect or mutate
 `--harness`, `--provider`, or `--model`.
 
-When a higher-power retry is allowed, DDx computes the next `MinPower` floor
-from Fizeau's catalog power numbers. It may skip catalog power floors that have
-no viable auto-routable model, but it still sends only a new `MinPower` bound
-to Fizeau. Fizeau chooses the concrete route and reports actual model,
-provider, and power.
+When a higher-power retry is allowed, DDx computes the next `MinPower` only
+from the prior abstract request, the abstract actual power in Fizeau's public
+final `RoutingActual` when present, and a configured escalation step. It does not
+query Fizeau's catalog, inspect candidate viability, choose or skip profiles,
+or predict whether a route exists. Fizeau receives the stronger floor, chooses
+the concrete route, and either executes it or returns a public immediate/final
+outcome.
 
 ### Passthrough Stickiness
 
@@ -82,41 +92,34 @@ Operator-supplied passthrough constraints are sticky across every retry.
 
 If the operator supplied `--harness`, `--provider`, or `--model`, DDx forwards
 the same values unchanged. If those constraints make a later power request
-unsatisfiable, DDx records a typed terminal classification such as
+unsatisfiable, DDx normalizes a public typed immediate error (or a richer future
+typed result after its release is pinned) into
 `blocked_by_passthrough_constraint` or `agent_power_unsatisfied` and reports
-operator action required. DDx must not remove pins, widen pins, substitute a
+operator action required. Generic final error text remains unclassified. DDx
+must not remove pins, widen pins, substitute a
 fallback route, call any route-selection helper to work around the conflict, or
 loop over concrete route names.
 
-### Infrastructure And Rate-Limit Fallback
+### Infrastructure And Rate-Limit Outcomes
 
-Infrastructure failures are not capability failures. Provider 5xx responses,
-network unreachability, command-not-found, authentication failures, quota
-exhaustion, and analogous transport/setup failures do not consume semantic
-escalation budget. DDx records the failure and leaves the bead immediately
-reclaimable.
+Infrastructure failures are not capability failures. Fizeau owns provider 5xx
+handling, network recovery, harness availability, authentication, quota,
+transport retry, and provider fallback inside the agent session. When Fizeau
+returns a public typed immediate error or compatible future typed result, DDx
+records it and applies only queue-level policy. Current
+`*fizeau.NoViableProviderForNow` supplies `RetryAfter`: DDx releases the bead
+claim, pauses queue claiming until that time, then resumes. No provider,
+infrastructure, or route outcome creates a per-bead cooldown. DDx does not raise
+`MinPower` to steer away from a failed provider, inspect concrete route
+evidence, maintain a route-exclusion window, decide whether an alternate route
+exists, or launch one. Generic final error text stays unclassified and cannot
+create a delay.
 
-Provider-connectivity failures have one retryable routing exception. If Fizeau
-reports concrete route evidence (`actual_power > 0`) and the operator did not
-pin `--harness`, `--provider`, or `--model`, DDx may immediately retry the same
-policy intent with `MinPower = actual_power + 1`. This is not provider/model
-fallback inside DDx; it is a numeric bound that lets Fizeau select a different
-eligible route above the failed low-power provider. If no concrete route
-evidence exists, or if an operator pin is present, DDx must stop the current
-attempt and preserve the pin unchanged.
-
-A per-bead `work-retry-after` cooldown MUST NOT be applied for
-`provider_connectivity` or `no_viable_provider` outcomes: the route-exclusion
-window and the worker's `paused-infra` state are the correct mechanisms. A
-retry-after cooldown is only permissible when (a) no alternate routing path
-exists AND (b) the condition is purely time-dependent (not fixable by routing
-to a different provider or worker).
-
-HTTP 429 / rate-limit handling is internal to one attempt. The claim stays held,
-DDx honors a parseable `Retry-After` when present, otherwise uses bounded
-exponential backoff, and emits `rate-limit-retry` evidence. When the retry
-budget is exhausted, the attempt falls back to the ordinary `execution_failed`
-mapping.
+HTTP 429 / rate-limit handling and provider backoff are Fizeau session-runtime
+concerns. DDx never parses a provider `Retry-After` header or performs provider
+backoff. DDx honors `RetryAfter` only from the current public immediate error or
+a future typed contract field after a compatible release is pinned, and uses it
+only to pause or resume queue work, not to choose a route.
 
 ### Default Adversarial Pre-Close Review Gate
 
@@ -131,40 +134,43 @@ governing artifacts), and before the durable close mutation. The candidate
 commit may already exist in git so the reviewer can inspect a stable
 `result_rev`; the bead is not closed until the review gate approves that result.
 
-The default gate dispatches two independent reviewer invocations. Each reviewer
-runs as a **read-only tool reviewer** in the still-live attempt worktree, before
-land. The bounded evidence bundle (candidate diff, acceptance criteria, governing
-artifacts) is the canonical review input; same-worktree read-only tool access
-(file reads, searches) is supplemental and does not override the bounded bundle.
-The reviewer cannot write files or create commits. Each reviewer must return a
-structured verdict with per-acceptance-criterion evidence.
-
-**Transitional single-slot allowance.** Until the two-slot quorum reviewer
-implementation lands, a single reviewer slot satisfies the gate. The removal
-condition is the landing of the bead that implements two-slot quorum aggregation.
+The routine gate dispatches one independent, stronger reviewer invocation. An
+elevated gate dispatches two independent stronger reviewer invocations only for
+the risk classes named by the governing close-gate policy or an explicit
+operator review-tier override. Harness/provider/model pins do not select the
+review tier. Each reviewer runs through Fizeau as a **read-only tool reviewer**
+in the still-live attempt worktree, before land. The bounded evidence bundle
+(candidate diff, acceptance criteria, governing artifacts) is the canonical
+review input; same-worktree read-only tool access (file reads, searches) is
+supplemental and does not override the bounded bundle. The reviewer cannot
+write files or create commits. Each reviewer must return a structured verdict
+with per-acceptance-criterion evidence.
 
 DDx requests a reviewer that is stronger than the implementer by using the
 implementer's actual power as evidence and setting reviewer `MinPower` to a
-higher floor. DDx also supplies structured correlation facts:
+higher floor. If actual power is unknown, DDx uses the configured abstract
+review floor; if the implementer already ran at the Fizeau contract maximum,
+DDx requests that maximum. Fizeau alone resolves the reviewer harness,
+provider, and model. DDx also supplies structured correlation facts:
 
 - `role=reviewer`
 - `bead_id`
 - `attempt_id`
-- `session_id`
+- DDx `run_id` encoded with the other DDx IDs in Fizeau `CorrelationID`
 - `result_rev`
 - `review_group_id`
 - `reviewer_index`
-- implementer harness/provider/model/power when known
+- implementer actual power when known
 
-These fields are Day-1 observability. DDx records them so operators and metrics
-can see whether review pairing degraded. Future agent-side routing
-intelligence may use `Role` and correlation internally, but DDx does not
-specify that algorithm and must not depend on it.
-
-Different-provider review is best effort. If the agent returns a reviewer on
-the same provider as the implementer, DDx emits a
-`review-pairing-degraded` event. That event affects triage bias and operator
-visibility; it is not by itself a review failure.
+These request-time fields provide correlation without concrete route steering.
+Current v0.14.50 does not accept a session ID in the request or return one in
+`ServiceFinalData`; the opaque terminal `SessionLogPath` is post-run evidence,
+not request correlation. DDx may record implementer and reviewer routes returned
+by Fizeau as per-run audit facts, but it does not compare provider/model
+identity, emit route-pairing degradation, or feed those identities into review
+policy. Reviewer independence comes from separate `Execute` operations and
+evidence-preserving verdicts, not from DDx attempting to force different
+providers.
 
 ### Review Outcomes And Retry
 
@@ -182,10 +188,12 @@ pass. The aggregate gate is conservative:
 Non-approve reviewer findings are classified before the next action:
 
 - `review_fixable_gap` — implementation or test work is missing, incomplete, or
-  erroneous. DDx schedules a new implementation cycle on the same bead when
-  retry budgets allow. The next implementation prompt includes the review
-  findings as required repair context. DDx may raise `MinPower` only when the
-  finding is plausibly capability-sensitive.
+  erroneous. DDx may run an append-only repair cycle in the current attempt at
+  unchanged abstract power. The repair prompt includes the review findings as
+  required context. When the finding is plausibly capability-sensitive and
+  policy permits stronger work, DDx first ends and preserves the current
+  attempt, then allocates a distinct attempt ID/workspace and raises only that
+  new request's `MinPower`.
 - `review_spec_gap` / `review_missing_acceptance` — the bead or governing spec
   is ambiguous, unverifiable, contradictory, or missing acceptance criteria. DDx
   first tries the TD-031 decomposition-first path: safe reframe when durable
@@ -228,7 +236,11 @@ cycle overwrites prior evidence.
 
 DDx applies escalation in a strict priority order within and across drain cycles:
 
-1. **Within-cycle (ladder climb):** For a single bead execution, DDx escalates `MinPower` across successive retries until the configured power ceiling is reached or a stop condition fires. Each retry is a new layer-1 invocation in the same layer-2 attempt record.
+1. **Within-drain ladder climb:** After a capability-sensitive attempt reaches a
+   terminal DDx decision, DDx may raise `MinPower` for a distinct new layer-2
+   attempt with a new attempt ID and workspace. One primary implementation
+   attempt never contains a hidden MinPower retry. The drain climbs until the
+   configured abstract ceiling is reached or a stop condition fires.
 2. **Cross-cycle (reframe):** When the escalation ladder is exhausted on `consecutive_ladder_exhaustions >= 2` drain cycles, DDx dispatches a strong-power reframer agent (per P3, `MinPower` set to the strong-power floor). The reframer rewrites the bead description and/or acceptance criteria in-place; the bead re-enters the execution-ready queue with `status=open` and a reset ladder.
 3. **Cross-cycle (decompose):** If the reframe attempt fails or produces no change, DDx dispatches a strong-power decomposer agent to split the bead into 2–5 executable child beads. If child depth is exhausted, the decomposer switches to sibling or replacement bead specs under the nearest safe parent/root. The oversized bead is left `status=open` with dependency, `execution-eligible=false`, or supersession metadata that lets the queue advance through the generated executable work.
 4. **Final escape (`status=proposed`):** If child decomposition and sibling/replacement decomposition both fail, or the decomposition would be lossy and require operator judgment, DDx parks the bead at `status=proposed` with `auto-recovery-failed` evidence and clears the active claim.
@@ -265,10 +277,29 @@ that cost contributes to the same drain-level cap as implementation attempts.
 If the cap is reached, DDx stops claiming more work and records an observable
 budget stop instead of disguising the stop as model failure.
 
+### Enforcement
+
+The boundary is test-enforced:
+
+- `TestRetryEscalationChangesPowerOnly` proves capability escalation changes
+  abstract power bounds without setting or inspecting harness, provider, model,
+  profile, or route fields.
+- `TestReviewRequestRaisesMinPowerWithoutSettingHarnessProviderModel` proves
+  every routine review asks for stronger abstract power while leaving concrete
+  routing to Fizeau.
+- `TestReviewRequestOmitsImplementerConcreteRoute` proves reviewer correlation
+  does not carry implementer harness/provider/model identity as routing input.
+- `TestInfrastructureOutcomeDoesNotTriggerDDxRouteSteering` proves a typed
+  provider/quota/transport failure cannot make DDx query the catalog, raise
+  power to escape a provider, or select an alternate route.
+- TP-020's structural routing lint fails if `run`, `try`, `work`, or review
+  policy imports route-selection helpers or branches on concrete route fields.
+
 ## Consequences
 
-- FEAT-006 owns request construction: `MinPower` / `MaxPower`, passthrough
-  envelope, role/correlation metadata, and actual power recording.
+- FEAT-006 owns request construction: DDx-selected `MinPower`, unchanged
+  operator `MaxPower`, passthrough envelope, role/correlation metadata, and
+  actual power recording.
 - FEAT-010 owns intake, retry scheduling, stop-condition evaluation,
   no-progress handling, adversarial review aggregation, review retry scopes, and
   budget stops.
@@ -281,9 +312,8 @@ budget stop instead of disguising the stop as model failure.
 
 - Specifying Fizeau's internal routing, fallback, provider-health, or model
   scoring algorithm.
-- Guaranteeing a different reviewer provider or model. DDx can request stronger
-  review, dispatch independent reviewer slots, and record degradation, not force
-  a route.
+- Guaranteeing or preferring a different reviewer provider, model, or harness.
+  DDx requests stronger review; Fizeau chooses the route.
 - Retrying by concrete model name or profile mutation.
 - Adding a fourth run layer or a review-specific execution substrate.
 

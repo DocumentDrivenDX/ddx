@@ -6,6 +6,17 @@ ddx:
 ---
 # Technical Design: Config-Driven Runtime Options
 
+> **NEEDS REVISION — NOT EXECUTION-READY (2026-07-13).** The type-sealing and
+> DDx-owned configuration goals remain useful, but route-shaped field tables and
+> code samples below predate the corrected Fizeau boundary. They must not be
+> implemented. Delete legacy `Profile`, model-route/catalog/provider-probe,
+> comparison-harness, and DDx route-resolution state. Retain only DDx-owned
+> workflow settings, abstract `MinPower` policy, and immutable explicit
+> operator passthrough (`MaxPower`, `Harness`, `Provider`, `Model`, public
+> `Policy`). Fizeau chooses every concrete route. Phase 2 contradiction-ledger
+> row 17 owns the replacement; FEAT-006, ADR-024, and TP-020 are authoritative
+> meanwhile.
+
 ## Type Definitions
 
 ### `config.ResolvedConfig`

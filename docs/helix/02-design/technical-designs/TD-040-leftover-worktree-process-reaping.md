@@ -1,16 +1,44 @@
 ---
 ddx:
   id: TD-040
-  depends_on: []
-  status: draft
+  depends_on:
+    - FEAT-006
+    - FEAT-010
+    - SD-025
+  status: superseded
 ---
 # Technical Design: Leftover-Worktree-Keyed Helper-Process Reaping
 
 ## Status
 
-Draft. Written for ddx-a9218e18 (epic: leak-proof helper-process reaping).
-No implementation lands in this document; it authorizes the child beads
-listed at the end.
+**Superseded — do not implement.** This draft assigned DDx ownership of nested
+harness/helper process discovery and reaping. FEAT-006, FEAT-010, and SD-025
+now establish the opposite boundary: Fizeau owns every concrete harness,
+provider, helper subprocess, process group, cancellation path, and continuation
+inside a session. This document no longer authorizes the child beads listed at
+the end.
+
+## Replacement Authority
+
+- DDx may supervise or reap only a DDx worker process that DDx itself launched.
+- DDx owns attempt worktrees, repository scratch, worker/workspace liveness,
+  gates, evidence, landing, and preservation.
+- DDx cancels the context supplied to Fizeau `Execute` and waits for the public
+  stream to terminate. It never scans `/proc/<pid>/fd`, infers worktree
+  residency, adopts a nested process group, or sends a signal to a Fizeau-owned
+  process.
+- Provider-tree lifetime is verified by upstream Fizeau conformance and
+  boundary chaos tests. DDx runtime cleanup has no provider-process census, so
+  it does not claim to detect or report surviving Fizeau children. A failed
+  upstream conformance test blocks the compatible Fizeau release.
+- Required replacement tests are
+  `TestCleanupDoesNotInspectOrReapFizeauProcessTree`,
+  `TestExecuteContextCancellationLeavesTerminationToFizeau`, and
+  `TestCleanupMayReapOnlyDDXLaunchedWorker`.
+
+The remaining text is retained as historical analysis of the implementation
+that existed when this draft was written. Its proposed `/proc`/open-fd scan,
+process-group kill, safety model, and child beads are non-normative.
 
 ## Motivation
 
@@ -22,7 +50,7 @@ recognize `find` — does not work, because the allowlist model cannot
 attribute a bare `find` invocation to a bead or worktree at all. This
 document specifies detection on **worktree residency**, not command name.
 
-## Existing Mechanisms (as-built)
+## Historical Analysis: Existing Mechanisms (as-built, non-normative)
 
 There are already two independent reaping paths in `cli/internal/agent`.
 Both matter to this design: the first shows why a cmdline allowlist is a
@@ -195,9 +223,10 @@ wiring is needed at the loop layer — only the attribution logic inside
   (`orphan_harness_reaper.go`) — it stays as an independent, narrower path.
 - No change to the liveness/registered-worktree safety gates.
 
-## Child Beads
+## Historical Child Beads (superseded; do not dispatch)
 
 - Change 1 (root-normalize the fallback cwd path) and Change 2 (open-fd
-  attribution fallback) are filed as separate child beads under this epic
-  (`ddx-a9218e18`), each with command-based acceptance criteria, so they can
-  land and be verified independently.
+  attribution fallback) were filed as separate child beads under this epic
+  (`ddx-a9218e18`). They conflict with the replacement authority above and
+  must not execute from this design. Tracker disposition is an operator action
+  outside this documentation-only repair.

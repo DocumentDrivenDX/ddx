@@ -1,18 +1,25 @@
 ---
 id: REF-004
-title: "Model Catalog"
+title: "Historical Model Catalog (Superseded)"
 kind: reference
+status: superseded
 source_url: https://openrouter.ai/api/v1/models
 source_author: DDx maintainers (pricing via OpenRouter)
 accessed: 2026-04-12
-summary: "Routing power assignment, SWE-bench/LiveCodeBench scores, and pricing for models used by agent routing (smart/standard/fast power classes)."
+summary: "Superseded 2026-04 snapshot retained for history; Fizeau, not DDx, owns current model catalogs, pricing, power mapping, and routing."
 tags: [models, routing, benchmarks, pricing]
 ---
 
-# Model Catalog
+# Historical Model Catalog — Superseded
 
-Reference table for routing power assignment, benchmark scores, and pricing.
-Used to drive model selection in agent routing (defined by Fizeau CONTRACT-003-fizeau-service).
+> **Do not use this document for DDx execution policy.** This is a frozen
+> 2026-04 research snapshot. Fizeau owns current model catalogs, pricing, power
+> mapping, concrete route selection, and provider diagnostics. DDx neither
+> refreshes nor consumes this table; it sends abstract `MinPower` and immutable
+> operator constraints only.
+
+Historical reference table for the routing power assignments, benchmark scores,
+and prices that informed the earlier design.
 
 **Primary benchmarks:**
 - **SWE-bench Verified** — real-world Python bug fixes from GitHub issues; most discriminative for software engineering capability at the frontier

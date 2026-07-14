@@ -551,15 +551,20 @@ automatic replay or rollback; it produces durable operator-attention evidence.
 
 Operator-initiated cancel writes `extra.cancel-requested: true` to the
 bead via the server's `/api/beads/<id>/cancel` endpoint (or directly
-via the bead store). The worker honors at the next safe point:
+via the bead store). The worker honors it through the boundary it actually
+owns:
 
-- **Mid-attempt poll** (default every 10s during long attempts): the
-  worker re-reads the bead's `extra` map. If `cancel-requested: true`
-  appears, the worker aborts the next LLM turn / next git operation
-  boundary and reports `preserved_for_review` with reason `operator_cancel`.
-- **Worst-case latency**: 10s (mid-attempt poll interval) plus the
-  current LLM turn duration (typically 5-30s). Operators expecting
-  faster cancel use OS signals.
+- **Mid-attempt poll** (default every 10s during a live operation): the worker
+  re-reads the bead's `extra` map. If `cancel-requested: true` appears while
+  Fizeau `Execute` is in flight, the worker cancels the context it supplied to
+  that call and waits for the public stream to end. DDx has no LLM-turn
+  boundary, cancel-by-session method, or authority to signal Fizeau's child
+  process tree. Before or after `Execute`, it stops at the next DDx-owned git or
+  state-mutation boundary and reports `preserved_for_review` with reason
+  `operator_cancel`.
+- **Latency semantics**: DDx promises only the polling bound before it requests
+  context cancellation. End-to-end termination latency belongs to the pinned
+  Fizeau contract; DDx does not estimate it from an underlying agent turn.
 - **Idempotency**: a bead with `cancel-requested: true` already worked
   is silently consumed (worker writes `cancel-honored: true` next to
   it); a worker starting work on a bead with `cancel-requested: true`

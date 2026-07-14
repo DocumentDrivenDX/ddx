@@ -7,6 +7,12 @@ ddx:
 
 # Read-Coverage Audit — HTTP/MCP Gap Analysis
 
+> **HISTORICAL AUDIT.** Provider, route-status, model-catalog, and
+> `ddx_provider_*` rows below were superseded by the 2026-07-13 boundary
+> correction. They are not current server requirements: Fizeau owns those
+> diagnostics, and DDx retains only per-invocation public audit facts. See
+> FEAT-002, FEAT-006, FEAT-014, and Phase 2 contradiction-ledger row 16.
+
 **Date:** 2026-04-29
 **Bead:** ddx-44236615 (artifact-run-arch read-coverage audit)
 **Plan:** plan-2026-04-29-artifact-and-run-architecture.md § Bead #20

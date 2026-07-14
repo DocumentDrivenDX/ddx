@@ -1,14 +1,25 @@
 # Plan: `agentlib.Service` interface — narrow public surface
 
-> **Historical / superseded.** Retained as a design record for the
-> 2026-04-18 service-boundary investigation. Do not use this file as current
-> routing-contract guidance. The current boundary is the top-level
-> `ddx run` / `ddx try` / `ddx work` stack: DDx owns bead orchestration,
-> success classification, evidence, and retry escalation; Fizeau owns
-> concrete route selection, provider/model discovery, transcript
-> rendering, and operator/debug status surfaces behind `Execute`.
-> Pre-resolved route injection and DDx-side route decisions described below are
-> obsolete.
+> **STALE PLAN — HISTORICAL AND SUPERSEDED. DO NOT IMPLEMENT.** Retained only
+> as the 2026-04-18 service-boundary investigation record. Current authority is
+> [FEAT-006](../01-frame/features/FEAT-006-agent-service.md),
+> [FEAT-010](../01-frame/features/FEAT-010-task-execution.md),
+> [ADR-024](adr/ADR-024-power-escalation-and-review-routing.md), and
+> [TP-020](../03-test/test-plans/TP-020-fizeau-boundary-and-pass-through.md).
+> Fizeau is the complete harness-of-harnesses and owns concrete Claude Code,
+> Codex, Gemini, and native invocation; the session/tool loop; routing and
+> provider fallback; subprocess/process-tree control; progress/events; native
+> session logs and usage; cancellation; and harness-specific continuation.
+> DDx owns beads/queue/claims, attempt worktree and base revision, request
+> construction, repository gates, landing/preservation, durable DDx evidence,
+> bead-attempt success, and whether to launch a new bead attempt.
+>
+> DDx may raise abstract `MinPower` and may forward explicit operator
+> harness/provider/model pins verbatim. It never originates, ranks, loosens,
+> rewrites, infers, or acts on concrete routing pins, and it never invokes or
+> parses a concrete harness. Pre-resolved route injection, DDx-side route
+> decisions, direct tool/session ownership, process supervision, and other
+> contrary proposals below are obsolete historical claims.
 >
 > Search hits in this file for legacy agent naming, legacy package paths, route
 > decision helpers, and old workflow examples are audited historical references

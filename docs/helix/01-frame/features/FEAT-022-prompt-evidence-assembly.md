@@ -452,8 +452,8 @@ work review path
 
 ## Dependencies
 
-- **FEAT-002** (DDx Server) — `/api/agent/run`, `/api/providers`,
-  `/api/executions`, and the MCP/GraphQL surfaces are the server-side
+- **FEAT-002** (DDx Server) — `/api/agent/run`, `/api/executions`, and the
+  DDx-owned MCP/GraphQL surfaces are the server-side
   text sinks governed by the §10 bounded-egress requirement. FEAT-002
   owns the response-shape definitions; FEAT-022 adds the `truncated`
   and `original_bytes` fields to those shapes and expects FEAT-002 to

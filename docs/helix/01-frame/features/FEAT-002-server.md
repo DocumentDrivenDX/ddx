@@ -11,7 +11,7 @@ ddx:
 # Feature: DDx Server
 
 **ID:** FEAT-002
-**Status:** Complete
+**Status:** In Progress — provider/runtime boundary corrected 2026-07-13; Phase 3 worker substrate remains unbuilt
 **Priority:** P0
 **Owner:** DDx Team
 
@@ -236,15 +236,10 @@ shape for the in-flight attempt, enabling a single read model across CLI and UI)
     "attempt_id": "20260413T140544-6b4034a1",
     "bead_id":    "ddx-abc12345",
     "bead_title": "Add structured progress output",
-    "harness":    "agent",
-    "model":      "qwen3.5-27b",
-    "profile":    "cheap",
     "phase":      "running",
     "phase_seq":  3,
     "started_at": "2026-04-14T05:09:51Z",
-    "elapsed_ms": 45000,
-    "tokens":     { "input": 8500, "output": 350, "total": 8850 },
-    "cost_usd":   0
+    "elapsed_ms": 45000
   },
   "recent_phases": [
     { "phase": "queueing",  "ts": "2026-04-14T05:09:00Z", "phase_seq": 1 },
@@ -262,101 +257,15 @@ link or copy the same underlying evidence, but DDx keeps the inner Fizeau
 session logs opaque there and does not render or parse them inside DDx worker
 views.
 
-**Provider Availability and Utilization (FEAT-014)**
+**Fizeau Runtime Diagnostics Handoff (FEAT-006, FEAT-008, FEAT-014)**
 
-The provider dashboard endpoints expose the upstream agent's normalized
-status/debug signal model. They are read-only; all signal data is derived from
-provider-native sources, agent-reported catalog/status data, and DDx-observed
-metrics, never fabricated. Unknown values are surfaced as `unknown`, not
-omitted. These endpoints do not participate in `ddx run` / `ddx try` /
-`ddx work` routing decisions.
-
-26. `GET /api/providers` — list all configured harnesses with current routing availability, auth/health state, quota/headroom, and signal freshness; not scoped to a project (provider config is host+user global, shared across projects). Response is an array of provider summary objects.
-27. `GET /api/providers/:harness` — detail for one harness: full routing signal snapshot, per-model quota/headroom when available, historical usage summary (last 7d / 30d), recent latency/success rates, burn estimate, and freshness timestamps with source attribution.
-
-Provider summary object (list response):
-
-```json
-{
-  "harness":        "claude",
-  "display_name":   "Claude (Anthropic)",
-  "status":         "available",
-  "auth_state":     "authenticated",
-  "quota_headroom": "unknown",
-  "signal_sources": ["stats-cache"],
-  "freshness_ts":   "2026-04-14T05:00:00Z",
-  "last_checked_ts":"2026-04-14T05:00:00Z",
-  "recent_success_rate": 0.97,
-  "recent_latency_p50_ms": 4200,
-  "cost_class":     "subscription"
-}
-```
-
-Provider detail object (`/api/providers/:harness`):
-
-```json
-{
-  "harness":        "claude",
-  "display_name":   "Claude (Anthropic)",
-  "status":         "available",
-  "auth_state":     "authenticated",
-  "models": [
-    {
-      "model":          "claude-sonnet-4-6",
-      "quota_headroom": "unknown",
-      "source":         "none",
-      "source_note":    "no stable non-PTY quota source confirmed"
-    }
-  ],
-  "historical_usage": {
-    "window_7d": {
-      "input_tokens":  420000,
-      "output_tokens": 38000,
-      "total_tokens":  458000,
-      "cost_usd":      0,
-      "cost_note":     "subscription plan; per-token cost not billed"
-    },
-    "window_30d": {
-      "input_tokens":  1800000,
-      "output_tokens": 160000,
-      "total_tokens":  1960000,
-      "cost_usd":      0
-    }
-  },
-  "burn_estimate": {
-    "daily_token_rate":  65400,
-    "subscription_burn": "moderate",
-    "source":            "stats-cache+ddx-metrics",
-    "confidence":        "low",
-    "freshness_ts":      "2026-04-14T05:00:00Z"
-  },
-  "routing_signals": {
-    "availability":   "available",
-    "request_fit":    "capable",
-    "cost_estimate":  "unknown",
-    "performance": {
-      "p50_latency_ms":  4200,
-      "p95_latency_ms":  9800,
-      "success_rate":    0.97,
-      "sample_count":    34,
-      "window":          "7d"
-    }
-  },
-  "signal_sources": ["stats-cache", "ddx-metrics"],
-  "freshness_ts":   "2026-04-14T05:00:00Z"
-}
-```
-
-Field semantics:
-- `status`: `available` | `unavailable` | `unknown` — routing-level reachability
-- `auth_state`: `authenticated` | `unauthenticated` | `unknown`
-- `quota_headroom`: `ok` | `blocked` | `unknown` — never fabricated; `unknown` means no trustworthy live source
-- `signal_sources`: which sources contributed to this snapshot (`stats-cache`, `native-session-jsonl`, `ddx-metrics`, `none`)
-- `freshness_ts`: when the oldest contributing signal was last observed
-- `burn_estimate.confidence`: `high` (live source, recent) | `medium` (cached, recent) | `low` (cached, stale or inferred)
-- `cost_usd`: `-1` when unknown; `0` for local models or subscription plans where per-token billing is unavailable
-
-MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not project-scoped (provider config is per host+user, not per project).
+DDx exposes no provider catalog, availability, auth/health, quota/headroom,
+route-candidate, or model-detail API and no `ddx_provider_*` MCP tools. Those
+signals belong to Fizeau. DDx may expose a configured external link to Fizeau's
+diagnostics surface and may show the public `RoutingActual`, usage, cost,
+duration, status, and opaque `SessionLogPath` returned for one completed run as
+audit evidence. It does not proxy, cache, normalize, aggregate, or infer
+Fizeau's detailed routing state.
 
 **Task Execution (FEAT-010)**
 22. `GET /api/projects/:project/exec/definitions` — list execution definitions with optional artifact filter
@@ -395,8 +304,11 @@ MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not pr
 40. `POST /api/projects/:project/exec/run/:id` — dispatch an execution run (delegates to
     `ddx exec run` internally). Localhost-only or via ts-net (ADR-006) for
     non-local access.
-41. `POST /api/projects/:project/agent/run` — dispatch an agent invocation with harness,
-    model, effort, and prompt. Localhost-only or via ts-net (ADR-006) for non-local access.
+41. `POST /api/projects/:project/agent/run` — dispatch a Fizeau agent invocation
+    with DDx work facts, prompt, abstract `MinPower`, and optional explicit
+    operator constraints forwarded unchanged. The endpoint never chooses a
+    harness/provider/model. Localhost-only or via ts-net (ADR-006) for
+    non-local access.
 42. MCP tools: `ddx_exec_dispatch`, `ddx_agent_dispatch` (project selector required unless singleton compatibility mode applies; localhost-only)
 
 ## Technology
@@ -416,11 +328,11 @@ MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not pr
 - FEAT-006 (Fizeau Execution Boundary) — task execution activity endpoints read
   DDx invocation metadata and opaque Fizeau telemetry references; `ddx try` artifacts
   live in each project's `.ddx/executions/<attempt-id>/` bundle
-- FEAT-008 (Web UI) — embedded SPA served at `/`; provider dashboard view consumes `/api/providers`
-- FEAT-014 (Agent Usage Awareness and Routing Signals) — provider availability
-  and utilization endpoints expose the same routing signal model governed by
-  FEAT-014; field semantics, unknown-state rules, and freshness conventions
-  are owned by FEAT-014
+- FEAT-008 (Web UI) — embedded SPA served at `/`; completed-run audit facts and
+  external Fizeau diagnostics handoff use no DDx provider-status API
+- FEAT-014 (Agent Usage, Cost, and Runtime Projections) — DDx aggregates public
+  per-run usage/cost fields and does not expose provider availability or routing
+  state
 - FEAT-020 (Server Node State) — host+user state file, addr file, and
   project auto-registration
 - FEAT-021 (Dashboard UI) — per-project beads/sessions/graph surfaced under

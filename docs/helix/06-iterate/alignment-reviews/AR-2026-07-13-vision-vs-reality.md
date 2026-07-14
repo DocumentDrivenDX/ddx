@@ -18,6 +18,8 @@ ddx:
 ---
 # AR-2026-07-13: Vision vs Reality — Why DDx Is Foundering, and the Plan Back
 
+## Review Scope
+
 **Date:** 2026-07-13
 **Scope:** Full-stack alignment review: product vision → PRD → feature specs → designs → implementation → live operational evidence.
 **Method:** 25 parallel investigations — doc-promise extraction and independent code assessment for six subsystems, spec-vs-code gap verification for all six, empirical mining of `.ddx/metrics/attempts.jsonl` / `.ddx/executions/` / `.ddx/attachments/` / git history / live host state, and a four-hypothesis diagnostic panel arguing scope vs specification vs implementation vs architectural premise. Headline claims were re-verified at file:line; one panelist executed the failing test on clean main to confirm it.
@@ -37,7 +39,7 @@ The vision is coherent and most specs are unusually concrete. The project is fou
 | **H-SPEC** — key parts mis-specified | Contributing | Real defects (boundary contradiction, status rot, the #2 symptom has *no spec at all*) — but the dominant killers were spec **violations**, not spec holes |
 | **H-SCOPE** — bit off too much | Contributing | Breadth is real, but effort data refutes dilution: the core got 3–5× the effort of breadth in every month and is still unreliable |
 
-**The two primary causes interlock.** DDx supervises opaque harness CLIs from outside — so every decision (is the run healthy? did it finish? why did it fail?) is inferred from scraped text: 22 stderr kill-regexes that cancel a live run on any matching line, ~50-substring failure classification, un-locale-pinned English git stderr as a control plane, JSON verdicts scraped from reviewer stdout. Every novel failure lands outside the regexes; each incident was answered with another patch at the same altitude (more reapers, more watchdogs, more classifiers); and that compensation layer is now where the failures come from. The watchdog that deletes live `.git/index.lock` files, the cleanup that treats `os.TempDir()` as deletable, the claim leases leaked 27,000-fold into `/tmp` — all of it is machinery a direct sub-agent invocation never needs.
+**The two primary causes interlock.** Fizeau v0.14.50 is the full agent runtime/harness-of-harnesses wrapping Claude Code, Codex, Gemini, and other providers, but DDx treats its session boundary as opaque text and tries to reconstruct runtime supervision outside Fizeau. Decisions such as whether a session is healthy, complete, retryable, or safe to cancel are inferred from scraped text: 22 stderr kill-regexes that cancel a live run on any matching line, ~50-substring failure classification, un-locale-pinned English git stderr as a control plane, JSON verdicts scraped from reviewer stdout. Every novel failure lands outside the regexes; each incident was answered with another patch at the same altitude (more reapers, more watchdogs, more classifiers); and that compensation layer is now where the failures come from. The watchdog that deletes live `.git/index.lock` files, the cleanup that treats `os.TempDir()` as deletable, the claim leases leaked 27,000-fold into `/tmp` — all of it is DDx machinery a bare Fizeau execution does not need.
 
 **The July collapse is the controlled experiment.** Attempt success was a stable ~48% plateau (May, June) and fell off a cliff to 18% in July — under unchanged specs, unchanged agents, unchanged volume, and *essentially zero breadth work* (2 breadth-scoped commits vs 19 core). Only the platform's own code churned. That is the signature of implementation regression at the wrong architectural altitude, not of scope dilution or spec drift.
 
@@ -61,7 +63,7 @@ All figures recomputed from on-disk evidence 2026-07-13. Per the operator framin
 | Spend | $1,020 recorded; ≥25% on attempts that landed nothing (undercounted — codex rows record cost 0 at 5.4M+ input tokens) | attempts.jsonl |
 | Evidence exhaust | 83% of 3,235 execution dirs (2.4 GB) contain no `result.json`; the specced unified `.ddx/runs/` substrate has **0 entries** | `.ddx/executions/` |
 
-## 3. Gap Analysis (vision → PRD → specs → code)
+## 3. Gaps and Risk Analysis (vision → PRD → specs → code)
 
 All six subsystems below were verified by dedicated gap passes that re-checked claims against code at file:line.
 
@@ -80,9 +82,9 @@ The vision (v2.2.0) is internally coherent. The PRD detaches from reality in thr
 
 Structural findings:
 
-- The work→harness chain is ~9 hops, and the seam where reliability ships is **excluded from CI by a static guard** (`no_live_harness_in_default_suite_test.go`). Runtime behavior there rests on text: 22 stderr kill-regexes (`executor.go:101-140,275-295` — a test log printing "429" aborts a healthy run), substring classification deciding retry/escalate/park (`provider_failure.go:85-192`, `execute_bead_status.go:124+`), stdout parsing with silent raw fallback (`runner.go:583-676`). The PATH-shim re-exec exists because fizeau never sets pdeathsig — production incident: 28 orphaned codex processes at ~90% CPU (ddx-01b89378).
+- The work→Fizeau chain is ~9 hops, and the seam where reliability ships is **excluded from CI by a static guard** (`no_live_harness_in_default_suite_test.go`). Runtime behavior there rests on text: 22 stderr kill-regexes (`executor.go:101-140,275-295` — a test log printing "429" aborts a healthy run), substring classification deciding DDx retry/escalate/park (`provider_failure.go:85-192`, `execute_bead_status.go:124+`), stdout parsing with silent raw fallback (`runner.go:583-676`). The PATH-shim re-exec compensates for Fizeau v0.14.50 lacking the required provider-process-tree lifetime contract — production incident: 28 orphaned underlying Codex processes at ~90% CPU (ddx-01b89378). That missing semantic belongs in upstream Fizeau; DDx process wrappers are not a valid substitute.
 - **Failure interpretation is quintuplicated** — five components independently re-classify the same attempt from concatenated free text; one transient failure can be simultaneously retried, power-escalated, cooled down, and parked.
-- The pre-close pipeline is architecture-by-spec cost: intake hook (gating *stricter* than ADR-023's WARN-ONLY default — an implementation divergence toward more blocking), attempt, reflog-regex integrity parsing, doc gate, landing retries, then a default-on two-slot elevated-power review with repair cycles. 3+ LLM invocations and ~6 rejection points per close **mathematically guarantees** lower completion probability than one direct sub-agent call, before counting the 41% review transport error rate.
+- The pre-close pipeline is architecture-by-spec cost: intake hook (gating *stricter* than ADR-023's WARN-ONLY default — an implementation divergence toward more blocking), attempt, reflog-regex integrity parsing, doc gate, landing retries, then a default-on two-slot elevated-power review with repair cycles. 3+ LLM invocations and ~6 rejection points per close **mathematically guarantees** lower completion probability than one bare Fizeau `Execute`, before counting the 41% review transport error rate.
 - Orchestrator contract confusion destroys correct work: 51 attempts rejected as `mixed_commit_and_no_changes_rationale`; ddx-232aa2c0 documents the orchestrator synthesizing commits and running full hooks *after* the agent wrote a valid retry rationale.
 - The one fully honored invariant — FEAT-022 evidence caps, mechanically enforced end-to-end with CI lint — proves the team can land invariants when they are specified as mechanisms.
 
@@ -120,7 +122,7 @@ Core design (per-attempt isolated worktrees, land coordinator, ff-or-merge --no-
 
 13 promises: 5 delivered, 6 partial, 1 diverged, 1 missing. The measure-half is built; the decide-half never was:
 
-- **The feedback loop was never closed**: `QuotaSignal` is declared (`types.go:309`) but never constructed; zero quota references in `profile_select.go`; no routing or escalation decision reads any recorded history. Dispatch runs on static labels plus substring matching (`escalation/infrastructure.go:22-78`) whose patterns ("no such file or directory", "429") routinely appear inside genuine test output — misrouting real failures into same-tier retry.
+- **The feedback loop was never closed, and it sits on the wrong side of the boundary**: `QuotaSignal` is declared (`types.go:309`) but never constructed; zero quota references in `profile_select.go`; DDx attempts provider routing/escalation from static labels plus substring matching (`escalation/infrastructure.go:22-78`) whose patterns ("no such file or directory", "429") routinely appear inside genuine test output. Provider routing, quota response, and in-session escalation belong inside Fizeau; DDx should pass work facts and `MinPower` plus unchanged explicit operator constraints, consume the public Fizeau outcome, and decide only whether a new DDx attempt is warranted.
 - **The metrics layer taxes and corrupts the hot path it observes**: per-attempt durable-audit commits of tracked files under the shared tracker lock (`durable_audit.go:32-60`; 25 of the last 100 main commits), and the lock-cap watchdog described in §3.3 — built to observe hygiene, provably a cause of it.
 - SD-023's comparison engine was silently downgraded to prose skills (its flags declared "unsupported" in `run_dispatch_spec.go:45-65`) while FEAT-019's UI doesn't exist — docs never updated.
 
@@ -137,7 +139,7 @@ Core design (per-attempt isolated worktrees, land coordinator, ff-or-merge --no-
 
 **Did we bite off too much?** Yes — but not in the way it feels. The effort ledger refutes "breadth starved the core": core-loop areas got ~993 closed beads vs ~200 for breadth, out-worked breadth 3–5× every month, and July's collapse happened during essentially pure core focus. Breadth's real damage was indirect: (a) **gate coupling** — the monorepo-wide green-suite closure gate lets any breadth regression (e.g. the GraphQL perf budget breach) convert unrelated finished core work into `no_changes`; (b) **doc-truth dilution** — a solo maintainer cannot keep 26 spec surfaces honest, so status rot hid which core gaps were real; (c) **review bandwidth** — the binding constraint the vision itself names. Cut breadth to fix those three transmissions, not to reallocate keystrokes.
 
-**Did we mis-specify something key?** Yes, three things — while noting the panel's finding that the *dominant* killers were spec violations, not spec holes. (1) The execution-boundary contradiction: "opaque passthrough consumer" (FEAT-006) plus total supervision duty (FEAT-010/ADR-023/-024) is only implementable as text-scraping. (2) **Worktree lifecycle under failure has no spec at all** — the #2 operator symptom is a spec hole filled by three ad-hoc reapers. (3) ADR-024's mandatory two-slot adversarial review with no risk-proportional path chose the latency and false-rejection profile operators now feel. Beneath these, the specification *system* is broken: Complete stamps on unbuilt contracts, an implementable server-coordination spec that appeared two days ago, hard parts deferred while trivia is frozen.
+**Did we mis-specify something key?** Yes, three things — while noting the panel's finding that the *dominant* killers were spec violations, not spec holes. (1) The execution-boundary contradiction: FEAT-006's opaque-passthrough language plus FEAT-010/ADR-023/-024's total DDx supervision duty assigns DDx responsibilities that belong to the full Fizeau runtime and leaves text-scraping as the only implementation. (2) **Worktree lifecycle under failure has no spec at all** — the #2 operator symptom is a spec hole filled by three ad-hoc reapers. (3) ADR-024's mandatory two-slot adversarial review with no risk-proportional path chose the latency and false-rejection profile operators now feel. Beneath these, the specification *system* is broken: Complete stamps on unbuilt contracts, an implementable server-coordination spec that appeared two days ago, hard parts deferred while trivia is frozen.
 
 **Are we failing at implementation?** Yes — primary cause, highest confidence. The failure signature is uniform: adequate specs violated at load-bearing points (SD-025's cleanup scope, ADR-023's WARN-ONLY default, US-025's claim rows, TD-027's boundary — implemented inverted); soft invariants everywhere (best-effort cleanup, ~449 discarded errors, fire-and-forget cascades); text-scraped control flow at every seam; and verification that systematically stops where the symptoms live (the harness boundary CI-banned, dispatch e2e mocked, cross-process locking untested, 8/19 TP-021 named tests missing, a red reliability test on clean main). The meta-defect that keeps regenerating all of it: **bead closure is never verified against the defect class staying dead.** Cleanup requirements have existed for months across P8/FEAT-010/SD-025 and multiple closed beads — `/tmp` sits at 100% inodes today.
 
@@ -147,7 +149,7 @@ Two primary causes interlock and compound; two contributing causes amplify:
 
 ```
                  ┌─ H-PREMISE (primary) ─────────────────────┐
-                 │ Supervise opaque CLIs from outside         │
+                 │ Rebuild Fizeau session supervision in DDx  │
                  │ → every decision inferred from text        │
                  │ → novel failures land outside the guards   │
                  └──────────────┬────────────────────────────┘
@@ -168,7 +170,7 @@ Two primary causes interlock and compound; two contributing causes amplify:
           72% of backlog = self-repair; throughput −61%/quarter
 ```
 
-The plateau-then-cliff shape carries the actionable message: the system held ~48% while the operator's patch rate kept up with the regenerating failure surface, then July's self-inflicted incidents (cleanup-io, provider-test-cpu) outran it. **~3 concrete fixes (scratch off `/tmp`, routing fail-open, gate scoping) plausibly restore the ~48% plateau quickly — but the plateau itself is the altitude problem.** A pipeline with ~6 rejection points and 3+ LLM invocations per close cannot beat a direct sub-agent's completion rate even implemented perfectly. Recovery has two stages: stop the self-harm, then lower the altitude.
+The plateau-then-cliff shape carries the actionable message: the system held ~48% while the operator's patch rate kept up with the regenerating failure surface, then July's self-inflicted incidents (cleanup-io, provider-test-cpu) outran it. **~3 concrete fixes (scratch off `/tmp`, DDx route-preflight deletion, gate scoping) plausibly restore the ~48% plateau quickly — but the plateau itself is the altitude problem.** A pipeline with ~6 rejection points and 3+ LLM invocations per close cannot beat bare Fizeau execution even implemented perfectly. Recovery has two stages: stop the self-harm, then lower the altitude.
 
 ## 6. What to Keep
 
@@ -178,13 +180,36 @@ The plateau-then-cliff shape carries the actionable message: the system held ~48
 - **FEAT-022 evidence caps** — the template: invariant = mechanism + CI lint, never prose.
 - **Worker process-tree lifecycle tests and the federation chaos suite** — the best tests in the repo; extend that standard to the seams that are currently mocked.
 
-## 7. The Plan (final)
+## 7. Work Breakdown — The Plan (final)
 
 > **Refinement note (2026-07-13):** each phase below has been refined into a standalone, adversarially-reviewed plan document — see `../phase0-stop-the-self-harm-plan-2026-07-13.md`, `../phase1-lower-the-altitude-plan-2026-07-13.md`, `../phase2-doc-truth-plan-2026-07-13.md`, `../phase3-server-rebuild-plan-2026-07-13.md`. A subsequent execution-readiness pass corrected lifecycle-state semantics, cross-phase cleanup ownership, cohort-scoped measurements, spec-evidence requirements, and phase dependencies. The plan documents supersede this section's task-level detail (review corrected several anchors and premises here, e.g. the perf suite was already lane-isolated, the red test is host-config leakage, `/tmp` inode state moved); this section remains the strategic summary.
 
 ### The architectural decision
 
-**Invert the control relationship at the supervision layer.** DDx keeps what the substrate lacks — the queue, worktree lifecycle, landing, durable evidence, cost accounting — and exposes them as tools the harness calls (MCP + skills, both partially existing), while the harness owns in-flight supervision, retries, and completion detection **in-band**. Concretely: an agent finishes by calling a completion tool with a typed result, instead of DDx inferring completion from commits, rationale files, and stderr afterward; gate failures return control to the *same live session* for repair instead of killing and re-spawning. Where DDx must still spawn headless work, it consumes a typed result contract (Agent SDK / structured stream / fizeau typed terminal events) — never scraped text. This retires, rather than repairs, the kill-regexes, the substring classifiers, the rationale-file contract, and the out-of-band review spawner. The weekly A/B baseline (P0.6) is the arbiter that this direction is converging.
+**Restore the Fizeau/DDx boundary at the supervision layer.** Fizeau is the full agent runtime/harness-of-harnesses: it owns provider discovery and selection, provider-specific protocols, the public execution stream, streaming, usage/cost, in-session/provider retry, and every underlying provider process tree. DDx is the work tracker and git-aware work-execution orchestrator: it owns bead claims, attempt/worktree identity, verification and review policy, landing, durable evidence, and tracker closure. Under current v0.14.50 DDx cancels only the context supplied to `Execute`; no continuation, active-session query, or cancel-by-session API exists. DDx calls only a pinned compatible Fizeau contract; it never invokes Claude Code, Codex, Gemini, or another provider directly, parses provider output for control flow, manufactures a provider resume command, or scrapes/kills provider processes. Missing typed cause/stage, harness-neutral continuation, session-targeted cancellation, or process-tree disposition are upstream Fizeau enhancements tracked by `fizeau-6f9ffa71` and its children; dependent DDx work blocks until a compatible release is pinned and its boundary conformance suite passes. Fizeau is never demoted to routing-only, replaced by DDx provider adapters, or bypassed as a schedule fallback.
+
+Completion and retry are layered, not synonyms. A current **Fizeau operation
+completes** when `Execute` returns an immediate public error or its stream emits
+one public final event. A future pinned contract may add machine-readable
+cause/stage, harness-neutral continuation, a stable session reference, and
+process-tree disposition; DDx cannot assume them before that release. This does
+not imply the candidate verified or landed. A **DDx attempt completes** when
+one claimed attempt reaches landed, failed, parked, or cancelled; it may
+contain an initial Fizeau operation and fresh-`Execute` repair operations at
+unchanged abstract power in the same workspace. A **bead completes** only after DDx verifies and
+lands the candidate, satisfies closure policy, and durably closes the tracker
+record. Fizeau owns all in-session/provider retry before its result. DDx starts
+a **new attempt retry** only after public Fizeau outcome and DDx-stage evidence
+produce a terminal attempt decision, allocating a new attempt ID/workspace and
+calling Fizeau `Execute` again. Only that distinct new attempt may raise
+`MinPower` for capability-sensitive evidence. Current gate repair is a fresh
+Fizeau `Execute` at unchanged power seeded with task + diff + failure evidence;
+a compatible future continuation contract may replace that operation — never
+an invented service method or direct provider invocation. This boundary retires, rather than
+repairs, kill-regexes, substring classifiers, the rationale-file control
+contract, PATH-shim process supervision, and provider-specific review/resume
+spawning. The weekly A/B baseline (P0.6) is the arbiter that this direction is
+converging.
 
 ### Phase 0 — Stop the self-harm (operator-driven, days)
 
@@ -193,21 +218,40 @@ The plateau-then-cliff shape carries the actionable message: the system held ~48
 - **P0.3 Remove the two active corruption sources.** (a) Lock-cap watchdog: never `RemoveAll` a live lock — observe-and-alert, or cancel the holder then release. (b) Fix the TOCTOU stale-break shared by the three lock implementations; collapse to one implementation.
 - **P0.4 Make gates truthful.** Fix `TestWorkerManagerStopStaleDiskEntry` (red on main, 0.093 s) and the rest of the red suite; then scope closure gates to the packages a bead's diff touches plus a curated core-invariant suite, with the full suite running async post-land and auto-filing regression beads. Move `internal/server/perf` to its own CI lane. This kills the largest refusal bucket after ENOSPC (unrelated-red-gate `no_changes`).
 - **P0.5 Stop destroying correct work.** Honor the agent's retry rationale — never synthesize commits over it (ddx-232aa2c0); propagate `ClosureGate` rejections as errors (`store.go:2058-2072`); take the per-attempt durable-audit *commit* out of the tracker-lock hot path (batch or async).
-- **P0.6 Stand up the baseline that arbitrates everything.** Weekly: the same ~20-bead sample through direct Claude Code sub-agents vs `ddx work`; publish landed-rate, wall-clock, and cost side-by-side. **Closing that delta becomes the project's top-line metric**, replacing the PRD's unmeasurable criteria.
+- **P0.6 Stand up the baseline that arbitrates everything.** Weekly: the same
+  paired bead sample through bare Fizeau `Execute` vs `ddx work`, with the same
+  task facts, initial abstract `MinPower`, Fizeau version, and base revision;
+  no profile or concrete route is pinned by DDx, and Fizeau routes each arm
+  independently. Publish landed-rate, wall-clock, and cost side-by-side.
+  **Closing that delta becomes the project's top-line metric**, replacing the
+  PRD's unmeasurable criteria.
 
 *Exit: `/tmp` inodes stable over a 20-attempt drain; zero unrelated-gate refusals for a week; attempt success back at the ~48% plateau.*
 
 ### Phase 1 — Lower the altitude (weeks)
 
-- **P1.1 One typed failure owner.** Amend FEAT-006: fizeau must deliver typed terminal events (outcome enum + machine-readable cause + pdeathsig-safe spawning) or be replaced; delete the 22 kill-regexes, the ~50-substring classifiers, and the four redundant re-classification layers. One classifier, one retry policy, one escalation ladder — everything downstream consumes its verdict. (This also lands the standing harness-as-provider unification: one registry.)
-- **P1.2 Dispatch-and-observe.** Preflight becomes advisory everywhere; the 7,823 predict-and-refuse rejections must go to ~zero. Cooldowns keyed on typed evidence only, and they must clear offline (`originMainHead` returning `""` on error currently pins them).
-- **P1.3 Risk-proportional close gate (amend ADR-024) + in-band repair.** Default: deterministic checks + one cheap reviewer, gate failure returns to the live session; two-slot elevated review only for high-risk labels; review transport failures retry-or-downgrade, never fail the attempt. Target ≤1 LLM invocation of overhead per routine close.
+- **P1.1 Typed Fizeau sessions; one DDx attempt-policy owner.** Amend FEAT-006
+  and upstream Fizeau CONTRACT-003 to add the missing typed cause/stage,
+  lifecycle capability, and process-tree guarantees to Fizeau's public
+  execution contract. Pin the compatible release and block dependent DDx work
+  until conformance is green; there is no invented DDx service method,
+  direct-provider path, or replacement fallback. Delete the 22 kill-regexes,
+  the ~50-substring classifiers, PATH-shim process supervision, and the four
+  redundant re-classification layers. Fizeau owns provider retry/escalation;
+  one DDx adapter maps typed immediate/final results plus DDx-owned stage
+  evidence to repair/new-attempt retry/escalate/park.
+- **P1.2 Dispatch-and-observe.** Delete DDx route preflight, catalog/viability
+  queries, predictions, and annotations entirely; the 7,823
+  predict-and-refuse rejections must go to zero. Cooldowns are keyed on typed
+  evidence only, and they must clear offline (`originMainHead` returning `""`
+  on error currently pins them).
+- **P1.3 Risk-proportional close gate (amend ADR-024) + Fizeau-owned repair.** Default: deterministic checks + one reviewer requested at a stronger abstract `MinPower` than the implementer, with every operation routed by Fizeau. Current gate repair uses a fresh Fizeau `Execute` at unchanged power seeded with task + diff + failure evidence; only a later pinned contract may replace it with harness-neutral continuation. Two-slot elevated review is only for high-risk labels or an explicit review-tier override, never a concrete route pin; typed review-transport failures retry at identical power through Fizeau or downgrade, never fail the attempt. Target ≤1 LLM invocation of overhead per routine close.
 - **P1.4 Write the missing worktree-lifecycle spec, then implement its single owner.** Enumerated states (created→claimed→landed/preserved→reaped), journal record written before `git worktree add`, crash-recovery semantics including `locked` (unlock-if-owner-dead→prune), lifecycle-classifier scratch routed through the same owner. Then delete the three reapers. Pin `LC_ALL=C` in `git.Command`. Land onto a non-checked-out integration ref — delete the checkout emulation that clobbered operator edits. Chaos test: SIGKILL mid-`worktree add`, assert full reclamation.
 - **P1.5 Fix claim liveness structurally.** Leases return to synced tracker state (or in-row with machine identity) — never per-machine `/tmp` sidecars on a git-synced store; kill the 1 ms×3 sleeps and the 4× reparse in `Status()` (single-pass classification, in-process cache).
 - **P1.6 Decompose `execute_bead_loop.go`** (8,199 lines, 261 commits since April) along its existing seams — intake → attempt → verify → land → report — as mechanical extraction with tests kept green.
 - **P1.7 Closed means the class is dead.** A `kind:reliability`/`kind:bug` bead may close only with a named regression tripwire wired into the default suite. Retro-apply per-class to the niflheim backlog.
 
-*Exit: `ddx try` ≥ direct sub-agent baseline on landed-rate AND wall-clock (P0.6 arbitrates); DDx-owned stages < 10% of losses; zero niflheim-class recurrence for 3 weeks.*
+*Exit: `ddx try` meets the paired non-inferiority rule against bare Fizeau `Execute` on landed-rate and wall-clock (P0.6 arbitrates); DDx-owned stages < 10% of losses; zero niflheim-class recurrence for 3 weeks.*
 
 ### Phase 2 — Make the documents true (parallel, cheap)
 
@@ -226,9 +270,9 @@ The plateau-then-cliff shape carries the actionable message: the system held ~48
 
 Federation write path + ADR-029 lease, FEAT-029 managed nodes, multi-node dashboard, FEAT-019 evaluation UX, delivery metrics (FEAT-016/MET-002), website investment, P10-style auto-remediation loops — all Deferred with tombstones; their open beads leave the ready queue.
 
-## 8. Confidence
+## 8. Validation, Evidence, and Open Questions
 
 - Empirical figures (§2), closure-gate defect, resolver stubs, worktree/inode/lease state, churn/LOC, monthly rates: **operator-verified directly**.
 - All six subsystem gap analyses (§3.2–3.7): independently extracted, code-assessed, then **re-verified at file:line by dedicated gap passes**; the red test on main was executed, not inferred.
 - Panel verdicts (§1, §4, §5): four adversarial single-hypothesis evaluations over the full dossier, each required to argue both sides and commit.
-- Known unknowns: no historical baseline exists for direct-sub-agent success on these beads (P0.6 creates it); rationale-cause counts vary by counting method (file-level vs mention-level) — the environmental-dominance conclusion holds across all methods.
+- Known unknowns: no historical bare-Fizeau baseline exists for these beads (P0.6 creates it); the first Fizeau release satisfying typed cause/stage, continuation-capability, cancellation, and process-tree semantics is not yet named; rationale-cause counts vary by counting method (file-level vs mention-level) — the environmental-dominance conclusion holds across all methods.

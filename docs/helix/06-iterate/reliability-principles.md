@@ -8,17 +8,23 @@ These principles describe how the execution machinery should behave when a layer
 
 When a layer's specific check rejects a candidate, the layer skips itself and emits a structured event. It does not wedge the pipeline.
 
-The auto-routing fix (`workers.go:803`, commit `3b4f5d58`) is the canonical example: preflight is now advisory when no operator pin exists.
+Route viability is not a DDx machinery check. DDx validates only the request
+fields it owns, dispatches to Fizeau, and consumes Fizeau's typed immediate or
+terminal outcome. It has no route-preflight, catalog-query, or pin-sensitive
+admission branch.
 
 ## P2: Single Responsibility Per Layer
 
-Each layer rejects only on conditions it owns. Routing pre-flight does NOT decide provider availability (`fizeau` owns); cooldown does NOT decide eligibility (`picker` owns); etc.
+Each layer rejects only on conditions it owns. Fizeau decides provider and route
+availability; DDx cooldown does not decide eligibility (`picker` owns); etc.
 
 Cross-layer concerns are the smell.
 
 ## P3: Observable Degradation
 
-Every fail-open emits a structured event surfaced in the workers panel. Operators see "preflight skipped (no operator pin)" instead of silent acceptance OR endless retry loop.
+Every fail-open emits a structured event surfaced in the workers panel. A
+Fizeau route failure is recorded from Fizeau's typed outcome; DDx does not invent
+an advisory route verdict or vary behavior based on operator pins.
 
 ## P4: Bounded Blast Radius
 
@@ -32,7 +38,9 @@ ADR-022 rev 5 `§Probe + freshness state model` defines the worker side; the UI 
 
 ## P6: Auto-Retry Only For Transient Classes
 
-Cooldown fires ONLY when the model genuinely couldn't make progress (clean no-changes with rationale). Disrupted, preflight-rejected, network-error, claim-race -> no cooldown, return to ready.
+Cooldown fires ONLY when DDx-owned no-progress evidence or a typed Fizeau
+queue-level retry hint authorizes it. Disrupted, route-unavailable, network-error,
+and claim-race outcomes do not acquire a DDx-invented cooldown.
 
 Existing code: `shouldSuppressNoProgress` at `execute_bead_loop.go:1545` already respects `Disrupted` (commit `47d8054e`).
 

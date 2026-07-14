@@ -1,5 +1,11 @@
 # Agent endpoints unified view
 
+> **STALE AND SUPERSEDED — DO NOT IMPLEMENT.** This note predates the corrected
+> Fizeau/DDx boundary. Provider/harness discovery, probing, quota, catalogs, and
+> route diagnostics belong to Fizeau. DDx has no provider-dashboard proxy and
+> does not parse native headers or session logs into provider status. Current
+> authority is FEAT-006, FEAT-014, ADR-024, and TP-020.
+
 Design note for `ddx-23978824`: unify the providers page to include both endpoint providers and subprocess harnesses, surface token utilization + quota trend.
 
 ## Decision summary

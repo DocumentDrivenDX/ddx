@@ -14,42 +14,56 @@ validated by this plan.
 
 ## Test Layers
 
-### Layer 1 — DDx Agent Executor (unit, in-process)
+### Layer 1 — DDx Consumer Of Fizeau (unit, in-process)
 
-These tests use DDx Agent's virtual provider for deterministic replay. No
-subprocess, no git, no network. All run in `internal/agent/`.
+These tests use a fake of the pinned public Fizeau service contract. The fake
+implements `Execute(context.Context, ServiceExecuteRequest)
+(<-chan ServiceEvent, error)` and emits a public final event carrying
+`ServiceFinalData`. DDx does not embed a virtual provider, concrete harness,
+tool loop, or session logger. No subprocess, git operation, or network call
+occurs in this layer.
 
 | ID | Test | What It Proves |
 |----|------|----------------|
-| F-01 | `TestAgentRunVirtualProvider` | RunAgent dispatches to the embedded agent library with virtual provider, returns typed Result with tokens/cost/model |
-| F-02 | `TestAgentRunToolExecution` | DDx Agent tools (read/write/edit/bash) execute in WorkDir and tool calls appear in session log |
-| F-03 | `TestAgentRunIterationLimit` | MaxIterations caps the loop; Result.Status = iteration_limit, ExitCode = 1 |
-| F-04 | `TestAgentRunTimeout` | Context timeout cancels the run; Result maps to timeout error |
-| F-05 | `TestAgentRunProviderError` | Provider returns error → Result.Error populated, ExitCode = 1 |
-| F-06 | `TestAgentRunSessionLogging` | Session entry written to sessions.jsonl with correct harness, tokens, cost |
-| F-07 | `TestAgentRunModelResolution` | Model from opts > config > env > provider default, in that priority |
-| F-08 | `TestAgentRunCostMapping` | CostUSD = 0 for local models, -1 mapped to 0 in Result (unknown model) |
+| F-01 | `TestEvaluationRequestUsesFizeauContract` | DDx sends prompt, worktree, correlation, and abstract power facts through one Fizeau request |
+| F-02 | `TestEvaluationToolAndSessionArtifactsRemainOpaque` | DDx retains the Fizeau session-log reference without executing tools or parsing session/tool logs |
+| F-03 | `TestEvaluationReviewRaisesMinPowerWithoutRoutePins` | Stronger grading/review intent raises `MinPower` while harness/provider/model/policy remain unset |
+| F-04 | `TestEvaluationCancelUsesExecuteContext` | DDx cancels the context supplied to `Execute`; Fizeau owns the session/process tree and terminates the stream according to the pinned contract |
+| F-05 | `TestEvaluationFinalFailurePreserved` | A public Fizeau final failure is stored separately from the DDx comparison/grade outcome |
+| F-06 | `TestEvaluationSessionEvidenceIsEnvelopeOnly` | DDx stores request/correlation fields plus opaque Fizeau session refs, not a second session-log schema |
+| F-07 | `TestEvaluationDoesNotOriginateHarnessProviderModel` | With no explicit operator pins, DDx leaves concrete routing fields empty |
+| F-08 | `TestEvaluationUsageComesFromFizeauOutcome` | Usage/cost and audit-only actual model are copied from public final fields without provider-log parsing |
+| F-09 | `TestEvaluationImmediateExecuteErrorPreserved` | An immediate typed `Execute` error is preserved without inventing a final event or routing fallback |
+| F-10 | `TestEvaluationGenericFinalErrorRemainsUnclassified` | Generic final `Error` text is retained but never parsed into cause, stage, retry, or escalation policy |
+| F-11 | `TestEvaluationHasNoContinuationOrSessionQueryAPI` | Evaluation exposes only new `Execute` operations and context cancellation under v0.14.50 |
 
-**Test fixture:** The virtual provider can be configured with inline
-responses that include tool calls, allowing deterministic multi-turn
-tests without any LLM:
+**Test fixture:** a Fizeau contract fake records requests and emits arbitrary
+opaque non-terminal payloads followed by the real public final shape:
 
 ```go
-virtual.New(virtual.Config{
-    InlineResponses: []virtual.InlineResponse{{
-        PromptMatch: "create hello.txt",
-        Response: agentlib.Response{
-            Content: "",
-            ToolCalls: []agentlib.ToolCall{{
-                Name: "write", Arguments: `{"path":"hello.txt","content":"hello"}`,
-            }},
+fakeFizeau.ExecuteFn = func(
+    ctx context.Context,
+    req fizeau.ServiceExecuteRequest,
+) (<-chan fizeau.ServiceEvent, error) {
+    input, output := 100, 25
+    payload, _ := json.Marshal(fizeau.ServiceFinalData{
+        Status: "success",
+        Usage: &fizeau.ServiceFinalUsage{
+            InputTokens: &input, OutputTokens: &output,
         },
-    }},
-})
+        SessionLogPath: "sessions/session-1.jsonl",
+    })
+    events := make(chan fizeau.ServiceEvent, 1)
+    events <- fizeau.ServiceEvent{
+        Type: fizeau.ServiceEventTypeFinal, Data: payload,
+    }
+    close(events)
+    return events, nil
+}
 ```
 
-This exercises the full DDx Agent loop (prompt → tool call → tool result →
-next LLM turn → final response) without network or cost.
+The fake does not model Fizeau's tool/session loop. That runtime behavior is
+covered by Fizeau's CONTRACT-003 conformance tests, not duplicated in DDx.
 
 ### Layer 2 — Comparison Dispatch (needs temp git repos)
 
@@ -58,17 +72,19 @@ lifecycle, and verify side-effect capture. Moderate speed (git operations).
 
 | ID | Test | What It Proves |
 |----|------|----------------|
-| C-01 | `TestCompareCreatesWorktrees` | --compare creates one worktree per harness arm under `.worktrees/compare-<id>-<harness>/` |
+| C-01 | `TestCompareCreatesWorktrees` | The comparison workflow creates one DDx-owned worktree per arm under an arm-id-keyed path, independent of Fizeau's selected route |
 | C-02 | `TestCompareArmsIsolated` | File written by arm A does not appear in arm B's worktree |
-| C-03 | `TestCompareCapturesDiff` | After DDx Agent writes a file, the effect diff contains the expected unified diff |
+| C-03 | `TestCompareCapturesDiff` | After a Fizeau session changes the arm worktree, DDx captures the expected repository diff |
 | C-04 | `TestCompareEmptyDiff` | Arm that produces no file changes records empty diff string |
 | C-05 | `TestCompareCleansUpWorktrees` | After comparison, worktrees are removed (default behavior) |
 | C-06 | `TestCompareKeepSandbox` | --keep-sandbox preserves worktrees; they exist after the run |
 | C-07 | `TestCompareParallelExecution` | Two arms run concurrently (verify via timing or sync primitives) |
-| C-08 | `TestCompareRecordSchema` | ComparisonRecord contains all expected fields: id, timestamp, prompt, arms[] with harness/model/output/diff/tokens/cost |
-| C-09 | `TestCompareArmFailure` | If one arm fails, comparison still completes with error in that arm's record |
+| C-08 | `TestCompareRecordSchema` | `ComparisonRecord` contains arm id, DDx request facts, explicit operator passthrough if any, Fizeau-returned route/usage/final facts, opaque session-log reference, diff, and grade |
+| C-09 | `TestCompareArmFailure` | If one Fizeau session fails, comparison still completes with the public final outcome in that arm's record |
 | C-10 | `TestComparePostRun` | --post-run command executes in each worktree; pass/fail captured |
 | C-11 | `TestComparePostRunFailure` | Post-run failure recorded but doesn't abort the comparison |
+| C-12 | `TestCompareArmIdentityIgnoresRoutingActual` | Different returned routes cannot relabel, merge, split, rank, or filter logical arms |
+| C-13 | `TestCompareOperatorPinsAreIdenticalAndExcluded` | One explicit operator envelope is copied unchanged to every arm and excluded from arm identity, grouping, grading, and comparison policy |
 
 **Test scaffold — temp git repo:**
 
@@ -86,70 +102,90 @@ func setupTestRepo(t *testing.T) string {
 }
 ```
 
-All comparison tests use the virtual provider (DDx Agent side) and
-mockExecutor (subprocess side) — no real LLM calls.
+All comparison tests use the Fizeau contract fake. They do not install a DDx
+virtual harness, mock a concrete harness executor, or encode a provider stream.
+When a test needs a repository side effect, the fake's test callback edits the
+arm worktree as the service boundary's observable effect.
 
-### Layer 3 — Grading (virtual harness, canned grades)
+### Layer 3 — Grading (Fizeau contract fake, canned grades)
 
-Grading sends a comparison record to a harness and parses the structured
-response. Tests use the DDx virtual harness (not DDx Agent virtual provider)
-with inline responses.
+Grading sends a comparison record through the same Fizeau contract and consumes
+the application-level grader response from `ServiceFinalData.FinalText`. DDx
+may parse that declared result as the grade while keeping the native session log
+and non-terminal service events opaque. DDx may request a stronger abstract
+`MinPower`, but it never selects a grader harness/provider/model. Tests use the
+Fizeau contract fake with canned final events.
 
 | ID | Test | What It Proves |
 |----|------|----------------|
 | G-01 | `TestGradeConstructsPrompt` | Grading prompt includes original task, each arm's output, each arm's diff |
-| G-02 | `TestGradeParsesResponse` | Virtual harness returns JSON grade → parsed into per-arm score/pass/rationale |
-| G-03 | `TestGradeAttachesToRecord` | Grade is written back to the comparison record in session log |
+| G-02 | `TestGradeParsesFinalText` | Fizeau `ServiceFinalData.FinalText` contains the requested JSON grade → parsed into per-arm score/pass/rationale |
+| G-03 | `TestGradeAttachesToRecord` | Grade is written to the DDx comparison record while the Fizeau session log remains opaque |
 | G-04 | `TestGradeCustomRubric` | --rubric file content replaces the default grading template |
 | G-05 | `TestGradeMalformedResponse` | Non-JSON grader output → graceful error, comparison record not corrupted |
-| G-06 | `TestGradeGraderFailure` | Grading harness returns exit_code=1 → error recorded, existing arms untouched |
+| G-06 | `TestGradeGraderFailure` | Fizeau returns a public final failure → error recorded, existing arms untouched |
+| G-07 | `TestGradePromptExcludesRoutingActual` | Concrete harness/provider/model and native session-log content never enter a grading prompt or score |
 
 **Test fixture — canned grade:**
 
 ```go
-t.Setenv("DDX_VIRTUAL_RESPONSES", `[{
-    "prompt_match": "Grade the following",
-    "response": "{\"arms\":[{\"arm\":\"agent\",\"score\":8,\"max_score\":10,\"pass\":true,\"rationale\":\"Correct\"}]}"
-}]`)
+final := fizeau.ServiceFinalData{
+    Status: "success",
+    FinalText: `{"arms":[{"arm":"arm-1","score":8,"max_score":10,` +
+        `"pass":true,"rationale":"Correct"}]}`,
+}
 ```
 
-### Layer 4 — Integration (real models, skip-if-unavailable)
+### Layer 4 — Integration (real Fizeau service, skip-if-unavailable)
 
-These tests hit real providers and are slow. They validate end-to-end
-but are not required for CI.
+These tests call a configured real Fizeau service and are slow. DDx never
+connects to a provider or concrete harness directly. They validate the consumer
+boundary end to end but are not required for CI.
 
 | ID | Test | What It Proves |
 |----|------|----------------|
-| I-01 | `TestIntegration_AgentLocalModel` | DDx Agent → LM Studio (localhost:1234) → real model response with tokens |
-| I-02 | `TestIntegration_CompareAgentVsClaude` | Full comparison: agent arm + claude arm, both produce diffs, comparison record complete |
-| I-03 | `TestIntegration_GradeWithClaude` | Grade a comparison using real claude; structured grade returned |
+| I-01 | `TestIntegration_EvaluationThroughFizeau` | DDx request → Fizeau → public final outcome/usage and opaque session-log reference |
+| I-02 | `TestIntegration_CompareArmsThroughFizeau` | Multiple arm requests go through Fizeau, produce isolated diffs, and record returned route facts without DDx selecting them |
+| I-03 | `TestIntegration_GradeThroughFizeau` | Grading uses a stronger abstract `MinPower` with no DDx-originated harness/provider/model |
 
 ```go
-func TestIntegration_AgentLocalModel(t *testing.T) {
-    // Skip if LM Studio not reachable
-    if _, err := net.DialTimeout("tcp", "localhost:1234", 2*time.Second); err != nil {
-        t.Skip("LM Studio not available on localhost:1234")
+func TestIntegration_EvaluationThroughFizeau(t *testing.T) {
+    if !fizeauTestServiceAvailable() {
+        t.Skip("Fizeau integration service not available")
     }
     // ...
 }
 ```
 
+### Layer 5 — Replay And Benchmark Policy
+
+Replay and benchmark tests operate on preserved DDx request, revision,
+`FinalText`, repository, check, and grade evidence. They may carry an opaque
+`SessionLogPath` as a reference but never open it to reconstruct an input.
+
+| ID | Test | What It Proves |
+|----|------|----------------|
+| R-01 | `TestReplayReconstructsFromDDxEvidence` | Replay builds a new request from DDx-owned evidence and calls `Execute` once |
+| R-02 | `TestReplayDoesNotParseSessionLog` | Missing or unreadable native logs do not change the replay request |
+| R-03 | `TestReplayIgnoresPriorRoutingActual` | A prior concrete route is absent from replay inputs unless it was an explicit unchanged operator pin |
+| B-01 | `TestBenchmarkGroupsByDeclaredInput` | Benchmark keys use prompt/rubric/work facts/`MinPower`, never returned route identity |
+| B-02 | `TestRoutingActualCannotDriveRankingOrWarning` | Changing only returned harness/provider/model cannot change aggregate grade, rank, warning, or policy |
+| B-03 | `TestStrongerReviewRaisesOnlyMinPower` | Reviewer intent raises abstract `MinPower` while operator `MaxPower` and pins remain unchanged |
+
 ## Side-Effect Capture: What to Test
 
-The key insight is that **DDx Agent gives us two levels of side-effect data**
-while subprocess harnesses give us only one:
+The boundary exposes two ownership classes:
 
-| Signal | DDx Agent | subprocess (codex/claude/opencode) |
-|--------|-------|-----------------------------------|
-| Git diff (after) | ✓ | ✓ |
-| Tool call log (during) | ✓ (typed ToolCallLog[]) | ✗ |
-| Bash command output | ✓ (in tool call log) | ✗ |
-| Files read | ✓ (in tool call log) | ✗ |
+| Signal | Owner | DDx behavior |
+|--------|-------|--------------|
+| Git diff / result revision | DDx | Compute from the arm worktree and store in comparison evidence |
+| Repository gates | DDx | Execute and store structured pass/fail evidence |
+| Final session outcome and usage | Fizeau | Copy public `ServiceFinalData` fields into the DDx envelope |
+| Tool/session/progress logs | Fizeau | Retain live public display events only while observed and store the opaque `SessionLogPath`; do not query or interpret native history |
 
-Tests should verify:
-- **Diff capture** works for both DDx Agent and subprocess arms (C-03, C-04)
-- **Tool call log** is populated for DDx Agent arms only (F-02)
-- **Missing tool log** for subprocess arms is nil, not empty (C-08)
+Tests verify DDx captures repository effects for every arm (C-03, C-04) and
+does not parse a Fizeau session log to reconstruct tool, bash, or file-read
+events (F-02). Unknown non-terminal event payloads pass through unchanged.
 
 ## Sandboxing Edge Cases
 
@@ -165,15 +201,16 @@ Tests should verify:
 ## Test Data: Prompts for Comparison Tests
 
 Rather than using trivial prompts, comparison tests should use prompts
-that produce predictable side effects with the virtual/mock providers:
+that produce predictable side effects with the Fizeau contract fake:
 
 ```
 prompt: "Create a file called result.txt containing 'hello world'"
 ```
 
-For DDx Agent (virtual provider): configure response with a write tool call.
-For subprocess (mockExecutor): configure output string, manually seed the
-file in the worktree to simulate the effect.
+Configure the Fizeau contract fake's side-effect callback to write the file in
+the arm worktree, then return an opaque session-log reference and public final
+event. DDx observes the repository diff without knowing which harness or tool
+produced it.
 
 This keeps tests deterministic while exercising realistic diff capture.
 
@@ -182,27 +219,26 @@ This keeps tests deterministic while exercising realistic diff capture.
 Tests in layers 2-3 depend on code that doesn't exist yet:
 
 - `Runner.RunCompare(opts CompareOptions) (*ComparisonRecord, error)`
-- `ComparisonRecord` type with arms, diffs, grades
-- `Runner.Grade(comparisonID string, graderHarness string, rubric string) error`
+- `ComparisonRecord` type with DDx arm evidence, Fizeau final envelopes,
+  opaque session-log references, diffs, and grades
+- `Runner.Grade(comparisonID string, minPower int, rubric string) error` with
+  optional explicit operator passthrough carried separately
 - Worktree creation/cleanup for comparison arms
 - Diff capture utility: `captureWorktreeDiff(worktreePath string) (string, error)`
 
-Layer 1 tests (F-01 through F-08) can be written now against the
-existing `RunAgent` method. Layers 2-3 should be written alongside
-the implementation.
+Layer 1 tests (F-01 through F-09) should target the FEAT-006 Fizeau consumer
+adapter. Layers 2-3 should be written alongside the comparison implementation.
 
 ## Running the Tests
 
 ```bash
-# Unit tests only (fast, no external deps)
-cd cli && go test ./internal/agent/ -run "^Test[^I]" -count=1
+# Unit/contract-fake tests only (fast, no external deps)
+cd cli && go test ./internal/agent/... -run 'TestEvaluation|TestCompare|TestGrade|TestReplay|TestBenchmark|TestRoutingActual|TestStrongerReview' -count=1
 
-# Include DDx Agent virtual provider tests
-cd cli && go test ./internal/agent/ -run "TestAgentRun" -v
+# Real Fizeau consumer integration; skips when the configured service is absent
+cd cli && go test ./internal/agent/... -run 'TestIntegration_.*ThroughFizeau' -v -timeout 120s
 
-# Integration tests (needs LM Studio on localhost:1234)
-cd cli && go test ./internal/agent/ -run "TestIntegration_Agent" -v -timeout 120s
-
-# Integration tests (needs LM Studio on vidar:1234)
-AGENT_BASE_URL=http://vidar:1234/v1 go test ./internal/agent/ -run "TestIntegration_Agent" -v
+# Owning package and repository gates
+cd cli && go test ./internal/agent/...
+lefthook run pre-commit
 ```

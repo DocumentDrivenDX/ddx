@@ -97,15 +97,15 @@ ACCEPTANCE
 
 ### 3.1 Example of a strong bead (audit score 8/8)
 
-`ddx-1e516bc9` — *"fizeau Execute: explicit Harness + empty Model + non-empty Profile/MinPower must route within harness's eligible models"*
+`ddx-1e516bc9` — *"fizeau Execute: explicit Harness + empty Model + non-empty Policy/MinPower must route within harness's eligible models"*
 
 Why it scored 8/8:
 
 - **Title (a)** names subsystem (`fizeau Execute`), the precondition (`explicit Harness + empty Model`), and the expected behavior (`route within harness's eligible models`).
 - **Description (b)** opens with **OBSERVED** (one paragraph, file:line) → **SCOPE — UPSTREAM (fizeau) ONLY** → **INVESTIGATION FIRST** (with explicit close-as-no-op outcome) → **UPSTREAM CHANGE** (file:line into `service_execute.go:193-224`, `models.yaml:31-60`, `registry.go`) → explicit **NOT IN SCOPE** list naming five excluded paths.
 - **AC (c)** names two concrete tests:
-  `TestExecute_ExplicitHarnessEmptyModelWithProfile_RoutesWithinHarness` and
-  `TestExecute_ExplicitHarnessEmptyModelNoProfile_FailsClearly`.
+  `TestExecute_ExplicitHarnessEmptyModelWithPolicy_RoutesWithinHarness` and
+  `TestExecute_ExplicitHarnessEmptyModelNoPolicyOrMinPower_FailsClearly`.
 - **Wired-in (d)**: AC #6 asserts the resolved model surfaces in
   `.ddx/workers/<id>/spec.json`, `.ddx/executions/<run-id>/result.json`, and the
   workers UI — three distinct call-graph endpoints.
@@ -230,22 +230,23 @@ Use the bead metadata field `triage.estimated_difficulty` only when there is a
 specific reason to override the default medium task-difficulty estimate. Valid
 values are `easy`, `medium`, and `hard`.
 
-| Value | Dispatch mapping | When to use |
+| Value | Requested `MinPower` | When to use |
 |---|---|---|
-| `easy` | `cheap` | Narrow mechanical tasks: typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius |
-| `medium` | `standard` | Ordinary implementation work; this is also the default when the hint is absent |
-| `hard` | `smart` | Architecture or ambiguous tradeoff judgment, multi-subsystem high-blast-radius work, security/data-loss/concurrency risk, or prior attempts showing standard power is insufficient |
+| `easy` | `0` (unset) | Narrow mechanical tasks: typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius |
+| `medium` | `7` | Ordinary implementation work; this is also the default when the hint is absent |
+| `hard` | `9` | Architecture or ambiguous tradeoff judgment, multi-subsystem high-blast-radius work, security/data-loss/concurrency risk, or prior capability-sensitive failures at the ordinary floor |
 
 Do not choose `hard` just because a bead is important, long, or could be
 written more cleanly. Low readiness means refine, split, or block; it is not a
-reason to spend a smarter implementation model.
+reason to request a higher implementation power floor.
 
 This is the only durable bead-level difficulty/power hint. Do not add
 `triage.power_hint`, `power:*` labels, Fizeau profile names, harness/provider/
 model pins, or numeric power floors to bead metadata.
 
 Invalid hint values are ignored and the default medium difficulty maps to
-standard power.
+`MinPower=7`. This mapping uses only Fizeau's public abstract 1–10 scale; DDx
+does not query catalogs, profiles, providers, models, or route viability.
 
 ---
 

@@ -5,13 +5,14 @@ ddx:
   status: reviewed
   depends_on:
     - AR-2026-07-13-vision-vs-reality
+    - FEAT-006
     - TD-027
     - TD-031
 ---
 # Phase 0 Plan: Stop the Self-Harm
 
 **Date:** 2026-07-13
-**Status:** Revised r3 — request-changes review resolved 2026-07-13; prior adversarial-review findings remain incorporated
+**Status:** Revised r4 — corrected Fizeau runtime boundary applied 2026-07-13; prior review findings remain incorporated
 **Source:** AR-2026-07-13-vision-vs-reality.md §7 Phase 0
 **Mode:** Operator-driven. The queue must not be trusted to repair itself until this phase completes; every task here is executed or directly supervised by the operator, not drained autonomously.
 **Duration honesty:** the hands-on work is days, but exit criteria 3–5 need 2–3 calendar weeks of observed drain under a single supervised worker.
@@ -24,19 +25,42 @@ Remove the mechanisms by which DDx actively damages its own host, repository, an
 
 In scope: host reclamation, scratch/lease placement, the two lock-corruption sources, gate truthfulness (including test hermeticity against host config), the three correct-work-destroyers, the weekly A/B baseline, and the intake freeze that protects this work.
 
-Non-goals: any altitude change (typed boundary, review-gate redesign, worktree ownership refactor — Phase 1); lock-implementation *consolidation* (Phase 1 WB-8 owns it; this phase only fixes the TOCTOU in place); spec edits beyond what a code fix forces (Phase 2); server work (Phase 3). No new features of any kind.
+Non-goals: designing or implementing the typed boundary, review-gate redesign, or worktree ownership refactor (Phase 1 owns them; Phase 0 only gates affected work on the corrected boundary); lock-implementation *consolidation* (Phase 1 WB-8 owns it; this phase only fixes the TOCTOU in place); spec edits beyond what a code fix forces (Phase 2); server work (Phase 3). No new features of any kind.
+
+Runtime boundary: Fizeau is the complete agent runtime and harness-of-harnesses. It exclusively invokes, parses, routes, and supervises Claude/Codex/Gemini sessions, and owns any continuation a future public contract exposes. Phase 0 cleans and verifies only DDx-owned queue, git/worktree, lock, claim, and evidence resources; DDx consumes Fizeau's current public immediate-error/final-event result and decides bead success or another attempt from repository evidence.
 
 ### Entry criteria — host-wide quiescence (revised)
 
 The scratch roots being reclaimed are **shared across projects and across two OS namespaces**: `~/.ddx/config.yaml:39` sets `temp_worktree_root: /Users/erik/Projects/.ddx-exec-wt`, which contains entries for at least fjord, heimq, pqueue, snorri, and this repo, plus the **live** `ddx-claim-heartbeats` subtree; and macOS-side ddx processes are invisible to a Linux-side `pgrep`. Therefore, before any deletion:
 
-1. Enumerate workers for **every** project whose `ExecutionWorktreeRoot` resolves to the shared root — on both sides of the `/Users` mount (verified live today: a snorri worker and a ddx worker, both `--server-managed`).
-2. Stop them: set each project's `.ddx/workers/desired.json` count to 0 **and** stop the ddx-server supervisor that respawns them (a fresh worker for this repo appeared today at 12:51 while this plan was being reviewed — the supervisor must be disabled first or it will race the reclamation).
-3. Verify: `pgrep -af 'ddx (work|try|run)'` empty on Linux; equivalent check on the macOS side.
+1. Enumerate DDx workers for **every** project whose `ExecutionWorktreeRoot`
+   resolves to the shared root — on both sides of the `/Users` mount (verified
+   live today: a snorri worker and a ddx worker, both `--server-managed`). Do not
+   assume Fizeau exposes active-session enumeration or cancel-by-session.
+2. Stop the DDx orchestration workers: set each project's
+   `.ddx/workers/desired.json` count to 0 **and** stop the ddx-server supervisor
+   that respawns them (a fresh worker for this repo appeared today at 12:51 while
+   this plan was being reviewed — the supervisor must be disabled first or it
+   will race the reclamation). Graceful worker stop cancels each live context
+   supplied to Fizeau `Execute`; abrupt worker death relies on the pinned Fizeau
+   caller-death/process-tree guarantee. DDx does not query, signal, or reap a
+   provider process.
+3. Verify `pgrep -af 'ddx (work|try|run)'` is empty on Linux and with the
+   equivalent macOS-side check. Require the pinned Fizeau caller-death and
+   process-tree conformance tests to be green before deletion. A provider-process
+   `pgrep` is diagnostic contract-violation evidence only and never a DDx cleanup
+   authority.
 
 ### Exit criteria (revised — each names its measurement)
 
-1. **Leak-free drain:** zero entries lacking DDx ownership metadata under `os.TempDir()` and under the configured `temp_worktree_root` after a supervised 20-attempt drain. Measured by the WB-3 tripwire test plus the scratch audit command WB-3 delivers (`ddx cleanup --audit-unowned`, dry-run listing of unowned entries — must print none). Note: raw `/tmp` inode % is *not* the criterion (it is already back to 4% today); the delta/ownership assertion is what has teeth.
+1. **Leak-free drain:** zero new DDx-created entries lacking DDx ownership
+   metadata under a cohort-private `TMPDIR` and the configured
+   `temp_worktree_root` after a supervised 20-attempt drain. The cohort manifest
+   records the starting inventory, attempt IDs, and UTC bounds; unrelated host
+   files are excluded. Measured by the WB-3 tripwire plus the scratch audit
+   command WB-3 delivers (`ddx cleanup --audit-unowned --cohort <manifest>`, a
+   dry-run listing that must print none). Raw `/tmp` inode percentage and
+   pre-existing non-DDx entries are diagnostics, not acceptance criteria.
 2. **Worktree-clean drain:** `git worktree list --porcelain | grep -c '^worktree'` == 1 before and after the same drain; zero new `.ddx-exec-wt` entries older than their attempt's lifetime.
 3. **No unrelated-gate refusals:** zero gate refusals whose failing package lies outside the bead's diff, over 7 consecutive drain days — measured mechanically from the structured `gate_failed` events WB-6 adds (each names the failing package; compared against the bead diff), not by grepping rationale prose. Until those events exist, the interim protocol is a daily operator review of every `no_changes_rationale.txt` against a written checklist.
 4. **Plateau restored:** attempt success (landed work) ≥ 45% over the most recent 100 attempts, computed from `.ddx/metrics/attempts.jsonl` **excluding** A/B arm-B rows (which live in a separate file per WB-8).
@@ -45,7 +69,7 @@ The scratch roots being reclaimed are **shared across projects and across two OS
 ## Assumptions
 
 - The org spend limit permits the A/B baseline runs (~40 attempts/week).
-- `fizeau` behavior is unchanged in this phase. (Consequence, flagged by review: the routing fail-open fix that AR §5 lists among the plateau-restorers is Phase 1 WB-2a. If exit criterion 4 stalls below 45% and the loss taxonomy shows routing refusals dominate, the operator may pull WB-2a forward into this phase — it has no dependency on Phase 1 WB-1.)
+- The corrected CONTRACT-003 Fizeau session-result contract is published and FEAT-006 identifies DDx as its consumer. WB-7(a) and WB-8 do not start until boundary conformance proves DDx neither invokes provider CLIs nor parses provider output; Fizeau routing and session lifecycle remain out of Phase 0 scope.
 - The bead tracker core is healthy (chaos-tested per AR §3.4) — Phase 0 changes nothing about storage format.
 - Attempt volume is throttled to what the operator can supervise (single worker, `--once` batches).
 
@@ -68,7 +92,7 @@ This document is a plan, not authorization to mutate the queue. The operator mus
 ### WB-2: Host reclamation (one-time, destructive — operator confirms each step)
 
 - Objective: clean baseline on every root the tripwires will watch. Inventory at review time (2026-07-13 late): `/tmp` inodes already back to 4% with zero `ddx-home-*` dirs (earlier 406-dir/100% state has partially self-cleared or been cleaned); what remains: ~27k stale heartbeat scope dirs under `/tmp`, the **live** `ddx-claim-heartbeats` under the shared exec-wt root, 2 locked worktree registrations, stale `.ddx-exec-wt` entries and 6 `.ddx-shared-cache-*` dirs. **Re-inventory at execution time before every deletion** — this state moves.
-- Files or systems: `/tmp/ddx-claim-heartbeats/` (stale, Linux-side), `/Users/erik/Projects/.ddx-exec-wt/` including its `ddx-claim-heartbeats` (LIVE — `ClaimLivenessRoot` prefers the configured runtime root, `cli/internal/bead/claim_liveness.go:51-59`) and `.ddx-shared-cache-*` (gocache, `attempt_backend.go:483-492`), `/tmp/claude-501/*exec-wt*`, the two `locked initializing` registrations.
+- Files or systems: `/tmp/ddx-claim-heartbeats/` (stale, Linux-side), `/Users/erik/Projects/.ddx-exec-wt/` including its `ddx-claim-heartbeats` (LIVE — `ClaimLivenessRoot` prefers the configured runtime root, `cli/internal/bead/claim_liveness.go:51-59`) and `.ddx-shared-cache-*` (gocache, `attempt_backend.go:483-492`), and the two `locked initializing` registrations. Fizeau/provider-owned temp roots are inventory-only here and are cleaned through Fizeau or by the operator, never by DDx.
 - Steps: (1) host-wide quiescence per entry criteria — **hard prerequisite**; (2) snapshot inventory listings to `docs/helix/06-iterate/phase0-reclaim-inventory.md` (durable, not `.ddx/executions/` which is per-machine exhaust); (3) delete stale `/tmp` heartbeat dirs and exec-wt scratch; the live `ddx-claim-heartbeats` subtree is deleted **only** after step 1 confirms every owning project quiescent — deleting a live heartbeat makes a fresh claim look stale → double execution; (4) worktree registrations: `git worktree unlock <path>` then `git worktree prune` (the registered paths don't exist on disk, so `git worktree remove` would error — review-verified; unlock→prune is the working sequence); (5) remove `.ddx-exec-wt` entries older than 7 days whose owning project is quiescent, and all `.ddx-shared-cache-*`.
 - Acceptance: `git worktree list --porcelain | grep -c '^worktree'` == 1; inventory doc committed; zero heartbeat dirs whose owning project was non-quiescent were touched (inventory shows the exclusion set).
 - Validation: re-run the listing commands; diff against inventory.
@@ -81,7 +105,7 @@ Review finding: much of the originally planned "relocation" already exists (`con
 
 - Objective: no DDx-created resource under any unowned root; cleanup only visits roots carrying ownership metadata.
 - Files or systems: `cli/internal/agent/execution_cleanup.go:845,853` (the two `os.TempDir()` appends — note the code comment says they exist to sweep legacy debris, so WB-2 must complete on every affected host first); `cli/internal/agent/runner_test.go:29-34,56-61` (the fixture producers — execute existing child beads ddx-7326dd54/ddx-e03399c8); `cli/internal/bead/claim_liveness.go` (published heartbeat files and per-project scope dirs have no reaper — the tmp-sidecar reaper does not cover them); repo-wide audit for remaining direct `os.TempDir()` / `os.MkdirTemp("")` call sites in production code.
-- Steps: (1) after WB-2, delete the two legacy appends; (2) land the two existing fixture beads; (3) add scope-dir/published-heartbeat reaping keyed on ownership metadata; (4) call-site audit with a short table (site → resolved root) appended to this plan; (5) tripwire test `TestAttemptLeavesNoUnownedTempDirs` — pointing `TMPDIR` at a private per-test directory (review: asserting on the shared `os.TempDir()` flakes under parallel tests) and running one fake-harness attempt; (6) deliver the audit command exit criterion 1 uses: `ddx cleanup --audit-unowned` listing entries under watched roots lacking ownership metadata.
+- Steps: (1) after WB-2, delete the two legacy appends; (2) land the two existing fixture beads; (3) add scope-dir/published-heartbeat reaping keyed on ownership metadata; (4) call-site audit with a short table (site → owner → resolved root) appended to this plan, rejecting any DDx cleanup claim over a Fizeau-owned session resource; (5) tripwire test `TestAttemptLeavesNoUnownedTempDirs` — point `TMPDIR` at a private per-test directory and drive the DDx attempt boundary with a fake typed Fizeau session result, asserting only DDx-owned resources; (6) deliver the audit command exit criterion 1 uses: `ddx cleanup --audit-unowned` listing DDx-owned entries under watched DDx roots that lack ownership metadata.
 - Acceptance: tripwire green in the default suite; `ddx cleanup --audit-unowned` empty after a 20-attempt drain; the two `os.TempDir()` appends gone.
 - Validation: `cd cli && go test -run 'TestAttemptLeavesNoUnownedTempDirs' ./internal/agent/...`; audit command output archived with the exit note.
 - Non-scope: single-owner `AttemptWorkspace` refactor (Phase 1 WB-4); new config knobs — all roots derive from the existing `ExecutionWorktreeRoot`/`ExecutionTempRoot` machinery (review resolved former open question 1).
@@ -112,7 +136,7 @@ Review finding: much of the originally planned "relocation" already exists (`con
 Review corrections adopted: (a) `internal/server/perf` is **already** behind `//go:build perf` with its own non-blocking CI lane (`ci.yml:283-300`) — the original step and its acceptance were already true and are dropped; (b) `TestWorkerManagerStopStaleDiskEntry` is **not** deterministically red — it fails only on hosts whose global `~/.ddx/config.yaml` sets `temp_worktree_root` (passes with `HOME` neutralized), so the defect class is *host-config leakage into tests*; (c) no full-suite `go test ./...` gate was found inside the loop's pre-close path — the plausible refusal locus is the **bead AC template itself**, which auto-inserts `cd cli && go test ./...` (`recovery_decompose.go:613`) for the agent to run.
 
 - Objective: refusals attributable, tests hermetic, gates scoped to the work.
-- Steps: (1) **attribution first**: instrument the loop to emit a structured `gate_failed` event naming the command and failing package(s) whenever an attempt's verification fails or an agent's rationale reports a gate failure; run 3–5 supervised drain days; confirm where broad-suite refusals actually originate (AC-template text vs any DDx-constructed gate) before cutting further beads; (2) **hermeticity**: tests must not read the host's global `~/.ddx/config.yaml` — add a test-scoped config isolation (fixture HOME or explicit config injection), fix the diverged helper at `workers_prune_test.go:308` by deriving the heartbeat path from the production `ClaimLivenessRoot` function, and sweep for other host-config-sensitive tests (`cd cli && env HOME=/nonexistent go test ./...` as the detector); (3) **AC template**: change the auto-inserted final gate from `cd cli && go test ./...` to the bead's touched packages plus the curated core-invariant suite (list checked into `docs/helix/06-iterate/core-invariant-suite.md`) — this requires the small diff→packages mapper the review noted is real work: map the attempt's changed files to Go packages (`go list` over dirs), sized as its own bead; (4) full suite runs async post-land; failures auto-file one `kind:regression` bead per failing package with the landing commit in `Extra`.
+- Steps: (1) **attribution first**: instrument the loop to emit a structured `gate_failed` event naming the DDx-run command and failing package(s) whenever DDx's repository verification fails; typed Fizeau session failures are recorded from the session result without parsing rationale or provider output. Run 3–5 supervised drain days and confirm where broad-suite refusals originate (AC-template text, DDx-constructed verification, or a typed Fizeau result) before cutting further beads. (2) **Hermeticity**: tests must not read the host's global `~/.ddx/config.yaml` — add a test-scoped config isolation (fixture HOME or explicit config injection), fix the diverged helper at `workers_prune_test.go:308` by deriving the heartbeat path from the production `ClaimLivenessRoot` function, and sweep for other host-config-sensitive tests (`cd cli && env HOME=/nonexistent go test ./...` as the detector). (3) **AC template**: change the auto-inserted final gate from `cd cli && go test ./...` to the bead's touched packages plus the curated core-invariant suite (list checked into `docs/helix/06-iterate/core-invariant-suite.md`) — this requires the small diff→packages mapper the review noted is real work: map the attempt's changed files to Go packages (`go list` over dirs), sized as its own bead. (4) Full suite runs async post-land; failures auto-file one `kind:regression` bead per failing package with the landing commit in `Extra`.
 - Acceptance: `cd cli && env HOME=/nonexistent go test ./...` and `cd cli && go test ./...` both green on main; `gate_failed` events present in a supervised drain with package attribution; AC template emits scoped gate text (fixture test on `recovery_decompose.go` output); async lane files a regression bead when seeded with a deliberate breakage.
 - Validation: exit criterion 3's mechanical computation runs on the new events; `cd cli && go test -run 'StaleDiskEntry' ./internal/server/...` green with and without host config present.
 - Non-scope: lefthook pre-commit content; in-band gate repair (Phase 1 WB-3).
@@ -121,24 +145,24 @@ Review corrections adopted: (a) `internal/server/perf` is **already** behind `//
 ### WB-7: Stop destroying correct work
 
 - Objective: three surgical fixes where the orchestrator or tracker converts success into failure.
-- Files or systems: (a) retry-rationale path — orchestrator synthesizes an iteration commit and runs full hooks after the agent wrote a valid `status: open` retry rationale (bug ddx-232aa2c0; 51 attempts destroyed); (b) `cli/internal/bead/store.go:2063-2068` — `closeWithEvidence` **swallows the existing** `ErrClosureGateRejected` (defined at `store.go:1976` — review: do not re-invent the type) and returns nil; `execute_bead_loop.go:4247-4257` counts it as success; (c) `cli/internal/agent/durable_audit.go:32-60` — per-attempt staging + commit of tracked audit files under the shared tracker lock.
-- Steps: (a) valid retry rationale → skip commit synthesis, classify `retry_requested`; (b) propagate the existing error; loop records a distinct failure outcome and surfaces the gate reason on the bead; (c) batch audit rows and commit once per drain iteration outside the lock window, flush on shutdown.
-- Acceptance: `TestRetryRationaleSuppressesCommitSynthesis`, `TestClosureGateRejectionPropagatesToLoop`, `TestDurableAuditCommitOutsideTrackerLock`.
-- Validation: `cd cli && go test -run 'RetryRationale|ClosureGateRejection|DurableAudit' ./internal/agent/... ./internal/bead/...`; tracker-noise ratio in `git log --oneline -100` < 10%.
+- Files or systems: (a) the legacy retry-rationale parser — the orchestrator synthesizes an iteration commit and runs full hooks after interpreting provider prose as `status: open` (bug ddx-232aa2c0; 51 attempts destroyed); replace it with the corrected FEAT-006/CONTRACT-003 consumer boundary; (b) `cli/internal/bead/store.go:2063-2068` — `closeWithEvidence` **swallows the existing** `ErrClosureGateRejected` (defined at `store.go:1976` — review: do not re-invent the type) and returns nil; `execute_bead_loop.go:4247-4257` counts it as success; (c) `cli/internal/agent/durable_audit.go:32-60` — per-attempt staging + commit of tracked audit files under the shared tracker lock.
+- Steps: (a) delete free-text retry-rationale interpretation. Consume the typed Fizeau session result, inspect the resulting repository diff and verification evidence, and either land/close or record a new DDx attempt; never synthesize a commit merely because provider prose resembles a retry request, and never resume or invoke the provider from DDx. (b) Propagate the existing closure-gate error; the loop records a distinct failure outcome and surfaces the gate reason on the bead. (c) Batch audit rows and commit once per drain iteration outside the lock window, flush on shutdown.
+- Acceptance: `TestTypedSessionResultDoesNotSynthesizeCommit`, `TestRepositoryEvidenceDeterminesAttemptOutcome`, `TestClosureGateRejectionPropagatesToLoop`, `TestDurableAuditCommitOutsideTrackerLock`.
+- Validation: `cd cli && go test -run 'TypedSessionResult|RepositoryEvidence|ClosureGateRejection|DurableAudit' ./internal/agent/... ./internal/bead/...`; tracker-noise ratio in `git log --oneline -100` < 10%.
 - Non-scope: the completion-contract redesign (Phase 1).
-- Dependencies: none.
+- Dependencies: corrected CONTRACT-003 Fizeau session-result contract and FEAT-006 consumer conformance for step (a); none for steps (b)–(c).
 
 ### WB-8: Weekly A/B baseline — the arbiter metric (methodology rewritten per review)
 
-Review found three structural holes (no base-rev pinning, asymmetric success predicates, arm-B rows polluting `attempts.jsonl` — which has no `labels` field; `ddx try` has no tagging or `--no-merge` flag, despite CLAUDE.md advertising one — that stale doc line goes to Phase 2's phantom-command sweep). Fixed methodology:
+Review found three structural holes (no base-rev pinning, asymmetric success predicates, arm-B rows polluting `attempts.jsonl` — which has no `labels` field; `ddx try` has no tagging or `--no-merge` flag, despite CLAUDE.md advertising one — that stale doc line goes to Phase 2's phantom-command sweep). The corrected methodology also keeps both arms behind Fizeau's public runtime boundary:
 
-- Objective: same beads, DDx vs direct sub-agent, measured fairly; closing the delta becomes the top-line metric.
+- Objective: same beads, DDx orchestration over Fizeau versus a Fizeau-only session baseline, measured fairly; closing the orchestration delta becomes the top-line metric.
 - Files or systems: new `scripts/ab-baseline.sh`; new metric doc `docs/helix/06-iterate/metrics/MET-003-ab-baseline.md`; separate results file `.ddx/metrics/ab-baseline.jsonl` (never `attempts.jsonl` — keeps exit criterion 4's window clean).
-- Steps: (1) sample 20 ready beads stratified by area and size; **pin one base rev** for the whole run; (2) **arm B runs first** from the pinned rev in a script-created scratch worktree: `claude -p` with the bead body as the entire prompt (P7: bead = prompt, so this is fair by construction), model pinned to the tier fizeau would route arm A to; (3) arm A runs after: `ddx try <id> --from <pinned-rev>` as shipped; its rows are identified post-hoc by attempt_id + the script's recorded time window (no schema change); (4) **equalized landed predicate for both arms**: diff applies cleanly to the pinned rev + the bead's named tests green + the core-invariant suite green + `lefthook run pre-commit` on the result tree; (5) record landed-rate, wall-clock, cost per arm into `ab-baseline.jsonl`; publish the weekly table in MET-003.
-- Acceptance: MET-003 specifies base-rev pinning, arm order, the equalized predicate, row segregation, and stratification before the first run; two consecutive weekly reports with ≥ 18/20 beads attempted per arm.
+- Steps: (1) sample 20 ready beads stratified by area and size; **pin one base rev, the same request facts/abstract `MinPower` floor, and one immutable comparison-wide operator-passthrough envelope for both arms**. The envelope is identical on every arm and excluded from grouping, filtering, grading, and comparison policy. DDx may raise `MinPower` only for a distinct new attempt after capability-sensitive evidence, or by review intent for a reviewer; route, quota, transport, authentication, setup, operator-action, and generic outcomes never trigger a power raise. Explicit operator pins pass through unchanged, and DDx never chooses or directs a harness, provider, or model. (2) **Arm B runs first** from the pinned rev in a script-created scratch worktree by submitting a bare Fizeau Execute request with those facts and `MinPower`; the script never invokes Claude/Codex/Gemini. Fizeau owns harness/provider/model choice, routing, streaming, any contract-defined continuation, and process lifetime and returns a public operation outcome. (3) Arm A runs after: `ddx try <id> --from <pinned-rev>` submits the equivalent request through the corrected FEAT-006 boundary and consumes the public immediate-error or final-event result; its rows are identified post-hoc by attempt ID plus the script's recorded time window. (4) **Equalized landed predicate for both arms**: the benchmark's shared repository-evidence evaluator checks that the diff applies cleanly to the pinned rev, the bead's named tests and core-invariant suite pass, and `lefthook run pre-commit` passes on the result tree. Arm A uses that evidence for DDx's bead verdict; the Fizeau-only arm records the comparable benchmark verdict without mutating the bead. Session-reported success alone does not count as landed. (5) Record landed-rate, wall-clock, cost, opaque `SessionLogPath`, request `MinPower`, and an `audit_ref` in `ab-baseline.jsonl`. Actual harness/provider/model metadata may exist only behind that linked per-invocation audit detail; it is excluded from the comparison table, grouping, filtering, grading, and policy. Publish the route-neutral weekly table in MET-003.
+- Acceptance: MET-003 specifies base-rev and equal request-fact/power pinning, arm order, the equalized repository-evidence predicate, row segregation, and stratification before the first run; a boundary test proves neither arm invokes or parses a provider CLI or selects a harness/provider/model; two consecutive weekly reports with ≥ 18/20 beads attempted per arm.
 - Validation: `ddx jq . .ddx/metrics/ab-baseline.jsonl | wc -l` ≥ 80 after week two; spot-audit two beads per week end-to-end.
 - Non-scope: optimizing either arm; single-week conclusions.
-- Dependencies: WB-2 (clean host).
+- Dependencies: WB-2 (clean host); corrected CONTRACT-003 Fizeau contract and FEAT-006 consumer conformance.
 
 ## Validation
 
@@ -151,14 +175,13 @@ Review found three structural holes (no base-rev pinning, asymmetric success pre
 - **WB-2 deletes something live** — the revised host-wide quiescence procedure, the live-heartbeat exclusion rule, and execution-time re-inventory are the mitigations; `/tmp` deletions are reboot-ephemeral by definition; worktree unlock→prune is non-destructive to data (registrations point at nonexistent paths).
 - **WB-6 scoped gates admit a real cross-package regression** — accepted; the async full suite + auto-filed regression bead bounds exposure to minutes. The attribution step (WB-6.1) prevents fixing the wrong locus — review showed the original plan had already mislocated two of four steps.
 - **WB-7(c) batching loses audit rows on crash** — flush on shutdown; bounded telemetry loss only, never tracker state.
-- **A/B fairness** — the equalized predicate and pinned base rev remove the two biases the review identified (arm order, predicate asymmetry). Residual bias: arm B skips review-quality checks that arm A's remaining gates impose — recorded in MET-003 as a known asymmetry favoring arm B; if arm A still wins, the result is conclusive; if arm B wins narrowly, interpret with that asymmetry in mind.
+- **A/B fairness** — both arms use equal request facts, the same abstract `MinPower` floor, and one immutable comparison-wide operator-passthrough envelope through the public Fizeau operation contract, while the equalized repository-evidence predicate and pinned base rev remove arm-order and predicate asymmetry. Fizeau alone chooses the concrete runtime; the envelope is identical across arms and excluded from comparison policy. Residual DDx-only review overhead is recorded in MET-003; no arm may bypass Fizeau by invoking a provider CLI.
 - **Freeze fatigue** — objective thaw condition (ratchet), not an open-ended freeze.
 
 ## Open Questions
 
 1. WB-6 core-invariant suite contents: proposal is `internal/bead` conformance + lifecycle tests, the WB-3/4/5 tripwires, and the FEAT-022 evidence-cap lint — operator to confirm before the AC-template change lands.
-2. WB-8 arm-B model pinning: pin both arms to one model for the first four weeks (proposal: yes), then consider letting fizeau route arm A freely once the baseline is stable.
-3. Should Phase 1 WB-2a (advisory preflight) be pulled into Phase 0 if exit criterion 4 stalls? (Pre-authorized by the Assumptions note; operator triggers it based on the loss taxonomy.)
+2. WB-8 request comparability: use identical request facts, the same abstract `MinPower` floor, and one immutable operator-passthrough envelope for both arms. Actual harness/provider/model metadata is confined to linked per-invocation audit detail and excluded from comparison display, grouping, filtering, grading, and policy. DDx never creates a concrete routing choice.
 
 ## Handoff
 

@@ -6,8 +6,8 @@ ddx:
 ---
 # Product Requirements Document: DDx
 
-**Version:** 4.2.0
-**Date:** 2026-04-29
+**Version:** 4.3.0
+**Date:** 2026-07-13
 **Status:** Active
 
 ## Summary
@@ -17,10 +17,11 @@ local-first infrastructure for document-driven development:
 
 1. **`ddx` CLI** — multi-media artifact library management, artifact graph
    operations, bead tracking, task execution lifecycle (`ddx run` /
-   `ddx try` / `ddx work`) on a unified on-disk substrate, agent dispatch,
-   persona composition, template application, and git sync
+   `ddx try` / `ddx work`) on a unified on-disk substrate, Fizeau request
+   construction, persona composition, template application, and git sync
 2. **`ddx-server`** — web server + MCP endpoints for browsing documents,
-   artifacts, beads, agent session logs, and execution history over the network
+   artifacts, beads, opaque Fizeau session evidence, and DDx attempt history
+   over the network
 3. **`ddx.github.io`** — promotional website explaining DDx to developers and
    linking to docs
 
@@ -32,9 +33,9 @@ Concrete command, API, and storage contracts belong in the DDx feature
 specifications. The PRD stays at the user- and capability-level:
 
 - FEAT-001 defines the CLI surface and operator experience: top-level `run`,
-  `try`, and `work` commands, no retired agent workflow namespace or legacy
-  aliases, and `ddx runs`, `ddx tries`, `ddx work workers` namespaces for
-  cross-layer evidence introspection
+   `try`, and `work` commands, no retired agent workflow namespace or legacy
+   aliases, and `ddx runs`, `ddx tries`, `ddx work workers` namespaces for
+   cross-layer DDx evidence introspection
 - FEAT-002 defines the server, HTTP, and MCP surfaces
 - FEAT-003 defines the promotional website and documentation
 - FEAT-004 defines shared work-item storage
@@ -42,11 +43,13 @@ specifications. The PRD stays at the user- and capability-level:
   broadens to non-markdown via sidecar `.ddx.yaml`; `media_type` and
   `generated_by` fields added; any file with a sidecar is a first-class
   artifact; authority rule: identity present → artifact
-- FEAT-006 defines the layer-1 Fizeau execution boundary: the `ddx run`
-  consumer-side wrapper that powers one invocation per CONTRACT-003; DDx sends
-  request facts and explicit operator passthrough constraints, while Fizeau
-  owns routing, provider/model discovery, concrete routing decisions,
-  model alias/constraint resolution, and the inner session-log shape
+- FEAT-006 defines the complete DDx consumer boundary for Fizeau: `ddx run`
+  constructs one session request per CONTRACT-003 and records the typed
+  terminal outcome plus opaque Fizeau evidence references. Fizeau owns all
+  Claude Code/Codex/Gemini/native invocation, the session/tool loop, routing,
+  subprocess and process-tree control, progress/events, native session logs,
+  usage, cancellation, provider fallback, and harness-specific continuation.
+  DDx never invokes or parses a concrete harness.
 - FEAT-007 defines the artifact graph and staleness model: sidecar-aware
   scanner; `media_type` field; `generated_by` edge with a separate provenance
   staleness rule (does not cascade like `depends_on`); 100% read endpoints for
@@ -62,23 +65,26 @@ specifications. The PRD stays at the user- and capability-level:
   record shape with layer metadata; `.ddx/exec-runs/` and
   `.ddx/executions/<attempt-id>/` collapse into one layout; `ddx work`
   no-progress detection and stop conditions; `artifactRegenerate` as the only
-  write surface added in this plan
+  write surface added in this plan. Fizeau's terminal session outcome is an
+  input; DDx decides bead-attempt success from repository gates, result
+  revision, review, and landing/preservation evidence.
 - FEAT-011 defines agent-facing skills for DDx CLI operations
 - FEAT-012 defines git awareness: auto-commit for documents and bead tracker,
   document history, write-then-commit for MCP/UI clients, and agent guidance
   generation on init
 - FEAT-013 defines multi-agent coordination: concurrent bead safety,
   MCP supervisor surface, worktree-aware dispatch
-- FEAT-014 defines agent token awareness: usage tracking, budget enforcement,
-  and model selection guidance across harnesses
+- FEAT-014 defines agent token awareness: Fizeau-reported usage tracking,
+  budget enforcement, and abstract power guidance; Fizeau alone selects the
+  concrete harness/provider/model
 - FEAT-015 defines the installation architecture: clean separation of
   install.sh / `ddx upgrade` (binary), `ddx init` (project bootstrap),
   and `ddx plugin *` (project plugin lifecycle)
 - FEAT-016 defines delivery metrics: bead lifecycle cost, rework rates, and
   derived measures computed from existing stores (beads, agent sessions).
   Distinct from FEAT-010 which covers operational metrics you *run*.
-- ~~FEAT-017~~: adversarial review is a form of multi-agent dispatch covered by
-  FEAT-006 quorum infrastructure. The "review against governing artifacts →
+- ~~FEAT-017~~: adversarial review is a multi-session composition over the
+  FEAT-006 Fizeau consumer boundary. The "review against governing artifacts →
   structured findings → beads" workflow needs a design cycle to find the right
   abstraction, not a standalone feature.
 - FEAT-018 defines plugin API documentation and stability: document existing
@@ -116,6 +122,30 @@ feedback. Adaptation updates specs, refines beads, changes workflow assets, or
 stops. This loop is DDx's operating model, not a workflow methodology: HELIX
 and other plugins decide the phase model, gates, and supervisory policy.
 
+### Execution Authority Chain
+
+1. HELIX or another workflow supplies methodology intent; DDx does not embed
+   that methodology.
+2. DDx selects/claims a bead when applicable, pins the base revision, creates
+   the attempt workspace, assembles the request, and calls Fizeau.
+3. Fizeau owns the complete agent session and every concrete harness concern:
+   invocation, tool loop, routing/fallback, child processes, events/logs,
+   usage, cancellation, and harness-specific continuation.
+4. Fizeau returns a public final session outcome and opaque artifact
+   references. DDx does not infer terminal state by parsing harness output.
+5. DDx runs repository gates, records durable DDx evidence, lands or preserves
+   the result, decides bead-attempt success, and decides whether a new bead
+   attempt may launch.
+
+DDx never directs Fizeau to a harness, provider, or model. It may express
+abstract power/effort/permission intent; explicit operator pins are forwarded
+verbatim and are never originated, ranked, loosened, rewritten, or inferred by
+DDx.
+
+A successful Fizeau session is neither a successful bead attempt nor authority
+to close a bead. Conversely, DDx never resumes, falls back, or repairs a
+concrete harness session itself; those are Fizeau runtime operations.
+
 ## Problem
 
 AI-assisted development needs more than prompt files. Teams need a shared way
@@ -146,17 +176,19 @@ problems outside that mapping belong in workflow tools, not the platform.
   fall back to bespoke scripts and logs with no shared history model
 
 **Methodology plurality** (Principle 3 — methodology is plural)
-- **No reusable agent dispatch**: Each tool grows its own harness registry,
-  logging, and output-capture behavior — every workflow tool reinvents the same
-  invocation plumbing
+- **No reusable agent execution boundary**: Each tool grows its own harness
+  registry, logging, and output-capture behavior. Fizeau provides the shared
+  runtime; DDx provides the workflow-agnostic request/terminal consumer and
+  connects that session evidence to beads, worktrees, gates, and landing.
 - **No reuse**: Every project reinvents its agent instructions and supporting
   mechanics from scratch; proven patterns stay trapped in individual repos
 
 **LLM physics** (Principle 4 — LLMs are stochastic, unreliable, and costly)
 - **No cost-aware enforcement**: Token cost is a first-order constraint, not an
-  optimization. Without capability-keyed routing and model-selection guidance,
-  teams overspend on routine work and have no signal on the cheapest model that
-  reliably closes beads
+  optimization. Without abstract capability-floor guidance and
+  throughput-per-dollar evidence, teams overspend on routine work. DDx may use
+  requested power and completed-work evidence to improve those floors; Fizeau
+  alone selects models, and returned model identity remains per-run audit data
 
 **Evidence and provenance** (Principle 5 — evidence provides memory)
 - **No provenance for generated artifacts**: Generated files carry no record of
@@ -184,8 +216,9 @@ problems outside that mapping belong in workflow tools, not the platform.
    and CLI tooling so declarative project knowledge — documents, diagrams,
    wireframes, images, prompts, and other media — stays organized and
    agent-discoverable
-2. **Provide reusable local runtime services** — expose beads, agent dispatch,
-   and execution history as workflow-agnostic DDx primitives
+2. **Provide reusable local runtime services** — expose beads, Fizeau-backed
+   session requests, and DDx attempt history as workflow-agnostic primitives,
+   without implementing a concrete harness runtime in DDx
 3. **Enable document composition** — combine personas, patterns, specs, and
    templates into coherent agent context
 4. **Serve project state to agents and tools** — expose documents, artifacts,
@@ -194,13 +227,13 @@ problems outside that mapping belong in workflow tools, not the platform.
    plugins through an online registry (`ddx install`)
 6. **Provide agent-facing skills for DDx operations** — ship interactive
    skills (slash commands) that guide agents through complex DDx CLI
-   operations like bead triage, agent dispatch, and package installation
+   operations like bead triage, Fizeau-backed execution, and package installation
 7. **Integrate with revision control** — auto-commit document changes to
    protect work, expose document history to agents and tools, enable
    write-then-commit workflows for MCP and UI clients
 8. **Support multi-agent coordination** — make bead operations, document
-   writes, and agent dispatch safe under concurrent multi-agent use, with
-   MCP as the remote observation and control surface
+   writes, and concurrent Fizeau session requests safe under multi-agent use,
+   with MCP as the remote observation and control surface
 9. **Embed essential utilities** — bundle common developer tools (jq, etc.)
    so workflow tools have a consistent, cross-platform base without external
    runtime dependencies
@@ -215,9 +248,10 @@ problems outside that mapping belong in workflow tools, not the platform.
     schema versioning, and commit to backward compatibility so plugin authors
     can build with confidence (FEAT-018)
 13. **Provide a task execution lifecycle** — ship `ddx run` (single agent
-    invocation), `ddx try` (bead attempt in isolated worktree), and `ddx work`
-    (mechanical queue drain) as DDx-owned primitives on one unified on-disk
-    substrate; layer metadata distinguishes records (FEAT-010)
+    session request/consumer record), `ddx try` (bead attempt in isolated
+    worktree), and `ddx work` (mechanical queue drain) as DDx-owned primitives
+    on one unified on-disk substrate; Fizeau owns the session runtime and layer
+    metadata distinguishes DDx records (FEAT-010)
 14. **Enable source-hash-driven regeneration of generated artifacts** — track
     which agent run, model, and prompt produced each generated artifact;
     support on-demand regeneration when the source changes (FEAT-005, FEAT-007)
@@ -265,7 +299,8 @@ problems outside that mapping belong in workflow tools, not the platform.
 - Cataloging run types beyond the `run`, `try`, and `work` layers — comparison, replay,
   benchmark, and similar workflow shapes are skill compositions; DDx does not
   enshrine them in Go core or specs
-- An AI agent or agent framework
+- An AI agent, agent framework, or concrete harness runtime. Fizeau is the
+  harness-of-harnesses; DDx consumes its service contract.
 - A standalone desktop GUI for editing documents (the embedded web UI editor
   in `ddx-server` is in-scope per FEAT-008; a separate desktop application is not)
 - A cloud/SaaS service
@@ -294,8 +329,9 @@ reinventing instructions and runtime tooling per project
 ### Secondary: Workflow Tool Author
 
 **Role:** Developer building a methodology tool (like HELIX) on DDx primitives
-**Goals:** Leverage DDx's document management, bead storage, agent dispatch,
-execution history, persona binding, and sync without reimplementing them
+**Goals:** Leverage DDx's document management, bead storage, Fizeau-backed
+execution boundary, DDx attempt history, persona binding, and sync without
+reimplementing them
 **Pain:** No standard infrastructure to build on; every workflow tool reinvents
 local state, execution, and document management
 
@@ -321,8 +357,9 @@ local operator surface that lets users:
 - understand artifact relationships, dependency structure, and document
   freshness
 - manage shared work items and their dependencies for higher-level tools
-- dispatch supported AI agents through one reusable interface and inspect the
-  resulting evidence
+- request agent sessions through the single Fizeau consumer interface and
+  inspect Fizeau's opaque session references alongside DDx-owned attempt,
+  repository-gate, and landing evidence
 - validate installation and configuration health
 - reuse and update shared DDx library content across projects
 - invoke DDx operations through agent-facing skills (slash commands) that
@@ -414,7 +451,8 @@ The server feature spec should also define requirements for:
 ## Constraints
 
 - **Technical:** Git-native. File-based. No external services required. Go for CLI and server.
-- **Scope:** DDx manages documents, not agents. No workflow enforcement.
+- **Scope:** DDx manages documents and bead attempts, not agent sessions. Fizeau
+  owns the agent runtime; workflow tools own methodology enforcement.
 - **Platform:** macOS, Linux, Windows for CLI. Server runs anywhere Go runs.
 - **License:** MIT, open source.
 - **Agent safety:** DDx defaults to safe agent permissions. Permissive modes
@@ -440,13 +478,14 @@ The server feature spec should also define requirements for:
       relying on ad hoc file conventions
 - [ ] Workflow tools can rely on DDx for shared work-item state instead of
       reimplementing local tracker storage
-- [ ] Workflow tools can rely on DDx for agent dispatch and reusable invocation
-      evidence
+- [ ] Workflow tools can rely on DDx for one Fizeau-backed execution boundary
+      and reusable DDx attempt evidence without DDx invoking or parsing a
+      concrete harness
 - [ ] Agents and tools can inspect repository documents and project state over
       local MCP or HTTP surfaces
 - [ ] Website: live at ddx.github.io with clear messaging and embedded demos
 - [ ] At least one workflow tool (HELIX) successfully building on DDx beads and
-      agent dispatch
+      the Fizeau-backed execution boundary
 - [ ] `ddx plugin install helix` bootstraps HELIX from the registry
 - [ ] Document library syncing between 2+ projects
 - [ ] CI pipeline green on every merge to main; Pages deploy gated on CI

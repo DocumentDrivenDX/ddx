@@ -10,8 +10,8 @@ ddx:
 ---
 # Product Vision: DDx
 
-**Version:** 2.2.0
-**Date:** 2026-05-01
+**Version:** 2.3.0
+**Date:** 2026-07-13
 **Status:** Active
 
 ## Lineage
@@ -46,7 +46,7 @@ Each pain point below maps to a specific DDx capability — the list is bounded 
 1. **Context assembly is manual.** Composing the right persona + pattern + spec + prior evidence into agent context is ad hoc and slow. *(DDx: artifact library + composition.)*
 2. **Documents drift silently.** When an upstream document changes, dependent artifacts go stale with no detection or reconciliation. *(DDx: artifact graph + staleness + reconciliation beads.)*
 3. **Work tracking is reinvented.** Every workflow tool reimplements issue storage, dependency DAGs, and ready/waiting queues. *(DDx: bead tracker + JSONL interchange.)*
-4. **Agent runs leave no shared trace.** Each tool grows its own dispatch, logging, and evidence shape; nothing carries between invocations. *(DDx: task execution lifecycle on a unified on-disk substrate.)*
+4. **Agent runs leave no shared trace.** Each tool grows its own dispatch, logging, and evidence shape; nothing carries between invocations. *(Fizeau: one agent-runtime contract and session evidence; DDx: bead-attempt and repository evidence on a unified on-disk substrate.)*
 5. **Cost of agentic work is invisible.** Token spend is a first-order constraint with no shared signal on the cheapest power band that reliably closes beads. *(DDx: power-aware retry evidence + token awareness.)*
 6. **Skills and plugins don't compose.** Each project reinvents its agent instructions, skills, and supporting mechanics from scratch. *(DDx: single `ddx` skill + project-local plugin install.)*
 
@@ -68,15 +68,22 @@ Each pain point below maps to a specific DDx capability — the list is bounded 
 
 ## Platform and Workflow
 
-DDx pairs with workflow tools across explicit boundaries:
+DDx sits between the Fizeau agent runtime and workflow tools across explicit
+boundaries:
 
 | Layer | Project | Owns |
 |-------|---------|------|
-| Platform | **DDx** (this repo) | Document library, bead tracker, task execution evidence, personas, templates, git sync |
+| Agent runtime | **Fizeau** | Claude Code, Codex, Gemini, and native invocation; session/tool loop; routing and provider fallback; subprocess tree; progress/events; native session logs and usage; cancellation and harness-specific continuation |
+| Platform | **DDx** (this repo) | Document library, bead tracker and claims, attempt/worktree/base revision, Fizeau request construction, repository gates, landing/preservation, durable DDx evidence, personas, templates, git sync |
 | Workflow | **HELIX** | Phases, gates, supervisory dispatch, bounded actions, methodology |
 
-DDx provides primitives. HELIX and others provide opinions. Each layer is
-independently useful and replaceable.
+The authority chain is workflow intent → DDx bead attempt → Fizeau session →
+Fizeau terminal outcome → DDx repository gates and landing → workflow result.
+Fizeau decides how a requested session runs. DDx decides whether repository
+evidence makes the bead attempt successful and whether to launch a new bead
+attempt. HELIX and other workflow tools decide why and when those platform
+primitives are composed. A Fizeau session success never closes a bead by
+itself.
 
 ## Operator Loop
 
@@ -120,10 +127,10 @@ deliver the artifacts agents produce and consume to build software.
   `.ddx.yaml` is a first-class artifact.
 - **Bead tracker** — work items with a dependency DAG, ready/waiting queues,
   and JSONL interchange. Beads are the unit of work agents execute.
-- **Three-layer run architecture** — `ddx run` (single agent invocation), `ddx
-  try` (bead attempt in isolated worktree), `ddx work` (queue drain). Agent
-  invocation is upstream; DDx owns worktree lifecycle, evidence bundling, and
-  drain.
+- **Three-layer run architecture** — `ddx run` (one Fizeau session request and
+  DDx consumer record), `ddx try` (bead attempt in isolated worktree), `ddx
+  work` (queue drain). Fizeau owns the complete agent session runtime; DDx owns
+  worktree lifecycle, repository gates, evidence bundling, landing, and drain.
 - **Project-local install** — `ddx init` and `ddx install <plugin>` only touch
   `<projectRoot>`. The only global artifact is `ddx-server`. No home-directory
   state, no machine-wide opinions.
@@ -137,8 +144,9 @@ deliver the artifacts agents produce and consume to build software.
   workflow tools such as HELIX decide the phase model and gates.
 - **Not a database.** Files in Git. No proprietary backend.
 - **Not an editor or IDE.** Editing happens wherever the user works.
-- **Not opinionated about agents.** Any harness with a prompt-in/output-out
-  contract plugs in.
+- **Not an agent runtime or direct harness adapter.** DDx consumes the Fizeau
+  execution contract. Concrete harnesses plug into Fizeau; DDx never invokes or
+  parses Claude Code, Codex, Gemini, or another harness directly.
 
 ## Key Differentiators
 
@@ -165,15 +173,17 @@ review.
 ### Platform vs Workflow Boundary
 
 The hardest discipline is keeping platform code free of methodology opinions.
-The boundary is concrete:
+The boundary is concrete. Fizeau remains below both columns: it owns the full
+agent session, while DDx and workflow tools consume its public immediate-error
+or final-event outcome.
 
 | DDx (Platform) | Workflow Tool (e.g., HELIX) |
 |----------------|------------------------------|
 | Document storage, versioning, sync | Artifact types and templates |
 | Bead CRUD, dependency DAG, ready queue | Phase definitions, gates, ratchets |
-| Agent dispatch, quorum, session logging | Methodology prompts, supervisory loops |
+| Fizeau request construction, opaque session-evidence references, DDx attempt records | Methodology prompts, role/quorum compositions, supervisory loops |
 | Persona binding mechanism | Which personas fulfill which roles |
-| Execute-loop runtime | When to run it, what to do with results |
+| Worktree/attempt/queue runtime, repository gates, landing | When to run it, what to do with bead results |
 
 If a feature request would push opinions into the CLI, it belongs in a plugin.
 
@@ -186,10 +196,13 @@ support all three directions equally.
 
 ### Cost-Tiered Execution
 
-Closed-bead throughput per dollar is the optimization target. Cheap models do
-the work; stronger models review; deterministic checks sit at the top of the
-ladder catching what review missed. The agent service routes by capability,
-not by name — endpoints with live model discovery, not hardcoded providers.
+Closed-bead throughput per dollar is the optimization target. Implementation
+starts at an appropriate abstract `MinPower`; review requests a stronger floor;
+deterministic checks remain authoritative. DDx expresses work facts and may
+raise `MinPower`; Fizeau routes by capability, health, and policy rather than DDx
+hardcoding providers or concrete harnesses. DDx never directs Fizeau to a
+harness/provider/model; explicit operator pins may only pass through verbatim
+and DDx never originates, ranks, loosens, rewrites, or infers them.
 
 ### Task Execution Lifecycle
 
@@ -199,14 +212,16 @@ DDx owns the named task execution layers:
 
 | Layer | CLI | Owns |
 |-------|-----|------|
-| 1 | `ddx run` | Single agent invocation; structured output, tokens, model, exit metadata |
+| 1 | `ddx run` | One Fizeau request/terminal-outcome record plus opaque Fizeau artifact references; no concrete harness invocation |
 | 2 | `ddx try <bead>` | Bead attempt in isolated worktree; merge or preserve result |
 | 3 | `ddx work` | Mechanical queue drain; no-progress detection and stop conditions |
 
 `ddx try` wraps `ddx run`. `ddx work` iterates `ddx try`. One on-disk
-substrate; layer metadata distinguishes records. Agent invocation is upstream
-(DDx-agent module via CONTRACT-003); DDx owns worktree lifecycle, evidence
-bundling, and drain loop.
+substrate; layer metadata distinguishes records. Fizeau owns invocation,
+session/tool-loop behavior, progress, usage, cancellation, continuation,
+provider fallback, and process-tree control via CONTRACT-003. DDx owns request
+construction, worktree lifecycle, repository gates, durable DDx evidence,
+landing/preservation, and the decision to start another bead attempt.
 
 ### Human-Agent Control Slider
 
@@ -237,4 +252,5 @@ Operating principles are the choices DDx makes in response to the physics above.
 4. **Bead-driven work** — beads are the unit of work; the queue is the interface.
 5. **Cost-awareed throughput** — optimize closed beads per dollar, not raw capability.
 6. **Git-native, file-first** — plain files, standard git, no lock-in.
-7. **Agent-agnostic** — any capable harness plugs in via the prompt envelope.
+7. **Agent-agnostic through Fizeau** — DDx consumes one Fizeau contract;
+   capable harnesses plug into Fizeau rather than DDx.

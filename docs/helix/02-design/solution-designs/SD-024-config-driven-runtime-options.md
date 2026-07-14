@@ -8,6 +8,16 @@ ddx:
 ---
 # Solution Design: Config-Driven Runtime Options
 
+> **BOUNDARY AMENDMENT (2026-07-13).** The immutable resolved-config pattern
+> below applies only to DDx-owned workflow settings and unchanged explicit
+> operator passthrough. Legacy `Profile`, model-route, catalog, provider-probe,
+> comparison-harness, and route-resolution fields are non-authoritative and
+> must be removed during revision; current Fizeau has no per-request `Profile`.
+> DDx sets or raises only abstract `MinPower` under FEAT-006/ADR-024 policy,
+> forwards operator `MaxPower`/`Harness`/`Provider`/`Model`/public `Policy`
+> unchanged, and never uses resolved config to choose a concrete route. Do not
+> execute this design until TD-024 is revised under Phase 2 ledger row 17.
+
 ## Purpose
 
 Eliminate the manual command-layer wiring pattern that copies config
@@ -342,7 +352,9 @@ touch:
 - The session log format (FEAT-006, TD-006).
 - The execution bundle layout (TD-010).
 - The bead tracker schema (SD-004, TD-004).
-- The model catalog (SD-014).
+- Any DDx-side model catalog. The pre-2026-07 SD-014 design and REF-004 catalog
+  claims are superseded; current SD-014 consumes public Fizeau resource fields,
+  and Fizeau owns catalog and routing information.
 
 Changes that are *enabled* by the refactor but not part of it:
 

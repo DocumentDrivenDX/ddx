@@ -123,12 +123,13 @@ The engine supports:
 Task execution remains CLI-owned at the orchestration layer:
 - `ddx run`, `ddx try`, and `ddx work` construct execution requests from CLI
   args, bead metadata, environment, and `.ddx/config.yaml`
-- DDx forwards explicit harness/provider/model passthrough values unchanged and
-  sends abstract `MinPower` / `MaxPower` bounds to Fizeau
+- DDx sets abstract `MinPower`; it forwards operator-supplied `MaxPower` and
+  explicit harness/provider/model passthrough values unchanged
 - Fizeau owns concrete route selection, provider/model discovery, alias
   matching, fallback, and route errors
-- capability, provider, and catalog status surfaces expose Fizeau-owned
-  diagnostics without feeding diagnostic route decisions back into execution
+- individual run detail may retain Fizeau-returned actual-route facts for audit;
+  provider, capability, and catalog diagnostics remain Fizeau-owned rather than
+  DDx proxy or execution-policy surfaces
 - execution evidence is written through dedicated run/attempt bundles with
   prompt, response, transcript, and log attachments, and is surfaced read-only by
   server

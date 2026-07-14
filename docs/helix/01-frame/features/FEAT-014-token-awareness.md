@@ -4,9 +4,9 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-006
-    - FEAT-002
+    - FEAT-010
 ---
-# Feature: Agent Usage Awareness and Routing Signals
+# Feature: Agent Usage, Cost, and Runtime Projections
 
 **ID:** FEAT-014
 **Status:** In Progress
@@ -15,470 +15,491 @@ ddx:
 
 ## Overview
 
-DDx should understand provider-native usage and agent-reported status signals
-well enough to attribute cost, show availability, and preserve audit evidence
-without taking ownership of model/provider routing. `ddx run`, `ddx try`,
-`ddx work`, and `ddx artifact regenerate` consume token budgets via this same
-FEAT-014 normalized signal model.
-`generate-artifact` runs therefore draw from the same FEAT-014 token budget
-accounting as agent work runs, with cost attribution recorded through the run
-evidence model rather than a separate artifact-only ledger.
-See [[MET-001]] for the canonical `source: exec` MET artifact that anchors
-runtime-metric reporting.
+FEAT-014 defines how DDx records and aggregates usage, cost, and runtime facts
+returned by Fizeau. DDx is the work tracker and git-aware executor. Fizeau is
+the complete agent runtime and the exclusive owner of concrete harness,
+provider, model, catalog, routing, native-log, authentication, quota, and usage
+acquisition behavior.
+
+DDx consumes the public final usage, cost, duration, warning, and actual-route
+fields Fizeau exposes. It stores those fields beside DDx-owned request, bead,
+worktree, repository-gate, and landing evidence so operators can audit a run
+and enforce cost budgets. DDx does not reconstruct a Fizeau projection by invoking a
+provider CLI, discovering or parsing a native session log, reading a provider
+cache, maintaining a model price table, or querying a route catalog.
+
+This boundary applies uniformly to `ddx run`, `ddx try`, `ddx work`, review and
+recovery runs, and agent-backed artifact generation. All of those operations
+use the same typed usage/cost fields and the same accounting rules.
 
 ## Problem Statement
 
-**Current situation:**
-- DDx can extract per-invocation token and cost data from subprocess output for
-  codex, claude, and opencode.
-- DDx currently aggregates usage through its own session-log model, but that
-  duplicates external provider storage and suppresses native persistence for
-  codex and claude by default.
-- Codex native session JSONL already carries `token_count` and `rate_limits`
-  data when persistence is enabled, which is more useful for routing than DDx's
-  current duplicate session ledger.
-- Claude exposes historical usage via `~/.claude/stats-cache.json`, but the
-  best current-quota source is still unresolved. DDx should exhaust stable
-  non-PTY options before accepting PTY automation.
-- The embedded Fizeau runtime is gaining its own session logging and OTEL
-  telemetry. DDx should consume that telemetry minimally rather than re-owning
-  the runtime's logs.
-- DDx does not yet have a normalized status/cost signal model that combines
-  capability, availability, quota/headroom, cost, and DDx-observed performance
-  for operator visibility and retry evidence.
+DDx needs durable answers to operational questions:
 
-**Desired outcome:** Every `ddx run` / `ddx try` / `ddx work` records normalized
-agent status and cost signals without selecting a concrete route:
-- request facts (MinPower/MaxPower, passthrough constraints, effort/permissions)
-- provider availability and authentication
-- current quota/headroom where known
-- cost estimate or cost class
-- DDx-observed performance and reliability
-- role/correlation facts for review invocations, including whether review
-  pairing degraded relative to the implementer
+- How many input, cached-input, and output tokens did a run consume?
+- What billable cost or cost class did Fizeau report?
+- How much known cost has a bead, attempt, review cycle, drain, or artifact
+  generation accumulated?
+- Which values are known, unknown, estimated upstream, or unavailable?
+- Which Fizeau session and DDx repository result produced the evidence?
 
-External harnesses preserve native persistence. DDx owns only the minimal
-activity and performance metadata needed for routing and provenance.
+The previous FEAT-014 mixed those questions with concrete runtime concerns. It
+assigned DDx direct Codex and Claude output parsers, provider-native log and
+cache readers, authentication and quota probes, catalog normalization, model
+pricing, provider comparison, and route-selection policy. That design created
+a second, incomplete harness runtime inside DDx and contradicted the Fizeau
+boundary in FEAT-006.
 
-## Spike Findings
+The desired outcome is a single authority chain:
 
-### Per-Invocation Data (implemented)
+1. DDx constructs a Fizeau request from work facts, abstract `MinPower`,
+   and any opaque operator-owned constraints.
+2. Fizeau selects and runs the concrete route, acquires usage/cost/auth/quota
+   signals, and returns its public immediate error or final event.
+3. DDx records the available public final fields with DDx-owned repository evidence.
+4. DDx aggregates usage and cost for audit, metrics, and budget decisions.
+5. DDx may use a higher `MinPower` for stronger-review intent or for a distinct
+   new attempt after capability-sensitive evidence; infrastructure, transport,
+   route, quota, authentication, setup, operator-action, and generic failures
+   never raise power. DDx never chooses or steers a concrete route.
 
-| Harness | Token Data | Cost Data | Status |
-|---------|-----------|-----------|--------|
-| codex | `turn.completed` JSONL: `input_tokens`, `cached_input_tokens`, `output_tokens` | Not reported | Working |
-| claude | JSON envelope: `input_tokens`, `output_tokens`, `cache_read/creation_input_tokens` | `total_cost_usd` | Working |
-| opencode | JSON envelope: `input_tokens`, `output_tokens` (if present) | `total_cost_usd` (if present) | Working |
-| gemini | Untested; no live auth available | Unknown | Blocked |
+## Normative Ownership Boundary
 
-### Signal-Source Matrix (re-reviewed)
+| Concern | Normative owner | DDx behavior |
+|---|---|---|
+| Harness/provider/model discovery and catalog | Fizeau | No catalog dependency, query, cache, normalization, or candidate ranking |
+| Concrete route selection, fallback, and provider retry | Fizeau | Sends no DDx-originated concrete route; consumes the public operation outcome |
+| Provider-native output, session logs, local caches, billing APIs, auth, quota, and rate-limit signals | Fizeau | Never discovers, reads, parses, probes, or reconstructs them |
+| Per-session token, cost, cost-class, freshness, and provenance projection | Fizeau | Decodes only fields defined by the public Fizeau contract |
+| Bead, attempt, worktree, repository gates, result revision, landing, and durable DDx evidence | DDx | Records and correlates these facts with its request ID and opaque Fizeau `SessionLogPath` |
+| Per-run, per-attempt, per-bead, per-drain, and per-artifact usage/cost aggregation | DDx | Aggregates typed Fizeau projections without route interpretation |
+| Retry and review capability escalation | DDx for new-attempt/review policy; Fizeau for routing | DDx may raise only abstract `MinPower`, and only for stronger review intent or a distinct new attempt after capability-sensitive evidence |
+| `MaxPower`, harness, provider, model, or public Fizeau `Policy` constraint | Operator | DDx forwards the supplied value unchanged and never originates, infers, ranks, loosens, rewrites, removes, or branches on it; current v0.14.50 has no per-request `Profile` field |
 
-| Source family | Current quota/headroom | Historical usage | Freshness | Scope | Stable enough for preflight routing? | Notes |
-|--------------|------------------------|------------------|-----------|-------|-------------------------------------|-------|
-| Codex native session JSONL / local state | Yes, when persistence is enabled and `token_count.rate_limits` is present | Yes, recent usage totals from session JSONL and local state | Near-real-time once Codex writes the session log; stale if the file is missing or unreadable | Machine-local, authenticated Codex session/account state | Yes, preferred live source for Codex routing when readable | Treat missing persistence or unreadable logs as `unknown`; do not rely on inline PTY scraping in the routing path |
-| Claude `~/.claude/stats-cache.json` | No stable non-PTY source confirmed yet; surface as `unknown` | Yes, account-wide daily activity, daily tokens by model, cumulative model usage, session counts, and hour-of-day distribution | Cached and delayed; freshness depends on the last stats-cache write | Machine-local cache with account-wide historical usage | Yes for historical usage, no for current quota | Use this source for history and load balancing only; current quota remains `unknown` until a stable live source is confirmed |
-| Claude runtime / statusline / SDK / hook artifacts | None confirmed | None confirmed | N/A unless a trustworthy source is discovered | N/A until validated | No, not yet | Investigate these before any PTY fallback; if live probing becomes necessary, feed an async snapshot cache rather than routing-time terminal scraping |
-| embedded Fizeau telemetry | Not a provider quota source | Yes, DDx-owned invocation activity, runtime metrics, and session references | Per invocation or per write | Local workspace / install / session | Yes for DDx-observed performance and provenance; no for provider quota routing | Consume references and derived metrics only; do not duplicate provider transcript storage or provider quota state |
+The following invariant is load-bearing:
 
-Interpretation:
+> DDx can ask Fizeau for more capability. DDx cannot tell Fizeau which concrete
+> harness, provider, or model should supply it.
 
-- `unknown` means no trustworthy live source exists, the source is stale, or the data is unreadable.
-- Unknown quota/headroom stays viable for routing with reduced confidence; it is not fabricated into `ok` or `blocked`.
-- If a current quota source requires active probing, the probe must populate an async snapshot history and never block routing on synchronous PTY scraping.
+Concrete harness/provider/model values returned by Fizeau are opaque audit
+facts. DDx may persist and render them only on that exact run's audit detail.
+It must not expose route-keyed list filters or use them to compute `MinPower`, select review
+pairing, rank candidates, estimate prices, decide fallback, or otherwise affect
+a future execution request.
 
-### Research Priorities
+## Current Public Fields And Future Projection Gate
 
-1. **Codex adapter from native logs** — use native session JSONL as the first
-   source of truth for current headroom and recent totals.
-2. **Claude non-PTY quota research** — investigate statusline, SDK, hook, or
-   other local runtime sources before accepting any PTY-based solution.
-3. **Minimal DDx-owned routing metrics** — define the smallest DDx state needed
-   to compare performance and reliability across harnesses without duplicating
-   provider transcripts.
-4. **Snapshot history and subscription-cost proxy** — when a current quota
-   source requires active probing, DDx should checkpoint quota snapshots over
-   time, map them to native usage accumulation, and estimate subscription burn
-   pressure well enough to balance providers intelligently.
+CONTRACT-003 owns the wire schema. Current v0.14.50 exposes final
+`ServiceFinalData` fields `Status`, `ExitCode`, opaque generic `Error`,
+`FinalText`, `DurationMS`, `Usage`, `Warnings`, `CostUSD`, `SessionLogPath`, and
+`RoutingActual`. `ServiceFinalUsage` currently exposes optional input, output,
+cache-read, cache-write, cache, reasoning, and total token counts plus `Source`,
+`Fresh`, `CapturedAt`, and per-source evidence. Warnings may also carry source
+evidence. DDx preserves those public usage-provenance fields. The final payload
+does not expose a general typed cause/stage, `RetryAfter`, cost class/currency/
+cost provenance, continuation capability, or process-tree disposition. Missing
+current fields remain unknown.
+
+The current and future concepts are separated below.
+
+### Session and terminal fields
+
+- stable Fizeau session/run reference distinct from `SessionLogPath`
+- machine-readable terminal cause and Fizeau-owned stage
+- start time and finish time (current final data exposes elapsed `DurationMS`)
+- abstract actual power (current audit-only `RoutingActual.Power`)
+- optional concrete harness/provider/model/route facts for opaque audit only
+- any terminal facts beyond the public final fields above
+
+### Usage fields
+
+- input tokens
+- cache-read, cache-write, and aggregate cache tokens
+- output tokens
+- reasoning tokens
+- total tokens
+- current `Source`, `Fresh`, `CapturedAt`, and per-source evidence
+- any additional typed units added by a versioned Fizeau contract
+
+### Cost fields
+
+- current `CostUSD` scalar observation, whose zero/omission ambiguity is
+  preserved;
+- whether cost is known
+- amount and currency when known
+- cost class, such as metered, subscription, local, or unknown
+- whether the amount is provider-reported or estimated by Fizeau
+
+Only `CostUSD` exists in v0.14.50. The known marker, generalized currency, cost
+class, and cost provenance are future-gated.
+
+Absence is not zero. Current usage pointers distinguish missing from explicit
+zero. Current scalar `CostUSD` does not reliably distinguish omission from an
+explicit zero and supplies no cost class, currency, or provenance, so DDx must
+not label a zero as a known free/local/subscription run. DDx never fills a gap
+from a concrete model name, built-in price table, native provider log, or
+provider cache.
+
+## DDx Run and Attempt Record
+
+Each FEAT-010 layer-1 run record stores:
+
+- DDx request and correlation facts: run id, parent run id, bead/attempt id,
+  role, timestamps, requested `MinPower`, permissions, effort, and timeout;
+- operator-owned `MaxPower` or concrete constraints, if supplied, as an opaque
+  immutable passthrough envelope;
+- DDx request correlation, opaque Fizeau `SessionLogPath`, and available public
+  final fields;
+- opaque Fizeau artifact references rather than copied or normalized native
+  transcript bodies; and
+- DDx-owned links to the base revision, result revision, checks, review verdict,
+  landing/preservation result, and evidence bundle.
+
+Layer-2 and layer-3 records reference their child layer-1 records and aggregate
+their typed usage/cost facts. They do not create a second provider session
+schema. A review, repair, reframer, decomposer, or artifact-generation run uses
+the same fields and is distinguished by DDx-owned role/correlation metadata.
+Review accounting does not include implementer/reviewer route comparison or a
+`review-pairing-degraded` policy signal.
+
+The canonical store is the FEAT-010 run substrate. An attempt evidence bundle
+may project the same fields into `result.json`, but that projection must be
+derived from the canonical run record and must not become an independent usage
+authority.
 
 ## Requirements
 
 ### Functional
 
-**Per-invocation extraction (complete)**
-1. codex harness: `--json` flag, `turn.completed` JSONL parsing
-2. claude harness: `--output-format=json`, JSON envelope parsing with
-   `total_cost_usd`
-3. opencode harness: `run --format json`, JSON envelope parsing
-4. `input_tokens`, `output_tokens`, `cost_usd` fields on DDx invocation
-   activity rows
-5. Fizeau usage diagnostics with harness/time-window/machine-readable output
-6. gemini harness: investigate `--output-format=json` output when auth is
-   available; implement token extraction if format is known
+1. **Fizeau-only acquisition.** DDx MUST obtain current-run usage, cost,
+   concrete route audit facts, auth/quota outcomes, and runtime provenance only
+   from typed public Fizeau projections. Production DDx code MUST NOT integrate
+   directly with Claude, Codex, Gemini, OpenCode, or another provider runtime.
 
-**Provider-native signal ingestion**
-7. **Native persistence preserved** — DDx must not pass suppressive flags such
-   as codex `--ephemeral` or claude `--no-session-persistence` by default for
-   external harnesses.
-8. **Codex native signal adapter** — read current quota/headroom and recent
-   usage from native Codex session JSONL when persistence is enabled.
-9. **Claude historical usage adapter** — read `~/.claude/stats-cache.json` to
-   obtain account-wide daily token consumption by model, session counts, and
-   activity patterns.
-10. **Claude current quota spike** — identify a stable non-PTY current-quota
-    source if one exists. If no stable source is found, DDx must surface quota
-    as `unknown` rather than inventing it. PTY automation is explicitly a
-    fallback of last resort, not the MVP path, and must feed an asynchronous
-    snapshot/sampling path rather than synchronous routing-time scraping.
-11. **Signal freshness/cache policy** — cache provider-native signal reads with
-    explicit freshness semantics so status/debug surfaces can distinguish fresh
-    from stale state.
+2. **No provider-native parsing.** DDx MUST NOT discover or parse provider
+   stdout/stderr, native session JSONL, local provider caches, status-line
+   output, hook output, billing responses, rate-limit headers, or provider
+   process state. Opaque Fizeau artifact references may be retained without
+   opening or interpreting their contents.
 
-**Normalized routing signals**
-12. **Routing signal model** — DDx normalizes every candidate's:
-    - capability/request fit
-    - availability/authentication state
-    - quota/headroom state (`ok`, `blocked`, `unknown`)
-    - cost estimate or cost class
-    - DDx-observed performance metrics
-    - freshness / confidence
-13. **Minimal DDx-owned metrics** — DDx stores only compact outcome samples,
-    async quota snapshots, and derived burn summaries. Those records are
-    attributed to the resolved canonical target or exact model pin so
-    different models on the same surface do not share one routing signal.
-    Outcome samples may record recent success/failure, latency, and last
-    observed token/cost values when available; DDx does not store provider
-    transcripts or native session bodies as routing inputs.
-13a. **Review cost and pairing signals** — default adversarial pre-close review
-    invocations record the same normalized cost fields as primary attempts plus
-    compact role/correlation metadata (`role=reviewer`, reviewed `result_rev`,
-    `review_group_id`, reviewer slot, and implementer/reviewer route facts when
-    known). A `review-pairing-degraded` event is a routing-quality signal for
-    operators and metrics; it is not a route-selection input owned by DDx.
-14. **Snapshot history for live quota sources** — when DDx depends on an
-    actively probed quota source, it checkpoints time-stamped quota snapshots
-    asynchronously and relates them to native usage accumulation to build a
-    history of usage plus quota availability.
-15. **Subscription-cost proxy** — DDx derives a relative subscription burn
-    estimate from quota snapshots and usage deltas well enough to balance
-    providers under subscription plans where direct per-token billing is
-    unavailable.
-16. **Routing integration** — harness selection uses the normalized signal
-    model together with requested profile, model, effort, permission mode, and
-    explicit harness override semantics.
-17. **Operator visibility** — Fizeau routing diagnostics and usage views
-    consume the normalized signal model and report source freshness.
+3. **No catalog or routing dependency.** DDx MUST NOT query, cache, normalize,
+   or interpret the Fizeau model/harness/provider catalog. DDx usage, budget,
+   retry, review, queue, and status code MUST NOT call a route-selection helper
+   or use a concrete route fact to affect execution.
 
-**Budgeting and throttling**
-18. **Deferred scope** — budget passthrough, automatic throttling, and pacing
-    policy remain follow-on work after the signal-source spikes establish the
-    right acquisition model.
+4. **Abstract escalation only.** A stronger-review request may raise
+   `MinPower` by review intent. A failed implementation may raise it only on a
+   distinct new DDx attempt after capability-sensitive evidence. Infrastructure,
+   transport, route, quota, authentication, setup, operator-action, and generic
+   failures MUST keep power unchanged. DDx MUST NOT derive a power change from
+   a model catalog or concrete model/provider identity. Returned abstract
+   actual-power may inform the new floor only under that same evidence rule.
 
-**Always-on bead-attempt runtime metrics**
-19. `ddx try` must capture built-in runtime metrics for every attempt,
-    independent of any graph-authored execution documents. These are DDx runtime
-    facts, not substitutes for project-authored metric docs. The fields below
-    are persisted into the project's `.ddx/runs/<run-id>/` run substrate
-    (FEAT-010) so the host+user
-    `ddx-server` and its dashboards can replay runtime metrics from the same
-    replay-backed artifacts that back execution history — DDx does not keep a
-    separate runtime-metrics store. When execute-bead runs inside the server's
-    supervised `WorkerManager` (FEAT-002), the worker writes the same bundle to
-    the project that owns the bead.
-    Minimum fields (where available):
-    - `harness`, `model`, `session_id`
-    - `elapsed_ms`
-    - `input_tokens`, `output_tokens`, `total_tokens`
-    - `cost_usd` (`-1` when unknown, `0` for local models)
-    - `base_rev`
-    - `result_rev`
-20. **Tracked metrics surface.** The runtime metrics captured in requirement
-    19 are persisted in the tracked execute-bead attempt bundle at
-    `.ddx/executions/<attempt-id>/result.json` per FEAT-006 §"Execute-Bead
-    Evidence Bundle". The runtime `harness`, `model`, and `session_id`
-    values must also be projected into the canonical Git trailer set on
-    the iteration commit (`Ddx-Harness`, `Ddx-Model`, and `Ddx-Worker-Id`
-    when no distinct worker identity is available) per FEAT-006
-    §"Canonical Git trailers". The commit trailers and the JSON block in
-    FEAT-006 §"Iteration commit summary" must both be projected from
-    `result.json`, never from ad hoc runtime state.
+5. **Immutable operator constraints.** `MaxPower`, harness, provider, model,
+   and public Fizeau `Policy` constraints are operator-owned inputs. DDx MUST
+   forward them byte-for-byte unchanged across retries and reviews. DDx MUST
+   NOT originate them or branch on their presence or value. Fizeau owns
+   compatibility validation and returns its public immediate error or final
+   outcome when a request cannot be satisfied.
+
+6. **Public-field persistence.** Every completed layer-1 run MUST persist the
+   available public Fizeau usage/cost/final fields, usage presence and public
+   provenance/freshness/source evidence, DDx request correlation, and opaque
+   `SessionLogPath` in the FEAT-010 run record. Cost provenance/class and a
+   stable session ID remain unknown until a future pinned contract exposes them.
+
+7. **DDx runtime facts.** Every layer-2 attempt MUST retain DDx-owned elapsed
+   time, base revision, result revision when present, repository-check result,
+   landing/preservation disposition, and links to every child layer-1 run.
+   These facts remain distinct from Fizeau runtime facts.
+
+8. **Aggregation.** DDx MUST aggregate known usage and cost by run, attempt,
+   bead, role, artifact, work drain, project, and time window. Unknown values
+   MUST be counted separately and MUST NOT be coerced to zero or silently
+   excluded from completeness reporting.
+
+9. **Budget accounting.** FEAT-010 budget and stop policies MUST consume the
+   public FEAT-014 `CostUSD` observation with explicit unknown coverage. A cost
+   class or generalized currency may participate only after a pinned public
+   contract exposes it. Implementation, review, repair,
+   reframer, decomposer, and agent-backed artifact-generation runs contribute
+   under the same rules. FEAT-014 defines accounting semantics; FEAT-010 and
+   ADR-024 define when a budget stops new DDx work.
+
+10. **No DDx price inference.** DDx MUST NOT maintain a concrete model pricing
+    table or estimate cost from a model identity and token count. An estimated
+    amount is acceptable only when Fizeau marks it as an upstream estimate with
+    explicit provenance.
+
+11. **Audit-only concrete facts.** DDx MAY display Fizeau-returned
+    harness/provider/model facts only on the exact run's audit detail. Those fields
+    MUST be stored separately from DDx policy state and MUST NOT feed retry,
+    review tier, reviewer pairing, candidate ranking, budget rate selection, or
+    queue decisions.
+
+12. **No provider/status proxy.** DDx MUST NOT proxy, cache, or persist Fizeau's
+    provider catalog, quota/headroom, health, or route-candidate read models.
+    DDx MAY link to a configured Fizeau diagnostics surface and MAY display the
+    per-run public `RoutingActual` audit fields. It MUST NOT synthesize missing
+    provider status from attempt metrics or native logs.
+
+13. **Unified command surface.** `ddx runs metrics` MUST report DDx-recorded
+    usage and cost aggregates with time-window, bead, role, and machine-readable
+    output options. It reads FEAT-010 run records; it does not query provider
+    runtimes or Fizeau catalogs. Fizeau-owned provider diagnostics remain a
+    Fizeau surface.
+
+14. **Legacy-record migration.** Historical DDx usage rows may be read through
+    a bounded migration adapter. Their source MUST be labeled `legacy`, unknown
+    values MUST remain unknown, and they MUST never become routing input.
+    Migration MUST NOT introduce a provider-native log reader into the current
+    execution path.
 
 ### Non-Functional
 
-- **Performance:** provider-native signal reads and DDx metrics lookups should
-  add only modest preflight overhead. Dispatch-time routing should remain fast
-  enough to avoid noticeable startup delay.
-- **Accuracy:** Token counts from harness JSON output are authoritative.
-  Provider-native stores reflect the provider's own accounting and should be
-  preferred where available.
-- **Zero fabrication:** DDx must never fabricate current quota/headroom. When a
-  source is unavailable or stale, DDx surfaces `unknown`.
-- **Graceful degradation:** If provider-native stores are missing, unreadable,
-  or in an unexpected format, DDx falls back to request fit, static cost, and
-  DDx-observed performance metrics. Never fail an invocation solely because a
-  signal source could not be read.
-- **Minimal ownership:** DDx owns only the metadata needed for routing,
-  provenance, and operator visibility. It must not become a shadow transcript
-  store for external providers.
+- **Boundary enforcement:** An automated structural test MUST fail if the DDx
+  Fizeau consumer imports a concrete harness adapter, provider-log parser,
+  native provider-store reader, model pricing table, route catalog, or
+  route-selection helper.
+- **No fabrication:** Unknown usage, cost, quota, auth, or provenance remains
+  unknown at storage, API, CLI, and UI layers.
+- **Determinism:** Recomputing aggregates from the same run records produces
+  identical totals and identical unknown counts.
+- **Performance:** Aggregating 10,000 canonical run records for a 30-day window
+  completes in under 500 ms on the reference test machine; this query performs
+  no network, provider-runtime, native-log, or catalog access.
+- **Privacy:** DDx stores only the typed projection and opaque artifact
+  references. It does not copy provider transcripts or credentials into usage
+  records.
+- **Forward compatibility:** Unknown fields in versioned Fizeau projections
+  round-trip without causing DDx to infer semantics or reject the run record.
 
-## Dashboard Read Model
+## Operator Surfaces
 
-The normalized routing signal model (requirement 12) doubles as the read model
-consumed by the FEAT-008 provider dashboard and the FEAT-002 `/api/providers`
-endpoints. FEAT-014 governs field semantics, unknown-state rules, and freshness
-conventions for both the routing code path and the UI read path.
+### Run usage and cost
 
-### Read-Model Fields
+`ddx runs metrics` is the DDx-owned usage surface. At minimum it reports:
 
-The provider summary and provider detail shapes are defined in FEAT-002
-§"Provider Availability and Utilization". FEAT-014 owns the rules that govern
-every field:
+- run/attempt/bead counts;
+- known input, cached-input, output, and total tokens;
+- known/established `CostUSD` subtotal under the current contract, plus
+  currency and cost-class groups only when a future pinned contract supplies
+  them;
+- count of runs with unknown usage or unknown cost;
+- role and time-window breakdowns; and
+- links to the underlying DDx run and opaque Fizeau `SessionLogPath` values.
 
-**Availability and auth fields**
+Human output renders unknown as `—` and includes an explicit incomplete-data
+count. Machine-readable output uses an explicit known/unknown representation,
+not `0`, an empty string, or an undocumented sentinel.
 
-| Field | Type | Source | Unknown condition |
-|-------|------|--------|-------------------|
-| `status` | `available` \| `unavailable` \| `unknown` | harness discovery | harness cannot be found or tested |
-| `auth_state` | `authenticated` \| `unauthenticated` \| `unknown` | per-harness auth probe | probe fails or is not implemented |
-| `quota_headroom` | `ok` \| `blocked` \| `unknown` | provider-native or `unknown` | no trustworthy live source exists |
+### Provider and routing status
 
-**Utilization fields**
-
-| Field | Type | Source | Unknown sentinel |
-|-------|------|--------|-----------------|
-| `historical_usage.*.input_tokens` | integer | provider-native or DDx-observed | `-1` (JSON) → rendered as `—` in UI |
-| `historical_usage.*.output_tokens` | integer | provider-native or DDx-observed | `-1` |
-| `historical_usage.*.cost_usd` | float | provider-native | `-1` |
-| `burn_estimate.daily_token_rate` | float | DDx-derived from usage deltas | `-1` |
-| `burn_estimate.subscription_burn` | `low` \| `moderate` \| `high` \| `unknown` | DDx-derived | `unknown` when no rate history |
-| `burn_estimate.confidence` | `high` \| `medium` \| `low` | DDx-derived | reflects staleness of contributing signal |
-| `routing_signals.performance.success_rate` | float 0–1 | DDx-observed | `-1` when sample_count < 3 |
-
-**Freshness fields**
-
-- `freshness_ts` — RFC 3339 timestamp of the oldest contributing signal write.
-  When no signals exist the field is omitted (not zero-time).
-- `last_checked_ts` — when DDx most recently attempted to read signals for this
-  harness. May differ from `freshness_ts` when the read attempt found no new data.
-- `signal_sources` — ordered list of source identifiers that contributed to
-  this snapshot. Defined values: `native-session-jsonl`, `stats-cache`,
-  `ddx-metrics`, `none`. `none` appears alone when no source contributed.
-
-### Source Attribution Labels (for UI display)
-
-The UI renders per-field source labels to distinguish certainty levels:
-
-| `signal_sources` entry | UI label |
-|------------------------|----------|
-| `native-session-jsonl` | provider-reported |
-| `stats-cache` | provider-reported |
-| `ddx-metrics` | DDx-estimated |
-| `none` | unknown |
-
-When multiple sources contribute, the field-level label reflects the most
-authoritative source. Fields absent from all sources carry a `?` badge in the UI
-and a tooltip drawn from `source_note` in the per-model quota object.
-
-### Unknown-State Contract
-
-**Zero fabrication.** No field may be coerced from `unknown` / `-1` to `ok` / `0`
-for display convenience. UI components must treat `-1` as `unknown` and render
-`—`, never `0`. Badge components must treat the string literal `"unknown"` as a
-distinct state with its own visual treatment, never as a fallback for `"ok"`.
-
-**Tooltips.** Every `?` badge and every "unknown" pill in the provider dashboard
-must include a tooltip populated from one of the defined tooltip strings below:
-
-| Condition | Tooltip text |
-|-----------|-------------|
-| Claude quota unknown | "No stable non-PTY quota source confirmed for Claude. DDx will route with reduced confidence rather than reject." |
-| Signal source not readable | "The signal source could not be read at the last check. DDx is using cached state." |
-| No signal history | "No signal history available. DDx will route based on request fit only." |
-| Stale signal | "Last signal observed more than 1 hour ago. Data may not reflect current provider state." |
-
-**Routing behavior.** `quota_headroom: unknown` does not block routing. It
-reduces routing confidence. `quota_headroom: blocked` rejects the candidate. The
-dashboard must not imply that `unknown` means `blocked`.
-
-### Queryable Read Model
-
-The read model supports the following query dimensions for the `/api/providers`
-list endpoint and for client-side filtering in the provider dashboard:
-
-| Dimension | Filter values |
-|-----------|--------------|
-| Provider / harness | exact match on `harness` name |
-| Model | substring or exact match on model identifier |
-| Status | `available`, `unavailable`, `unknown` |
-| Auth state | `authenticated`, `unauthenticated`, `unknown` |
-| Quota state | `ok`, `blocked`, `unknown` |
-| Signal source | presence of a named source in `signal_sources` |
-| Time window | scopes `historical_usage` window (7d, 30d) |
-
-Sorting is supported on: `harness` (alpha), `status`, `auth_state`,
-`quota_headroom`, `recent_success_rate`, `recent_latency_p50_ms`,
-`freshness_ts`. Default sort: `status` ascending, then `harness` ascending.
-
-## CLI Interface
-
-```bash
-# Routing state with freshness and quota/headroom where known
-Fizeau routing diagnostics
-
-# Usage summary derived from provider-native sources + DDx-owned metrics
-Fizeau usage diagnostics
-
-# Filter to one harness
-Fizeau usage diagnostics --harness claude
-
-# Specific time window
-Fizeau usage diagnostics --since 7d
-Fizeau usage diagnostics --since 2026-04-01
-
-# Machine-readable
-Fizeau usage diagnostics --format json
-```
+Provider availability, authentication, quota/headroom, model catalogs, and
+route candidates are Fizeau-owned observability. DDx does not expose or proxy
+that information. FEAT-008 provides an external handoff to Fizeau diagnostics
+and renders only per-run public terminal audit facts. DDx attempt metrics never
+augment or override Fizeau's routing state.
 
 ## User Stories
 
-### US-140: Developer Checks Agent Usage and Routing Signals
-**As a** developer managing agent usage
-**I want** to see provider-native usage signals and DDx-observed routing metrics
-**So that** I can understand what DDx is routing on
+### US-140: Developer Inspects Run Usage
+
+**As a** developer reviewing an agent-backed run
+**I want** to see the usage and cost Fizeau reported beside DDx repository
+evidence
+**So that** I can audit resource consumption without DDx parsing provider logs
 
 **Acceptance Criteria:**
-- Given I run Fizeau usage diagnostics, then I see per-harness usage/cost where
-  available, plus DDx-observed runtime metrics
-- Given I run Fizeau usage diagnostics --since today, then only today's windows are
-  counted
-- Given I run Fizeau usage diagnostics --format json, then output is valid JSON
 
-### US-141: DDx Routes Using Current Availability Signals
-**As** the DDx agent router
-**I want** to combine request fit, availability, quota/headroom, cost, and
-performance signals
-**So that** I choose the best viable harness for each run
+- Given Fizeau returns public usage/cost fields, when the layer-1 run is
+  persisted, then every known field and its source plus the opaque
+  `SessionLogPath` round-trip through the canonical run record.
+- Given Fizeau reports an unknown cost, when I inspect the run, then cost is
+  shown as unknown rather than zero or a DDx estimate.
+- Given an opaque native-session-log path is present, then DDx stores the
+  reference without opening or interpreting the target.
 
-**Acceptance Criteria:**
-- Given Codex native session logs are available, when DDx evaluates codex, then
-  current quota/headroom comes from those native logs rather than PTY
-  automation
-- Given Claude has no stable current-quota source yet, when DDx evaluates
-  claude, then current quota is surfaced as `unknown` rather than fabricated
-- Given quota is explicitly blocked for a candidate, then that candidate is
-  rejected
-- Given quota is unknown for a candidate, then the candidate remains viable but
-  is ranked with reduced confidence rather than hard-rejected
+### US-141: Operator Enforces a Work Budget
 
-### US-142: Developer Sees Signal Freshness in Doctor Output
-**As a** developer debugging harness selection
-**I want** Fizeau routing diagnostics to show where each signal came from and
-how fresh it is
-**So that** I can trust or question DDx's decision with evidence
+**As an** operator running a bounded drain
+**I want** every agent-backed operation to contribute to one cost ledger
+**So that** DDx can stop new work at the configured budget without choosing a
+provider or model
 
 **Acceptance Criteria:**
-- Given I run Fizeau routing diagnostics, then each harness reports current
-  availability state, quota/headroom state, and last-checked freshness
-- Given a signal came from a provider-native source, then doctor output
-  identifies that source
-- Given a signal source could not be read, then doctor output reports `unknown`
-  with an explanatory note instead of omitting the field
 
-### US-143: Operator Views Provider Dashboard in Browser
-**As an** operator deciding which harnesses to use for a batch of work
-**I want** to see all configured providers with routing availability, auth state,
-  quota/headroom, utilization, and burn rate in one browser view
-**So that** I can make informed dispatch decisions without running CLI commands
+- Given implementation, review, repair, and artifact-generation child runs,
+  when DDx computes the drain cost, then all known Fizeau-reported billable
+  amounts are included under the same accounting rules.
+- Given some child runs have unknown cost, then the budget view reports the
+  known subtotal and unknown-run count; it does not claim the subtotal is a
+  complete total.
+- Given the FEAT-010 cost stop fires, then no route, provider, or model failure
+  is synthesized.
 
-**Acceptance Criteria:**
-- Given I open the Provider Dashboard (FEAT-008 §"Provider / Harness Dashboard"),
-  then I see one row per configured harness with status, auth, quota/headroom,
-  cost class, and freshness timestamp
-- Given a harness has `quota_headroom: unknown`, then the pill renders "unknown"
-  with a tooltip from the FEAT-014 tooltip registry — not a green "ok" badge
-- Given I click a row, then the detail panel shows the full read-model fields
-  defined in FEAT-014 §"Read-Model Fields", with source labels distinguishing
-  provider-reported from DDx-estimated values
-- Given a numeric field has no trustworthy source (sentinel `-1`), then the UI
-  renders `—`, not `0`
-- Given I look at the burn estimate row, then I see `confidence` labeled as
-  `high`, `medium`, or `low` — not omitted
-- Given I search or filter the provider list, then results update client-side
-  within 100 ms without a server round-trip
+### US-142: Operator Preserves Routing Authority
 
-### US-144: Operator Distinguishes Provider-Reported vs DDx-Estimated Signals
-**As an** operator auditing routing signal provenance
-**I want** each signal field in the provider dashboard to be labeled by its source
-**So that** I can determine how much weight to place on the value
+**As an** operator supplying an explicit runtime constraint
+**I want** DDx to pass it through without interpretation
+**So that** Fizeau remains the sole concrete routing authority
 
 **Acceptance Criteria:**
-- Given a field came from `native-session-jsonl` or `stats-cache`, then it
-  carries a "provider-reported" label
-- Given a field was derived from DDx-observed invocation metrics, then it carries
-  a "DDx-estimated" label
-- Given the `signal_sources` list includes `none`, then the harness shows no
-  usage or burn data, only availability and auth state where detectable
 
-### US-145: Execute-bead Runtime Metrics Are Captured Automatically
-**As** a developer reviewing bead execution history
-**I want** runtime metrics recorded for every bead-attempt iteration without
-manual instrumentation
-**So that** iterations are comparable and cost is always visible
+- Given I supply `MaxPower`, harness, provider, model, or public `Policy`, then
+  every retry and review request contains the exact same operator value.
+- Given DDx raises `MinPower`, then no concrete constraint is added, removed,
+  normalized, or rewritten.
+- Given Fizeau returns a public incompatibility error, then DDx records it and
+  requests operator action without inspecting or substituting the constraint.
+
+### US-143: Analyst Compares DDx Work Costs
+
+**As an** analyst evaluating execution economics
+**I want** deterministic aggregates by bead, role, artifact, and time window
+**So that** I can compare DDx work without turning historical route facts into
+execution policy
 
 **Acceptance Criteria:**
-- Given `ddx try` runs with an agent response that exposes token and cost
-  data, when the iteration completes, then the run record contains `harness`,
-  `model`, `session_id`, `elapsed_ms`, `input_tokens`, `output_tokens`,
-  `total_tokens`, and `cost_usd`
-- Given runtime token and cost data is captured, when the iteration commit
-  summary is written, then the summary includes harness, model, total tokens,
-  cost, base revision, and result revision
 
-## Dependencies
+- Given the same canonical run corpus, two aggregate reads return the same
+  totals and unknown counts.
+- Given a historical run record contains concrete route audit facts, its exact
+  run detail may display them, but list filters, aggregates, and execution
+  requests cannot consume them.
+- Given 10,000 fixture run records, a 30-day aggregate completes within the
+  stated performance bound without catalog or provider access.
 
-- FEAT-006 (Fizeau Execution Boundary) — execution route facts and invocation activity capture
-- FEAT-002 (DDx Server) — `/api/providers` and `/api/providers/:harness`
-  expose FEAT-014's routing signal model to UI and MCP consumers
-- FEAT-008 (Web UI) — the provider dashboard view is the browser surface for
-  FEAT-014's read model; FEAT-014 governs field semantics, unknown-state
-  rules, and tooltip registry for that view
-- [[MET-001]] (ddx test wall time) — canonical `source: exec` MET artifact for
-  projected runtime metrics and evidence formatting
-- provider-native local stores such as `~/.codex/` and `~/.claude/`
-- embedded Fizeau runtime telemetry and session references
+### US-144: Operator Distinguishes Runtime and Repository Evidence
+
+**As an** operator auditing an execution
+**I want** Fizeau projections and DDx-owned facts labeled by their authority
+**So that** I do not mistake DDx aggregation for provider or routing evidence
+
+**Acceptance Criteria:**
+
+- Given a usage, cost, actual-power, or concrete route audit fact came from the
+  public Fizeau final data, then the run view labels it as Fizeau-returned and
+  shows reported/estimated provenance only when the public field supplies it;
+  current cost provenance remains unknown.
+- Given elapsed attempt time, base/result revisions, checks, or landing state
+  came from DDx, then the run view labels it as DDx-owned evidence.
+- Given no authoritative value exists, then the view reports unknown and does
+  not substitute a DDx estimate or a value inferred from another field.
+
+### US-145: Bead-Attempt Metrics Are Captured Automatically
+
+**As a** developer reviewing bead execution history
+**I want** runtime metrics recorded for every attempt without manual
+instrumentation
+**So that** attempts remain comparable and cost remains visible
+
+**Acceptance Criteria:**
+
+- Given `ddx try` completes through Fizeau, then its attempt record links every
+  child run and records DDx elapsed time, base revision, result revision when
+  present, checks, and landing/preservation disposition.
+- Given child runs expose typed usage/cost projections, then attempt and bead
+  summaries aggregate those projections without reading a provider transcript.
+- Given an attempt has no trustworthy usage projection, then the record remains
+  valid and explicitly reports unknown usage.
+
+## Test Strategy
+
+Tests use a contract fake implementing the public Fizeau interface. Fixtures
+contain typed Fizeau projections, not Claude/Codex/Gemini output or native log
+formats.
+
+| Invariant | Required test |
+|---|---|
+| Typed usage/cost fields persist without loss | `TestFizeauUsageProjectionRoundTrip` |
+| DDx does not parse provider output or native stores | `TestUsageConsumerHasNoProviderParserOrNativeStoreDependency` |
+| DDx has no catalog, pricing-table, or route-helper dependency | `TestUsageConsumerHasNoCatalogPricingOrRouteDependency` |
+| Retry/review changes abstract capability only | `TestRetryAndReviewChangeMinPowerOnly` |
+| Operator `MaxPower` and concrete pins remain immutable | `TestOperatorRuntimeConstraintsPassThroughUnchanged` |
+| Concrete route facts are audit-only | `TestConcreteRouteFactsCannotAffectDDxPolicy` |
+| Unknown usage and cost are not coerced | `TestUnknownUsageAndCostRemainUnknown` |
+| All agent-backed roles share one ledger | `TestAgentBackedRolesShareUsageAccounting` |
+| Budget consumes typed cost and reports unknown coverage | `TestBudgetAccountingUsesTypedFizeauCost` |
+| Attempt metrics link repository and child-run evidence | `TestAttemptRuntimeMetricsLinkCanonicalRuns` |
+| Fizeau and DDx facts retain distinct authority labels | `TestRunMetricsPreserveAuthorityLabels` |
+| Aggregate path performs no external acquisition | `TestRunMetricsAggregateIsOfflineAndDeterministic` |
+
+Validation commands:
+
+```bash
+cd cli && go test ./internal/agent/... ./internal/agentmetrics/... ./cmd/...
+lefthook run pre-commit
+```
+
+Package paths may be narrowed to the final owning packages when the FEAT-010
+run substrate lands, but every named test remains mandatory. TP-014 and SD-014
+must be revised to this boundary before implementation work that cites them is
+execution-ready; their former direct-provider parsers, native-log adapters,
+model-pricing table, and DDx routing tests are migration debt, not acceptance
+authority.
+
+## Dependencies and Consumers
+
+- **CONTRACT-003 (upstream Fizeau):** owns current public final fields, future
+  projection extensions, provider-native acquisition, concrete catalogs, and
+  routing behavior.
+- **FEAT-006:** owns the DDx request/terminal consumer boundary and opaque
+  passthrough envelope.
+- **FEAT-010:** owns canonical run records, attempt/drain lifecycle, retry
+  scheduling, and budget-stop policy.
+- **FEAT-002 and FEAT-008:** may expose DDx usage aggregates, per-run public
+  route audit facts, and an external Fizeau diagnostics handoff; they do not
+  acquire, proxy, cache, or synthesize provider signals.
+- **FEAT-016:** consumes canonical FEAT-014 aggregates for bead- and
+  feature-level process metrics.
+- **ADR-024:** may consume FEAT-014 cost fields for limits; it must not use
+  route facts, provider identity, or model identity as DDx policy input.
 
 ## Implementation Strategy
 
-### Phase 1 — Signal-source spikes
-- Inventory provider-native signal sources and freshness semantics
-- Define the minimal routing metrics schema and retention rules
-  (now part of Fizeau's internal routing per CONTRACT-003-fizeau-service)
-- Resolve whether Claude has a stable non-PTY current-quota source
+### Phase 1 — Contract gate and deletion inventory
 
-### Phase 2 — Preserve native persistence and add adapters
-- Remove DDx defaults that suppress codex/claude native persistence
-- Implement Codex native signal adapter
-- Implement Claude historical usage adapter
+- Consume v0.14.50's existing public fields without inventing missing semantics;
+  pin a later CONTRACT-003 revision before implementing any required richer
+  usage/cost/runtime projection or provenance semantics.
+- Inventory and mark for deletion every DDx provider-output parser, native-log
+  or provider-cache reader, auth/quota probe, concrete model pricing table,
+  catalog query, and route-selection consumer.
+- Add the structural boundary tests before changing runtime behavior.
 
-### Phase 3 — Normalize routing signals
-- Build the shared routing signal model
-- Feed doctor/usage/routing from that model
-- Treat unknown quota as unknown, not as blocked or OK
-- If a live quota source requires active probing, persist async snapshot history
-  rather than blocking routing on synchronous PTY gymnastics
+### Phase 2 — Canonical typed consumer
 
-### Phase 4 — Follow-on policy work
-- Budget passthrough
-- Throttling / pacing
-- Optional PTY fallback only if non-PTY Claude quota sourcing proves impossible
+- Decode the public Fizeau projection once at the FEAT-006 boundary.
+- Persist it in the FEAT-010 layer-1 record with opaque artifact references.
+- Preserve operator-owned `MaxPower` and concrete constraints byte-for-byte;
+  ensure retry/review code can change only `MinPower` under the policy above.
+
+### Phase 3 — Aggregation and budget observability
+
+- Implement deterministic offline aggregates over canonical run records.
+- Wire FEAT-010 cost stops to typed amount/cost-class fields and explicit
+  unknown coverage.
+- Project attempt, bead, drain, and artifact-generation summaries without a
+  second usage store.
+
+### Phase 4 — Surface migration and legacy retirement
+
+- Point CLI, server, and UI usage views at canonical aggregates.
+- Replace DDx provider/status projections with an external handoff to Fizeau
+  diagnostics and per-run terminal audit fields.
+- Migrate historical DDx rows with explicit `legacy` provenance, then remove
+  all current-path provider parsing and routing-signal acquisition code.
 
 ## Out of Scope
 
-- Provider billing API integration
-- Intercepting harness HTTP traffic for real-time rate-limit headers
-- Gemini token capture (blocked on auth investigation)
-- Cross-machine usage aggregation (see FEAT-013)
-- Immediate budget enforcement and adaptive throttling policy
-- Queue-drain budget stop policy and reviewer-cost cap handling, which are
-  owned by FEAT-010 and ADR-024. FEAT-014 supplies the normalized cost and
-  cost-class signals they consume.
-- Prompt design and task strategy beyond harness selection
+- Concrete harness/provider/model selection, ranking, fallback, or review
+  pairing
+- Fizeau model, provider, or harness catalogs
+- Direct Claude, Codex, Gemini, OpenCode, or native-runtime integration in DDx
+- Provider-native log, cache, auth, quota, billing, rate-limit, or process-state
+  discovery and parsing
+- DDx-maintained concrete model pricing tables or provider cost estimation
+- Provider transcript storage or a DDx-native session schema
+- Provider catalog, health, quota, route-candidate, or dashboard proxy semantics
+- Workflow-specific interpretation of usage or cost beyond FEAT-010 budgets

@@ -21,7 +21,7 @@ the layer beneath it. There are no other run kinds beyond those named layers.
 
 | Layer | CLI | Inputs | Outputs / side effects | Owns |
 |---|---|---|---|---|
-| 1 | `ddx run` | prompt + execution config | structured output, side effects, run metadata (tokens, model, duration, exit) | invocation atom; consumes upstream Fizeau execution contract |
+| 1 | `ddx run` | prompt + execution config | typed immediate error or public Fizeau final event, `FinalText`, opaque session-log ref, DDx run metadata | consumer record for one Fizeau operation; no concrete harness runtime |
 | 2 | `ddx try <bead>` | bead id, base revision | new worktree state + run evidence; merge or preserve | worktree start/end capture; bead → prompt resolution; side-effect bundling |
 | 3 | `ddx work` | bead queue, stop conditions | sequence of `ddx try` records + loop-level record (drained / blocked / deferred) | mechanical queue drain; no-progress detection |
 
@@ -137,17 +137,21 @@ narrow read-only HTTP/MCP write surface limited to artifact regeneration.
 
 ## Task Execution Layers
 
-### Layer 1 — `ddx run` (invocation atom)
+### Layer 1 — `ddx run` (Fizeau session consumer record)
 
-A layer-1 run is one AI invocation. Inputs are a prompt, requested
-`MinPower` and optional `MaxPower`, optional operator passthrough constraints,
-and non-routing execution config; outputs are the structured response (text or
-bytes), any side-effects the service performed via tools, and run metadata
-(tokens, model, actual power, duration, exit status, session pointer).
+A layer-1 run is one request to the complete Fizeau agent runtime. Inputs are a
+prompt, requested `MinPower`, an unchanged operator `MaxPower` when supplied,
+optional operator passthrough constraints, and non-routing execution config;
+outputs are Fizeau's typed immediate error or terminal session outcome, opaque
+response/session artifact references, and envelope metadata (usage, model,
+actual power, duration, terminal status, session pointer).
 
-Layer 1 calls the upstream Fizeau execution contract directly. DDx does not
-reimplement routing or the invocation loop; it wraps one `Execute` call with
-provenance capture.
+Layer 1 calls the upstream Fizeau execution contract directly. Fizeau owns
+Claude Code/Codex/Gemini/native invocation, the session/tool loop, routing and
+provider fallback, subprocess/process-tree control, progress/events, native
+logs, usage, cancellation, and harness-specific continuation. DDx wraps one
+Fizeau request/terminal outcome with provenance capture; it never invokes or
+parses a concrete harness.
 
 `ddx artifact regenerate <id>` is layer 1 when the generator returns
 bytes/text and DDx writes the file; it is layer 2 when the generator
@@ -167,11 +171,13 @@ A layer-2 run is one bead attempt in an isolated workspace. It owns:
 
 A layer-2 record references its child layer-1 records by run id.
 
-Layer 2 owns bead-attempt success classification. DDx determines success from
+Layer 2 owns bead-attempt success classification. A Fizeau terminal `success`
+is necessary session evidence, not bead success. DDx determines bead success from
 the artifacts it owns: commit presence, merge/preserve result, no-changes
-rationale, post-run checks, review verdicts, and cooldown policy. The agent's
-exit status and actual model/power are inputs to that decision, not the whole
-decision.
+rationale, post-run checks, review verdicts, and cooldown policy. The terminal
+status is session evidence. Concrete model identity is audit-only; abstract
+actual power may inform a later request's `MinPower`, but neither determines
+bead success.
 
 Layer 2 records raw attempt evidence. Layer 3 applies the outcome → state
 mapping in [`TD-031 §2`](../../02-design/technical-designs/TD-031-bead-state-machine.md)
@@ -188,8 +194,9 @@ cache, or equivalent project-local build output created inside the attempt is
 ordinary worktree-local state unless the operator or project explicitly routes
 the toolchain elsewhere.
 
-DDx's responsibility is to pass the caller's environment through unchanged to
-the agent process that runs inside the attempt worktree. DDx must not invent
+DDx's responsibility is to include the caller's environment and attempt
+worktree in the Fizeau request unchanged. Fizeau applies that environment to
+the concrete harness session. DDx must not invent
 toolchain-specific cache knobs, set or rewrite variables such as
 `CARGO_TARGET_DIR`, `GRADLE_USER_HOME`, `GOPATH`, `GOMODCACHE`,
 `npm_config_cache`, or `PIP_CACHE_DIR`, or choose a build-cache policy on
@@ -229,10 +236,9 @@ skill under the `ddx` skill tree and records readiness evidence in the
 layer-3 run record.
 
 `ddx work` wires this hook by default in both CLI and server-managed worker
-paths. Decomposition decisions request Fizeau's `smart` model-ref and run with a
-strong `MinPower` floor, defaulting to the smart/top-power class floor when no
-project-specific splitter override is configured. DDx does not choose the
-concrete model; it passes the raised power floor to Fizeau and preserves any
+paths. Decomposition decisions use a configured abstract strong `MinPower`
+floor. DDx does not select or set a profile, harness, provider, or model; it
+passes only the raised power floor to Fizeau and preserves any
 operator-supplied harness/provider/model passthrough constraints. If those
 constraints cannot satisfy the strong floor, DDx records readiness as
 unavailable (`readiness_error` / `intake_error`) instead of treating the bead as
@@ -343,7 +349,8 @@ reconciliation beads") are not layer-3 concerns. Those are skill or
 plugin compositions on top of the task execution layers.
 
 Layer 3 treats raw attempt evidence separately from durable bead action. When a
-worker stops, receives SIGTERM/SIGINT, loses its child agent process, or honors
+worker stops, receives SIGTERM/SIGINT, receives a typed disrupted/cancelled
+terminal outcome from Fizeau, loses the Fizeau service connection, or honors
 operator cancel before a terminal bead mutation, it follows TD-027 §12.2: preserve
 evidence, record the interruption/disruption, release the claim, and leave the
 bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
@@ -392,11 +399,12 @@ operator surface with an exhausted-auto-remediation marker.
   does not expect. Surface for operator.
 - `claimed_in_progress` — bead currently claimed by an active worker. No
   action; honored by claim semantics.
-- `provider_route_unavailable` — last dispatch failed because the selected
-  provider route is unavailable. In broad `ddx work` drains this remains
-  retryable: record the failed route, keep the bead open, and let the next
-  attempt choose a different live route. Targeted runs still surface the
-  provider hint.
+- `provider_route_temporarily_unavailable` — `Execute` returned public
+  `*fizeau.NoViableProviderForNow`. Release the bead claim, record the typed
+  evidence, pause queue claiming until its `RetryAfter`, then let a later request
+  route independently inside Fizeau. Other route/pin errors follow their public
+  typed operator-action semantics. Generic final `Error` text is never parsed
+  into this class.
 - `gated_by_budget_or_cooldown` — auto-remediation matched but
   `--max-recovery-cost` exhausted, cooldown active, or `--no-*` override set.
   Surface with the gate name.
@@ -455,25 +463,30 @@ evidence that more capable reasoning could plausibly change the result, DDx may
 retry the bead with a higher `MinPower`.
 
 Fizeau owns routing within the requested power bounds. A retry request says
-"use at least this much power" by raising `MinPower`; an explicit `MaxPower`, if
-supplied, remains a hard upper bound. Operator-supplied `--harness`,
+"use at least this much power" by raising `MinPower`; an explicit operator
+`MaxPower`, if supplied, remains an unchanged hard upper bound. Operator-supplied `--harness`,
 `--provider`, and `--model` values may be sent to Fizeau as passthrough
 constraints, but DDx does not interpret them. Each layer-1 record stores:
 
-- requested `MinPower` and optional `MaxPower`
+- requested `MinPower` and unchanged operator `MaxPower`, if any
 - requested passthrough constraints, if any
 - actual model and actual power reported by Fizeau
 - run outcome and DDx attempt outcome
 
-DDx may query Fizeau's available model/power catalog to choose escalation
-targets such as "retry using only top-power models." DDx uses the returned power
-numbers only to compute `MinPower` thresholds; Fizeau still chooses the
-concrete model.
+DDx must never originate, rank, infer, loosen, rewrite, or remove a harness,
+provider, model, or `MaxPower` constraint. Review strength and retry escalation
+change `MinPower` only. The only concrete pins or upper bound DDx can send are
+explicit operator values forwarded verbatim.
+
+DDx may use the prior Fizeau terminal outcome's abstract actual-power fact plus
+DDx-owned attempt/review evidence to raise a later request's `MinPower`. It does
+not inspect the model catalog to select or infer a profile, harness, provider,
+model, route, or fallback; those remain Fizeau policy.
 
 Passthrough constraints stay sticky across retries. DDx may increase `MinPower`
 between attempts, but it must not alter or drop operator-supplied
 harness/provider/model passthrough values to make escalation work. If the
-combination is invalid or constraining, the agent owns that typed error or
+combination is invalid or constraining, Fizeau owns that typed error or
 actual route. DDx stops with `blocked_by_passthrough_constraint` or
 `agent_power_unsatisfied`, records the evidence, and reports operator action
 required; it does not remove pins, widen pins, call any route-selection helper,
@@ -497,11 +510,12 @@ Power retry is not eligible for deterministic setup or operator-action
 failures:
 
 - dirty worktree, merge/land conflict, missing checkout, invalid bead metadata,
-  unresolved dependencies, config parse errors, missing harness binaries,
-  authentication failures, command-not-found/toolchain setup failures
+  unresolved dependencies, or DDx config parse errors; and runtime
+  setup/authentication/tool-availability failures only when the pinned Fizeau
+  API exposes a public typed classification
 - readiness ambiguity, missing acceptance criteria, spec contradictions,
   decomposition overflow, review errors, reviewer context overflow, claim races,
-  routing preflight rejection, quota/transport disruption, and any other class
+  public typed route unavailability or quota/transport disruption, and any other class
   where the implementer did not receive valid task context and an opportunity to
   act
 - `blocked_by_passthrough_constraint` / `agent_power_unsatisfied`
@@ -509,8 +523,9 @@ failures:
   substitute `--harness`, `--provider`, or `--model`
 
 Every retry/stop decision records the classification and evidence used. The
-policy may inspect DDx attempt outcomes and the agent's typed status; it must
-not branch on concrete provider/model identity.
+policy may inspect DDx attempt outcomes, public typed immediate errors, and
+Fizeau's final status. Current generic final `Error` text is opaque and cannot
+create a cause class. Policy must not branch on concrete provider/model identity.
 
 ADR-024 is the decision record for this policy. FEAT-010 owns when `ddx try` or
 `ddx work` schedules a retry, how no-progress and stop conditions are recorded,
@@ -565,6 +580,9 @@ A **repair cycle** is a cycle triggered when the prior cycle's review verdict is
 attempt worktree and is **append-only** — no `git reset`, `git commit --amend`,
 `git squash`, or `git rebase` against the prior candidate is permitted. The
 repair prompt includes the prior review group's findings as required context.
+It uses the attempt's unchanged abstract power. If capability-sensitive
+evidence warrants raising `MinPower`, DDx ends and preserves this attempt, then
+allocates a distinct attempt ID/workspace for the stronger request.
 
 A **read-only tool reviewer** is a reviewer agent that runs in the still-live
 attempt worktree with access to read-only filesystem tools (file reads,
@@ -648,22 +666,23 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    races skip the bead for the current pass without cooldown.
 3. **Primary implementation cycle.** Run one layer-2 implementation attempt.
    A candidate result records `base_rev`, `result_rev`, implementation run ids,
-   route/power facts, verification output, and cost. Already-satisfied
+   abstract power and opaque route audit facts, verification output, and cost. Already-satisfied
    no-changes may close only after the required verification evidence exists;
    otherwise no-changes outcomes follow TD-031 §6.1 NoChangesContract.
 4. **Adversarial pre-close review.** Review is enabled by default. For every
-   close-eligible `result_rev`, layer 2 pins a candidate ref and dispatches two
-   read-only tool reviewer runs **in the still-live attempt worktree, before
-   land**, each carrying `role=reviewer`, a stronger `MinPower` floor than the
-   implementer, and correlation metadata (`review_group_id`, `result_rev`,
-   reviewer slot, and implementer route facts). The bounded evidence bundle is
-   the canonical review input; same-worktree read-only tool access is
-   supplemental. Close is permitted only when the aggregate review is unanimous
-   `APPROVE` with per-AC evidence.
+   close-eligible `result_rev`, layer 2 pins a candidate ref and dispatches one
+   read-only tool reviewer run **in the still-live attempt worktree, before
+   land**, carrying `role=reviewer`, a stronger `MinPower` floor than the
+   implementer, and correlation metadata (`review_group_id`, `result_rev`, and
+   reviewer slot). High-risk labels or an explicit review-tier override dispatch
+   two reviewers. Concrete implementer route facts are not review request input.
+   The bounded evidence bundle is the canonical review input; same-worktree
+   read-only tool access is supplemental. Close is permitted only when every
+   required reviewer returns `APPROVE` with per-AC evidence.
 5. **Review classification.** Any evidenced `REQUEST_CHANGES` or `BLOCK`
    prevents close. `review_fixable_gap` schedules a repair cycle on the same
    bead when `repair_max_cycles` allows, injecting the review findings as
-   required repair context and optionally raising `MinPower`; it preserves the
+   required repair context at the unchanged request power; it preserves the
    retry path and does not move the bead to `status=proposed`.
    `review_spec_gap`, `review_missing_acceptance`, `review_too_large`, and
    non-mechanical unsafe or out-of-scope findings enter the TD-031
@@ -679,12 +698,14 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    active claim, move the bead to `status=proposed`, and prevent close. The
    `review_fixable_gap` path stays on the automatic retry track instead of
    converting into operator review.
-6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
-   context cancellation, routing preflight rejection, and worker disruption are
-   not model-capability failures. They emit structured evidence and either stay
-   immediately retryable or use a bounded retry-after when the same class is
-   time-based. HTTP 429 retry happens inside one attempt with `rate-limit-retry`
-   events.
+6. **Infrastructure fallback.** Fizeau owns transport, quota, rate-limit,
+   runtime setup, route exhaustion, provider fallback, and continuation inside
+   one session. DDx consumes the current public immediate error types and final
+   status, plus richer cause/stage only after a compatible CONTRACT-003 release
+   is pinned. It records generic final error text as opaque evidence. Only
+   public `NoViableProviderForNow.RetryAfter` (or a future equivalent typed
+   field) may release the bead claim and pause queue claiming; DDx never derives
+   retry delay or route action from text or concrete identity.
 7. **Capability retry.** Failed checks, `review_fixable_gap`,
    capability-insufficient attempts, and eligible no-changes-after-attempt may
    schedule a higher-power retry by raising the next request's `MinPower`.
@@ -719,9 +740,10 @@ Common fields:
   bundles) stored alongside the record rather than inline
 
 Layer extensions:
-- `layer1` — prompt reference, agent config, model id, token usage,
-  upstream session id, structured response pointer, normalized
-  `ToolCallEntry` stream captured at drain time
+- `layer1` — prompt reference, DDx request/correlation facts, public Fizeau final
+  outcome, Fizeau-reported model/power/usage, and opaque `SessionLogPath` and
+  response artifact pointers. DDx does not require a session id from an opaque
+  non-terminal routing event and does not normalize a tool-event stream.
 - `layer2` — bead id, base revision, workspace path, finalization mode
   (`merge` | `preserve`), child layer-1 run ids, evidence-bundle pointer
 - `layer3` — queue snapshot pointer, stop-condition evaluation log,
@@ -774,14 +796,17 @@ which condition fired.
    configurable). A valid implementation attempt is one where DDx created a
    checkout, supplied task context to the implementer, and the implementer had
    an opportunity to act. Intake blocks, decomposition, claim races, routing
-   preflight rejection, quota/transport/auth/tool setup failures, review errors,
+   typed route/quota/transport/auth/tool setup failures, review errors,
    and operator-action classes do not increment this counter.
 5. **`signal`** — a SIGINT/SIGTERM was received. On the first signal, DDx
    prints `Cancel received, shutting down gracefully`, cancels the active
-   command context, stops claiming new beads, and gives the in-flight
-   `ddx try` (if any) one cooperative cleanup path to preserve evidence,
-   release its claim, and leave the bead re-claimable. A second signal may
-   hard-abort the process.
+   command context passed to Fizeau `Execute`, and stops claiming new beads.
+   Fizeau owns concrete harness/process-tree cancellation and terminates the
+   public execution stream. DDx then gives the
+   in-flight `ddx try` (if any) one repository cleanup path to preserve
+   evidence, release its claim, and leave the bead re-claimable. A second
+   signal may hard-abort the DDx worker; it still does not authorize DDx to
+   discover or signal a nested Fizeau harness/provider process.
 6. **`resource_exhausted`** — DDx cannot safely create or publish execution
    state because a required execution root is out of bytes, out of inodes, not
    writable, or cannot register/remove git worktrees. Resource exhaustion is
@@ -847,9 +872,10 @@ path or ref.
 DDx-owned cleanup scope includes execution workspaces, helper scratch roots
 created beside the configured execution root, legacy `$TMPDIR/ddx-exec-wt`
 resources, DDx-created test and e2e scratch roots, generated test binaries,
-run-state or liveness files, and stale attempt-descendant process groups whose
-owning attempt has reached a terminal state or whose process-group heartbeat
-has expired. The cleanup manager may delete only DDx-owned paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
+and DDx run-state or worker/workspace liveness files. It may supervise and reap
+only DDx worker processes that DDx itself launched. Nested Fizeau
+harness/provider process trees are Fizeau-owned and are never scanned, adopted,
+signaled, or reaped by DDx. The cleanup manager may delete only DDx-owned paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
 `ddx-test-bin-`, `ddx-test-binary-`, `ddx-lifecycle-`,
 `ddx-agent-support-keepalive`, `ddx-config-anchor-`, `ddx-exec-keepalive`,
 `ddx-metric-keepalive`, `ddx-metaprompt-keepalive`,
@@ -864,19 +890,15 @@ Deletion is permitted only when all of the following hold:
 - **Metadata-backed paths**: the `cleanup.json` liveness record is expired or
   the owning attempt has reached a terminal state.
 - **Metadata-less recognized-prefix paths**: the directory's mtime is at least
-  **6 hours** old and no live PID or active session is attached.
-- **Attempt-descendant process groups**: the owning attempt is terminal, or the
-  process group leader no longer matches the recorded attempt PID, or no live
-  heartbeat confirms the group is still executing bead work.
+  **6 hours** old and no live DDx worker/workspace lease is attached.
 
 The manager must preserve published evidence, active workspaces, and anything
 outside DDx-owned roots.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
-- once at startup, before the first queue claim; this pass includes a
-  process-group census to reap any stale attempt-descendant groups left by
-  prior runs
+- once at startup, before the first queue claim; this pass inventories stale
+  DDx workspaces and DDx-owned workers only
 - before the next claim after any setup/finalization failure
 - periodically while a long-lived poll worker remains active
 - during graceful signal shutdown before exit
@@ -887,11 +909,12 @@ workers do not all prune at once. It is conservative and DDx-scoped: it may
 remove stale unregistered directories under DDx temp roots, registered DDx
 worktrees or metadata-backed workspaces whose attempt is terminal or whose
 liveness marker is stale, stale
-heartbeat/liveness files for dead PIDs, and partial setup directories that were
+DDx worker/workspace heartbeat files for dead DDx worker PIDs, and partial setup directories that were
 never published as complete evidence. It must not remove preserved workspaces,
 `refs/ddx/iterations/...`, complete `.ddx/runs/<id>` or
 `.ddx/executions/<attempt-id>` evidence, active workspaces with live
-PID/session liveness, or non-DDx directories.
+DDx worker/workspace liveness, Fizeau-owned session/process resources, or
+non-DDx directories.
 
 Cleanup is observable but not noisy. Routine passes are trace/debug or worker
 events. Passes that reclaim significant bytes or inodes emit an operator-visible
@@ -899,16 +922,17 @@ summary such as `cleanup: removed 37 stale ddx worktrees, freed 14210 inodes`.
 Resource exhaustion after cleanup is a hard visible stop message and a layer-3
 `resource_exhausted` disposition.
 
-Cleanup supports a **dry-run** mode that reports what would be removed or reaped
+Cleanup supports a **dry-run** mode that reports what DDx-owned filesystem or
+worker resources would be removed or reaped
 without taking action, and an **apply** mode that performs the removal and
-reports results. Both modes emit operator-visible process findings separately
-from filesystem reclamation: discovered stale process groups, reaped PIDs, and
-any groups that could not be reaped are included in the summary so operators
-can see what process cleanup found and what it did.
+reports results. Both modes distinguish DDx-owned worker findings from
+filesystem reclamation. Fizeau child-process state is outside DDx runtime
+observability; only upstream conformance/chaos evidence or a future public
+typed disposition may establish a CONTRACT-003 process-lifetime violation.
 
 Cleanup reporting includes scratch roots removed, bytes and inodes reclaimed,
-preserved paths, process groups reaped, and blocked warnings so operators can
-see why cleanup stopped short.
+preserved paths, DDx workers reaped, upstream conformance references,
+and blocked warnings so operators can see why cleanup stopped short.
 
 ### `ddx work` Run Modes
 
@@ -1267,12 +1291,13 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     `.ddx/config.yaml`.
 14. **Execution cleanup** — `ddx try` and `ddx work` remove stale DDx-owned
     execution worktrees, DDx-created test/e2e scratch roots, generated test
-    binaries, liveness files, and stale attempt-descendant process groups
-    through inline, loop, and background cleanup paths without deleting
-    preserved attempts or published evidence. The startup pre-claim pass
-    includes a process-group census to reap stale descendants from prior runs.
-    Cleanup supports dry-run and apply modes; both report operator-visible
-    process findings separately from filesystem reclamation.
+    binaries, liveness files, and DDx worker processes that DDx launched through
+    inline, loop, and background cleanup paths without deleting preserved
+    attempts or published evidence. Nested Fizeau harness/provider trees are
+    explicitly excluded; Fizeau owns their lifecycle. Cleanup supports dry-run
+    and apply modes. Provider-tree lifetime is verified only by upstream Fizeau
+    conformance and boundary chaos tests; DDx runtime cleanup does not census,
+    report, adopt, or reap a Fizeau process.
 15. **Resource preflight** — `ddx try` validates writable execution roots and
     free bytes/inodes before claim; failed validation may trigger one cleanup
     retry, and `ddx work` / server-managed workers run cleanup before claim
@@ -1311,16 +1336,17 @@ Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScrat
   re-claimable. Budget exhaustion is a recheckable signal, not a terminal state;
   an operator may raise the cap or the bead may be retried in a later drain.
   See ADR-024 Per-Bead Budget.
-- **Determinism:** the persisted record reflects the exact prompt,
-  response, logs, and structured result of one invocation.
+- **Determinism:** the persisted record reflects the exact DDx request, typed
+  Fizeau terminal outcome, opaque Fizeau artifact references/copies, and
+  DDx-owned repository result; it does not normalize Fizeau logs.
 - **Durability:** record writes are atomic or serialized so concurrent
   writers cannot leave partial records.
-- **Observability:** stored records are human-readable enough for
-  debugging and machine-parseable enough for automation.
+- **Observability:** DDx-owned envelopes are human-readable and
+  machine-parseable; Fizeau-owned attachments remain opaque.
 - **Portability:** records remain repo-local and file-backed; no hosted
   service or database is required.
 - **Low overhead:** layer-1 record bookkeeping adds minimal overhead
-  beyond the underlying agent invocation.
+  beyond the underlying Fizeau session.
 - **Payload resilience:** large prompt, response, log, and bundle
   bodies are stored as attachments and never require rewriting a shared
   history file to persist one run safely.
@@ -1447,20 +1473,11 @@ the run-layer fields used by FEAT-008:
 - `stderr`
 - `bundleFiles[]`
 
-The tool-call resolver is the `toolCalls(first, after)` stream exposed via
-`runToolCalls(id:, first:, after:)`. It returns the normalized tool-call
-stream as a paginated `RunToolCallConnection`, where each node projects the
-canonical drain-time `ToolCallEntry` shape:
-
-- `tool`
-- `input`
-- `output`
-- `duration_ms`
-- `error`
-
-`ToolCallEntry` is the normalized agent-side record of one tool execution. DDx
-persists the stream at drain time so the run substrate can page the stored
-sequence without rehydrating raw agent logs.
+Tool/session detail is a Fizeau-owned opaque attachment or Fizeau-provided read
+projection. DDx may expose an attachment link or proxy a Fizeau read response,
+but it does not construct a canonical `ToolCallEntry`, parse native logs, or
+rehydrate tool calls. A typed paginated tool API, if desired by the UI, must be
+added to CONTRACT-003 and proxied without DDx inventing a second schema.
 
 The `bundleFile(path)` lookup is exposed via `runBundleFile(id:, path:)`. It
 is confined to the run's bundle root, rejects path traversal, absolute paths,
@@ -1477,13 +1494,13 @@ FEAT-008, FEAT-019, and FEAT-021:
 | Chip | Substrate row | Detail backing for row expansion |
 |---|---|---|
 | `work` | `layer: 3` Run record | Layer-3 record's queue inputs / stop-condition log / child layer-2 attempt ids; the shared tab strip exposes `overview` only |
-| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, result, checks, verdict); the shared tab strip exposes `overview`, `prompt`, `response`, `tools`, and `evidence` |
-| `run` | `layer: 1` Run record | The associated `AgentSession` row (prompt / response / stderr / billing / cached-token detail) joined onto the layer-1 record; the shared tab strip exposes `overview`, `prompt`, `response`, `session`, `tools`, and `evidence` |
+| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, DDx result, checks, verdict, and opaque Fizeau refs); the shared tab strip exposes `overview`, `prompt`, `response`, `tools`, and `evidence` where Fizeau supplies those projections |
+| `run` | `layer: 1` Run record | Typed Fizeau terminal envelope plus opaque prompt/response/session/tool attachments or Fizeau-provided projections; the shared tab strip exposes only details the Fizeau contract supplies without DDx parsing native logs |
 
-`AgentSession` rows that have no parent layer-2 attempt (raw `ddx
-agent log` invocations) surface as synthesized `layer=run` Runs rows
-keyed by session id, so no agent-session row is dropped during the
-Sessions/Executions tab retirement.
+Fizeau sessions that have no parent layer-2 attempt surface as `layer=run`
+records keyed by the DDx run id and linked opaque upstream session-log path. Migration may
+retain legacy `AgentSession` rows as opaque attachments, but DDx does not keep
+that legacy schema as a second session-log authority.
 
 The shared tab strip is:
 
@@ -1504,9 +1521,9 @@ The shared tab strip is:
   `.ddx/runs/<run-id>/` with `layer: 1` and the layer-1 extension
   populated.
 - Given the run completes, when I run `ddx runs show <run-id>`, then I
-  see common fields, the layer-1 extension, requested `MinPower`/`MaxPower`,
-  actual model/power, requested passthrough constraints if supplied, and attachment
-  references.
+  see common fields, the layer-1 extension, requested `MinPower`, unchanged
+  operator `MaxPower` when supplied, actual model/power audit facts, requested
+  passthrough constraints if supplied, and attachment references.
 
 ### US-091: Developer Inspects a Layer-2 Bead Attempt
 
@@ -1550,19 +1567,22 @@ spinning, or interrupted
   merged side-effect (default `N = 3`, configurable), then the next
   stop-condition evaluation triggers `no_progress` and the layer-3 record
   terminates with that disposition.
-- Given a candidate is skipped by readiness, claim race, routing preflight,
-  quota/transport/auth/tool setup failure, review error, or operator-action
-  class, then that iteration does not increment the no-progress counter.
+- Given a candidate is skipped by readiness or claim race, or the pinned Fizeau
+  API reports a public typed route/quota/transport/auth/tool-setup failure,
+  review error, unclassified final failure, or operator-action class, then that
+  iteration does not increment the no-progress counter.
 - Given retry policy permits escalation before `no_progress` fires, when
   a retry is scheduled, then the next layer-1 run raises `MinPower`
-  and records the actual model/power returned by the agent.
+  without setting a harness/provider/model and records the actual model/power
+  returned by Fizeau.
 - Given the original invocation supplied `--harness`, `--provider`, or
   `--model`, then retries pass the same values through unchanged and DDx does
   not inspect those values when choosing the next requested `MinPower`.
-- Given retry escalation would exceed the power available under hard
-  passthrough pins, then DDx stops with `blocked_by_passthrough_constraint` or
-  `agent_power_unsatisfied`, records the Fizeau-supplied evidence, and does not
-  mutate the pins or call any route-selection helper.
+- Given Fizeau reports that the stronger `MinPower` is incompatible with an
+  operator `MaxPower` or hard passthrough pin, then DDx stops with
+  `blocked_by_passthrough_constraint` or `agent_power_unsatisfied`, records the
+  Fizeau-supplied evidence, and does not inspect or mutate the constraints or
+  call any route-selection helper.
 
 ### US-094: Cross-Layer Run History
 

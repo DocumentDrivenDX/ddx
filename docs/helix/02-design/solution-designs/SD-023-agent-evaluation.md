@@ -15,606 +15,694 @@ ddx:
 
 ## Purpose
 
-FEAT-019 adds an evaluation layer above DDx's existing agent execution
-surface. The layer answers three operator questions:
+FEAT-019 adds an evaluation layer above DDx's work tracker and git-aware
+executor. The layer answers questions about DDx-controlled inputs and observed
+work results:
 
-- What changed when the same prompt ran through multiple harness/model arms?
-- Which arm produced the highest-quality result under an explicit rubric?
-- What would another harness or model have done for a preserved bead attempt?
+- Did a prompt, rubric, or work-fact change improve the result?
+- Did a higher abstract `MinPower` floor produce stronger work?
+- Does a preserved bead attempt still reproduce from the same base revision?
+- Did a stronger reviewer find problems that a weaker review missed?
 
-This design defines the architecture for comparison isolation, grading,
-benchmark aggregation, and replay. It does not replace `ddx try`; it evaluates
-preserved executions and comparison runs produced by existing task-execution
-primitives.
+DDx does not answer which concrete harness, provider, or model should perform
+the work. Fizeau is the full agent runtime and owns that decision. Returned
+route identity is execution audit evidence, never an evaluation variable or a
+policy input.
+
+This design is authoritative for TP-019. Tests derived from TP-019 must enforce
+the ownership boundary and the current Fizeau public service contract described
+here.
 
 ## Scope
 
-- Isolated comparison arms for side-effecting agent runs
-- `ComparisonRecord` and `ComparisonGrade` semantics
-- Grading rubric loading, prompt construction, parsing, and score attachment
-- Replay source-of-truth across execution bundles, session logs, and bead
-  metadata
-- Relationship between comparison, benchmark, quorum, grade, and replay
-  commands
+In scope:
+
+- Isolated DDx worktrees for side-effecting comparison arms
+- Route-neutral comparison-arm identity and persistence
+- Prompt, rubric, abstract `MinPower`, and work-fact experiments
+- Unchanged passthrough of explicit operator constraints
+- Repository diff, gate, commit, and evidence capture
+- Route-blind grading through a stronger Fizeau request
+- Benchmark aggregation over DDx-controlled variables
+- Replay from preserved DDx execution evidence
+- Current Fizeau `Execute` request, event, final, error, and cancellation
+  semantics
 
 Out of scope:
 
-- Model-selection policy and escalation rules
+- Concrete harness, provider, endpoint, or model selection
+- Route catalogs, route preflight, provider health, quota inspection, or
+  DDx-managed fallback
+- Grouping, ranking, grading, warning, or policy by concrete route identity
+- Fizeau's session/tool loop, native logs, process tree, cancellation
+  implementation, or continuation implementation
 - Prompt optimization loops
 - Container or VM isolation
 - Cross-project evaluation
-- Replacing provider-native transcript stores
 
-## Existing Command Surface
+## Ownership Boundary
 
-The design uses several FEAT-019-adjacent primitives:
+The boundary is architectural, not an implementation convenience.
 
-- `compare-prompts`: immediate comparison dispatch. It runs N arms against the
-  same prompt and emits a `ComparisonRecord`.
-- `benchmark-suite`: suite runner. It expands suite arms/prompts into
-  repeated comparison dispatches and aggregates statistics.
-- comparison skill consensus mode: consensus gate. It reuses multi-arm dispatch
-  ideas but returns pass/fail consensus, not graded comparison evidence.
-- `replay-bead`: bead replay entry point. This design tightens its
-  evidence lookup and diff-comparison contract.
-- grading workflows over `ddx run`: rubric grades on a persisted comparison.
-  The grading library path defines the record and parser shape.
-- `ddx runs list/show`: inspection surface for persisted comparison records
-  once they are stored in the FEAT-010 run substrate.
+| Concern | Owner | DDx behavior |
+|---|---|---|
+| Beads, work selection, dependencies, and attempt state | DDx | Select and track work |
+| Base revision, worktree, repository gates, diff, merge/preserve | DDx | Create and evaluate repository evidence |
+| Prompt, rubric, role, correlation, permissions, and work facts | DDx | Construct the work request |
+| Retry and review strength | DDx | Raise abstract `MinPower` for stronger review intent, or on a distinct new DDx attempt after capability-sensitive evidence; never for infrastructure/route failure |
+| Explicit operator pins and `MaxPower` | Operator | Pass through unchanged; never infer, relax, or rewrite |
+| Harness, provider, endpoint, model, and fallback | Fizeau | Do not select, validate, rank, or emulate |
+| Agent loop, tools, compaction, and native transcript | Fizeau | Treat as runtime-private |
+| Native session log | Fizeau | Retain only its opaque public reference |
+| Cancellation and process-tree cleanup | Fizeau | Cancel the `Execute` context; do not kill harness processes |
+| Harness-specific continuation | Fizeau | Do not implement or emulate a DDx continuation API |
+| Final application text, usage, cost, and actual route | Fizeau | Decode public final fields; actual route is audit-only |
+| Bead-attempt and evaluation result | DDx | Decide from Fizeau outcome plus repository evidence |
 
-The design keeps these surfaces separate because they answer different
-questions. `quorum` answers "did enough agents agree or pass?" Comparison and
-benchmark answer "what did each arm do and cost?" Grading answers "which result
-best satisfies this rubric?" Replay answers "what would this other harness have
-done from the same evidence-backed starting point?"
+A successful Fizeau session does not by itself make a DDx work item or
+comparison arm successful. DDx still evaluates repository gates, required
+effects, review evidence, and the governing rubric. Conversely, DDx never
+reimplements the runtime in order to produce those effects.
 
-## Architecture Overview
+## Current Fizeau Service Contract
 
-```text
-prompt source
-    |
-    v
-comparison dispatcher
-    |
-    +-- arm A sandbox worktree
-    |       --> harness/model --> output + tool log + diff + post-run
-    |
-    +-- arm B sandbox worktree
-    |       --> harness/model --> output + tool log + diff + post-run
-    |
-    v
-ComparisonRecord
-    |
-    +-- grade pipeline --> ComparisonGrade[]
-    |
-    +-- benchmark aggregation --> per-arm suite statistics
-    |
-    +-- compare inspection --> list/show/json
+This design targets the public Fizeau v0.14.50 in-process contract:
+
+```go
+Execute(
+    ctx context.Context,
+    req fizeau.ServiceExecuteRequest,
+) (<-chan fizeau.ServiceEvent, error)
 ```
 
-Replay starts from a bead or execution attempt instead of an arbitrary prompt:
+### Request Construction
+
+DDx may populate request fields that describe the work, including:
+
+- `Prompt` and `SystemPrompt`
+- `WorkDir`
+- `Role` and `CorrelationID`
+- `Permissions`, timeouts, estimated prompt size, and tool requirement facts
+- abstract `MinPower`
+- explicit operator-supplied `MaxPower`, `Harness`, `Provider`, `Model`, and
+  `Policy`, copied without modification
+
+DDx must leave concrete route fields unset when the operator did not provide
+them. It must not derive them from an arm label, task class, rubric, benchmark
+suite, prior `RoutingActual`, cost, usage, or a Fizeau diagnostic surface.
+DDx must not populate `SelectedRoute` as a route choice.
+
+An operator-supplied constraint remains byte-for-byte the same on every new
+operation unless the operator changes it. If a higher DDx `MinPower` conflicts
+with an operator pin or cap, Fizeau reports the incompatibility. DDx records the
+outcome and requests operator action; it does not remove the pin or choose an
+alternative.
+
+### Immediate Errors
+
+`Execute` may return an error before it returns an event channel. DDx records
+that as an immediate Fizeau operation error. It must not invent a final event,
+start a route fallback, or parse error text to select another route.
+
+The current public transient queue signal is an immediate
+`*fizeau.NoViableProviderForNow`. Its `RetryAfter` is the only Fizeau retry time
+DDx may use. A worker or evaluation scheduler may defer new work until that
+instant after releasing any claim or attempt resources. `RetryAfter` is not
+present on `ServiceFinalData` and must not be synthesized from a final error
+string.
+
+Other immediate errors may retain their public Go error identity for display
+and stable classification when the contract defines one. They do not authorize
+DDx to inspect routing internals or perform concrete fallback.
+
+### Event Stream And Final Data
+
+After `Execute` returns a channel, Fizeau owns the session until the stream
+ends. DDx may forward non-final `ServiceEvent` values and their metadata as
+opaque evidence, but it must not parse tool calls, reconstruct a tool loop, or
+derive DDx worker state from native runtime events.
+
+DDx decodes the public final event as `fizeau.ServiceFinalData`:
+
+- `Status`
+- `ExitCode`
+- `Error`
+- `FinalText`
+- `DurationMS`
+- `Usage`
+- `Warnings`
+- `CostUSD`
+- `SessionLogPath`
+- `RoutingActual`
+
+`FinalText` is the application response consumed by grading and other declared
+DDx output schemas. `SessionLogPath` is an opaque native-log reference. DDx
+does not parse that file to recover output, tools, usage, failures, or routing.
+
+The current generic final `Error` string has no public typed cause or stage.
+DDx stores it verbatim as opaque, unclassified evidence. It must not parse the
+string for retry, fallback, escalation, grouping, warning, or route policy.
+`Status` and `ExitCode` contribute to the operation outcome independently of
+that opaque text.
+
+`RoutingActual` may be copied verbatim into a per-operation audit envelope. Its
+concrete harness, provider, server, model, fallback-chain, and failure-class
+fields must never:
+
+- define or relabel a comparison arm;
+- enter the grading prompt or grading rubric inputs;
+- select a later request or change its constraints;
+- drive warnings, retry, escalation, or review policy;
+- become a benchmark grouping, ranking, or quality dimension.
+
+The abstract returned power may be retained as audit evidence and may inform a
+later `MinPower` floor where ADR-024 permits it. Concrete identity remains
+audit-only.
+
+A closed stream without a valid final event is a Fizeau contract failure, not
+an agent-quality result. A malformed final payload is likewise a contract
+failure. DDx preserves the available envelope and does not repair it by reading
+native logs.
+
+### Cancellation And Continuation
+
+DDx cancels an in-flight operation by canceling the context passed to
+`Execute`. Fizeau owns termination of the active agent, subprocess group,
+descendants, tool loop, event stream, and native session record. DDx does not
+send signals to a concrete harness or inspect a process tree.
+
+Fizeau v0.14.50 has no public `Continue` API. DDx therefore exposes no
+continuation implementation and does not reconstruct one from session logs or
+provider-native identifiers. Replay is a new `Execute` operation built from
+preserved DDx evidence. If Fizeau later publishes a continuation contract,
+Fizeau still owns its semantics and DDx may only consume that public contract.
+
+## Evaluation Architecture
 
 ```text
-bead id
-    |
-    v
-execution bundle + session log lookup
-    |
-    v
-reconstruct prompt + base revision + original result diff
-    |
-    v
-single-arm sandbox run
-    |
-    v
-ReplayComparison
+DDx evaluation plan
+  prompt/rubric/MinPower/work-fact variants
+  + unchanged explicit operator constraints
+                    |
+                    v
+          DDx comparison dispatcher
+                    |
+         +----------+----------+
+         |                     |
+         v                     v
+  DDx worktree A        DDx worktree B
+         |                     |
+         +--- Execute(ctx, request) ---+
+                    |
+                    v
+          Fizeau full agent runtime
+       route + session + tools + logs
+                    |
+                    v
+      public final envelope per operation
+                    |
+                    v
+  DDx diff/gates/evidence + ComparisonRecord
+                    |
+         +----------+----------+
+         |                     |
+         v                     v
+  stronger review        benchmark summary
+   via MinPower          by logical arm inputs
 ```
 
-The comparison dispatcher is the shared execution core. Benchmark and replay
-compose it; quorum remains a sibling that shares harness dispatch and
-parallelism but intentionally does not create comparison grades.
+The comparison dispatcher is DDx git-aware orchestration around repeated
+Fizeau operations. It is not an agent runtime and has no direct harness
+adapter. Benchmark and replay compose the same dispatcher.
 
-## Comparison Arm Isolation
+## Comparison Arms
 
-### Isolation Boundary
+### Logical Identity
 
-Each side-effecting arm runs in its own git worktree rooted at the same base
-revision. The worktree is the only filesystem boundary FEAT-019 requires.
+Each arm has a stable route-neutral `arm_id` and display label. Its identity is
+the declared experiment input, such as:
 
-Default comparison behavior:
+- prompt variant or prompt artifact reference;
+- rubric reference;
+- requested abstract `MinPower`;
+- role, permissions, timeouts, and other work facts;
+- no concrete route constraint; an operator passthrough envelope, when
+  supplied, is comparison-wide and identical on every arm.
 
-1. Resolve the base repository root from the requested `WorkDir`.
-2. Generate a comparison ID such as `cmp-<hex>`.
-3. For each arm, create a detached worktree under
-   `.worktrees/<comparison-id>-<arm-label>/` from the same base revision.
-4. Dispatch the harness with its working directory set to that worktree.
-5. Capture stdout/stderr-equivalent output from the harness result.
-6. Capture side effects with `git diff HEAD` plus untracked files.
-7. Run the optional post-run command in the same worktree and capture pass/fail.
-8. Remove all comparison worktrees unless `--keep-sandbox` was requested.
+The resolved harness, provider, or model is not part of the arm key, display
+label, deduplication key, or grade identity. Every label must be route-neutral
+regardless of who authors it. Labels should
+describe the experiment, for example `baseline-prompt`, `concise-prompt`,
+`min-power-6`, or `min-power-10`. Labels such as `claude-arm`, `codex-arm`, or
+model names are invalid because later grouping or grading would turn the label
+into route-keyed comparison policy.
 
-The base revision must be recorded on the comparison record when persistence
-lands. For `run --compare`, the base is the current `HEAD` at dispatch time.
-For replay, the base is derived from the original attempt evidence.
+Explicit operator pins may not differ between arms and are not part of arm
+identity or fingerprints. DDx stores one comparison-wide envelope and forwards
+it unchanged to every arm. It does not validate the values, advertise them as
+preferred routes, or include them in grouping, grading, or comparison policy.
 
-### Arm Identity
+### Isolation
 
-An arm is identified by:
+Every side-effecting arm runs in its own DDx-owned git worktree at the same
+base revision:
 
-- `harness`
-- resolved `model`
-- optional power/profile or explicit model pin
-- stable display label
-- sandbox path while retained
+1. Resolve the repository root and immutable base revision.
+2. Allocate a comparison ID and route-neutral arm IDs.
+3. Create a detached worktree under an arm-ID-keyed path.
+4. Construct one `ServiceExecuteRequest` using that worktree as `WorkDir`.
+5. Call Fizeau `Execute` and consume its public operation outcome.
+6. After the operation ends, capture repository diff, untracked files, result
+   revision, and configured repository gates.
+7. Remove the worktree unless the operator requested retention.
 
-Labels must be stable within a comparison. When the same harness appears
-multiple times with different models, callers should supply labels like
-`agent-fast` and `agent-smart`; otherwise report rendering cannot disambiguate
-grades and benchmark summaries.
+All arms start from the same base. Parallel execution is permitted because
+worktrees are independent. Sequential mode changes scheduling only; it does
+not change arm identity or record shape.
 
-### Parallelism
+DDx locks are held only around their short git or tracker mutations. No DDx
+lock may be held while waiting for Fizeau.
 
-Comparison arms run concurrently by default because each arm has an independent
-worktree. Sequential mode is an execution-policy flag, not a different record
-shape. Both modes produce the same `ComparisonRecord`; only timestamps and
-durations differ.
+### Evidence Per Arm
 
-### Side-Effect Capture
+DDx records two separate evidence classes.
 
-Every arm records two categories of evidence:
+DDx work evidence:
 
-- Common evidence for all harnesses: output, exit code, duration, token/cost
-  fields when available, post-run result, and git diff.
-- DDx Agent evidence: typed tool-call log entries for reads, writes, edits,
-  and bash calls. Subprocess harnesses do not expose this detail, so their
-  `tool_calls` field stays absent rather than an empty audit trail.
+- logical arm inputs and their provenance;
+- base revision and worktree result revision;
+- output schema parsed from `FinalText`, when declared;
+- repository diff and untracked-file manifest;
+- repository gate results;
+- attempt timestamps and DDx outcome;
+- cleanup warnings and retained worktree path, if any.
 
-The effect diff is the canonical side-effect summary for cross-harness
-comparison because every harness can produce it. Tool-call logs are richer
-diagnostic evidence, not the comparison key.
+Fizeau operation envelope:
+
+- immediate error or decoded `ServiceFinalData`;
+- public usage, cost, warnings, and duration;
+- opaque `SessionLogPath`;
+- exact `RoutingActual` in an audit-only subrecord.
+
+The repository diff is the cross-arm side-effect comparison. Fizeau's native
+tool and session logs are richer runtime evidence but remain outside DDx's
+evaluation schema.
 
 ### Failure Semantics
 
-Comparison dispatch is best-effort across arms:
+Comparison is best-effort across independent arms:
 
-- Worktree creation failure marks that arm failed and does not block other
-  arms whose worktrees were created.
-- Harness failure records `exit_code` and `error` on the arm.
-- Post-run failure records `post_run_ok=false` and captured output; it does not
-  erase the harness result.
-- Cleanup failures are warnings in the inspection output and should include
-  retained sandbox paths for manual removal.
+- worktree creation failure marks that arm as a DDx setup failure;
+- an immediate Fizeau error marks the operation failed or deferred according
+  to its public type;
+- a final non-success status records a Fizeau operation failure;
+- an opaque final `Error` is stored but not classified from its text;
+- a repository gate failure records a DDx work-result failure even if Fizeau
+  reported session success;
+- cleanup failure records a DDx warning and retained path;
+- one arm's failure does not erase evidence from completed arms.
 
-The comparison command exits non-zero only when dispatch itself cannot produce
-a record, such as invalid input, no arms, unreadable prompt, or repository root
-resolution failure.
+The comparison request itself fails only when DDx cannot construct a record,
+for example invalid comparison input, no arms, unreadable prompt, or unresolved
+repository root.
 
 ## Data Model
 
 ### ComparisonRecord
 
-`ComparisonRecord` is the durable unit for comparison, benchmark, and grading.
-
 Required fields:
 
 - `id`
-- `timestamp`
+- `started_at` and `ended_at`
 - `base_rev`
-- `prompt`
 - `prompt_source`
 - `arms[]`
 
 Optional fields:
 
-- `suite` and `prompt_id` when produced by benchmark
-- `correlation` for workflow identifiers such as `bead_id`, `attempt_id`, or
-  `spec_id`
-- `source_execution` when comparison consumes preserved execute-bead attempts
-- `grades[]`
-- `storage_refs` for large prompt, output, diff, and tool-log attachments
+- `suite` and `prompt_id` for benchmark runs;
+- `correlation` containing bead, attempt, spec, or execution IDs;
+- `source_execution` for replay or preserved-attempt comparison;
+- `rubric_ref` and rubric provenance;
+- `grades[]`;
+- `storage_refs` for large prompt, output, diff, and raw grader attachments.
 
 ### ComparisonArm
 
 Required fields:
 
+- `arm_id`
 - `label`
-- `harness`
-- `exit_code`
+- `input_fingerprint`
+- `requested_min_power`
+- `operation_outcome`
+- `work_outcome`
 - `duration_ms`
 
 Optional fields:
 
-- `model`
-- `power` or `profile`
-- `output`
-- `diff`
-- `tool_calls`
-- `post_run_out`
-- `post_run_ok`
-- `tokens`
-- `input_tokens`
-- `output_tokens`
-- `cost_usd`
-- `error`
-- `sandbox_path` when `--keep-sandbox` is used
+- prompt variant and work-fact references;
+- unchanged operator passthrough envelope;
+- parsed application output from `FinalText`;
+- diff, untracked-file manifest, result revision, and gate results;
+- usage and cost copied from the public final data;
+- opaque session-log reference;
+- immediate public error classification;
+- opaque final error text;
+- audit-only `routing_actual`;
+- retained worktree path.
+
+Concrete route identity must not be duplicated into top-level arm identity or
+summary fields. It remains nested in the Fizeau audit envelope.
 
 ### ComparisonGrade
 
 Required fields:
 
-- `arm`
+- `arm_id`
 - `score`
 - `max_score`
 - `pass`
 - `rationale`
+- `rubric_id` and `rubric_version`
+- `graded_at`
 
 Optional fields:
 
-- `grader_harness`
-- `grader_model`
-- `rubric_id`
-- `rubric_version`
-- `graded_at`
-- `raw_response_ref`
+- reviewer requested `MinPower`;
+- unchanged operator passthrough provenance;
+- raw grader-response attachment;
+- reviewer operation envelope with audit-only `RoutingActual`.
 
-Scores are rubric-local. DDx may summarize averages within a suite only when
-all grades use the same rubric identity and `max_score`.
+There are no grader-harness, grader-provider, or grader-model policy fields.
+Any concrete reviewer route returned by Fizeau stays inside the audit-only
+operation envelope and is excluded from grade identity and aggregation.
 
 ## Persistence
 
-Comparison records use the same attachment-backed pattern as agent sessions:
-small metadata is stored in a JSONL row, while large prompts, outputs, diffs,
-tool logs, and raw grader responses are stored as referenced attachments.
+Comparison, replay, benchmark, and grade records use the FEAT-010 run
+substrate. Small DDx metadata stays in the record envelope. Large prompts,
+application outputs, diffs, and raw grader responses use referenced DDx
+attachments.
 
-The persisted collection is logically `agent-comparisons`. The physical store
-may remain file-backed under `.ddx/` until a bead-backed collection is
-available. Readers must treat the logical schema as authoritative and avoid
-depending on the current file path.
+Fizeau's `SessionLogPath` is stored as an opaque external evidence reference.
+DDx does not copy its internal schema into `ComparisonRecord`, normalize it to
+DDx tool events, or use it as a recovery source for missing public final data.
 
 Persistence is required for:
 
-- `ddx runs list` inspection of comparison records
-- `ddx runs show <id>` inspection of one comparison record
-- grading workflows that append results to a comparison record
-- benchmark output history
-- CI gates that consume prior comparison IDs
+- evaluation list and detail views;
+- append-only grade events;
+- benchmark history;
+- replay provenance;
+- CI gates consuming stable comparison IDs.
 
-`compare-prompts --json` may still emit an ephemeral record without storing it
-when explicitly requested by tests or scripts, but the default operator workflow
-should persist records so grading and inspection can follow.
+Summary indexes may group by logical arm label, prompt/rubric identity,
+requested `MinPower`, work facts, outcome, time, bead, or suite. They must not
+group by, rank, or make claims about actual harness, provider, endpoint, model,
+fallback chain, failure class, or the comparison-wide operator passthrough.
+Per-operation `RoutingActual` may be shown only in an explicitly labeled audit
+detail.
 
 ## Grading Pipeline
 
 ### Rubric Resolution
 
-Grading is deterministic at the DDx orchestration layer even when the grader
-model is probabilistic. DDx resolves exactly one rubric before invoking the
-grader:
+DDx resolves one rubric before requesting a reviewer:
 
-1. If `--rubric <file>` is provided, load that file as the complete rubric.
-2. Else if the comparison record has a suite rubric reference, load it.
-3. Else use the built-in default rubric for correctness, completeness, and
-   implementation quality.
+1. Use an explicit rubric artifact when supplied.
+2. Otherwise use the suite's rubric reference when present.
+3. Otherwise use the versioned default rubric for correctness, completeness,
+   and implementation quality.
 
-DDx owns rubric loading and provenance. Workflow tools own rubric content.
+DDx owns rubric storage and provenance. Skills and operators own rubric
+content. A rubric may judge task outcomes and repository evidence; it must not
+score or express preference for a concrete route identity.
 
-### Prompt Construction
+### Route-Blind Review Prompt
 
-The grading prompt includes:
+The review prompt includes:
 
-- Rubric text and required JSON schema
-- Original task prompt
-- Per-arm label, harness, model, status, tokens, cost, and duration
-- Per-arm output
-- Per-arm diff
-- Post-run result and output when present
-- Tool-call summary for DDx Agent arms when present
+- rubric text and required JSON schema;
+- original task and logical experiment labels;
+- each arm's application output from `FinalText`;
+- each arm's repository diff and gate results;
+- declared work facts relevant to the rubric;
+- explicit notice when evidence was omitted or truncated.
 
-Large fields should be attached or truncated by explicit policy. Truncation
-must be called out in the prompt so the grader knows evidence is incomplete.
+It excludes:
 
-### Structured Response
+- `RoutingActual` and routing-decision events;
+- concrete harness, provider, endpoint, server, or model names;
+- fallback-chain and concrete route failure-class fields;
+- native Fizeau session/tool logs;
+- any DDx inference about which route is stronger, cheaper, or preferred.
 
-The grader must return JSON in this shape:
+Usage, cost, and latency may be displayed in operator reports under FEAT-014,
+but a quality grade must not use them unless the governing rubric explicitly
+defines a route-neutral resource constraint. Even then, the rubric evaluates
+the numeric work outcome, not the concrete route that produced it.
+
+### Stronger Reviewer Request
+
+The grading workflow creates a new Fizeau `Execute` operation with
+`Role="reviewer"` and a higher abstract `MinPower` according to ADR-024. It
+does not set `Harness`, `Provider`, `Model`, or `Policy` unless those exact
+values came from explicit operator passthrough. An operator `MaxPower` and
+pins remain unchanged.
+
+DDx parses the declared grade JSON from `ServiceFinalData.FinalText`. A valid
+example is:
 
 ```json
 {
   "arms": [
     {
-      "arm": "agent-smart",
+      "arm_id": "min-power-10",
       "score": 8,
       "max_score": 10,
       "pass": true,
-      "rationale": "Correct implementation with minor test coverage gaps."
+      "rationale": "The required behavior and regression tests are present."
     }
   ]
 }
 ```
 
-The parser may tolerate non-JSON preamble by extracting the first object, but
-the saved `raw_response_ref` must preserve the original response for audit.
+Malformed application JSON fails the grade event without mutating existing
+arm evidence. A reviewer immediate error or non-success final records a review
+operation failure. The generic final `Error` remains opaque and unclassified.
 
-### Attachment and Mutation
-
-Grading appends to the comparison record; it does not rewrite arm evidence.
-If a record already has grades for the same `rubric_id` and grader, DDx keeps
-the prior grades and appends a new grading event with a later `graded_at`
-timestamp. Consumers pick the latest grade by default and can request history.
-
-Malformed grader output fails the grade command without corrupting the
-comparison record. Harness failure records a grading error event and leaves
-existing grades untouched.
-
-### Pass/Fail
-
-The default pass threshold is `score >= 7` when `max_score` is `10`. Custom
-rubrics may specify another pass rule, but the grader must still return the
-boolean `pass` for each arm. DDx does not reinterpret score thresholds after
-the fact; it reports the grader's structured decision.
+Grades are append-only. Consumers select the latest grade for the same rubric
+version by default and may inspect history. Scores are comparable only within
+the same rubric identity and `max_score`.
 
 ## Benchmark Architecture
 
-`benchmark-suite` is a batch wrapper around comparison dispatch.
+`benchmark-suite` is a batch workflow over comparison records. A suite may
+define:
 
-Suite input:
+- name and version;
+- prompt variants;
+- requested abstract `MinPower` values;
+- rubric versions;
+- route-neutral work facts;
+- at most one operator passthrough envelope, copied identically to every arm
+  and excluded from aggregate keys;
+- post-operation repository gates;
+- timeout and sandbox policy.
 
-- `name`
-- `version`
-- `arms[]`
-- `prompts[]`
-- optional `sandbox`
-- optional `post_run`
-- optional `timeout`
-- optional rubric reference
+For each prompt, the workflow builds logical arms and calls the shared
+comparison dispatcher. The aggregate includes completed/failed/deferred arm
+counts, gate outcomes, token/cost totals, duration, and rubric-local grades.
 
-For each prompt, the benchmark runner builds `CompareOptions` from suite arms
-and calls the comparison dispatcher. The benchmark result stores every
-comparison record plus an aggregate summary:
+Aggregates are keyed only by suite, prompt/rubric version, logical arm,
+requested `MinPower`, and other DDx-controlled work facts. The benchmark must
+not produce per-harness, per-provider, per-model, fallback, or route-quality
+tables from `RoutingActual`.
 
-- completed arm count
-- failed arm count
-- total tokens
-- total cost
-- average duration
-- average score when a single rubric was applied
+## Replay
 
-Benchmark does not own a separate execution engine. Any fix to comparison
-isolation, diff capture, model resolution, or post-run behavior must flow
-through benchmark automatically.
-
-## Replay Source of Truth
-
-Replay has stricter provenance requirements than an ad hoc comparison because
-it claims to recreate the inputs to a prior bead attempt.
+Replay asks what a new operation does from preserved DDx evidence. It is not a
+Fizeau continuation and does not choose a replacement route.
 
 ### Source Precedence
 
-Replay reconstructs evidence in this order:
+DDx reconstructs replay inputs in this order:
 
-1. `.ddx/executions/<attempt-id>/` execution bundle, when the bead or session
-   links to an attempt ID.
-2. Agent session log entry linked by bead `session_id`.
-3. Provider-native session reference linked from the DDx session entry.
-4. Bead title, description, and acceptance criteria as degraded fallback.
+1. `.ddx/executions/<attempt-id>/` bundle linked by attempt evidence;
+2. DDx run/session envelope linked by the work item;
+3. bead title, description, and acceptance criteria as degraded fallback.
 
-The execution bundle is the best source for DDx execute-bead attempts because
-it is the preserved workflow artifact: manifest, prompt files, result files,
-base revision, result revision, hidden iteration ref, and session-log path
-travel together. The session log is the best source for harness metadata:
-harness, model, token counts, cost, native session ID, and transcript pointers.
+The execution bundle provides the exact prompt artifact, base revision, result
+revision, and original repository evidence. The DDx envelope may provide the
+opaque Fizeau `SessionLogPath` for audit, but replay never reads the native log
+to reconstruct a prompt or route.
 
-Neither source supersedes the other. Replay joins them:
+If exact prompt evidence is absent, replay marks `degraded_prompt=true`. If the
+base revision is absent, it uses the documented degraded fallback and marks
+`degraded_base=true`.
 
-- Use the execution bundle for base/result refs and immutable prompt artifact
-  when present.
-- Use the session log for harness/model/cost metadata and prompt transcript
-  when the bundle does not include a prompt body.
-- Use bead prose only when both execution and session evidence are missing.
+### New Operation
 
-### Prompt Reconstruction
+Replay creates a fresh worktree and a fresh `Execute` request. The operator or
+workflow may change only declared evaluation inputs: prompt, rubric,
+`MinPower`, or work facts. Any operator passthrough constraints are copied
+unchanged from the declared replay request and excluded from the comparison
+identity; changing concrete pins is not a DDx evaluation variable. DDx does not
+translate a request such as "try something stronger" into a concrete model; it
+raises `MinPower` and lets Fizeau route.
 
-For preserved execute-bead iterations, replay uses the exact prompt artifact
-stored in the execution bundle. This avoids rebuilding a prompt from today's
-bead state after labels, dependencies, instructions, or acceptance criteria
-may have changed.
-
-For non-execute-bead agent runs, replay uses the prompt stored or referenced by
-the linked session log.
-
-Fallback to bead prose must print "baseline session unknown" and mark the
-result `degraded_prompt=true` in JSON output.
-
-### Base Revision
-
-Default replay answers: "what would this harness have done then?"
-
-Base selection:
-
-1. Prefer execution bundle `base_rev`.
-2. Else use the parent of bead `closing_commit_sha`.
-3. Else use current `HEAD` and mark the baseline as degraded.
-
-`--at-head` explicitly switches the question to: "what would this harness do
-today?" In that mode replay uses current `HEAD` while still reporting the
-original source evidence for context.
-
-Tracker-only close commits must not masquerade as implementation baselines. If
-the only closing commit is a metadata-only tracker update, replay should omit
-the original diff comparison and report that the governed implementation
-baseline is unknown.
+The new result is compared with the original repository diff and DDx work
+outcome. The original and replay `RoutingActual` values remain separate
+audit-only envelopes and are excluded from the comparison grade.
 
 ### Original Diff
 
-Replay compares the new sandbox diff with the original result diff:
+DDx resolves the baseline diff in this order:
 
-1. Prefer execution bundle result diff when present.
-2. Else compute `git diff <base_rev> <result_rev>` when both refs are known.
-3. Else compute `git diff <closing_commit_sha>^ <closing_commit_sha>` when the
-   close commit is the implementation commit.
-4. Else report no original diff.
+1. preserved execution-bundle result diff;
+2. `git diff <base_rev> <result_rev>` when both refs are known;
+3. implementation close-commit diff when the close commit is known to contain
+   the governed work;
+4. no original diff, with explicit degradation evidence.
 
-The replay result is a comparison-style record with one new arm plus original
-baseline metadata. It can be graded using the same grade pipeline by treating
-the original result as a synthetic arm labeled `baseline`.
+Tracker-only close commits must not masquerade as implementation baselines.
 
-## Relationship to Execute-Bead Iterations
-
-`ddx try` remains the canonical bead-attempt workflow. FEAT-019 evaluation
-consumes preserved attempts; it does not create a separate evaluation-specific
-execution path.
-
-When an operator wants to try multiple approaches for one bead, the workflow
-tool should:
-
-1. Run `ddx try <id> --no-merge` multiple times from the same base revision.
-2. Preserve each attempt under its execution bundle and hidden iteration ref.
-3. Build a comparison record whose arms point at those preserved attempts.
-4. Grade the resulting comparison.
-5. Let workflow policy decide whether to land, retry, or escalate.
-
-The comparison record stores references to source attempts. It does not copy or
-redefine execute-bead evidence. Provenance inspection must trace back to the
-originating session ID, attempt ID, base revision, result revision, and hidden
-iteration ref.
-
-## CLI Contracts
+## Workflow Contracts
 
 ### Compare
 
-```bash
-compare-prompts --arm agent --arm claude --prompt task.md
-compare-prompts \
-  --arm agent:gpt-5.4:agent-smart \
-  --arm claude:opus:claude-smart \
-  --prompt task.md
-ddx runs list --type comparison
-ddx runs show cmp-abc123 --format json
-```
-
-`compare-prompts` creates records. `ddx runs list` and `ddx runs show` inspect
-persisted records. A future comparison workflow may assemble records from
-preserved `ddx try` attempts without rerunning agents.
+A comparison workflow accepts an explicit list of route-neutral arms. For
+example, a suite may compare the same task with `baseline-prompt` and
+`concise-prompt`, or at `MinPower` 6 and 10. It must reject a DDx-generated
+configuration that attempts to enumerate Fizeau routes or convert a route
+catalog into arms, and must reject concrete passthrough differences between
+arms.
 
 ### Grade
 
-```bash
-compare-prompts --grade cmp-abc123
-compare-prompts --grade cmp-abc123 --min-power 10 --rubric rubrics/code.md
-```
-
-The grade command mutates only the comparison record's grading events.
+A grade workflow accepts a comparison ID, rubric reference, and optional
+reviewer `MinPower`. It appends grade evidence only. It does not mutate arm
+inputs or choose a reviewer route.
 
 ### Benchmark
 
-```bash
-benchmark-suite --suite benchmarks/implementation.json --output results.json
-```
-
-Benchmark output includes full comparison records, not only summary rows.
-
-### Quorum
-
-```bash
-compare-prompts --policy majority --arm codex --arm claude --prompt review.md
-```
-
-Quorum does not persist comparison records by default because it is a gate, not
-an evaluation corpus. If a workflow needs graded quorum evidence, it should run
-comparison plus grade and then apply its own policy.
+A benchmark workflow expands prompts, rubrics, abstract power, and work facts
+into comparisons and persists the complete records plus route-neutral
+aggregates.
 
 ### Replay
 
-```bash
-replay-bead ddx-52d42ccb --model gpt-5.4
-replay-bead ddx-52d42ccb --model gpt-5.4 --at-head
-```
+A replay workflow accepts a bead or attempt ID plus allowed input changes. It
+starts a new `Execute` operation. It has no `Continue` call and no native-log
+reconstruction path.
 
-Replay emits JSON with source evidence flags so CI and reviewers can
-distinguish exact replay from degraded fallback.
+### Consensus
+
+Consensus is a workflow policy over route-blind result evidence. It may count
+independent arms or review verdicts, but it must not require route diversity,
+group votes by concrete route, or weight a verdict by harness/provider/model.
 
 ## Error Handling
 
-- Prompt file missing: command fails before creating arms.
-- No harnesses or arms: command fails before creating a comparison ID.
-- Worktree creation fails for one arm: arm records failure; other arms
-  continue.
-- Harness unavailable: arm records failure with service error.
-- Post-run command fails: arm records `post_run_ok=false`; command still
-  returns record.
-- Grader output is malformed: grade command fails; record evidence is
-  unchanged.
-- Comparison ID missing: grade/show command fails with not found.
-- Replay evidence missing: replay uses the next fallback and marks
-  degradation.
-- Base revision missing: replay uses `HEAD` and marks degradation unless
-  `--at-head` was explicit.
+| Condition | DDx behavior |
+|---|---|
+| Prompt or rubric missing | Fail before creating the affected arm |
+| No logical arms | Fail before creating a comparison record |
+| Worktree setup failure | Record DDx setup failure for that arm |
+| Immediate `*NoViableProviderForNow` | Record deferred operation and honor only its `RetryAfter` |
+| Other immediate `Execute` error | Record immediate Fizeau operation failure; no invented final |
+| Final non-success | Record operation failure from public status/exit data |
+| Generic final `Error` text | Store opaque and unclassified; do not parse |
+| Stream closes without valid final | Record Fizeau contract failure |
+| Context canceled | Record interruption after canceling the `Execute` context |
+| Repository gate fails | Record DDx work-result failure; preserve Fizeau envelope |
+| Grade JSON malformed | Fail grade event; leave comparison evidence unchanged |
+| Replay evidence incomplete | Use documented fallback and mark degradation |
+| Worktree cleanup fails | Warn with retained DDx worktree path |
 
-## Security and Privacy
+No error path authorizes DDx to enumerate, choose, retry, or fall back across
+concrete Fizeau routes.
+
+## Security And Privacy
 
 Comparison and replay records may contain proprietary code, prompts, diffs,
-tool outputs, and model responses. They are repository-local by default and
-must follow the same redaction and retention controls as agent sessions.
+gate output, and application responses. DDx stores them repository-locally by
+default and applies its artifact retention and redaction policy.
 
-Rubric files are local input. DDx does not fetch rubrics from the network.
+Rubrics are local DDx artifacts. DDx does not fetch them from the network.
 
-Worktree sandboxes prevent cross-arm filesystem interference, not malicious
-code execution. Stronger isolation belongs to DDx Agent tool permissions or
-external sandboxing.
+Fizeau owns native transcript retention and redaction. DDx stores only the
+opaque public reference and must not expose native logs through a second DDx
+schema. Worktree isolation prevents accidental cross-arm repository
+interference; it is not a malicious-code sandbox.
 
 ## Observability
 
-Every persisted comparison, grade, benchmark, and replay should include:
+Each persisted evaluation operation includes:
 
-- start and end timestamps
-- harness and model per arm
-- base revision
-- prompt source
-- session IDs produced by each arm
-- token and cost fields when available
-- post-run command and status
-- evidence degradation flags
+- DDx correlation, logical arm, timestamps, and requested `MinPower`;
+- prompt/rubric/work-fact provenance;
+- unchanged explicit operator constraints when present;
+- Fizeau public operation outcome, usage, cost, and opaque session-log ref;
+- repository base/result revisions, diff, and gate evidence;
+- degradation and cleanup flags;
+- audit-only `RoutingActual` nested under the operation envelope.
 
-Process metrics can aggregate benchmark and comparison costs after the records
-are persisted, but FEAT-019 does not define a new metrics engine.
+Operator views must visually separate requested DDx work facts, Fizeau
+operation outcome, DDx work outcome, and route audit. They must not offer a
+DDx route picker, provider-health view, route recommendation, route-quality
+warning, or model-efficacy ranking.
 
-## Validation
+## Validation Requirements For TP-019
 
-The concrete validation matrix is TP-019. The design requires coverage for:
+TP-019 must cover:
 
-- worktree creation and cleanup
-- arm isolation
-- diff and untracked-file capture
-- DDx Agent tool-call capture
-- post-run pass/fail recording
-- comparison record schema
-- grade prompt construction and JSON parsing
-- custom rubric loading
-- malformed grader response handling
-- benchmark suite expansion and summary aggregation
-- replay prompt/source precedence
-- replay base revision selection
-- degraded replay fallback
+- exact `Execute(ctx, ServiceExecuteRequest) (<-chan ServiceEvent, error)`
+  consumption;
+- immediate errors versus public final events;
+- `RetryAfter` only on immediate `*NoViableProviderForNow`;
+- generic final `Error` stored opaque and unclassified;
+- final `Status`, `ExitCode`, `FinalText`, `DurationMS`, `Usage`, `Warnings`,
+  `CostUSD`, `SessionLogPath`, and `RoutingActual` handling;
+- context cancellation without DDx process-tree logic;
+- absence of a DDx continuation API and replay as a new operation;
+- route-neutral arm identity and worktree isolation;
+- unchanged operator passthrough constraints;
+- stronger review by `MinPower` only;
+- exclusion of concrete route fields from grading prompts and aggregates;
+- `RoutingActual` confined to audit details;
+- repository diff, gate, replay provenance, and degraded fallback behavior.
+
+Fizeau runtime behavior belongs in Fizeau conformance tests. DDx tests use a
+public-contract fake and must not embed virtual providers, concrete harness
+executors, native tool loops, provider streams, or Fizeau session-log parsers.
 
 ## Implementation Order
 
-1. Stabilize `ComparisonRecord` persistence and `ddx runs list/show`.
-2. Ensure `compare-prompts` records `base_rev`, prompt source, and arm labels.
-3. Complete grading CLI and append-only grade events.
-4. Update benchmark to persist or emit full comparison records with suite
-   provenance.
-5. Tighten replay evidence lookup to join execution bundles and session logs.
-6. Add replay baseline diff comparison and JSON degradation flags.
-7. Add CI-oriented fixtures using virtual providers and temp git repositories.
+1. Replace DDx harness/model arm identity with route-neutral logical arms.
+2. Implement the current Fizeau consumer seam and public final envelope.
+3. Persist separate Fizeau operation and DDx work outcomes.
+4. Add comparison worktree isolation, diff capture, and repository gates.
+5. Implement route-blind grading with stronger reviewer `MinPower`.
+6. Persist route-neutral benchmark aggregates.
+7. Implement replay from DDx execution evidence as a new operation.
+8. Add audit-only rendering for returned `RoutingActual`.
+9. Enforce the TP-019 negative tests for forbidden DDx routing behavior.
 
 ## Risks
 
-- Diffs and outputs become too large for JSONL rows: store large bodies as
-  attachments and keep only refs in metadata.
-- Grader scores are mistaken for objective truth: persist rubric identity and
-  rationale; workflows decide policy.
-- Replay reconstructs today's prompt instead of original prompt: prefer
-  execution bundle prompt artifact and session prompt over bead prose.
-- Benchmark hides per-prompt failures in aggregate stats: store full
-  comparison records and summarize from them.
-- Quorum and grading semantics blur: keep quorum as a pass/fail dispatch gate;
-  use comparison plus grade for quality scoring.
+- **Concrete route identity leaks back into arm keys or grade prompts.** Keep
+  `RoutingActual` nested in an audit-only envelope and add structural tests.
+- **DDx mistakes Fizeau session success for work success.** Persist separate
+  operation and repository outcomes and require DDx gates.
+- **A final error string becomes accidental routing policy.** Store it as
+  opaque evidence and prohibit text parsing.
+- **Replay becomes an unofficial continuation implementation.** Rebuild only
+  from DDx evidence and always start a fresh `Execute` operation.
+- **Large outputs and diffs overload record rows.** Store large DDx bodies as
+  attachments with stable references.
+- **Benchmark statistics imply route quality.** Aggregate only by declared
+  route-neutral experiment inputs and audit the output schema.
+- **Operator pins are silently loosened during escalation.** Preserve the raw
+  envelope unchanged and stop for operator action on incompatibility.

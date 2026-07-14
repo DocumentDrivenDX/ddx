@@ -79,7 +79,9 @@ DDx supports two distinct paths to transition a bead to `closed` status, each wi
 - **When used**: When a bead is closed after execution, review, or manual administration. This is the primary close path for work that ran and completed.
 - **Execution evidence required**: The bead must carry one of:
   - A `closing_commit_sha` (exact SHA of the commit that closed the work)
-  - A `session_id` (agent session that ran the work)
+  - A DDx run/attempt evidence record linking the public Fizeau operation
+    outcome to repository verification (legacy `session_id` is migration-only,
+    not a new request/final-contract requirement)
   - An execute-bead success event in the events history
   - AND a terminal verdict event (review APPROVE with non-empty rationale, explicit review-skipped marker, or manual-close marker)
 - **ClosureGate enforcement**: `CloseWithEvidence` enforces `ClosureGate` (per `ddx-e30e60a9`) to reject closes without sufficient evidence, preventing silent false-closures. `Store.Close` bypasses the gate by design as a manual-administration escape hatch.
@@ -92,7 +94,7 @@ Both paths append an event (`lifecycle_reconciled` for reconcile-close, implicit
 - Raw `no_changes` is attempt evidence, not a durable bead queue state. The drain loop MUST translate it into one of the rows below before mutating the bead.
 - `work-retry-after` may be set only when retrying the same bead after time passes could plausibly succeed without human/spec/dependency changes.
   - **MUST NOT set retry-after** (cause is not time-resolvable by waiting): `push_failed`, `declined_needs_decomposition`, `review_spec_gap`, `review_missing_acceptance`, `review_too_large` at decomposition depth cap.
-  - **MAY set retry-after** (recheckable by waiting): `push_conflict` (15 min — remote advanced), `land_conflict` (15 min), transient quota/transport (15 min). `no_viable_provider` MUST NOT set per-bead retry-after when alternate routing paths exist or when the worker can transition to `paused-infra`; a per-bead cooldown is only appropriate when no alternate route exists AND the condition is purely time-dependent with no other worker that could claim the bead.
+  - **MAY set retry-after** (recheckable by waiting): `push_conflict` (15 min — remote advanced) and `land_conflict` (15 min). Provider, quota, route, and transport availability never create a DDx per-bead cooldown. When Fizeau returns a typed `RetryAfter`, DDx may pause the queue/worker until that time while leaving the bead immediately re-claimable; DDx does not inspect alternate routes or decide whether another provider is viable.
   - Cooldown lifetime SHOULD match the recheckable window; 15 min is the ceiling for every current recheckable outcome. A 24 h cooldown is never appropriate.
 - Continuous forward progress is the default. Before a bead can move to
   `status=proposed`, the drain loop MUST exhaust every applicable automatic
@@ -135,20 +137,38 @@ not drift between execution modes.
 The try-loop states are control-flow states only. They do not add persisted bead
 statuses.
 
+The Fizeau boundary is strict. DDx may consume a public typed error returned
+directly by Fizeau `Execute` or the public `ServiceFinalData` in the final event.
+Current generic final `Error` text has no cause/stage semantics and remains
+opaque; richer final classification is unavailable until a compatible
+CONTRACT-003 release is pinned.
+DDx combines that result with repository and attempt evidence, but it does not
+interpret non-terminal provider/session events or inspect provider, harness,
+model, profile, catalog, viability, route, fallback, or connectivity state.
+Fizeau owns provider retry and every concrete routing decision.
+
+DDx may originate an abstract `MinPower` floor and may raise only that floor for
+a capability-sensitive **new DDx attempt**. `MaxPower` and concrete
+`harness`/`provider`/`model` constraints are operator-owned immutable
+passthrough: when present, DDx forwards and records them unchanged. Returned
+concrete route/model identity is audit-only and MUST NOT affect this transition
+machine. Current `*fizeau.NoViableProviderForNow.RetryAfter`, or a future public
+typed equivalent after its release is pinned, may affect queue-level waiting,
+never route selection or per-bead power policy.
+
 | State | Input | Transition | Action |
 |---|---|---|---|
 | `classify_result` | `success`, `already_satisfied`, `no_changes`, structural validation, or any non-escalatable status | `stop_attempt` | Return the report to the lifecycle mapper in §3.2. |
-| `classify_result` | disrupted report, budget exhaustion, or a hard passthrough/operator constraint | `stop_attempt` | Return the report; do not raise `MinPower`. |
-| `classify_result` | capability-sensitive failure such as implementation failure, post-run check failure, or review block | `retry_power` when the power ladder has a higher viable floor; otherwise `stop_attempt` | Retry the same bead with only `MinPower` raised to the next viable catalog power. Preserve policy intent and all operator pins. |
-| `classify_result` | provider-connectivity infrastructure failure with concrete route evidence (`actual_power > 0`) and no operator harness/provider/model pin | `retry_power` | Retry immediately with `MinPower = actual_power + 1`, preserving policy intent. This asks Fizeau to route above the failed low-power route without DDx naming a tier, provider, or model. |
-| `classify_result` | infrastructure failure without concrete route evidence, or with an operator harness/provider/model pin | `stop_attempt` | Record/release according to §3.2. A smarter model cannot fix an absent service when DDx has no alternate power signal, and pins must not be widened silently. |
-| `retry_power` | retry finishes | `classify_result` | Reclassify the new report through the same table. |
+| `classify_result` | disrupted report, budget exhaustion, or a typed operator-action outcome such as unsatisfied immutable passthrough | `stop_attempt` | Return the report; do not raise `MinPower` or inspect passthrough values. |
+| `classify_result` | capability-sensitive failure such as implementation failure, post-run check failure, or review block | `retry_power` when the configured abstract retry policy permits a higher `MinPower`; otherwise `stop_attempt` | End the current attempt and record a new-attempt retry decision with only `MinPower` raised. Preserve all operator-owned passthrough unchanged; do not query a catalog or test route viability. |
+| `classify_result` | public typed Fizeau provider/route/quota/auth/transport outcome available in the pinned API | `stop_attempt` | Record and release according to §3.2. Do not raise `MinPower`, inspect concrete route identity, exclude a route, or retry provider connectivity. Honor `RetryAfter` only when the public type actually carries it, and only as queue-level worker waiting. Generic final `Error` maps to unclassified failure. |
+| `retry_power` | new-attempt retry decision recorded | `stop_attempt` | Finish the current attempt. A later scheduler iteration allocates a distinct attempt/session record and calls Fizeau with the higher abstract `MinPower`. |
 | `stop_attempt` | report returned to worker | §3.2 outcome mapping | Apply the durable bead lifecycle mutation, event, and recovery policy. |
 
-`policy` remains routing intent. `MinPower` is only a retry/fallback bound after
-DDx has attempt evidence. Initial zero-config dispatch MUST NOT duplicate the
-selected policy's lower bound as `MinPower`; Fizeau owns the concrete route
-within the selected policy and any numeric power bounds DDx sends.
+`MinPower` is abstract capability intent, not a fallback route. DDx may set an
+initial floor from task facts and may raise it only under the capability-sensitive
+new-attempt rule above. It never selects a provider/profile policy or copies a
+catalog-derived lower bound. Fizeau owns the concrete route for every request.
 
 ### 3.2 Outcome → Label / Event / Extra Mapping
 
@@ -171,7 +191,7 @@ within the selected policy and any numeric power bounds DDx sends.
 | parent/epic/decomposed container | `in_progress → open` with dep edges to children, or `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` or `triage-decomposed` | `extra.children` lists child IDs + AC mapping, or `extra.execution-eligible=false` |
 | external blocker | `in_progress → blocked` (hard) or `in_progress → open` (soft) | add `blocked-on-upstream:<id>` as explanatory label when useful | `no_changes_blocked` | `extra.last-rationale` names the external blocker |
 | superseded work | no terminal success; leave open if visible history needed | (none) | structured superseded event if appended | `extra.superseded-by` names the replacement |
-| transient infra/quota/transport | `in_progress → open` | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `work-retry-after` for retryable time-based condition only |
+| public typed Fizeau infra/quota/route/transport outcome | `in_progress → open` | (none) | `drain-paused-quota`, `rate-limit-retry`, or unclassified outcome evidence | never set per-bead `work-retry-after`; only a public typed `RetryAfter` may pause the queue/worker |
 | `push_failed` (branch protection, auth-token, pre-push test, executor race) | `in_progress → open` | optional explanatory label (e.g. `blocked-on-branch-protection`) | `push-failed` with stderr detail and base-rev | `extra.last-run` only; **DO NOT** set `work-retry-after` |
 | `push_conflict` (remote advanced; FF rejected) | `in_progress → open` | (none) | `push-conflict` with current remote head | may set `work-retry-after` at 15 min |
 | stale no_changes tracker metadata | no status change unless latest terminal evidence closes the bead | remove stale no_changes triage labels only when contradicted by terminal evidence | preserve historical events; append reconciliation event if performed | clear stale `work-*` when latest terminal event proves them obsolete |
@@ -181,7 +201,7 @@ within the selected policy and any numeric power bounds DDx sends.
 | `auto_recovery_failed` — reframe, child decomposition, and sibling/replacement decomposition failed, or a valid operator-authored `recovery:manual` label set | `in_progress → proposed` | add `triage:auto-recovery-failed` label | `auto-recovery-failed` with `reframe_attempt_cost` + `decompose_attempt_cost` | `extra.last-recovery` records costs and failure reasons; **DO NOT** set `work-retry-after` |
 | `per_bead_budget_exhausted` — cumulative cost exceeded `escalation.per_bead_budget_usd` | `in_progress → open` (re-claimable — budget exhaustion is recheckable) | (none) | `per-bead-budget-exhausted` with `total_cost` | `extra.last-run` only; **DO NOT** set `work-retry-after` — requires operator action or config change |
 
-Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not lifecycle controls. New routing uses `status=proposed` for operator decisions; those labels may remain only as migration metadata until cleanup removes them.
+Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not lifecycle controls. New lifecycle handling uses `status=proposed` for operator decisions; those labels may remain only as migration metadata until cleanup removes them.
 
 ### 3.3 Decomposition-First Transition Sequence
 
@@ -224,9 +244,8 @@ Worker state is the in-process state of the drain loop. It is **distinct from be
 |---|---|---|---|
 | `idle` | Worker is up but not actively claiming. | Worker startup; transient between attempts. | Operator or scheduler moves to `draining`. |
 | `draining` | Worker is actively claiming and executing beads. | Default operating state. | Quota or rate-limit pause; explicit stop. |
-| `paused-quota` | Worker observed quota exhaustion on its harness. | `drain-paused-quota` event. | `drain-resumed-quota` after backoff or operator resume. |
-| `paused-rate-limit` | Worker is sleeping out a rate-limit retry window inside an attempt. | Rate-limit response from harness. | Wait window elapses; worker resumes the same attempt. |
-| `paused-infra` | Worker observed an infrastructure-class failure (`no_viable_provider`, all beads in infra-fault cooldowns). Beads are left immediately reclaimable — no per-bead `work-retry-after` is written. Worker sleeps `PausedInfraInterval` (2 min) then re-evaluates the full queue. | `loop.paused-infra` event with `resume_at` timestamp. See reliability-principles.md P6. | `resume_at` elapses or `WakeCh` fires; worker returns to `draining`. |
+| `paused-quota` | Worker is honoring queue-level `RetryAfter` from current public `*fizeau.NoViableProviderForNow` or a pinned future typed equivalent. | `drain-paused-quota` event after the affected bead is released. | `RetryAfter` elapses or operator resume; worker returns to `draining`. |
+| `paused-rate-limit` | Worker is honoring a public typed queue-level `RetryAfter` after Fizeau has finished its own bounded provider retry. Generic final errors cannot enter this state. | Typed Fizeau outcome after the affected bead is released. | `RetryAfter` elapses; worker returns to `draining`. |
 | `exiting` | Worker is shutting down cleanly; will not claim more beads. | Operator stop or terminal failure. | Process exit. |
 
 Worker state is observable via the worker's stdout/log; it is not stored on any bead. Hygiene beads affecting worker state (QuotaPauseContract, RateLimitRetryContract) MUST NOT add new fields to the bead schema to represent these transient states.
@@ -240,13 +259,22 @@ Two agent roles support the cross-cycle recovery path (per ADR-024 P4; SD-025 La
 | `reframer` | Strong-power per ADR-024 P3 — `MinPower` set above the current cycle's implementer actual power | Drain proxy (not the reframer agent); reframer runs read-only against the bead record, then returns structured edits | Structured edits to bead description and/or acceptance criteria. Edits must preserve all explicit commitments (AC, non-scope, named files/tests, deps, governing artifact refs). A no-op result (no change) is valid and triggers the decomposer path. | Counter/event-derived ladder exhaustion, or an explicit structural classification that can be safely reframed, and no valid operator-authored `recovery:manual` label |
 | `decomposer` | Strong-power per ADR-024 P3 — same floor as reframer | Drain proxy; decomposer runs read-only against the bead record, then returns a list of child, sibling, or replacement bead specs | List of 2-5 executable bead specs for `Backend.Create`. Each spec must include title, description, numbered AC, labels (inheriting parent's labels and `spec-id`), and the required parent/dep or supersession edge. A child-depth cap switches the requested output to sibling/replacement specs under the nearest safe parent/root; a no-op result triggers `auto_recovery_failed`. | Reframe attempt returned no change, reframer invocation failed, or a too-large/depth-cap classification requires structural split |
 
-Both roles are dispatched with the same `role`, `bead_id`, `attempt_id`, `session_id`, and `review_group_id` correlation fields used by the reviewer role (ADR-024 Default Adversarial Pre-Close Review Gate). Operator-supplied passthrough constraints (`--harness`, `--provider`, `--model`) are forwarded unchanged. If those constraints prevent satisfying the strong-power `MinPower` floor, the dispatch returns `readiness_error` and the outcome maps to `auto_recovery_failed`.
+Both roles are dispatched with the same DDx-owned `role`, `bead_id`,
+`attempt_id`, and `review_group_id` correlation fields used by the reviewer
+role (ADR-024 Default Adversarial Pre-Close Review Gate). The opaque terminal
+`SessionLogPath` is evidence, not required request correlation.
+Operator-supplied `MaxPower` and concrete passthrough constraints (`--harness`,
+`--provider`, `--model`) are forwarded unchanged. If a current public immediate
+error, or a future pinned typed outcome, says the requested `MinPower` cannot
+be satisfied under those immutable constraints, DDx records the operator-action
+evidence and maps the recovery operation to `auto_recovery_failed`; it does not
+inspect the constraints or choose an alternative route.
 
 ## 6. `consecutive_ladder_exhaustions` Policy
 
 The field `extra.consecutive_ladder_exhaustions` is a compact coordination counter maintained by the drain loop on each bead record. The field's data definition lives in TD-027 §11 (Bead Data Model); this section specifies the operational policy for incrementing, resetting, and threshold-triggering. It is not the only source of truth for recovery eligibility: DDx may derive equivalent facts from append-only attempt/review events, and missing, stale, or malformed counter data must fail open to ordinary execution or event-derived recovery rather than blocking, proposing, or cooling down the bead.
 
-- **Incremented** at the end of each drain cycle in which the bead's within-cycle escalation ladder was fully exhausted (all power levels tried, none produced a close or forward progress).
+- **Incremented** at the end of each drain cycle in which the bead's configured sequence of abstract `MinPower` new-attempt retries was fully exhausted and none produced a close or forward progress. Exhaustion is derived from completed DDx attempts, not a Fizeau catalog or concrete route list.
 - **Reset to 0** when the bead is successfully closed, when a reframe or decompose pass fires (the bead's prompt has changed; start fresh), or when an operator explicitly clears the counter via `ddx bead update`.
 - **Threshold**: when `consecutive_ladder_exhaustions >= 2` (default; configurable in `ddxroot.Path()/config.yaml` as `escalation.auto_recovery_threshold`), the drain loop triggers the auto-recovery sequence described in ADR-024 Escalation Sequencing and SD-025 Layer 3.5.
 - **Direct structural trigger**: explicit too-large, needs-decomposition, child-depth-cap, or no-changes-decompose classifications may enter §3.3 immediately without waiting for the counter threshold. The counter prevents infinite same-bead retry loops; it must not delay obvious decomposition work.
@@ -304,19 +332,32 @@ For successful replacement rewrites, the bead body may be materially shorter or 
 
 **Claim behavior**: the claim on the in-flight bead is released cleanly so another worker (or a later resumed worker) can pick it up.
 
-**Loop interaction**: the worker transitions to worker-state `paused-quota` (§4). It stops claiming new beads until the configured backoff elapses or an explicit resume signal arrives.
+**Loop interaction**: Fizeau owns quota/provider retry during execution. DDx
+releases the bead and transitions the worker to `paused-quota` (§4) only for
+current public `*fizeau.NoViableProviderForNow.RetryAfter` or a compatible
+future typed equivalent. There is no DDx-invented fallback delay. DDx does not
+select another provider or raise `MinPower` to escape quota.
 
 ### 7.4 RateLimitRetryContract (ddx-c6e3db02)
 
-**Status transitions used**: none. Rate-limit retry is internal to a single attempt; the bead remains `in_progress` throughout.
+**Status transitions used**: `in_progress → open` after Fizeau exhausts its
+internal provider retry and returns a public typed rate-limit outcome. Until the
+pinned API exposes such a type, generic final errors remain unclassified and do
+not enter this contract. Provider retry inside one execution is wholly
+Fizeau-owned and is not represented by this DDx contract.
 
 **Labels**: none.
 
-**Events fired**: `rate-limit-retry` per retry, on the bead's event stream. Each event carries the retry count and the wait duration in the body.
+**Events fired**: one `rate-limit-retry` queue/worker event when DDx honors Fizeau's typed `RetryAfter`. The event carries the wait duration and an outcome/evidence reference, not provider identity or DDx route-exclusion state. Fizeau-internal retries are not mirrored as DDx retry events.
 
-**Claim behavior**: claim is held continuously across retries.
+**Claim behavior**: the bead claim is released before DDx enters a queue-level wait, so the provider pause does not become a bead lifecycle state.
 
-**Loop interaction**: rate-limit handling is bounded by the retry budget; on budget exhaustion the outcome becomes `execution_failed` and the standard mapping in §3 applies. The worker briefly enters `paused-rate-limit` for the wait window, then returns to `draining`.
+**Loop interaction**: Fizeau owns bounded provider retry and fallback. DDx
+consumes only public typed immediate/final fields. If the public type includes
+`RetryAfter`, the worker enters `paused-rate-limit` for that queue-level window
+and then returns to `draining`; otherwise DDx records an unclassified outcome
+and does not invent a wait. DDx does not retry provider connectivity, alter
+concrete pins, inspect a catalog, or steer the next route.
 
 ### 7.5 LockContentionContract (ddx-da11a34a)
 

@@ -21,7 +21,7 @@ Task execution is composed from named layers:
 
 | Layer | Public verb | Meaning |
 | --- | --- | --- |
-| 1 | `ddx run` | one upstream agent invocation |
+| 1 | `ddx run` | one DDx consumer record around a complete Fizeau session |
 | 2 | `ddx try <bead>` | one bead attempt in an isolated workspace |
 | 3 | `ddx work` | one mechanical queue-drain loop |
 
@@ -80,22 +80,25 @@ Rules:
 
 ## Layer Extensions
 
-### Layer 1: invocation atom
+### Layer 1: Fizeau session consumer record
 
-Layer 1 stores the DDx request envelope and the agent's typed response fields:
+Layer 1 stores the DDx request envelope and Fizeau's typed immediate error or
+public final-event fields:
 
 - prompt attachment or prompt reference
-- requested `MinPower` and optional `MaxPower`
+- requested `MinPower` and unchanged operator `MaxPower`, when supplied
 - opaque passthrough constraints (`harness`, `provider`, `model`) when supplied
 - non-routing work facts such as permissions, effort, timeout, and artifact id
-- actual model and actual power returned by the agent
-- token/cost/duration metadata
-- upstream session id and session-log attachment pointer
-- structured result attachment
+- actual model and actual power returned by Fizeau
+- Fizeau-reported usage/cost/duration metadata
+- DDx correlation identifiers and opaque upstream session-log path
+- application result from the public final field, when present; non-terminal
+  session/tool event payloads remain opaque
 
 DDx does not persist route decisions as DDx-owned policy. Concrete
 harness/provider/model values are recorded only as requested passthrough or
-agent-reported facts.
+Fizeau-reported facts. DDx never originates concrete pins, invokes or parses a
+concrete harness, normalizes tool events, or controls Fizeau's subprocess tree.
 
 ### Layer 2: bead attempt
 
@@ -114,7 +117,9 @@ Layer 2 stores DDx-owned attempt orchestration:
 
 Layer 2 owns success classification for a bead attempt because DDx owns commits,
 merge/preserve state, no-change rationale, post-run gates, and review evidence.
-The agent's exit status and actual power are inputs, not the full decision.
+Fizeau's operation outcome is session evidence; concrete model identity is
+audit-only and abstract actual power can affect only a later `MinPower`.
+Fizeau `success` never closes a bead by itself.
 Per FEAT-010's network-free drain boundary, this layer performs no network I/O;
 origin-sync and push are out-of-band per FEAT-023.
 
@@ -145,9 +150,9 @@ origin-sync and push are out-of-band per FEAT-023.
         ├── record.json
         ├── prompt.md
         ├── result.json
-        ├── session.jsonl
-        ├── stdout.log
-        ├── stderr.log
+        ├── fizeau-session.ref
+        ├── fizeau-result.ref
+        ├── fizeau-events.ref
         └── evidence/
             ├── manifest.json
             └── checks.json
@@ -186,8 +191,8 @@ The drain loop evaluates the auto-recovery trigger after each drain cycle before
 
 ### Sequence
 
-1. **Reframe attempt** — dispatch a strong-power reframer agent (ADR-024 P3; TD-031 §4 (Auto-Recovery Role Catalogue)) with `MinPower` set above the exhausted escalation ceiling. The reframer receives the bead record (description, AC, governing artifact refs) and returns structured edits. If the reframer returns edits, DDx applies them via `ddx bead update` paths, records `reframe-applied` (TD-027 §13), resets `consecutive_ladder_exhaustions` to 0, releases the claim, and returns the bead to `status=open` execution-ready. The bead re-enters the standard drain cycle with a fresh ladder.
-2. **Decompose attempt** (only when reframe returned no change or the reframer invocation failed) — dispatch a strong-power decomposer agent with the same `MinPower` floor. The decomposer returns 2–5 executable child bead specs when the bead can be split under itself. If child depth is exhausted, it returns sibling or replacement bead specs under the nearest safe parent/root. DDx calls `Store.Create` for each generated bead, wires the required dependency or supersession edges, records `decompose-applied` (TD-027 §13), and leaves the oversized bead `status=open` with `Extra["execution-eligible"]=false` when it should no longer be claimed directly. The queue advances through the generated executable work.
+1. **Reframe attempt** — request a reframer session from Fizeau (ADR-024 P3; TD-031 §4 (Auto-Recovery Role Catalogue)) with an abstract `MinPower` above the exhausted escalation ceiling and no DDx-originated harness/provider/model pins. The reframer receives the bead record (description, AC, governing artifact refs) and returns structured edits. If the reframer returns edits, DDx applies them via `ddx bead update` paths, records `reframe-applied` (TD-027 §13), resets `consecutive_ladder_exhaustions` to 0, releases the claim, and returns the bead to `status=open` execution-ready. The bead re-enters the standard drain cycle with a fresh ladder.
+2. **Decompose attempt** (only when reframe returned no change or the reframer session failed) — request a decomposer session through Fizeau with the same abstract `MinPower` floor. Fizeau alone selects harness/provider/model/fallback. The decomposer returns 2–5 executable child bead specs when the bead can be split under itself. If child depth is exhausted, it returns sibling or replacement bead specs under the nearest safe parent/root. DDx calls `Store.Create` for each generated bead, wires the required dependency or supersession edges, records `decompose-applied` (TD-027 §13), and leaves the oversized bead `status=open` with `Extra["execution-eligible"]=false` when it should no longer be claimed directly. The queue advances through the generated executable work.
 3. **Final escape** (only when child decomposition and sibling/replacement decomposition returned no executable work or failed) — DDx records `auto-recovery-failed` (TD-027 §13), moves the bead to `status=proposed`, clears the active claim, and does not schedule another attempt. The operator must resolve the bead via `ddx bead update --status open` (after fixing it) or `ddx bead update --status cancelled`.
 
 ### Layer-3 record
@@ -218,16 +223,19 @@ The auto-recovery sequence runs within the layer-3 run record as an additional s
 The layer-3 evaluation log records the candidate bead, previous outcome,
 retry eligibility, requested power bounds, passthrough envelope presence, and
 the condition that fired. The log may inspect DDx-owned attempt outcomes and
-agent typed status; it must not branch on concrete provider/model identity.
+Fizeau's public final status; it must not branch on concrete
+harness/provider/model identity.
 
 Signal handling is process-root behavior, not a per-command special case.
 The root command installs a SIGINT/SIGTERM-backed context. On the first signal,
 DDx writes `Cancel received, shutting down gracefully` to stderr/stdout visible
-to the operator, cancels the root context, and lets `ddx work` / `ddx try`
-finish the TD-027 §12.2 worker-interruption path: preserve available evidence, remove
-runtime liveness state, release any non-terminal bead claim, and exit with
-layer-3 disposition `signal`. A second signal may hard-abort rather than wait
-for cleanup.
+to the operator and cancels the root context propagated into Fizeau `Execute`.
+Fizeau owns concrete harness/process-tree cancellation and terminates its public
+execution stream. DDx then lets `ddx work` / `ddx try` finish
+the TD-027 §12.2 repository interruption path: preserve available evidence,
+remove DDx runtime liveness state, release any non-terminal bead claim, and
+exit with layer-3 disposition `signal`. A second signal may hard-abort the DDx
+worker but does not authorize DDx to signal a nested Fizeau process.
 
 ## Cleanup Manager
 
@@ -247,13 +255,14 @@ temporary execution directory records enough ownership to answer:
 - whether the attempt reached published evidence
 - whether it was intentionally preserved
 - when its liveness signal was last refreshed
-- which process group (if any) is the attempt's registered descendant group
-- whether the process group leader PID matches the recorded attempt PID
+- which DDx worker process, if any, DDx launched for the attempt
 
-This process ownership evidence is the primary basis for staleness decisions on
-attempt-descendant process groups: a group is stale when its owning attempt is
-terminal, the group leader no longer matches the recorded PID, or no live
-heartbeat confirms the group is still executing bead work.
+This ownership evidence governs DDx workspaces, scratch, and DDx-launched
+worker processes only. Fizeau owns every nested harness/provider process tree.
+DDx does not census, adopt, signal, or reap those descendants; after cancelling
+the Execute context it waits for Fizeau's stream to terminate and treats any
+surviving Fizeau child found by upstream conformance tests as a Fizeau contract
+violation.
 
 During the legacy migration window, the manager handles both
 `.ddx/executions/<attempt-id>` and `.ddx/runs/<run-id>` evidence, but it treats
@@ -275,7 +284,7 @@ file with matching project ownership is DDx-owned regardless of its name. A
 path is eligible for deletion when: (a) it has `cleanup.json` metadata and the
 liveness is expired or the owning attempt is terminal; or (b) it matches a
 recognized DDx prefix without metadata, the directory mtime is at least **6
-hours** old, and no live PID or active session is present. The manager
+hours** old, and no live DDx worker/workspace lease is present. The manager
 preserves published evidence and active workspaces.
 
 ### Entry points
@@ -318,12 +327,12 @@ The manager may delete:
 - DDx-created test and e2e scratch roots that satisfy the same ownership,
   age, and liveness rules
 - generated test binaries and run-state or liveness files that are DDx-owned
-- stale heartbeat/liveness files for dead PIDs or expired sessions
+- stale DDx worker/workspace heartbeat files for dead DDx worker PIDs or
+  expired workspace leases
 - partial setup directories that never reached atomic evidence publication
 - old non-preserved scratch data past configured retention
-- stale attempt-descendant process groups whose owning attempt is terminal,
-  whose process group leader no longer matches the recorded attempt PID, or
-  whose process-group heartbeat has expired
+- stale DDx worker processes that DDx launched and whose owning attempt is
+  terminal or whose DDx worker heartbeat has expired
 
 The manager must not delete:
 
@@ -331,8 +340,8 @@ The manager must not delete:
 - local evidence refs under `refs/ddx/iterations/...`
 - attempt backend refs under `refs/ddx/attempt-backend/...`
 - complete `.ddx/runs/<id>` or `.ddx/executions/<attempt-id>` evidence
-- active workspaces with a live PID/session heartbeat
-- active attempt-descendant process groups confirmed live by a current heartbeat
+- active workspaces with a live DDx worker/workspace heartbeat
+- every Fizeau-owned harness/provider process, whether active or suspected stale
 - paths outside configured DDx roots
 - paths that only loosely resemble DDx names without matching ownership
   metadata or registered worktree evidence
@@ -365,13 +374,14 @@ new beads. It must not continue scanning the ready queue in the same process.
 Cleanup output is structured. Routine passes are trace/debug or worker events.
 Passes that reclaim meaningful bytes or inodes emit an operator-visible summary
 including counts. Failures include path, class, and whether the failure blocked
-progress. Operator-visible process findings are emitted separately from
-filesystem reclamation: discovered stale process groups, reaped PIDs, and any
-groups that could not be reaped (with reason) appear in the summary so
-operators can see what the process-reaping census found and what it did.
+progress. Operator-visible DDx worker findings are emitted separately from
+filesystem reclamation. Fizeau child-process state is outside DDx runtime
+observability. Only upstream conformance/chaos evidence or a future public
+typed disposition may establish a CONTRACT-003 process-lifetime violation;
+DDx neither detects nor reaps the underlying process tree.
 
-The cleanup manager supports a **dry-run** mode that reports what would be
-removed or reaped without taking action, and an **apply** mode (default for
+The cleanup manager supports a **dry-run** mode that reports what DDx-owned
+resource would be removed or reaped without taking action, and an **apply** mode (default for
 automated passes) that performs the removal and reports results. Both modes
 emit the same structured operator-visible output so the dry-run report and the
 apply report are directly comparable.
