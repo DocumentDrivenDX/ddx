@@ -73,7 +73,18 @@ type ExecuteBeadResult struct {
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`
 	// CycleIndex is the zero-based repair-cycle index for this candidate.
-	CycleIndex          int               `json:"cycle_index,omitempty"`
+	CycleIndex int `json:"cycle_index,omitempty"`
+	// ReviewVerdict is the pre-land candidate-cycle reviewer verdict (APPROVE,
+	// REQUEST_CHANGES, BLOCK) when a reviewer ran. Empty when review was
+	// skipped or never completed. Mirrors ExecuteBeadReport.ReviewVerdict.
+	ReviewVerdict string `json:"review_verdict,omitempty"`
+	// ReviewRationale carries the actionable reviewer-authored findings for
+	// non-APPROVE review outcomes. Mirrors ExecuteBeadReport.ReviewRationale.
+	ReviewRationale string `json:"review_rationale,omitempty"`
+	// ReviewSkipReason carries the durable review:skip-reason:* label when a
+	// success path is allowed to close without running a reviewer. Mirrors
+	// ExecuteBeadReport.ReviewSkipReason.
+	ReviewSkipReason    string            `json:"review_skip_reason,omitempty"`
 	GateResults         []GateCheckResult `json:"gate_results,omitempty"`
 	RequiredExecSummary string            `json:"required_exec_summary,omitempty"`
 	ChecksFile          string            `json:"checks_file,omitempty"`
@@ -380,9 +391,27 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 	if err != nil {
 		return err
 	}
-	res.CandidateRef = cycleResult.Report.CandidateRef
-	res.CycleIndex = cycleResult.Report.CycleIndex
-	res.CycleTrace = append([]ExecutionCycleTrace(nil), cycleResult.Report.CycleTrace...)
+	// Project every outcome-bearing field from the candidate-cycle report back
+	// onto the execute result. A review malfunction, request-changes, block, or
+	// exhausted repair cycle must overwrite the worker's provisional "success"
+	// status so the loop's landing/close decision (and the durable decision
+	// audit) reflect the cycle's real disposition instead of a stale success
+	// (ddx-0c7d976c).
+	report := cycleResult.Report
+	res.Status = report.Status
+	res.Detail = report.Detail
+	if report.Error != "" {
+		res.Error = report.Error
+	}
+	if report.OutcomeReason != "" {
+		res.FailureMode = report.OutcomeReason
+	}
+	res.ReviewVerdict = report.ReviewVerdict
+	res.ReviewRationale = report.ReviewRationale
+	res.ReviewSkipReason = report.ReviewSkipReason
+	res.CandidateRef = report.CandidateRef
+	res.CycleIndex = report.CycleIndex
+	res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
 	return nil
 }
 
