@@ -24,6 +24,16 @@ func (f fakeOrphanHarnessScanner) Scan(context.Context) ([]orphanHarnessProcess,
 	return append([]orphanHarnessProcess(nil), f.processes...), nil
 }
 
+type hermeticOrphanHarnessScanner struct{}
+
+func (hermeticOrphanHarnessScanner) Scan(context.Context) ([]orphanHarnessProcess, error) {
+	return nil, nil
+}
+
+func newHermeticOrphanHarnessProcessScanner() orphanHarnessProcessScanner {
+	return hermeticOrphanHarnessScanner{}
+}
+
 type fakeOrphanHarnessLeaseStore struct {
 	leases     map[string]bead.ClaimLeaseRecord
 	released   []string

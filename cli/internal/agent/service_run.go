@@ -153,13 +153,11 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 	// service so that when fizeau LookPaths codex/claude/etc it finds our
 	// wrapper, which sets PR_SET_PDEATHSIG=SIGKILL before execve'ing the real
 	// binary. Without this, provider children survive worker SIGKILL/OOM as
-	// ppid=1 orphans (bead ddx-f2b413ea). The pattern mirrors the legacy
-	// runAgentViaService path so both entry points install the shim; the
-	// helper is idempotent (sync.Mutex + early-return once installed).
-	if ddxBinary, execErr := os.Executable(); execErr == nil {
-		if _, _, shimErr := EnsureProviderShimOnPATH(ddxBinary); shimErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
-		}
+	// ppid=1 orphans (bead ddx-f2b413ea). The shared installer resolves the
+	// running ddx executable first and refuses the go test wrapper before any
+	// PATH mutation occurs.
+	if _, _, shimErr := installProviderShimOnPATH(); shimErr != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
 	}
 
 	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
@@ -179,6 +177,13 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+
+	// Ensure the provider-launch PATH shim is in place before dispatching the
+	// actual service call. This covers the execute-bead / reviewer dispatch path
+	// that reaches executeOnService without going through RunWithConfigViaService.
+	if _, _, shimErr := installProviderShimOnPATH(); shimErr != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim install failed (continuing without parent-death protection): %v\n", shimErr)
 	}
 
 	promptText := runtime.Prompt

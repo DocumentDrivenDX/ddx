@@ -64,7 +64,10 @@ func TestExecuteLoop_ClaimsHighestPriorityFirst(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker-prio"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:                        true,
+		OrphanHarnessProcessScanner: newHermeticOrphanHarnessProcessScanner(),
+	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -177,7 +180,10 @@ func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				w := makeWorker(id)
-				_, err := w.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+				_, err := w.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+					Once:                        true,
+					OrphanHarnessProcessScanner: newHermeticOrphanHarnessProcessScanner(),
+				})
 				assert.NoError(t, err)
 			}()
 		}

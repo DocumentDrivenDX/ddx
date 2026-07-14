@@ -248,6 +248,8 @@ func TestWorkCleanup_RunsPeriodicallyWhilePolling(t *testing.T) {
 func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim(t *testing.T) {
 	projectRoot := t.TempDir()
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
 
 	inner, first, second := newExecuteLoopTestStore(t)
 	var appendCalls int32
@@ -270,6 +272,8 @@ func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim(t *testing.T) {
 	}
 
 	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{scratchRoot}
 	runner := cleanupRunnerFunc(func(ctx context.Context) (ExecutionCleanupSummary, error) {
 		atomic.AddInt32(&cleanupCalls, 1)
 		return mgr.Cleanup(ctx)
@@ -297,6 +301,83 @@ func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim(t *testing.T) {
 	gotSecond, err := inner.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+}
+
+func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim_DoesNotTouchSharedScratchRoot(t *testing.T) {
+	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+	sharedScratchRoot := t.TempDir()
+
+	inner, first, second := newExecuteLoopTestStore(t)
+	var appendCalls int32
+	store := &errorInjectingStore{
+		ExecuteBeadLoopStore: inner,
+		onAppendEvent: func(id string, event bead.BeadEvent) error {
+			if id == first.ID && atomic.AddInt32(&appendCalls, 1) == 1 {
+				return errors.New("finalization failed")
+			}
+			return nil
+		},
+	}
+
+	sentinelPath := filepath.Join(sharedScratchRoot, ExecuteBeadWtPrefix+"ddx-shared-sentinel-20260713T163832-deadbeef")
+	require.NoError(t, os.MkdirAll(sentinelPath, 0o755))
+	require.NoError(t, WriteExecutionCleanupMetadata(sentinelPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-shared-sentinel",
+		AttemptID:    "20260713T163832-deadbeef",
+		WorktreePath: sentinelPath,
+	}))
+	sentinelFile := filepath.Join(sentinelPath, "keep.txt")
+	require.NoError(t, os.WriteFile(sentinelFile, []byte("sentinel\n"), 0o644))
+	old := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, os.Chtimes(sentinelPath, old, old))
+
+	var cleanupCalls int32
+	guard := &cleanupAdvanceClaimStore{
+		ExecuteBeadLoopStore: store,
+		t:                    t,
+		cleanupCalls:         &cleanupCalls,
+		claimCalls:           new(int32),
+	}
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{scratchRoot}
+	runner := cleanupRunnerFunc(func(ctx context.Context) (ExecutionCleanupSummary, error) {
+		atomic.AddInt32(&cleanupCalls, 1)
+		return mgr.Cleanup(ctx)
+	})
+
+	worker := &ExecuteBeadWorker{
+		Store: guard,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, SessionID: "sess-setup", ResultRev: "feedface"}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		ProjectRoot:   projectRoot,
+		CleanupRunner: runner,
+		CleanupLog:    io.Discard,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&appendCalls), int32(1))
+
+	gotSecond, err := inner.Get(context.Background(), second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+
+	gotSentinel, err := os.ReadFile(sentinelFile)
+	require.NoError(t, err)
+	assert.Equal(t, "sentinel\n", string(gotSentinel))
+	assert.DirExists(t, sentinelPath)
 }
 
 type blockingCleanupRunner struct {
