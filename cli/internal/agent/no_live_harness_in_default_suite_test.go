@@ -115,6 +115,66 @@ func TestNoLiveHarnessExecInDefaultSuite(t *testing.T) {
 	}
 }
 
+// TestNoDirectRunnerConstructionInHermeticFixtures keeps the default-suite
+// fixtures in work_concurrent_attempts_test.go and integration_helper_test.go
+// on the hermetic AgentRunner boundary. These helpers must not construct the
+// production Runner directly, because that re-opens the live-provider path this
+// bead is removing.
+func TestNoDirectRunnerConstructionInHermeticFixtures(t *testing.T) {
+	cliRoot := findCLIRoot(t)
+	targets := []string{
+		filepath.Join(cliRoot, "internal", "agent", "work_concurrent_attempts_test.go"),
+		filepath.Join(cliRoot, "internal", "agent", "integration_helper_test.go"),
+	}
+
+	var offenders []string
+	for _, path := range targets {
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.CallExpr:
+				ident, ok := node.Fun.(*ast.Ident)
+				if !ok || ident.Name != "NewRunner" {
+					return true
+				}
+				pos := fset.Position(node.Pos())
+				offenders = append(offenders, fmt.Sprintf("%s:%d NewRunner", filepath.Base(path), pos.Line))
+			case *ast.UnaryExpr:
+				if node.Op != token.AND {
+					return true
+				}
+				lit, ok := node.X.(*ast.CompositeLit)
+				if !ok {
+					return true
+				}
+				if ident, ok := lit.Type.(*ast.Ident); !ok || ident.Name != "Runner" {
+					return true
+				}
+				pos := fset.Position(node.Pos())
+				offenders = append(offenders, fmt.Sprintf("%s:%d &Runner{}", filepath.Base(path), pos.Line))
+			case *ast.CompositeLit:
+				ident, ok := node.Type.(*ast.Ident)
+				if !ok || ident.Name != "Runner" {
+					return true
+				}
+				pos := fset.Position(node.Pos())
+				offenders = append(offenders, fmt.Sprintf("%s:%d Runner{}", filepath.Base(path), pos.Line))
+			}
+			return true
+		})
+	}
+
+	if len(offenders) > 0 {
+		t.Fatalf("hermetic fixtures must not construct the production Runner directly:\n  %s",
+			strings.Join(offenders, "\n  "))
+	}
+}
+
 func hasLiveHarnessBuildTag(f *ast.File) bool {
 	for _, cg := range f.Comments {
 		for _, c := range cg.List {

@@ -93,7 +93,7 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 
 	// Script harness: execute directives against the real filesystem and git.
 	if harnessName == "script" {
-		return runScriptFn(r, opts)
+		return runScriptFn(opts)
 	}
 
 	// HTTP-provider harnesses (lmstudio, openrouter, and any other harness

@@ -18,7 +18,7 @@ import (
 // runScriptFn executes a directive file against opts.WorkDir using real filesystem
 // and git operations. The directive file path is taken from opts.Model (if it is
 // a readable file) or from opts.PromptFile as a fallback.
-func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
+func runScriptFn(opts RunArgs) (*Result, error) {
 	start := time.Now()
 	ctx := opts.Context
 	if ctx == nil {

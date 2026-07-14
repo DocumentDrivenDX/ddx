@@ -136,6 +136,15 @@ func writeDirectiveFile(t *testing.T, path string, lines []string) {
 // Executor helpers
 // ---------------------------------------------------------------------------
 
+// scriptHarnessAgentRunner is a hermetic AgentRunner boundary for the script
+// harness. It delegates directly to the script interpreter without constructing
+// a production Runner, so default-suite tests never need a live provider path.
+type scriptHarnessAgentRunner struct{}
+
+func (scriptHarnessAgentRunner) Run(opts RunArgs) (*Result, error) {
+	return runScriptFn(opts)
+}
+
 // landSerializerMu guards landSerializerMap.
 var (
 	landSerializerMu  sync.Mutex
@@ -172,9 +181,7 @@ func landMutexFor(projectRoot string) *sync.Mutex {
 // refs/ddx/iterations/ by LandBeadResult before Land() is invoked.
 func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) ExecuteBeadExecutorFunc {
 	t.Helper()
-	// Build Runner once at executor-construction time so concurrent goroutine
-	// calls share a stable test runner instance.
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealGitOps{}
 	// Per-projectRoot mutex serializes git operations so concurrent workers

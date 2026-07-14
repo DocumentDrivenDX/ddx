@@ -34,6 +34,18 @@ func (r blockingLiveAttemptRunner) Run(opts RunArgs) (*Result, error) {
 	}
 }
 
+type dirtyCheckoutHermeticRunner struct{}
+
+func (dirtyCheckoutHermeticRunner) Run(opts RunArgs) (*Result, error) {
+	if opts.WorkDir == "" {
+		return &Result{ExitCode: 1, Error: "missing work dir"}, nil
+	}
+	if err := os.WriteFile(filepath.Join(opts.WorkDir, "README.md"), []byte("# worker edit\n"), 0o644); err != nil {
+		return &Result{ExitCode: 1, Error: err.Error()}, nil
+	}
+	return &Result{ExitCode: 0}, nil
+}
+
 func TestWorkConcurrentAttempts_CleanupPreservesBothLiveWorktrees(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 2)
 	execRoot := config.ExecutionWorktreeRoot(projectRoot)
@@ -98,17 +110,10 @@ func TestWorkConcurrentAttempts_DirtyCheckoutDoesNotLoseSuccessfulResult(t *test
 	runGitInteg(t, projectRoot, "add", "README.md")
 	runGitInteg(t, projectRoot, "commit", "-m", "docs: seed readme")
 
-	dirFile := filepath.Join(t.TempDir(), "directive.txt")
-	writeDirectiveFile(t, dirFile, []string{
-		"modify-line README.md ^#.* # worker edit",
-		"commit feat: worker readme",
-	})
-
-	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).
-		Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).
+		Resolve(config.CLIOverrides{})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
-		AgentRunner: runner,
+		AgentRunner: dirtyCheckoutHermeticRunner{},
 	}, &RealGitOps{})
 	require.NoError(t, err)
 	require.NotNil(t, res)
