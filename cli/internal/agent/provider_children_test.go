@@ -631,7 +631,7 @@ func TestProviderForCommandDetectsNodeWrappedGemini(t *testing.T) {
 		{"node /some/other/script.js", ""},
 		{"node script.js", ""},
 		{"node", ""},
-		{"node -e 'console.log(1)'", ""},
+		{"node -e 'process.stdout.write(\"1\")'", ""},
 		{"python /usr/local/bin/gemini", ""},
 		{"gemini --interactive", "gemini"},
 	}
