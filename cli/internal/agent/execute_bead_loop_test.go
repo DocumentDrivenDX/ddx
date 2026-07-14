@@ -829,7 +829,9 @@ func TestExecuteBeadWorkerPreservedFailureStaysOpenAndContinues(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		OrphanHarnessProcessScanner: newHermeticOrphanHarnessProcessScanner(),
+	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)

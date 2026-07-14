@@ -32,6 +32,10 @@ import (
 const serverUnavailableLogMessage = "server unreachable: holding queue until /api/health returns"
 const serverUnavailableStatePhase = "server.unavailable"
 
+var defaultOrphanHarnessProcessScanner = func() orphanHarnessProcessScanner {
+	return newOrphanHarnessProcessScanner()
+}
+
 // ExecuteBeadLoopRuntime carries the non-serializable plumbing and
 // per-invocation runtime intent for an execute-bead loop run. Durable knobs
 // (assignee, retry caps, harness/model, powerClass bounds, etc.) live on
@@ -122,6 +126,9 @@ type ExecuteBeadLoopRuntime struct {
 	// with equivalent arguments and this loop should exit before claiming work.
 	// Errors are logged and fail open so update-probing never blocks the queue.
 	BinaryRefreshCheck func(ctx context.Context) (bool, error)
+	// OrphanHarnessProcessScanner, when non-nil, overrides the startup
+	// orphan-harness reap pass. Nil uses the package default scanner factory.
+	OrphanHarnessProcessScanner orphanHarnessProcessScanner
 	// ProjectRootDirtyCheck, when non-nil, is called at the top of each loop
 	// iteration before any bead is claimed. A non-empty return value means the
 	// canonical project root has uncommitted tracked non-.ddx changes. Startup
@@ -1688,10 +1695,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	leaseReader, _ := w.Store.(orphanHarnessLeaseReader)
 	releaser, _ := w.Store.(orphanHarnessLeaseReleaser)
 	appender, _ := w.Store.(orphanHarnessEventAppender)
+	orphanScanner := runtime.OrphanHarnessProcessScanner
+	if orphanScanner == nil {
+		orphanScanner = defaultOrphanHarnessProcessScanner()
+	}
 	if reaped, reapErr := reapOrphanedHarnessChildren(
 		ctx,
 		runtime.ProjectRoot,
-		newOrphanHarnessProcessScanner(),
+		orphanScanner,
 		leaseReader,
 		releaser,
 		appender,

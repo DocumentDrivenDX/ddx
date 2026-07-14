@@ -66,13 +66,18 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	originalLookup := providerShimExecutableLookup
+	originalOrphanScannerFactory := defaultOrphanHarnessProcessScanner
 	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
+	defaultOrphanHarnessProcessScanner = func() orphanHarnessProcessScanner {
+		return newHermeticOrphanHarnessProcessScanner()
+	}
 
 	resetProviderShimStateForTest()
 	code := m.Run()
 
 	resetProviderShimStateForTest()
 	providerShimExecutableLookup = originalLookup
+	defaultOrphanHarnessProcessScanner = originalOrphanScannerFactory
 	_ = os.Setenv("PATH", originalPATH)
 	_ = os.RemoveAll(providerShimRoot)
 	os.Exit(code)
