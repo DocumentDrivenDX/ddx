@@ -99,7 +99,7 @@ func Emit(ev Event) {
 // release event is emitted even if critical panics. critical's error is
 // returned unchanged.
 //
-// When process-wide cap enforcement is enabled (see SetCapEnforcement),
+// When process-wide cap observation is enabled (see SetCapEnforcement),
 // Instrument additionally arms a hold-time cap for the lock; otherwise it is a
 // pure metric wrapper.
 func Instrument(lockName, operation string, critical func() error) error {
