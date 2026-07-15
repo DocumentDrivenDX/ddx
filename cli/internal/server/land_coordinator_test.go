@@ -125,12 +125,12 @@ func (o *outcomeGitOps) MergeInto(_, _, _ string) error {
 
 // submit sends one LandRequest to the coordinator using the given base so
 // the gitOps stub can decide the fast vs merge path.
-func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, outcome string, base string) {
+func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, worktreeDir, outcome, base string) {
 	t.Helper()
 	ops.callIdx = len(ops.outcomes)
 	ops.outcomes = append(ops.outcomes, outcome)
 	_, err := c.Submit(agent.LandRequest{
-		WorktreeDir: t.TempDir(),
+		WorktreeDir: worktreeDir,
 		BaseRev:     base,
 		ResultRev:   "result" + base,
 		BeadID:      "ddx-test",
@@ -145,23 +145,24 @@ func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, outcome str
 // (3 landed, 2 preserved, 1 landed, 4 landed) and asserts the counters
 // reflect the correct outcome counts.
 func TestLandCoordinatorMetrics(t *testing.T) {
+	repo := newLandIntegRepo(t)
 	ops := &outcomeGitOps{}
 
-	c := newLandCoordinator(t.TempDir(), ops)
+	c := newLandCoordinator(repo.dir, ops)
 	defer c.Stop()
 
 	// 3 landed (fast-forward path)
 	for i := 0; i < 3; i++ {
-		submitOne(t, c, ops, "landed", "base000")
+		submitOne(t, c, ops, repo.dir, "landed", "base000")
 	}
 	// 2 preserved (merge path with conflict)
-	submitOne(t, c, ops, "preserved", "base000")
-	submitOne(t, c, ops, "preserved", "base000")
+	submitOne(t, c, ops, repo.dir, "preserved", "base000")
+	submitOne(t, c, ops, repo.dir, "preserved", "base000")
 	// 1 landed
-	submitOne(t, c, ops, "landed", "base000")
+	submitOne(t, c, ops, repo.dir, "landed", "base000")
 	// 4 more landed
 	for i := 0; i < 4; i++ {
-		submitOne(t, c, ops, "landed", "base000")
+		submitOne(t, c, ops, repo.dir, "landed", "base000")
 	}
 
 	m := c.Metrics()
@@ -202,8 +203,8 @@ func TestLandCoordinatorMetricsRegistry(t *testing.T) {
 	ops := &outcomeGitOps{}
 	reg.gitOpsOverride = ops
 
-	root1 := t.TempDir()
-	root2 := t.TempDir()
+	root1 := newLandIntegRepo(t).dir
+	root2 := newLandIntegRepo(t).dir
 
 	c1 := reg.Get(root1)
 	defer reg.StopAll()

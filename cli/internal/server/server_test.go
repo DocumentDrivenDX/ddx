@@ -51,12 +51,19 @@ func isolateServerTestTempRoot() func() {
 		return func() {}
 	}
 	oldTmp, hadTmp := os.LookupEnv("TMPDIR")
+	oldExecWorktreeRoot, hadExecWorktreeRoot := os.LookupEnv("DDX_EXEC_WT_DIR")
 	_ = os.Setenv("TMPDIR", tempRoot)
+	_ = os.Setenv("DDX_EXEC_WT_DIR", filepath.Join(tempRoot, "exec-worktrees"))
 	return func() {
 		if hadTmp {
 			_ = os.Setenv("TMPDIR", oldTmp)
 		} else {
 			_ = os.Unsetenv("TMPDIR")
+		}
+		if hadExecWorktreeRoot {
+			_ = os.Setenv("DDX_EXEC_WT_DIR", oldExecWorktreeRoot)
+		} else {
+			_ = os.Unsetenv("DDX_EXEC_WT_DIR")
 		}
 		_ = os.RemoveAll(tempRoot)
 	}

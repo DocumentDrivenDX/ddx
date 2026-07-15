@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -297,15 +295,7 @@ func writeStaleClaimLeaseForTest(t *testing.T, s *bead.Store, rec bead.ClaimLeas
 	require.NoError(t, err)
 	data = append(data, '\n')
 
-	root := filepath.Clean(filepath.Dir(s.Dir))
-	if abs, err := filepath.Abs(root); err == nil {
-		root = abs
-	}
-	if real, err := filepath.EvalSymlinks(root); err == nil {
-		root = real
-	}
-	sum := sha1.Sum([]byte(filepath.Clean(root)))
-	path := filepath.Join(os.TempDir(), "ddx-claim-heartbeats", hex.EncodeToString(sum[:]), rec.BeadID+".json")
+	path := filepath.Join(bead.ClaimLivenessRoot(s.Dir), rec.BeadID+".json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 }
