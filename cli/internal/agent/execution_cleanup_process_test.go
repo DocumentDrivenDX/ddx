@@ -90,8 +90,7 @@ func TestExecutionCleanupManager_DryRunReportsStaleAttemptDescendantProcesses(t 
 	}))
 
 	killer := &fakeExecutionCleanupAttemptProcessKiller{}
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.DryRun = true
 	mgr.Now = func() time.Time { return now }
 	mgr.attemptProcessScanner = fakeExecutionCleanupAttemptProcessScanner{
@@ -193,8 +192,7 @@ func TestExecutionCleanupManager_ApplyReapsOnlyStaleAttemptProcessGroups(t *test
 	}))
 
 	killer := &fakeExecutionCleanupAttemptProcessKiller{}
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{worktrees: []string{registeredPath}})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{worktrees: []string{registeredPath}})
 	mgr.Now = func() time.Time { return now }
 	mgr.attemptProcessScanner = fakeExecutionCleanupAttemptProcessScanner{
 		processes: []executionCleanupAttemptProcess{
@@ -295,8 +293,7 @@ func TestExecutionCleanupManager_DetectsNonHarnessDescendantByOwnershipEvidence(
 	}))
 
 	killer := &fakeExecutionCleanupAttemptProcessKiller{}
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.DryRun = true
 	mgr.Now = func() time.Time { return now }
 	mgr.attemptProcessScanner = fakeExecutionCleanupAttemptProcessScanner{
@@ -451,8 +448,7 @@ func TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation(t
 	}, nil)
 
 	killer := &fakeExecutionCleanupAttemptProcessKiller{}
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{worktrees: []string{registeredPath}})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{worktrees: []string{registeredPath}})
 	mgr.Now = func() time.Time { return now }
 	mgr.attemptProcessScanner = fakeExecutionCleanupAttemptProcessScanner{
 		processes: []executionCleanupAttemptProcess{

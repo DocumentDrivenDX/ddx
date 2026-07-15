@@ -22,8 +22,7 @@ func TestExecutionCleanupManager_UnsupportedPlatformReportsProcessCleanupUnavail
 		WorktreePath: filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-unavailable-20260608T140000-ffffffff"),
 	}))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
