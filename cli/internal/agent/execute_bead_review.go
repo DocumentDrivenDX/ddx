@@ -108,16 +108,17 @@ func countACGradeMismatches(acCheckJSONStr string, perAC []ReviewAC) (int, []str
 }
 
 // ImplementerRouting captures the implementer's execution evidence so the
-// post-merge reviewer can reuse correlation and request MinPower one above the
-// implementer's actual selected power. Concrete route fields remain evidence.
+// post-merge reviewer can reuse route-neutral correlation and request MinPower
+// one above the implementer's actual selected power. Concrete route fields
+// remain result evidence and never enter the reviewer dispatch request.
 type ImplementerRouting struct {
 	Harness     string
 	Provider    string
 	Model       string
 	ActualPower int
-	// Correlation is the implementer's correlation map. The reviewer copies
-	// its keys into its own dispatch metadata so events / session log /
-	// aggregations can join the two calls.
+	// Correlation is the implementer's route-neutral correlation map. The
+	// reviewer copies its keys into its own dispatch metadata so events,
+	// session logs, and aggregations can join the two calls.
 	Correlation map[string]string
 }
 
@@ -797,10 +798,10 @@ type DefaultBeadReviewer struct {
 }
 
 // BuildReviewExecuteRequest constructs the AgentRunRuntime used for the
-// post-merge reviewer dispatch. It sets the reviewer harness/profile,
-// attaches the implementer's correlation map (with role=reviewer overlaid),
-// and derives MinPower as impl.ActualPower + 1 so routing is biased toward a
-// stronger candidate than the implementer's actual selection. The returned
+// post-merge reviewer dispatch. It sets explicit reviewer overrides, attaches
+// route-neutral correlation (with role=reviewer overlaid), and derives
+// MinPower as impl.ActualPower + 1 so Fizeau can route to a stronger candidate.
+// The returned
 // runtime is missing per-call plumbing (Prompt/PromptFile, WorkDir,
 // SessionLogDirOverride) — the caller fills those in before dispatching.
 func BuildReviewExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerProfile string) AgentRunRuntime {
@@ -808,31 +809,22 @@ func BuildReviewExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewe
 }
 
 // BuildReviewGroupExecuteRequest constructs the reviewer runtime for one
-// slot in a review group. It threads the implementer's correlation facts,
-// overlays reviewer role metadata, and stamps the review_group_id and
+// slot in a review group. It threads route-neutral correlation facts, overlays
+// reviewer role metadata, and stamps the review_group_id and
 // reviewer_index when provided so downstream routing / tracing can join the
 // two reviewer slots back to the same evidence bundle.
 func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerProfile string, meta ReviewGroupDispatchMeta) AgentRunRuntime {
 	correlation := map[string]string{}
 	for k, v := range impl.Correlation {
+		if isImplementerRouteMetadataKey(k) {
+			continue
+		}
 		correlation[k] = v
 	}
 	correlation["role"] = "reviewer"
 	if meta.GroupID != "" {
 		correlation["review_group_id"] = meta.GroupID
 		correlation["reviewer_index"] = fmt.Sprintf("%d", meta.ReviewerIndex)
-	}
-	if impl.Harness != "" {
-		correlation["impl_harness"] = impl.Harness
-	}
-	if impl.Provider != "" {
-		correlation["impl_provider"] = impl.Provider
-	}
-	if impl.Model != "" {
-		correlation["impl_model"] = impl.Model
-	}
-	if impl.ActualPower > 0 {
-		correlation["impl_actual_power"] = fmt.Sprintf("%d", impl.ActualPower)
 	}
 	minPower := 0
 	if impl.ActualPower > 0 {
@@ -849,6 +841,15 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 		PermissionsOverride: PermissionsReadOnlyReviewer,
 		ClearRoutingPins:    true,
 		ClearProfile:        true,
+	}
+}
+
+func isImplementerRouteMetadataKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "impl_harness", "impl_provider", "impl_model", "impl_actual_power":
+		return true
+	default:
+		return false
 	}
 }
 

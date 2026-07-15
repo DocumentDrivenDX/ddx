@@ -15,9 +15,9 @@ import (
 )
 
 // TestBuildReviewExecuteRequest verifies that the helper produces the runtime
-// fields demanded by R4 pairing: Role=reviewer in the correlation map, the
-// implementer's correlation keys are propagated, and MinPower is bumped one
-// above the implementer's actual selected power.
+// fields demanded by R4 pairing: Role=reviewer in the correlation map,
+// route-neutral implementer correlation keys are propagated, concrete route
+// metadata is omitted, and MinPower is bumped one above actual selected power.
 func TestBuildReviewExecuteRequest(t *testing.T) {
 	impl := ImplementerRouting{
 		Harness:     "codex",
@@ -46,10 +46,10 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.Equal(t, "ddx-pairing-1", got.Correlation["bead_id"], "implementer correlation keys must propagate")
 	assert.Equal(t, "att-1", got.Correlation["attempt_id"])
 	assert.Equal(t, "sess-1", got.Correlation["session_id"])
-	assert.Equal(t, "codex", got.Correlation["impl_harness"])
-	assert.Equal(t, "openai", got.Correlation["impl_provider"])
-	assert.Equal(t, "gpt-5", got.Correlation["impl_model"])
-	assert.Equal(t, "70", got.Correlation["impl_actual_power"])
+	assert.NotContains(t, got.Correlation, "impl_harness")
+	assert.NotContains(t, got.Correlation, "impl_provider")
+	assert.NotContains(t, got.Correlation, "impl_model")
+	assert.NotContains(t, got.Correlation, "impl_actual_power")
 }
 
 func TestReviewerDispatch_UsesProfilePin(t *testing.T) {
@@ -239,8 +239,60 @@ func TestPostMergeReviewer_DispatchesWithStrongerMinPowerAndNoConcretePin(t *tes
 	assert.Empty(t, svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_harness")
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_provider")
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_model")
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_actual_power")
 	assert.False(t, svc.listPoliciesCalled)
 	assert.False(t, svc.listModelsCalled)
+}
+
+func TestPostMergeReviewer_RequestIsInvariantAcrossImplementerRouteIdentity(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	newService := func() *passthroughTestService {
+		return &passthroughTestService{executeEvents: []agentlib.ServiceEvent{{
+			Type: "final",
+			Data: []byte(`{"status":"success","final_text":"{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}"}`),
+		}}}
+	}
+
+	run := func(impl ImplementerRouting) agentlib.ServiceExecuteRequest {
+		svc := newService()
+		reviewer := &DefaultBeadReviewer{ProjectRoot: projectRoot, BeadStore: store, Service: svc}
+		res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, impl)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		return svc.lastReq
+	}
+
+	commonCorrelation := map[string]string{
+		"bead_id":    "ddx-pairing",
+		"attempt_id": "att-identity-invariant",
+		"result_rev": head,
+	}
+	first := run(ImplementerRouting{
+		Harness: "codex", Provider: "openai", Model: "gpt-5", ActualPower: 70,
+		Correlation: commonCorrelation,
+	})
+	second := run(ImplementerRouting{
+		Harness: "claude", Provider: "anthropic", Model: "claude-opus", ActualPower: 70,
+		Correlation: commonCorrelation,
+	})
+
+	assert.Equal(t, first.Prompt, second.Prompt)
+	assert.Equal(t, first.MinPower, second.MinPower)
+	assert.Equal(t, first.Metadata, second.Metadata)
+	for _, req := range []agentlib.ServiceExecuteRequest{first, second} {
+		assert.Empty(t, req.Harness)
+		assert.Empty(t, req.Provider)
+		assert.Empty(t, req.Model)
+		assert.Empty(t, req.Policy)
+		assert.Equal(t, 71, req.MinPower)
+		assert.NotContains(t, req.Metadata, "impl_harness")
+		assert.NotContains(t, req.Metadata, "impl_provider")
+		assert.NotContains(t, req.Metadata, "impl_model")
+		assert.NotContains(t, req.Metadata, "impl_actual_power")
+	}
 }
 
 func TestReviewRouting_MissingActualPowerUsesStrongAbstractFloor(t *testing.T) {

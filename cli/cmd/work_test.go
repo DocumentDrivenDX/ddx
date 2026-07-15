@@ -19,6 +19,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -538,7 +539,7 @@ func TestWork_WarnsStaleSourceBinaryButProceeds(t *testing.T) {
 		"stderr must include the stale-binary warning")
 }
 
-func TestWorkZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
+func TestWorkEstimatedDifficultySeedsFirstMinPower(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -562,6 +563,9 @@ func TestWorkZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
 		ID:        "ddx-zero-config-work-powerClass-standard",
 		Title:     "Work with inferred standard routing powerClass",
 		IssueType: "bug",
+		Extra: map[string]any{
+			policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyHard),
+		},
 	}))
 
 	factory := NewCommandFactory(dir)
@@ -579,7 +583,7 @@ func TestWorkZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
 	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
 	lastReq := requests[0]
 	assert.Empty(t, lastReq.Policy, "zero-config work must not select a Fizeau policy")
-	assert.Equal(t, 0, lastReq.MinPower, "difficulty-to-MinPower mapping is owned by its dedicated boundary bead")
+	assert.Equal(t, 9, lastReq.MinPower, "hard difficulty must seed the first abstract floor")
 	assert.Empty(t, lastReq.Harness, "zero-config work must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config work must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config work must not hard-pin a model")
@@ -636,7 +640,7 @@ func TestWorkZeroConfigStandardPolicyDoesNotDowngradeToCheapPolicy(t *testing.T)
 	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
 	lastReq := requests[0]
 	assert.Empty(t, lastReq.Policy, "DDx must not inspect a model snapshot to choose a policy")
-	assert.Equal(t, 0, lastReq.MinPower)
+	assert.Equal(t, 7, lastReq.MinPower)
 }
 
 func TestWorkHarnessOnlyProfileIsOpaquePassthrough(t *testing.T) {
@@ -911,9 +915,9 @@ func TestWorkZeroConfigSemanticRetryRaisesAbstractPowerFloor(t *testing.T) {
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx work should retry an escalatable implementation failure; output=%q err=%v", out, err)
 	assert.Empty(t, requests[0].Policy, "DDx must not select a policy before the first attempt")
-	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
+	assert.Equal(t, 7, requests[0].MinPower, "default difficulty inference must seed MinPower=7")
 	assert.Empty(t, requests[1].Policy, "retry changes only the existing MinPower policy")
-	assert.Equal(t, 6, requests[1].MinPower, "semantic retry must ask Fizeau for a strictly stronger abstract floor")
+	assert.Equal(t, 8, requests[1].MinPower, "semantic retry must ask Fizeau for a strictly stronger abstract floor")
 	assert.Empty(t, capturedModelFilters(stub), "semantic escalation must not inspect Fizeau's model catalog")
 	assert.Empty(t, capturedRouteRequests(stub), "semantic escalation must not pre-resolve a route")
 	assert.Equal(t, policyQueriesAtFirstAttempt, capturedPolicyQueries(stub), "semantic escalation must not inspect Fizeau's policy catalog")
@@ -970,9 +974,9 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx work should retry provider connectivity with a higher floor; output=%q err=%v", out, err)
 	assert.Empty(t, requests[0].Policy, "DDx must not select a policy before the first attempt")
-	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
+	assert.Equal(t, 7, requests[0].MinPower, "default difficulty inference must seed MinPower=7")
 	assert.Equal(t, requests[0].Policy, requests[1].Policy, "retry should preserve the selected policy intent")
-	assert.Equal(t, 6, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
+	assert.Equal(t, 8, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
 }
 
 // TestWorkProviderConnectivityCommitsEvidence is the ddx-ca94d157 regression

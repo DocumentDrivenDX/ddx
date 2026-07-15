@@ -17,23 +17,20 @@ import (
 // escalate standard -> smart.
 //
 // The test drives a simulated powerClass ladder using the real escalation
-// primitives (InferPowerClass, IsInfrastructureFailure, ShouldEscalate,
+// primitives (InferInitialMinPower, IsInfrastructureFailure, ShouldEscalate,
 // BuildEscalationSummary). It does not require a running
 // agent service or harness binary.
 func TestZeroConfigRetryEscalationPolicy(t *testing.T) {
 	// 1. Unflagged bead: no explicit estimated-difficulty hint.
-	// InferPowerClass must default to standard; cheap and smart require the
-	// single explicit bead metadata hint or later retry escalation.
+	// Difficulty inference must default to the ordinary MinPower=7 floor.
 	b := &bead.Bead{
 		ID:          "ddx-zero-config-001",
 		Title:       "trivial cleanup, unflagged",
 		Description: "minor doc tweak",
 	}
-	startPowerClass := escalation.InferPowerClass(b)
-	require.Equal(t, escalation.PowerStandard, startPowerClass,
-		"unflagged bead must infer standard powerClass")
-	require.Equal(t, "standard", string(startPowerClass),
-		"standard powerClass maps to the ordinary implementation profile")
+	startMinPower := escalation.InferInitialMinPower(b)
+	require.Equal(t, 7, startMinPower, "unflagged bead must infer MinPower=7")
+	startPowerClass := escalation.PowerStandard
 
 	// 2. Transient infrastructure failure on standard powerClass (e.g. 502 from
 	// the inference host). The policy is: do NOT escalate; defer with a

@@ -164,14 +164,19 @@ type ExecutionCycleRouteFacts struct {
 // ExecutionCycleRequestedRouteFacts captures the operator/request-side routing
 // facts available to the worker for one execution cycle.
 type ExecutionCycleRequestedRouteFacts struct {
-	Harness             string `json:"harness,omitempty"`
-	Provider            string `json:"provider,omitempty"`
-	Model               string `json:"model,omitempty"`
-	Profile             string `json:"profile,omitempty"`
-	RoutingIntentSource string `json:"routing_intent_source,omitempty"`
-	EstimatedDifficulty string `json:"estimated_difficulty,omitempty"`
-	InferredPowerClass  string `json:"inferred_power_class,omitempty"`
-	RequestedPowerClass string `json:"requested_power_class,omitempty"`
+	Harness                 string `json:"harness,omitempty"`
+	Provider                string `json:"provider,omitempty"`
+	Model                   string `json:"model,omitempty"`
+	Profile                 string `json:"profile,omitempty"`
+	RoutingIntentSource     string `json:"routing_intent_source,omitempty"`
+	EstimatedDifficulty     string `json:"estimated_difficulty,omitempty"`
+	InferredPowerClass      string `json:"inferred_power_class,omitempty"`
+	RequestedPowerClass     string `json:"requested_power_class,omitempty"`
+	RequestedPolicy         string `json:"requested_policy,omitempty"`
+	InferredMinPower        int    `json:"inferred_min_power"`
+	InferredMinPowerPresent bool   `json:"inferred_min_power_present,omitempty"`
+	RequestedMinPower       int    `json:"requested_min_power"`
+	RequestedMaxPower       int    `json:"requested_max_power"`
 }
 
 // ExecutionCycleReviewResult captures the reduced review outcome for one

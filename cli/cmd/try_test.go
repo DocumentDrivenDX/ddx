@@ -556,24 +556,26 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 		return agent.ExecuteBeadReport{
-			BeadID:              beadID,
-			Status:              agent.ExecuteBeadStatusSuccess,
-			SessionID:           "sess-hint",
-			ResultRev:           "deadbeef01234567",
-			Harness:             "claude",
-			Provider:            "anthropic",
-			Model:               "claude-sonnet-4-6",
-			ActualPower:         91,
-			RoutingIntentSource: string(policyescalation.ExecutionIntentSourceBeadHint),
-			EstimatedDifficulty: string(policyescalation.DifficultyHard),
-			InferredPowerClass:  string(policyescalation.PowerSmart),
+			BeadID:                  beadID,
+			Status:                  agent.ExecuteBeadStatusSuccess,
+			SessionID:               "sess-hint",
+			ResultRev:               "deadbeef01234567",
+			Harness:                 "claude",
+			Provider:                "anthropic",
+			Model:                   "claude-sonnet-4-6",
+			ActualPower:             91,
+			RoutingIntentSource:     string(policyescalation.ExecutionIntentSourceBeadHint),
+			EstimatedDifficulty:     string(policyescalation.DifficultyHard),
+			InferredMinPower:        9,
+			InferredMinPowerPresent: true,
+			RequestedMinPower:       9,
 		}, nil
 	})
 	root := factory.NewRootCommand()
 
 	out, err := executeCommand(root, "try", "hint-bead-001", "--no-review", "--no-review-i-know-what-im-doing")
 	require.NoError(t, err, "ddx try with a hard bead hint must succeed: %s", out)
-	assert.Contains(t, out, "routing intent: difficulty=hard powerClass=smart source=bead_hint")
+	assert.Contains(t, out, "routing intent: difficulty=hard minPower=9 source=bead_hint")
 
 	events, err := store.Events("hint-bead-001")
 	require.NoError(t, err)
@@ -591,14 +593,16 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(intentEvent.Body), &body))
 	assert.Equal(t, "bead_hint", body["routing_intent_source"])
 	assert.Equal(t, "hard", body["estimated_difficulty"])
-	assert.Equal(t, "smart", body["requested_power_class"])
+	assert.Equal(t, float64(9), body["inferred_min_power"])
+	assert.Equal(t, float64(9), body["requested_min_power"])
+	assert.NotContains(t, body, "requested_power_class")
 	assert.Equal(t, "claude", body["actual_harness"])
 	assert.Equal(t, "anthropic", body["actual_provider"])
 	assert.Equal(t, "claude-sonnet-4-6", body["actual_model"])
 	assert.Equal(t, float64(91), body["actual_power"])
 }
 
-func TestTryZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
+func TestTryEstimatedDifficultySeedsFirstMinPower(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -616,6 +620,9 @@ func TestTryZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
 		ID:        "ddx-zero-config-try-powerClass-standard",
 		Title:     "Try with inferred standard routing powerClass",
 		IssueType: "bug",
+		Extra: map[string]any{
+			policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyHard),
+		},
 	}))
 
 	factory := NewCommandFactory(dir)
@@ -635,7 +642,7 @@ func TestTryZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
 	assert.Empty(t, lastReq.Policy, "zero-config try must not select a Fizeau policy")
-	assert.Equal(t, 0, lastReq.MinPower, "difficulty-to-MinPower mapping is owned by its dedicated boundary bead")
+	assert.Equal(t, 9, lastReq.MinPower, "hard difficulty must seed the first abstract floor")
 	assert.Empty(t, lastReq.Harness, "zero-config routing must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config routing must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
@@ -692,9 +699,9 @@ func TestTryZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testing
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx try should use the shared try-loop retry state machine; output=%q err=%v", out, err)
 	assert.Empty(t, requests[0].Policy)
-	assert.Equal(t, 0, requests[0].MinPower)
+	assert.Equal(t, 7, requests[0].MinPower)
 	assert.Empty(t, requests[1].Policy)
-	assert.Equal(t, 6, requests[1].MinPower)
+	assert.Equal(t, 8, requests[1].MinPower)
 }
 
 func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
@@ -776,7 +783,7 @@ func TestTryIgnoresNumericLegacyRetryFloor(t *testing.T) {
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke implementation dispatch; output=%q err=%v", out, err)
 	assert.Empty(t, lastReq.Policy, "numeric retry metadata must not cause DDx policy selection")
-	assert.Equal(t, 0, lastReq.MinPower, "numeric retry metadata must not become the requested MinPower")
+	assert.Equal(t, 7, lastReq.MinPower, "numeric retry metadata must not override the default inferred MinPower")
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling
@@ -870,9 +877,10 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-model"), "try must expose --review-model flag")
 }
 
-// TestTry_HooksWired verifies that ddx try wires the pre-dispatch lint hook
-// into ExecuteBeadLoopRuntime, and that the triage hook is skipped (not invoked)
-// when the implementer produces no commits (BaseRev == ResultRev).
+// TestTry_HooksWired verifies that ddx try wires the pre-claim intake and
+// pre-dispatch lint hooks into ExecuteBeadLoopRuntime, and that the triage hook
+// is skipped (not invoked) when the implementer produces no commits
+// (BaseRev == ResultRev).
 func TestTry_HooksWired(t *testing.T) {
 	env := NewTestEnvironment(t)
 	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
@@ -912,8 +920,9 @@ bead-quality:
 	)
 	require.Error(t, err)
 	assert.Contains(t, out, "bead:", "try command should still render the terminal report")
-	// triage is skipped for empty diffs (BaseRev == ResultRev); only lint fires
-	assert.Equal(t, []string{"bead-lifecycle-lint"}, runner.promptSource)
+	// Intake supplies the current bead's difficulty before dispatch. Triage is
+	// skipped for empty diffs (BaseRev == ResultRev), so only intake and lint fire.
+	assert.Equal(t, []string{"bead-lifecycle-intake", "bead-lifecycle-lint"}, runner.promptSource)
 
 	events, err := store.Events("hook-bead-001")
 	require.NoError(t, err)

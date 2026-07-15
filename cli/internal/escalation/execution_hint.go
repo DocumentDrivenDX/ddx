@@ -23,15 +23,16 @@ const (
 type ExecutionHint struct {
 	Source              ExecutionIntentSource
 	EstimatedDifficulty EstimatedDifficulty
-	InferredPowerClass  PowerClass
+	InferredMinPower    int
+	HasInferredMinPower bool
 	RejectedRoutePins   []string
 }
 
 type ExecutionHintInput struct {
 	Bead                         *bead.Bead
 	ReadinessEstimatedDifficulty string
-	ExplicitRouting              bool
-	ProjectRouting               bool
+	ExplicitMinPower             bool
+	PublicPolicy                 string
 }
 
 // ExecutionHintFinding is a single lint finding emitted when bead metadata
@@ -50,24 +51,22 @@ func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 	return ResolveExecutionHint(ExecutionHintInput{Bead: b})
 }
 
-// ResolveExecutionHint applies the TD-037 precedence for execution intent:
-// explicit CLI routing first, project routing second, durable bead difficulty
-// third, transient readiness difficulty fourth, and the ordinary standard route
-// otherwise. Concrete route pins are lint-only diagnostics and never influence
-// the inferred power class.
+// ResolveExecutionHint applies the routing boundary for difficulty inference.
+// Only an explicit operator MinPower or a non-empty opaque Fizeau policy
+// suppresses inference. Harness/provider/model/MaxPower remain sticky request
+// constraints, but do not disable the inferred numeric floor.
 func ResolveExecutionHint(input ExecutionHintInput) ExecutionHint {
 	hint := ExecutionHint{
-		Source:             ExecutionIntentSourceDefault,
-		InferredPowerClass: PowerStandard,
+		Source:              ExecutionIntentSourceDefault,
+		InferredMinPower:    7,
+		HasInferredMinPower: true,
 	}
 	b := input.Bead
 	switch {
-	case input.ExplicitRouting:
+	case input.ExplicitMinPower || input.PublicPolicy != "":
 		hint.Source = ExecutionIntentSourceCLIPassthru
-		hint.InferredPowerClass = ""
-	case input.ProjectRouting:
-		hint.Source = ExecutionIntentSourceProject
-		hint.InferredPowerClass = ""
+		hint.InferredMinPower = 0
+		hint.HasInferredMinPower = false
 	default:
 		hint = resolveDifficultyExecutionHint(b, input.ReadinessEstimatedDifficulty)
 	}
@@ -94,17 +93,18 @@ func ResolveExecutionHint(input ExecutionHintInput) ExecutionHint {
 
 func resolveDifficultyExecutionHint(b *bead.Bead, readinessEstimatedDifficulty string) ExecutionHint {
 	hint := ExecutionHint{
-		Source:             ExecutionIntentSourceDefault,
-		InferredPowerClass: PowerStandard,
+		Source:              ExecutionIntentSourceDefault,
+		InferredMinPower:    7,
+		HasInferredMinPower: true,
 	}
 	if difficulty, ok := BeadEstimatedDifficulty(b); ok {
 		hint.Source = ExecutionIntentSourceBeadHint
 		hint.EstimatedDifficulty = difficulty
-		hint.InferredPowerClass = PowerClassForEstimatedDifficulty(difficulty)
+		hint.InferredMinPower = MinPowerForEstimatedDifficulty(difficulty)
 	} else if difficulty, ok := parseEstimatedDifficulty(readinessEstimatedDifficulty); ok {
 		hint.Source = ExecutionIntentSourceReadiness
 		hint.EstimatedDifficulty = difficulty
-		hint.InferredPowerClass = PowerClassForEstimatedDifficulty(difficulty)
+		hint.InferredMinPower = MinPowerForEstimatedDifficulty(difficulty)
 	}
 	return hint
 }

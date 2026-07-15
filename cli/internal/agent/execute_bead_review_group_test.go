@@ -130,10 +130,10 @@ func TestReviewGroup_CorrelationFields(t *testing.T) {
 		assert.Equal(t, head, call.Correlation["result_rev"])
 		assert.Equal(t, "reviewer", call.Correlation["role"])
 		assert.Equal(t, fmt.Sprintf("%d", i), call.Correlation["reviewer_index"])
-		assert.Equal(t, "codex", call.Correlation["impl_harness"])
-		assert.Equal(t, "openai", call.Correlation["impl_provider"])
-		assert.Equal(t, "gpt-5", call.Correlation["impl_model"])
-		assert.Equal(t, "70", call.Correlation["impl_actual_power"])
+		assert.NotContains(t, call.Correlation, "impl_harness")
+		assert.NotContains(t, call.Correlation, "impl_provider")
+		assert.NotContains(t, call.Correlation, "impl_model")
+		assert.NotContains(t, call.Correlation, "impl_actual_power")
 	}
 }
 

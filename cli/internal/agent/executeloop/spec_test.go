@@ -30,6 +30,7 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 		RequestTimeout:         executeloop.Duration{Duration: 2 * time.Minute},
 		RateLimitMaxWait:       executeloop.Duration{Duration: 90 * time.Second},
 		MinPower:               2,
+		MinPowerSet:            true,
 		MaxPower:               5,
 		FromRev:                "abc123def456",
 		SpecVersion:            executeloop.SpecCurrentVersion,
@@ -105,6 +106,9 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	if got.MinPower != original.MinPower {
 		t.Errorf("MinPower: got %d, want %d", got.MinPower, original.MinPower)
 	}
+	if got.MinPowerSet != original.MinPowerSet {
+		t.Errorf("MinPowerSet: got %v, want %v", got.MinPowerSet, original.MinPowerSet)
+	}
 	if got.MaxPower != original.MaxPower {
 		t.Errorf("MaxPower: got %d, want %d", got.MaxPower, original.MaxPower)
 	}
@@ -113,6 +117,24 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	}
 	if got.SpecVersion != original.SpecVersion {
 		t.Errorf("SpecVersion: got %d, want %d", got.SpecVersion, original.SpecVersion)
+	}
+}
+
+func TestExecuteLoopSpec_UnmarshalTracksExplicitZeroMinPower(t *testing.T) {
+	var explicit executeloop.ExecuteLoopSpec
+	if err := json.Unmarshal([]byte(`{"min_power":0}`), &explicit); err != nil {
+		t.Fatal(err)
+	}
+	if !explicit.MinPowerSet || explicit.MinPower != 0 {
+		t.Fatalf("explicit zero presence lost: %+v", explicit)
+	}
+
+	var omitted executeloop.ExecuteLoopSpec
+	if err := json.Unmarshal([]byte(`{}`), &omitted); err != nil {
+		t.Fatal(err)
+	}
+	if omitted.MinPowerSet {
+		t.Fatalf("omitted min_power marked present: %+v", omitted)
 	}
 }
 

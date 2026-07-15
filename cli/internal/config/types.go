@@ -499,13 +499,10 @@ type AgentEndpoint struct {
 //
 // Note: agent.routing.default_harness was REMOVED in the routing-config
 // deprecation pass (bead ddx-87fb72c2). agent.routing.profile_ladders and
-// agent.routing.model_overrides were removed in bead ddx-3bd7396a. Configs
-// that still carry any of these fields fail to load with a migration message.
-type RoutingConfig struct {
-	// ProfilePriority is the deprecated flat-list form; still parsed so
-	// existing configs can emit a deprecation warning.
-	ProfilePriority []string `yaml:"profile_priority,omitempty" json:"profile_priority,omitempty"`
-}
+// agent.routing.model_overrides were removed in bead ddx-3bd7396a, and the
+// final flat-list compatibility field is retired as well. Configs that still
+// carry any of these fields fail to load with a migration message.
+type RoutingConfig struct{}
 
 // AgentRunnerConfig was the embedded DDx Agent harness config block.
 // Deprecated: Use native .agent/config.yaml instead. This type is retained for

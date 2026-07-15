@@ -772,10 +772,18 @@ type ExecuteBeadReport struct {
 	RoutingIntentSource string `json:"routing_intent_source,omitempty"`
 	EstimatedDifficulty string `json:"estimated_difficulty,omitempty"`
 	InferredPowerClass  string `json:"inferred_power_class,omitempty"`
-	RoutingIntentNote   string `json:"routing_intent_note,omitempty"`
-	ResolvedPowerClass  string `json:"resolved_power_class,omitempty"`
-	EscalationCount     int    `json:"escalation_count,omitempty"`
-	FinalPowerClass     string `json:"final_power_class,omitempty"`
+	// Current requests use only the opaque Fizeau policy and numeric power
+	// bounds below. The profile/power-class fields above are retained solely
+	// for reading historical execution records.
+	RequestedPolicy         string `json:"requested_policy,omitempty"`
+	InferredMinPower        int    `json:"inferred_min_power"`
+	InferredMinPowerPresent bool   `json:"inferred_min_power_present,omitempty"`
+	RequestedMinPower       int    `json:"requested_min_power"`
+	RequestedMaxPower       int    `json:"requested_max_power"`
+	RoutingIntentNote       string `json:"routing_intent_note,omitempty"`
+	ResolvedPowerClass      string `json:"resolved_power_class,omitempty"`
+	EscalationCount         int    `json:"escalation_count,omitempty"`
+	FinalPowerClass         string `json:"final_power_class,omitempty"`
 	// DecompositionRecommendation carries the structured list of recommended
 	// sub-bead titles when Status == declined_needs_decomposition. The loop
 	// records these on the bead as a `decomposition-recommendation` event so
@@ -5461,20 +5469,25 @@ func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report
 	if provider == "" {
 		return
 	}
-	intentSource, estimatedDifficulty, requestedPowerClass, _ := executionRoutingIntentFacts(target, report)
-	body, err := json.Marshal(map[string]any{
+	intentSource, estimatedDifficulty, inferredMinPower, hasInferredMinPower, _ := executionRoutingIntentFacts(target, report)
+	body := map[string]any{
 		"resolved_provider":     provider,
 		"resolved_model":        report.Model,
 		"fallback_chain":        []map[string]any{},
 		"routing_intent_source": intentSource,
 		"estimated_difficulty":  estimatedDifficulty,
-		"requested_profile":     report.RequestedProfile,
-		"requested_power_class": requestedPowerClass,
+		"requested_policy":      report.RequestedPolicy,
+		"requested_min_power":   report.RequestedMinPower,
+		"requested_max_power":   report.RequestedMaxPower,
 		"routing_intent_note":   report.RoutingIntentNote,
 		"resolved_power_class":  report.ResolvedPowerClass,
 		"escalation_count":      report.EscalationCount,
 		"final_power_class":     report.FinalPowerClass,
-	})
+	}
+	if hasInferredMinPower {
+		body["inferred_min_power"] = inferredMinPower
+	}
+	encoded, err := json.Marshal(body)
 	if err != nil {
 		return
 	}
@@ -5485,7 +5498,7 @@ func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report
 	_ = store.AppendEvent(target.ID, bead.BeadEvent{
 		Kind:      "routing",
 		Summary:   summary,
-		Body:      string(body),
+		Body:      string(encoded),
 		Actor:     "ddx",
 		Source:    "ddx work",
 		CreatedAt: createdAt,
@@ -5496,14 +5509,15 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if store == nil || target.ID == "" {
 		return
 	}
-	intentSource, estimatedDifficulty, requestedPowerClass, rejectedRoutePins := executionRoutingIntentFacts(target, report)
+	intentSource, estimatedDifficulty, inferredMinPower, hasInferredMinPower, rejectedRoutePins := executionRoutingIntentFacts(target, report)
 	body := map[string]any{
 		"bead_id":                 target.ID,
 		"attempt_id":              report.AttemptID,
 		"routing_intent_source":   intentSource,
 		"estimated_difficulty":    estimatedDifficulty,
-		"requested_power_class":   requestedPowerClass,
-		"requested_profile":       report.RequestedProfile,
+		"requested_policy":        report.RequestedPolicy,
+		"requested_min_power":     report.RequestedMinPower,
+		"requested_max_power":     report.RequestedMaxPower,
 		"actual_harness":          report.Harness,
 		"actual_provider":         report.Provider,
 		"actual_model":            report.Model,
@@ -5511,6 +5525,9 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		"routing_intent_degraded": false,
 		"routing_intent_note":     "",
 		"rejected_route_pins":     rejectedRoutePins,
+	}
+	if hasInferredMinPower {
+		body["inferred_min_power"] = inferredMinPower
 	}
 	degraded := false
 	note := ""
@@ -5536,8 +5553,8 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if estimatedDifficulty != "" {
 		summary += fmt.Sprintf(" difficulty=%s", estimatedDifficulty)
 	}
-	if requestedPowerClass != "" {
-		summary += fmt.Sprintf(" powerClass=%s", requestedPowerClass)
+	if hasInferredMinPower {
+		summary += fmt.Sprintf(" minPower=%d", inferredMinPower)
 	}
 	if report.Model != "" {
 		summary += " model=" + report.Model
@@ -5558,44 +5575,21 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	})
 }
 
-func executionRoutingIntentFacts(target bead.Bead, report ExecuteBeadReport) (source, estimatedDifficulty, requestedPowerClass string, rejectedRoutePins []string) {
+func executionRoutingIntentFacts(target bead.Bead, report ExecuteBeadReport) (source, estimatedDifficulty string, inferredMinPower int, hasInferredMinPower bool, rejectedRoutePins []string) {
 	intent := escalation.ParseExecutionHint(&target)
 	source = string(intent.Source)
 	estimatedDifficulty = string(intent.EstimatedDifficulty)
+	inferredMinPower = intent.InferredMinPower
+	hasInferredMinPower = intent.HasInferredMinPower
 	rejectedRoutePins = intent.RejectedRoutePins
 
 	if report.RoutingIntentSource != "" {
 		source = report.RoutingIntentSource
-		switch escalation.ExecutionIntentSource(report.RoutingIntentSource) {
-		case escalation.ExecutionIntentSourceCLIPassthru, escalation.ExecutionIntentSourceProject:
-			estimatedDifficulty = ""
-			requestedPowerClass = ""
-		case escalation.ExecutionIntentSourceDefault:
-			estimatedDifficulty = ""
-			requestedPowerClass = string(escalation.PowerStandard)
-		case escalation.ExecutionIntentSourceReadiness:
-			estimatedDifficulty = ""
-			if strings.TrimSpace(report.EstimatedDifficulty) != "" {
-				readinessIntent := escalation.ResolveExecutionHint(escalation.ExecutionHintInput{
-					ReadinessEstimatedDifficulty: report.EstimatedDifficulty,
-				})
-				requestedPowerClass = string(readinessIntent.InferredPowerClass)
-			}
-		}
-	}
-	if report.EstimatedDifficulty != "" {
 		estimatedDifficulty = report.EstimatedDifficulty
+		inferredMinPower = report.InferredMinPower
+		hasInferredMinPower = report.InferredMinPowerPresent
 	}
-
-	if requestedPowerClass == "" &&
-		source != string(escalation.ExecutionIntentSourceCLIPassthru) &&
-		source != string(escalation.ExecutionIntentSourceProject) {
-		requestedPowerClass = string(intent.InferredPowerClass)
-	}
-	if report.InferredPowerClass != "" {
-		requestedPowerClass = report.InferredPowerClass
-	}
-	return source, estimatedDifficulty, requestedPowerClass, rejectedRoutePins
+	return source, estimatedDifficulty, inferredMinPower, hasInferredMinPower, rejectedRoutePins
 }
 
 func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result LintResult, lintErr error, threshold int, actor string, createdAt time.Time) {

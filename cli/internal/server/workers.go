@@ -407,7 +407,10 @@ func looksLikeDDXBinary(path string) bool {
 	return base == "ddx" || base == "ddx.exe"
 }
 
-func managedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
+// ManagedWorkerCommandArgs reconstructs the CLI invocation for a persisted
+// server-managed worker spec. MinPower presence is preserved so an omitted
+// floor does not become an explicit --min-power=0 constraint.
+func ManagedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
 	args := []string{"work", "--server-managed", workerID}
 	if spec.ProjectRoot != "" {
 		args = append(args, "--project", spec.ProjectRoot)
@@ -468,9 +471,11 @@ func managedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []str
 		"--route-resolution-timeout", spec.RouteResolutionTimeout.String(),
 		"--request-timeout", spec.RequestTimeout.String(),
 		"--rate-limit-max-wait", spec.RateLimitMaxWait.String(),
-		"--min-power", fmt.Sprintf("%d", spec.MinPower),
 		"--max-power", fmt.Sprintf("%d", spec.MaxPower),
 	)
+	if spec.MinPowerSet || spec.MinPower != 0 {
+		args = append(args, "--min-power", fmt.Sprintf("%d", spec.MinPower))
+	}
 	return args
 }
 
@@ -635,7 +640,7 @@ func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoo
 		return WorkerRecord{}, err
 	}
 
-	cmd := exec.Command(binary, managedWorkerCommandArgs(spec, id)...)
+	cmd := exec.Command(binary, ManagedWorkerCommandArgs(spec, id)...)
 	cmd.Dir = projectRoot
 	cmd.Stdout = log
 	cmd.Stderr = log
@@ -881,6 +886,19 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
 
+func applyServerExecutionRoutingIntent(report *agent.ExecuteBeadReport, intent policyescalation.ExecutionHint, requestedPolicy string, requestedMinPower, requestedMaxPower int) {
+	if report == nil {
+		return
+	}
+	report.RoutingIntentSource = string(intent.Source)
+	report.EstimatedDifficulty = string(intent.EstimatedDifficulty)
+	report.InferredMinPower = intent.InferredMinPower
+	report.InferredMinPowerPresent = intent.HasInferredMinPower
+	report.RequestedPolicy = requestedPolicy
+	report.RequestedMinPower = requestedMinPower
+	report.RequestedMaxPower = requestedMaxPower
+}
+
 func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
@@ -944,7 +962,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Harness:           spec.Harness,
 		Model:             spec.Model,
 		Provider:          spec.Provider,
-		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
+		Profile:           spec.Profile,
 		Effort:            spec.Effort,
 		MinPower:          spec.MinPower,
 		MaxPower:          spec.MaxPower,
@@ -997,7 +1015,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Harness:           resolvedHarness,
 				Model:             resolvedModel,
 				Provider:          attemptProvider,
-				Profile:           rcfg.Profile(),
+				Profile:           spec.Profile,
 				Effort:            spec.Effort,
 				MinPower:          requestedMinPower,
 				MaxPower:          spec.MaxPower,
@@ -1087,16 +1105,19 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Detail: fmt.Sprintf("cost cap reached: $%.2f reported >= $%.2f cap; raise the cap or set 0 to disable.", spent, maxCostUSD),
 			}, true
 		}
-		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int, intent policyescalation.ExecutionHint) (agent.ExecuteBeadReport, error) {
 			if cappedReport, capped := costCapTripped(); capped {
 				cappedReport.BeadID = beadID
+				applyServerExecutionRoutingIntent(&cappedReport, intent, spec.Profile, requestedMinPower, spec.MaxPower)
 				return cappedReport, nil
 			}
 			report, err := singlePolicyAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
+			applyServerExecutionRoutingIntent(&report, intent, spec.Profile, requestedMinPower, spec.MaxPower)
 			if err == nil {
 				accumulateBilledCost(report)
 				if cappedReport, capped := costCapTripped(); capped {
 					cappedReport.BeadID = beadID
+					applyServerExecutionRoutingIntent(&cappedReport, intent, spec.Profile, requestedMinPower, spec.MaxPower)
 					return cappedReport, nil
 				}
 			}
@@ -1104,6 +1125,23 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		}
 
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			target, err := store.Get(ctx, beadID)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			intent := policyescalation.ResolveExecutionHint(policyescalation.ExecutionHintInput{
+				Bead:                         target,
+				ReadinessEstimatedDifficulty: agent.ReadinessEstimatedDifficultyFromContext(ctx),
+				ExplicitMinPower:             spec.MinPowerSet || spec.MinPower != 0,
+				PublicPolicy:                 spec.Profile,
+			})
+			initialMinPower := rcfg.MinPower()
+			if intent.HasInferredMinPower {
+				initialMinPower = intent.InferredMinPower
+			}
+			if spec.MaxPower > 0 && initialMinPower > spec.MaxPower {
+				return agent.ExecuteBeadReport{}, fmt.Errorf("inferred MinPower %d conflicts with requested MaxPower %d", initialMinPower, spec.MaxPower)
+			}
 			attempts := make([]policyescalation.PowerAttemptRecord, 0, 3)
 			recordAttempt := func(report agent.ExecuteBeadReport) {
 				if report.PowerClass == "" && report.Harness == "" && report.Model == "" && report.ProbeResult == "" && report.CostUSD == 0 && report.DurationMS == 0 {
@@ -1119,8 +1157,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				})
 				appendPowerAttemptEvent(store, beadID, report, "ddx", time.Now().UTC())
 			}
-			report, err := runEscalatingPowerAttempts(ctx, rcfg.MinPower(), rcfg.MaxPower(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
-				return attemptWithCostCap(ctx, beadID, requestedMinPower)
+			report, err := runEscalatingPowerAttempts(ctx, initialMinPower, rcfg.MaxPower(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+				return attemptWithCostCap(ctx, beadID, requestedMinPower, intent)
 			}, recordAttempt, strings.TrimSpace(spec.Harness) == "" && strings.TrimSpace(spec.Provider) == "" && strings.TrimSpace(spec.Model) == "")
 			if len(attempts) > 0 {
 				winningPowerClass := ""

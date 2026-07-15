@@ -17,14 +17,14 @@ const (
 	DifficultyHard   EstimatedDifficulty = "hard"
 )
 
-// InferPowerClass maps the bead's authored difficulty estimate to an abstract
-// execution power class. Beads without a valid difficulty estimate use the
-// ordinary standard route.
-func InferPowerClass(b *bead.Bead) PowerClass {
+// InferInitialMinPower maps the bead's authored difficulty estimate to the
+// abstract numeric floor DDx sends to Fizeau. It deliberately ignores every
+// other bead field: Fizeau, not DDx, owns concrete route selection.
+func InferInitialMinPower(b *bead.Bead) int {
 	if difficulty, ok := BeadEstimatedDifficulty(b); ok {
-		return PowerClassForEstimatedDifficulty(difficulty)
+		return MinPowerForEstimatedDifficulty(difficulty)
 	}
-	return PowerStandard
+	return 7
 }
 
 // BeadEstimatedDifficulty reads the single durable bead-level difficulty hint.
@@ -58,15 +58,15 @@ func parseEstimatedDifficulty(raw string) (EstimatedDifficulty, bool) {
 	}
 }
 
-func PowerClassForEstimatedDifficulty(difficulty EstimatedDifficulty) PowerClass {
+func MinPowerForEstimatedDifficulty(difficulty EstimatedDifficulty) int {
 	switch difficulty {
 	case DifficultyEasy:
-		return PowerCheap
+		return 0
 	case DifficultyHard:
-		return PowerSmart
+		return 9
 	case DifficultyMedium:
-		return PowerStandard
+		return 7
 	default:
-		return PowerStandard
+		return 7
 	}
 }

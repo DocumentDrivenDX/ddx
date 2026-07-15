@@ -116,6 +116,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		RequestTimeout:         executeloop.Duration{Duration: requestTimeout},
 		RateLimitMaxWait:       executeloop.Duration{Duration: rateLimitMaxWait},
 		MinPower:               minPower,
+		MinPowerSet:            cmd.Flags().Changed("min-power"),
 		MaxPower:               maxPower,
 		FromRev:                fromRev,
 	}
@@ -203,12 +204,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
 	}
-	noRoutingFlags := spec.Harness == "" && spec.Model == "" && spec.Provider == "" &&
-		spec.Profile == "" && spec.MinPower == 0 &&
-		spec.MaxPower == 0 && !cmd.Flags().Changed("harness") &&
-		!cmd.Flags().Changed("model") && !cmd.Flags().Changed("provider") &&
-		!cmd.Flags().Changed("profile") &&
-		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
+	explicitMinPower := cmd.Flags().Changed("min-power")
 	store := bead.NewStore(beadStoreRoot)
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {
@@ -392,8 +388,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			attemptProvider = resolvedProvider
 		}
 		reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-			report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-			applyExecutionRoutingIntentReport(&report, routingIntent, requestedProfile, routingNote)
+			report := agent.ReportFromExecuteBeadResult(res, "")
+			applyExecutionRoutingIntentReport(&report, routingIntent, requestedProfile, requestedMinPower, spec.MaxPower, routingNote)
 			return report
 		}
 		loopOverrides := config.CLIOverrides{
@@ -502,8 +498,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags)
+			routingIntent := resolveCommandExecutionHint(ctx, targetBead, explicitMinPower, spec.Profile)
 			initialMinPower := rcfg.MinPower()
+			if routingIntent.HasInferredMinPower {
+				initialMinPower = routingIntent.InferredMinPower
+			}
+			if spec.MaxPower > 0 && initialMinPower > spec.MaxPower {
+				return agent.ExecuteBeadReport{}, fmt.Errorf("inferred MinPower %d conflicts with requested MaxPower %d", initialMinPower, spec.MaxPower)
+			}
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
 			perBeadBudget := spec.MaxBeadCostUSD
@@ -719,21 +721,25 @@ func worktreeReapMaxAgeFromEnv() time.Duration {
 	return d
 }
 
-func resolveCommandExecutionHint(ctx context.Context, b *bead.Bead, noRoutingFlags bool) escalation.ExecutionHint {
+func resolveCommandExecutionHint(ctx context.Context, b *bead.Bead, explicitMinPower bool, publicPolicy string) escalation.ExecutionHint {
 	return escalation.ResolveExecutionHint(escalation.ExecutionHintInput{
 		Bead:                         b,
 		ReadinessEstimatedDifficulty: agent.ReadinessEstimatedDifficultyFromContext(ctx),
-		ExplicitRouting:              !noRoutingFlags,
+		ExplicitMinPower:             explicitMinPower,
+		PublicPolicy:                 publicPolicy,
 	})
 }
 
-func applyExecutionRoutingIntentReport(report *agent.ExecuteBeadReport, intent escalation.ExecutionHint, requestedProfile, routingNote string) {
+func applyExecutionRoutingIntentReport(report *agent.ExecuteBeadReport, intent escalation.ExecutionHint, requestedPolicy string, requestedMinPower, requestedMaxPower int, routingNote string) {
 	if report == nil {
 		return
 	}
 	report.RoutingIntentSource = string(intent.Source)
 	report.EstimatedDifficulty = string(intent.EstimatedDifficulty)
-	report.InferredPowerClass = string(intent.InferredPowerClass)
-	report.RequestedProfile = requestedProfile
+	report.InferredMinPower = intent.InferredMinPower
+	report.InferredMinPowerPresent = intent.HasInferredMinPower
+	report.RequestedPolicy = requestedPolicy
+	report.RequestedMinPower = requestedMinPower
+	report.RequestedMaxPower = requestedMaxPower
 	report.RoutingIntentNote = routingNote
 }

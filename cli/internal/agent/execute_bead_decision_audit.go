@@ -64,14 +64,19 @@ func applyDecisionAuditToTrace(entry *ExecutionCycleTrace, audit executionDecisi
 
 func requestedRouteFactsForAudit(report ExecuteBeadReport) ExecutionCycleRequestedRouteFacts {
 	return ExecutionCycleRequestedRouteFacts{
-		Harness:             report.Harness,
-		Provider:            report.Provider,
-		Model:               report.Model,
-		Profile:             report.RequestedProfile,
-		RoutingIntentSource: report.RoutingIntentSource,
-		EstimatedDifficulty: report.EstimatedDifficulty,
-		InferredPowerClass:  report.InferredPowerClass,
-		RequestedPowerClass: firstNonEmpty(report.InferredPowerClass, report.PowerClass),
+		Harness:                 report.Harness,
+		Provider:                report.Provider,
+		Model:                   report.Model,
+		Profile:                 report.RequestedProfile,
+		RoutingIntentSource:     report.RoutingIntentSource,
+		EstimatedDifficulty:     report.EstimatedDifficulty,
+		InferredPowerClass:      report.InferredPowerClass,
+		RequestedPowerClass:     firstNonEmpty(report.InferredPowerClass, report.PowerClass),
+		RequestedPolicy:         report.RequestedPolicy,
+		InferredMinPower:        report.InferredMinPower,
+		InferredMinPowerPresent: report.InferredMinPowerPresent,
+		RequestedMinPower:       report.RequestedMinPower,
+		RequestedMaxPower:       report.RequestedMaxPower,
 	}
 }
 

@@ -330,7 +330,7 @@ func TestResolveDeepCopy(t *testing.T) {
 			ReasoningLevels: map[string][]string{
 				"smart": {"high", "medium"},
 			},
-			Routing: &RoutingConfig{ProfilePriority: []string{"default"}},
+			Routing: &RoutingConfig{},
 		},
 		Executions: &ExecutionsConfig{
 			Mirror: &ExecutionsMirrorConfig{
