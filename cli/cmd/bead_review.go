@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -78,15 +79,25 @@ func (f *CommandFactory) runBeadReview(cmd *cobra.Command, args []string) error 
 
 	// Resolve governing document references from the bead's spec-id field.
 	refs := agent.ResolveGoverningRefs(projectRoot, b)
+	rcfg, err := config.LoadAndResolve(projectRoot, config.CLIOverrides{})
+	if err != nil {
+		return fmt.Errorf("load reviewer evidence caps: %w", err)
+	}
+	reviewerCaps := rcfg.EvidenceCapsForRole(config.EvidenceRoleReviewer)
+	promptOpts := agent.BuildReviewPromptOptions{Caps: reviewerCaps, CapsConfigured: true}
 
 	// Delegate prompt assembly to the single source of truth in the agent
 	// package so the CLI handler and the post-merge reviewer cannot drift.
-	var prompt string
+	var built agent.BuildReviewPromptResult
 	if includeProse {
-		prompt = agent.BuildReviewPromptWithProse(b, iter, rev, diff, projectRoot, refs)
+		built = agent.BuildReviewPromptBoundedWithProse(b, iter, rev, diff, projectRoot, refs, promptOpts)
 	} else {
-		prompt = agent.BuildReviewPrompt(b, iter, rev, diff, projectRoot, refs)
+		built = agent.BuildReviewPromptBounded(b, iter, rev, diff, projectRoot, refs, promptOpts)
 	}
+	if built.Overflow {
+		return fmt.Errorf("review prompt exceeds reviewer role cap: observed=%d bytes cap=%d bytes", len(built.Prompt), reviewerCaps.MaxPromptBytes)
+	}
+	prompt := built.Prompt
 
 	if outputFile != "" {
 		return os.WriteFile(outputFile, []byte(prompt), 0o644)

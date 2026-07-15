@@ -635,7 +635,7 @@
     },
     "evidence_caps": {
       "type": "object",
-      "description": "Byte-size caps used by the shared evidence-assembly primitives (FEAT-022 §1a). Project-level fields override the built-in defaults; entries in per_harness further override the project-level values for that harness name.",
+      "description": "Byte-size caps used by shared evidence assembly (FEAT-022 §1a). Project-level fields override built-in defaults; per_role may further override caps for DDx's implementer, reviewer, and lifecycle prompt roles. Route identity is intentionally excluded.",
       "properties": {
         "max_prompt_bytes": {
           "type": "integer",
@@ -657,19 +657,42 @@
           "minimum": 0,
           "description": "Cap on a single governing document's inlined bytes. Default: 256 KiB."
         },
-        "per_harness": {
+        "per_role": {
           "type": "object",
-          "description": "Per-harness overrides. Keys are harness names; values override the project-level caps for that harness only.",
-          "additionalProperties": {
-            "type": "object",
-            "properties": {
-              "max_prompt_bytes": {"type": "integer", "minimum": 0},
-              "max_inlined_file_bytes": {"type": "integer", "minimum": 0},
-              "max_diff_bytes": {"type": "integer", "minimum": 0},
-              "max_governing_doc_bytes": {"type": "integer", "minimum": 0}
+          "description": "Overrides keyed only by DDx semantic prompt role. Harness, provider, model, and route names are invalid keys.",
+          "properties": {
+            "implementer": {
+              "type": "object",
+              "properties": {
+                "max_prompt_bytes": {"type": "integer", "minimum": 0},
+                "max_inlined_file_bytes": {"type": "integer", "minimum": 0},
+                "max_diff_bytes": {"type": "integer", "minimum": 0},
+                "max_governing_doc_bytes": {"type": "integer", "minimum": 0}
+              },
+              "additionalProperties": false
             },
-            "additionalProperties": false
-          }
+            "reviewer": {
+              "type": "object",
+              "properties": {
+                "max_prompt_bytes": {"type": "integer", "minimum": 0},
+                "max_inlined_file_bytes": {"type": "integer", "minimum": 0},
+                "max_diff_bytes": {"type": "integer", "minimum": 0},
+                "max_governing_doc_bytes": {"type": "integer", "minimum": 0}
+              },
+              "additionalProperties": false
+            },
+            "lifecycle": {
+              "type": "object",
+              "properties": {
+                "max_prompt_bytes": {"type": "integer", "minimum": 0},
+                "max_inlined_file_bytes": {"type": "integer", "minimum": 0},
+                "max_diff_bytes": {"type": "integer", "minimum": 0},
+                "max_governing_doc_bytes": {"type": "integer", "minimum": 0}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         },
         "context_budget": {
           "type": "string",

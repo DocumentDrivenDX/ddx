@@ -102,6 +102,9 @@ func (cl *ConfigLoader) loadNewFormat(path string) (*NewConfig, error) {
 	if err := checkRoutingMigration(path, data); err != nil {
 		return nil, err
 	}
+	if err := checkEvidenceCapsMigration(path, data); err != nil {
+		return nil, err
+	}
 
 	// Validate using two-phase validation
 	if err := cl.validator.Validate(data); err != nil {

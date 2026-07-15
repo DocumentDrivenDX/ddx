@@ -70,6 +70,7 @@ var forbiddenRuntimeFields = map[string]bool{
 	"Endpoints":               true,
 	"ProfileLadders":          true,
 	"ModelOverrides":          true,
+	"PerRole":                 true,
 	"PerHarness":              true,
 }
 

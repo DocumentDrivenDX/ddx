@@ -26,6 +26,7 @@ type ReviewPromptRenderInput struct {
 	LastVerbatimTurns     int
 	UnresolvedFindings    []ReviewPromptFinding
 	MaxPromptBytes        int
+	MaxPromptConfigured   bool
 }
 
 // ReviewPromptRenderResult is the structured output of RenderReviewPrompt.
@@ -55,7 +56,7 @@ func (e *PromptBudgetExceededError) Error() string {
 // findings.
 func RenderReviewPrompt(input ReviewPromptRenderInput) (ReviewPromptRenderResult, error) {
 	max := input.MaxPromptBytes
-	if max <= 0 {
+	if !input.MaxPromptConfigured && max <= 0 {
 		max = evidence.DefaultMaxPromptBytes
 	}
 

@@ -35,11 +35,8 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	refs := ResolveGoverningRefs(r.ProjectRoot, b)
 	iter := 1
 
-	caps := r.Caps
-	if caps.MaxPromptBytes == 0 {
-		caps = evidence.DefaultCaps()
-	}
-	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps, ACCheckJSON: acCheckJSON})
+	caps, configured := r.effectiveEvidenceCaps()
+	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps, CapsConfigured: configured, ACCheckJSON: acCheckJSON})
 	groupID := GenerateAttemptID()
 	artifacts, err := createArtifactBundle(r.ProjectRoot, r.ProjectRoot, groupID)
 	if err != nil {

@@ -477,6 +477,7 @@ func newPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		runtime := AgentRunRuntime{
 			Prompt:           prompt,
 			PromptSource:     PreClaimIntakePromptSource,
+			Role:             config.EvidenceRoleLifecycle,
 			Output:           log,
 			WorkLogPhase:     "readiness",
 			Correlation:      map[string]string{"bead_id": beadID},
@@ -559,6 +560,7 @@ func truncatePreClaimIntakePromptForLog(prompt string) string {
 }
 
 func applyLifecycleHookRouting(rcfg config.ResolvedConfig, runtime *AgentRunRuntime) {
+	runtime.Role = config.EvidenceRoleLifecycle
 	runtime.ClearRoutingPins = true
 
 	if harness, ok := rcfg.ExplicitHarness(); ok {

@@ -1169,13 +1169,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
 		if !spec.NoReview {
-			postMergeReviewer = &agent.DefaultBeadReviewer{
-				ProjectRoot:           projectRoot,
-				BeadStore:             bead.NewStore(ddxroot.JoinProject(projectRoot)),
-				BeadEvents:            bead.NewStore(ddxroot.JoinProject(projectRoot)),
-				ReviewTier:            spec.ReviewTier,
-				PrimaryConfigSnapshot: &rcfg,
-			}
+			postMergeReviewer = newServerReviewer(projectRoot, ddxroot.JoinProject(projectRoot), spec.ReviewTier, rcfg)
 			reviewer = postMergeReviewer.(agent.CandidateReviewer)
 		}
 
@@ -1298,6 +1292,18 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	_ = m.writeRecord(dir, record)
 	handle.record = record
 	m.mu.Unlock()
+}
+
+func newServerReviewer(projectRoot, beadStoreRoot, reviewTier string, rcfg config.ResolvedConfig) *agent.DefaultBeadReviewer {
+	return &agent.DefaultBeadReviewer{
+		ProjectRoot:           projectRoot,
+		BeadStore:             bead.NewStore(beadStoreRoot),
+		BeadEvents:            bead.NewStore(beadStoreRoot),
+		ReviewTier:            reviewTier,
+		PrimaryConfigSnapshot: &rcfg,
+		Caps:                  rcfg.EvidenceCapsForRole(config.EvidenceRoleReviewer),
+		CapsConfigured:        true,
+	}
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {

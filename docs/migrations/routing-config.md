@@ -66,6 +66,36 @@ preserves operator `MaxPower` and all other request facts byte-identically.
 Fizeau chooses the concrete route. DDx never normalizes, substitutes, widens,
 or fuzzy-matches explicit passthrough values.
 
+## Evidence caps now use DDx semantic roles
+
+`evidence_caps.per_harness` is removed. DDx hard-rejects the key even when its
+value is `{}` or `null`, because accepting it would preserve a routing coupling
+that DDx cannot resolve correctly. Replace it with `evidence_caps.per_role`:
+
+```yaml
+evidence_caps:
+  max_prompt_bytes: 4194304
+  per_role:
+    implementer:
+      max_diff_bytes: 1048576
+    reviewer:
+      max_prompt_bytes: 524288
+    lifecycle:
+      max_prompt_bytes: 262144
+```
+
+The schema accepts exactly `implementer`, `reviewer`, and `lifecycle` beneath
+`per_role`. These are DDx prompt responsibilities, not Fizeau routes:
+
+- `implementer` applies to initial execution and same-worktree repair prompts.
+- `reviewer` applies to CLI- and server-created review prompts.
+- `lifecycle` applies to pre-claim intake, bead lint, and post-attempt triage.
+
+Project-level caps remain the fallback. Harness, provider, model, profile, and
+route changes do not alter a role's cap. Do not translate old harness names
+mechanically: choose the DDx role that owns the prompt. Fizeau continues to
+choose the concrete harness and model independently.
+
 ## Remaining Search-Hit Audit
 
 The repository still contains historical `legacy agent`, `ddx-agent`,

@@ -41,6 +41,20 @@ func beadReviewFixture(t *testing.T) (*bead.Bead, []agent.GoverningRef, string, 
 	return b, refs, rev, diff, root
 }
 
+func writeBeadReviewConfig(t *testing.T, root, evidenceCapsYAML string) {
+	t.Helper()
+	contents := `version: "1.0"
+library:
+  path: ./library
+  repository:
+    url: https://example.invalid/library
+    branch: main
+` + evidenceCapsYAML
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestBeadReviewCollapseGolden is the byte-equivalence gate for FEAT-022 §4
 // stage B: agent.BuildReviewPrompt — which the post-collapse CLI handler
 // invokes directly — must produce bytes identical to the committed golden
@@ -134,6 +148,7 @@ func TestBeadReviewCommandWiring(t *testing.T) {
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeBeadReviewConfig(t, tmp, "")
 	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("store init: %v", err)
@@ -224,6 +239,7 @@ func TestBeadReviewCommandWithProseIncludesAdvisoryFindings(t *testing.T) {
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeBeadReviewConfig(t, tmp, "")
 	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("store init: %v", err)

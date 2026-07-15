@@ -29,7 +29,7 @@ func (r *RoutingConfig) Clone() *RoutingConfig {
 }
 
 // Clone returns a deep copy of e. Returns nil when e is nil. The
-// PerHarness map and each *EvidenceCapsOverride value are duplicated
+// PerRole map and each *EvidenceCapsOverride value are duplicated
 // so the returned struct shares no pointer storage with e.
 func (e *EvidenceCapsConfig) Clone() *EvidenceCapsConfig {
 	if e == nil {
@@ -40,11 +40,11 @@ func (e *EvidenceCapsConfig) Clone() *EvidenceCapsConfig {
 	out.MaxInlinedFileBytes = clonePtrInt(e.MaxInlinedFileBytes)
 	out.MaxDiffBytes = clonePtrInt(e.MaxDiffBytes)
 	out.MaxGoverningDocBytes = clonePtrInt(e.MaxGoverningDocBytes)
-	if e.PerHarness != nil {
-		out.PerHarness = make(map[string]*EvidenceCapsOverride, len(e.PerHarness))
-		for name, h := range e.PerHarness {
+	if e.PerRole != nil {
+		out.PerRole = make(map[string]*EvidenceCapsOverride, len(e.PerRole))
+		for name, h := range e.PerRole {
 			if h == nil {
-				out.PerHarness[name] = nil
+				out.PerRole[name] = nil
 				continue
 			}
 			cp := &EvidenceCapsOverride{
@@ -53,7 +53,7 @@ func (e *EvidenceCapsConfig) Clone() *EvidenceCapsConfig {
 				MaxDiffBytes:         clonePtrInt(h.MaxDiffBytes),
 				MaxGoverningDocBytes: clonePtrInt(h.MaxGoverningDocBytes),
 			}
-			out.PerHarness[name] = cp
+			out.PerRole[name] = cp
 		}
 	}
 	return &out

@@ -114,11 +114,15 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 
 	promptText := runtime.Prompt
 	if runtime.PromptFile != "" {
-		data, err := readPromptFileBounded(runtime.PromptFile)
+		caps := rcfg.EvidenceCapsForRole(runtime.Role)
+		data, err := readPromptFileBoundedWithCap(runtime.PromptFile, caps.MaxPromptBytes)
 		if err != nil {
 			return nil, fmt.Errorf("agent: read prompt file: %w", err)
 		}
 		promptText = string(data)
+	}
+	if err := validateInlinePromptCap(runtime.PromptSource, promptText, rcfg.EvidenceCapsForRole(runtime.Role).MaxPromptBytes); err != nil {
+		return nil, fmt.Errorf("agent: prompt for role %q: %w", runtime.Role, err)
 	}
 	if promptText == "" {
 		return nil, fmt.Errorf("agent: prompt is required")

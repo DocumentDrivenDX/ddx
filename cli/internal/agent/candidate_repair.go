@@ -139,7 +139,7 @@ func (r *fizeauCandidateRepairPass) Repair(ctx context.Context, candidate Candid
 	runtime.PromptSource = filepath.ToSlash(promptPath)
 	runtime.WorkDir = candidate.WorktreePath
 	runtime.WorkLogPhase = "repair"
-	runtime.Role = "implementer"
+	runtime.Role = config.EvidenceRoleImplementer
 	runtime.CorrelationID = fmt.Sprintf("%s:repair:%d", strings.TrimSpace(r.runtime.CorrelationID), cycleIndex)
 	runtime.Correlation = cloneRepairStringMap(r.runtime.Correlation)
 	runtime.Correlation["phase"] = "repair"

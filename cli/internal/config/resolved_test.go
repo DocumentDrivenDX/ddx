@@ -86,6 +86,7 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"WallClock":                          func(r ResolvedConfig) { _ = r.WallClock() },
 		"ContextBudget":                      func(r ResolvedConfig) { _ = r.ContextBudget() },
 		"EvidenceCaps":                       func(r ResolvedConfig) { _ = r.EvidenceCaps() },
+		"EvidenceCapsForRole":                func(r ResolvedConfig) { _ = r.EvidenceCapsForRole(EvidenceRoleReviewer) },
 		"SessionLogDir":                      func(r ResolvedConfig) { _ = r.SessionLogDir() },
 		"MirrorConfig":                       func(r ResolvedConfig) { _ = r.MirrorConfig() },
 		"BeadQualityLintBlockThresholdScore": func(r ResolvedConfig) { _ = r.BeadQualityLintBlockThresholdScore() },
@@ -242,6 +243,26 @@ func TestResolvedConfigEvidenceCapsAccessor(t *testing.T) {
 	got := (ResolvedConfig{sealed: true}).EvidenceCaps()
 	if got != (evidence.Caps{}) {
 		t.Fatalf("zero-after-seal EvidenceCaps = %+v, want zero", got)
+	}
+}
+
+func TestResolvedConfigEvidenceCapsForRoleAccessor(t *testing.T) {
+	r := (ResolvedConfig{
+		sealed:                  true,
+		evidenceCaps:            evidence.Caps{MaxPromptBytes: 1},
+		implementerEvidenceCaps: evidence.Caps{MaxPromptBytes: 2},
+		reviewerEvidenceCaps:    evidence.Caps{MaxPromptBytes: 3},
+		lifecycleEvidenceCaps:   evidence.Caps{MaxPromptBytes: 4},
+	})
+	for role, want := range map[string]int{
+		EvidenceRoleImplementer: 2,
+		EvidenceRoleReviewer:    3,
+		EvidenceRoleLifecycle:   4,
+		"unknown":               1,
+	} {
+		if got := r.EvidenceCapsForRole(role).MaxPromptBytes; got != want {
+			t.Errorf("EvidenceCapsForRole(%q) = %d, want %d", role, got, want)
+		}
 	}
 }
 

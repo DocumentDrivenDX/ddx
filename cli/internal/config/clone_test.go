@@ -47,9 +47,9 @@ func TestEvidenceCapsConfigClone(t *testing.T) {
 	override := 200
 	src := &EvidenceCapsConfig{
 		MaxPromptBytes: &prompt,
-		PerHarness: map[string]*EvidenceCapsOverride{
-			"claude": {MaxPromptBytes: &override},
-			"nilval": nil,
+		PerRole: map[string]*EvidenceCapsOverride{
+			"reviewer": {MaxPromptBytes: &override},
+			"nilval":   nil,
 		},
 	}
 
@@ -57,20 +57,20 @@ func TestEvidenceCapsConfigClone(t *testing.T) {
 
 	// Mutate cloned int pointers and verify source untouched.
 	*dst.MaxPromptBytes = 999
-	*dst.PerHarness["claude"].MaxPromptBytes = 999
-	dst.PerHarness["new"] = &EvidenceCapsOverride{}
+	*dst.PerRole["reviewer"].MaxPromptBytes = 999
+	dst.PerRole["new"] = &EvidenceCapsOverride{}
 
 	if *src.MaxPromptBytes != 100 {
 		t.Fatalf("source MaxPromptBytes mutated: %d", *src.MaxPromptBytes)
 	}
-	if *src.PerHarness["claude"].MaxPromptBytes != 200 {
-		t.Fatalf("source PerHarness[claude] mutated: %d", *src.PerHarness["claude"].MaxPromptBytes)
+	if *src.PerRole["reviewer"].MaxPromptBytes != 200 {
+		t.Fatalf("source PerRole[reviewer] mutated: %d", *src.PerRole["reviewer"].MaxPromptBytes)
 	}
-	if _, ok := src.PerHarness["new"]; ok {
-		t.Fatal("source PerHarness gained new key")
+	if _, ok := src.PerRole["new"]; ok {
+		t.Fatal("source PerRole gained new key")
 	}
-	if v, ok := dst.PerHarness["nilval"]; !ok || v != nil {
-		t.Fatalf("nil per-harness entry not preserved: %v", v)
+	if v, ok := dst.PerRole["nilval"]; !ok || v != nil {
+		t.Fatalf("nil per-role entry not preserved: %v", v)
 	}
 }
 

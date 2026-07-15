@@ -27,6 +27,44 @@ type AgentConfigMigrationError struct {
 	Path  string
 }
 
+// EvidenceCapsMigrationError signals that evidence caps are keyed by the
+// removed Fizeau harness identity instead of a DDx semantic prompt role.
+type EvidenceCapsMigrationError struct {
+	Field string
+	Path  string
+}
+
+func (e *EvidenceCapsMigrationError) Error() string {
+	return fmt.Sprintf(
+		"%s: %s has been removed from DDx configuration. "+
+			"Migration: replace it with strict DDx semantic roles, for example:\n"+
+			"evidence_caps:\n  per_role:\n    reviewer:\n      max_prompt_bytes: 262144\n"+
+			"Valid per_role keys are implementer, reviewer, and lifecycle; harness, provider, model, and route selection belong to Fizeau. "+
+			"See docs/migrations/routing-config.md.",
+		e.Path, e.Field)
+}
+
+// checkEvidenceCapsMigration hard-errors on presence of the retired
+// evidence_caps.per_harness key. Presence, not value, controls rejection, so
+// empty objects and null cannot silently preserve the old contract.
+func checkEvidenceCapsMigration(path string, data []byte) error {
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil // YAML errors surface from the validator below
+	}
+	evidenceCaps, _ := raw["evidence_caps"].(map[string]any)
+	if evidenceCaps == nil {
+		return nil
+	}
+	if _, ok := evidenceCaps["per_harness"]; ok {
+		return &EvidenceCapsMigrationError{
+			Field: "evidence_caps.per_harness",
+			Path:  path,
+		}
+	}
+	return nil
+}
+
 func (e *AgentConfigMigrationError) Error() string {
 	return fmt.Sprintf(
 		"%s: %s has been removed from DDx configuration. "+

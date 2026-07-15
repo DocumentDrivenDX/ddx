@@ -129,6 +129,7 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 			Prompt:        prompt,
 			WorkDir:       projectRoot,
 			PromptSource:  "bead-lifecycle-lint",
+			Role:          config.EvidenceRoleLifecycle,
 			ClearProfile:  true,
 			ClearMinPower: true,
 		}

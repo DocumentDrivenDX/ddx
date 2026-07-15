@@ -76,7 +76,7 @@ byte accounting on every review and grading attempt.
    the primitives every prompt-building call site must use. The package
    covers, at minimum, these capabilities:
    - Byte-size caps for inlined files, diffs, governing documents, and
-     total prompts, each with per-harness override resolution.
+     total prompts, with overrides for DDx's semantic prompt roles.
    - Clamped file read (returns content plus amount truncated).
    - Clamped text output (bounded length with a canonical truncation
      marker).
@@ -97,7 +97,10 @@ byte accounting on every review and grading attempt.
 1a. **Cap defaults and configurability.** Byte-size caps have conservative
     defaults shipped in the binary. Project-level overrides are expressed
     in `.ddx/config.yaml` under a dedicated evidence-caps section;
-    per-harness overrides resolve from the same configuration file.
+    role overrides resolve from `evidence_caps.per_role` in the same file.
+    The only valid role keys are `implementer`, `reviewer`, and `lifecycle`.
+    Harness, provider, model, and route identity never participate in cap
+    resolution: Fizeau owns those routing facts and DDx does not infer them.
     Defaults and override precedence are defined in the solution design
     for this feature. The invariant is that every cap is configurable at
     the project level without a rebuild; specific numeric defaults are
@@ -291,11 +294,11 @@ byte accounting on every review and grading attempt.
   justifying comment.
 
 - **Byte-based enforcement and calibration.** All caps are enforced in
-  bytes. Token-based caps are deferred until DDx has a per-harness
-  tokenizer binding. Default byte caps are calibrated conservatively
+  bytes. DDx does not bind tokenizers to harnesses or models because Fizeau
+  owns concrete route selection. Default byte caps are calibrated conservatively
   relative to the smallest common-reviewer model's context window using
   an assumed worst-case bytes-per-token ratio; the solution design
-  document carries the concrete calibration table and the per-harness
+  document carries the concrete calibration table and semantic-role
   override mechanism (see §1a). If runtime telemetry (§15) shows that
   the default is either rejecting valid prompts or failing to prevent
   provider-side overflow, the cap is retuned via configuration, not
@@ -515,8 +518,8 @@ context-overflow outcome class.
   and drives. Primitives are shared; the top-level assembly order
   differs per caller (review, grading, primary) and forcing unification
   would couple unrelated call sites.
-- Token-based caps. Deferred until a per-harness tokenizer binding
-  exists; byte caps are the enforcement unit.
+- Token-based caps. Concrete tokenizer and model knowledge belongs at the
+  Fizeau harness boundary; DDx uses route-neutral byte caps.
 - Map-reduce per-file review (small per-file reviews + an aggregator).
   Noted as a potential follow-on if bounded assembly plus diff caps
   proves insufficient; not in scope here.

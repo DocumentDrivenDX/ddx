@@ -224,6 +224,12 @@ type AttemptCycleCoordinator struct {
 	// do not have a real repository.
 	OriginalTask  string
 	CandidateDiff func(candidate CandidateResult) (string, error)
+	// RepairCaps is the implementer-role evidence budget used for both the
+	// candidate diff and the final repair prompt. RepairCapsConfigured preserves
+	// an explicitly configured all-zero budget; unset seam-only tests use the
+	// binary defaults.
+	RepairCaps           evidence.Caps
+	RepairCapsConfigured bool
 	// RepairMaxCycles caps append-only repair attempts after review_fixable_gap.
 	// Values <=0 default to one repair cycle.
 	RepairMaxCycles int
@@ -652,10 +658,18 @@ func (c *AttemptCycleCoordinator) buildRepairPrompt(beadID string, candidate Can
 			return "", err
 		}
 	}
-	return BuildRepairPrompt(repairPromptInput(beadID, candidate, review, repairCycleIndex, c.OriginalTask, diff, failureOutput)), nil
+	prompt := BuildRepairPrompt(repairPromptInput(beadID, candidate, review, repairCycleIndex, c.OriginalTask, diff, failureOutput))
+	if err := validateInlinePromptCap("implementer repair prompt", prompt, c.effectiveRepairCaps().MaxPromptBytes); err != nil {
+		return "", err
+	}
+	return prompt, nil
 }
 
 func boundedCandidateRepairDiff(candidate CandidateResult) (string, error) {
+	return boundedCandidateRepairDiffWithCaps(candidate, evidence.DefaultCaps())
+}
+
+func boundedCandidateRepairDiffWithCaps(candidate CandidateResult, caps evidence.Caps) (string, error) {
 	if strings.TrimSpace(candidate.WorktreePath) == "" || strings.TrimSpace(candidate.Report.BaseRev) == "" || strings.TrimSpace(candidate.Report.ResultRev) == "" {
 		return "", fmt.Errorf("repair diff requires worktree_path, base_rev, and result_rev")
 	}
@@ -666,8 +680,15 @@ func boundedCandidateRepairDiff(candidate CandidateResult) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("repair diff %s..%s: %w", candidate.Report.BaseRev, candidate.Report.ResultRev, err)
 	}
-	clamped, _ := evidence.ClampDiff(string(out), evidence.DefaultCaps().MaxDiffBytes)
+	clamped, _ := evidence.ClampDiff(string(out), caps.MaxDiffBytes)
 	return clamped, nil
+}
+
+func (c *AttemptCycleCoordinator) effectiveRepairCaps() evidence.Caps {
+	if c.RepairCapsConfigured || c.RepairCaps != (evidence.Caps{}) {
+		return c.RepairCaps
+	}
+	return evidence.DefaultCaps()
 }
 
 func repairPromptInput(beadID string, candidate CandidateResult, review CandidateReviewResult, repairCycleIndex int, originalTask, currentDiff, failureOutput string) RepairPromptInput {

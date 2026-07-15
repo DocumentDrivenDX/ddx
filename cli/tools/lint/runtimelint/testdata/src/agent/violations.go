@@ -5,18 +5,20 @@ package agent
 // the analysistest pins each diagnostic to its own line.
 
 type BadRuntime struct {
-	Harness          string // want `runtimelint: forbidden durable-knob field Harness`
-	Model            string // want `runtimelint: forbidden durable-knob field Model`
-	Provider         string // want `runtimelint: forbidden durable-knob field Provider`
-	ModelRef         string // want `runtimelint: forbidden durable-knob field ModelRef`
-	Effort           string // want `runtimelint: forbidden durable-knob field Effort`
-	Permissions      string // want `runtimelint: forbidden durable-knob field Permissions`
-	Timeout          int    // want `runtimelint: forbidden durable-knob field Timeout`
-	WallClock        int    // want `runtimelint: forbidden durable-knob field WallClock`
-	ContextBudget    int    // want `runtimelint: forbidden durable-knob field ContextBudget`
-	ReviewMaxRetries int    // want `runtimelint: forbidden durable-knob field ReviewMaxRetries`
-	SessionLogDir    string // want `runtimelint: forbidden durable-knob field SessionLogDir`
-	Assignee         string // want `runtimelint: forbidden durable-knob field Assignee`
+	Harness          string         // want `runtimelint: forbidden durable-knob field Harness`
+	Model            string         // want `runtimelint: forbidden durable-knob field Model`
+	Provider         string         // want `runtimelint: forbidden durable-knob field Provider`
+	ModelRef         string         // want `runtimelint: forbidden durable-knob field ModelRef`
+	Effort           string         // want `runtimelint: forbidden durable-knob field Effort`
+	Permissions      string         // want `runtimelint: forbidden durable-knob field Permissions`
+	Timeout          int            // want `runtimelint: forbidden durable-knob field Timeout`
+	WallClock        int            // want `runtimelint: forbidden durable-knob field WallClock`
+	ContextBudget    int            // want `runtimelint: forbidden durable-knob field ContextBudget`
+	ReviewMaxRetries int            // want `runtimelint: forbidden durable-knob field ReviewMaxRetries`
+	SessionLogDir    string         // want `runtimelint: forbidden durable-knob field SessionLogDir`
+	Assignee         string         // want `runtimelint: forbidden durable-knob field Assignee`
+	PerRole          map[string]int // want `runtimelint: forbidden durable-knob field PerRole`
+	PerHarness       map[string]int // want `runtimelint: forbidden durable-knob field PerHarness`
 }
 
 // Pattern 3: function declared in agent pkg with a parameter typed as

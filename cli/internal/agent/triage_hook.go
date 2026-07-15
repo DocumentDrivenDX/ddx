@@ -132,6 +132,7 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 			Prompt:        prompt,
 			WorkDir:       projectRoot,
 			PromptSource:  postAttemptTriagePromptSource,
+			Role:          config.EvidenceRoleLifecycle,
 			ClearProfile:  true,
 			ClearMinPower: true,
 		})

@@ -38,6 +38,9 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 		return nil, err
 	}
 	if runner != nil {
+		if err := validateRuntimePromptCaps(rcfg, runtime); err != nil {
+			return nil, err
+		}
 		return runner.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
 	if svc == nil {
@@ -52,6 +55,17 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 		svc = built
 	}
 	return executeOnService(ctx, svc, projectRoot, rcfg, runtime)
+}
+
+func validateRuntimePromptCaps(rcfg config.ResolvedConfig, runtime AgentRunRuntime) error {
+	caps := rcfg.EvidenceCapsForRole(runtime.Role)
+	if runtime.PromptFile != "" {
+		if _, err := readPromptFileBoundedWithCap(runtime.PromptFile, caps.MaxPromptBytes); err != nil {
+			return fmt.Errorf("agent: read prompt file for role %q: %w", runtime.Role, err)
+		}
+		return nil
+	}
+	return validateInlinePromptCap(runtime.PromptSource, runtime.Prompt, caps.MaxPromptBytes)
 }
 
 func validateRuntimeRoutingPins(rcfg config.ResolvedConfig, runtime AgentRunRuntime) error {

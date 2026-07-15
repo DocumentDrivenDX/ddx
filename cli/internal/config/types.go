@@ -14,6 +14,15 @@ const (
 	// BeadQualityModeBlock is the blocking bead-quality policy: valid
 	// low-quality findings may park the bead.
 	BeadQualityModeBlock = "block"
+
+	// EvidenceRoleImplementer identifies prompts that perform or repair bead
+	// implementation work. Evidence caps are keyed by DDx semantic role, never
+	// by a Fizeau harness, provider, model, or route.
+	EvidenceRoleImplementer = "implementer"
+	// EvidenceRoleReviewer identifies independent review prompts.
+	EvidenceRoleReviewer = "reviewer"
+	// EvidenceRoleLifecycle identifies intake, lint, and triage prompts.
+	EvidenceRoleLifecycle = "lifecycle"
 )
 
 // NewConfig represents the simplified DDx configuration structure
@@ -190,14 +199,14 @@ func (c *NewConfig) ResolveReviewMaxRetries() int {
 
 // EvidenceCapsConfig configures byte-size caps used by the shared
 // evidence-assembly primitives (FEAT-022 §1a). Project-level fields
-// override the binary defaults; entries in `per_harness` further
-// override the project-level values for a specific harness name.
+// override the binary defaults; entries in `per_role` further override the
+// project-level values for one of DDx's three semantic prompt roles.
 type EvidenceCapsConfig struct {
 	MaxPromptBytes       *int                             `yaml:"max_prompt_bytes,omitempty" json:"max_prompt_bytes,omitempty"`
 	MaxInlinedFileBytes  *int                             `yaml:"max_inlined_file_bytes,omitempty" json:"max_inlined_file_bytes,omitempty"`
 	MaxDiffBytes         *int                             `yaml:"max_diff_bytes,omitempty" json:"max_diff_bytes,omitempty"`
 	MaxGoverningDocBytes *int                             `yaml:"max_governing_doc_bytes,omitempty" json:"max_governing_doc_bytes,omitempty"`
-	PerHarness           map[string]*EvidenceCapsOverride `yaml:"per_harness,omitempty" json:"per_harness,omitempty"`
+	PerRole              map[string]*EvidenceCapsOverride `yaml:"per_role,omitempty" json:"per_role,omitempty"`
 	// ContextBudget is the prompt budget label that execute-bead consults
 	// when assembling the bead prompt. Empty string means "full budget";
 	// "minimal" omits large governing documents (cheap-powerClass path). See
@@ -214,8 +223,8 @@ func (e *EvidenceCapsConfig) ResolveContextBudget() string {
 	return e.ContextBudget
 }
 
-// EvidenceCapsOverride is the per-harness override shape inside
-// `evidence_caps.per_harness`.
+// EvidenceCapsOverride is the per-role override shape inside
+// `evidence_caps.per_role`.
 type EvidenceCapsOverride struct {
 	MaxPromptBytes       *int `yaml:"max_prompt_bytes,omitempty" json:"max_prompt_bytes,omitempty"`
 	MaxInlinedFileBytes  *int `yaml:"max_inlined_file_bytes,omitempty" json:"max_inlined_file_bytes,omitempty"`
