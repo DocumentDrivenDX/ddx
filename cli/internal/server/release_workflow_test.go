@@ -20,16 +20,20 @@ const (
 	releaseFrontendJob      = "frontend"
 	releaseFrontendArtifact = "verified-frontend-bundle"
 	releaseFrontendPath     = "cli/internal/server/frontend/build"
+	resolvedReleaseTagExpr  = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+	resolvedReleaseCommit   = "${{ needs.prepare.outputs.commit }}"
 )
 
 var goBuildCommand = regexp.MustCompile(`(?m)^\s*go\s+build(?:\s|$)`)
 
 type releaseWorkflow struct {
+	Env  map[string]string             `yaml:"env"`
 	Jobs map[string]releaseWorkflowJob `yaml:"jobs"`
 }
 
 type releaseWorkflowJob struct {
 	Needs    releaseWorkflowNeeds    `yaml:"needs"`
+	Outputs  map[string]string       `yaml:"outputs"`
 	Strategy releaseWorkflowStrategy `yaml:"strategy"`
 	Steps    []releaseWorkflowStep   `yaml:"steps"`
 }
@@ -49,11 +53,13 @@ type releaseWorkflowMatrixEntry struct {
 }
 
 type releaseWorkflowStep struct {
-	Name             string         `yaml:"name"`
-	Uses             string         `yaml:"uses"`
-	WorkingDirectory string         `yaml:"working-directory"`
-	Run              string         `yaml:"run"`
-	With             map[string]any `yaml:"with"`
+	ID               string            `yaml:"id"`
+	Name             string            `yaml:"name"`
+	Uses             string            `yaml:"uses"`
+	WorkingDirectory string            `yaml:"working-directory"`
+	Run              string            `yaml:"run"`
+	Env              map[string]string `yaml:"env"`
+	With             map[string]any    `yaml:"with"`
 }
 
 type releaseWorkflowNeeds []string
@@ -73,6 +79,140 @@ func (n *releaseWorkflowNeeds) UnmarshalYAML(node *yaml.Node) error {
 	default:
 		return fmt.Errorf("release workflow needs must be a string or sequence")
 	}
+}
+
+func TestReleaseWorkflowResolvesManualAndTagEventToSameImmutableTag(t *testing.T) {
+	wf := loadReleaseWorkflow(t)
+	require.Equal(t, resolvedReleaseTagExpr, wf.Env["RELEASE_TAG"],
+		"the sole event resolver must select inputs.tag for manual dispatch and github.ref_name for tag pushes")
+
+	prepare, ok := wf.Jobs["prepare"]
+	require.True(t, ok)
+	assert.Equal(t, "${{ steps.identity.outputs.tag }}", prepare.Outputs["tag"])
+	assert.Equal(t, "${{ steps.identity.outputs.commit }}", prepare.Outputs["commit"])
+	assert.Equal(t, "${{ steps.version.outputs.version }}", prepare.Outputs["version"])
+	assert.Equal(t, "${{ steps.previous.outputs.tag }}", prepare.Outputs["previous_tag"])
+
+	identityAt := stepIndex(prepare, func(step releaseWorkflowStep) bool { return step.ID == "identity" })
+	require.NotEqual(t, -1, identityAt, "prepare must resolve the requested tag to an immutable commit")
+	identity := prepare.Steps[identityAt]
+	assert.Contains(t, identity.Run, `TAG="${RELEASE_TAG}"`)
+	assert.Contains(t, identity.Run, `git rev-parse "${TAG}^{commit}"`)
+	assert.Contains(t, identity.Run, `git rev-parse HEAD`)
+	assert.Contains(t, identity.Run, `echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"`)
+	assert.Contains(t, identity.Run, `echo "commit=${TAG_COMMIT}" >> "${GITHUB_OUTPUT}"`)
+
+	for jobName, job := range wf.Jobs {
+		if jobName != "prepare" {
+			require.Containsf(t, []string(job.Needs), "prepare", "%s must consume the resolved release identity", jobName)
+		}
+		checkoutAt := stepIndex(job, func(step releaseWorkflowStep) bool {
+			return strings.HasPrefix(step.Uses, "actions/checkout@")
+		})
+		require.NotEqualf(t, -1, checkoutAt, "%s must check out release source", jobName)
+		wantRef := resolvedReleaseCommit
+		if jobName == "prepare" {
+			wantRef = "${{ env.RELEASE_TAG }}"
+		}
+		assert.Equalf(t, wantRef, stepWithString(job.Steps[checkoutAt], "ref"),
+			"%s must check out the single resolved release identity", jobName)
+	}
+
+	buildJob := wf.Jobs["build-matrix"]
+	buildAt := stepIndex(buildJob, func(step releaseWorkflowStep) bool {
+		return strings.Contains(step.Run, "LDFLAGS=")
+	})
+	require.NotEqual(t, -1, buildAt)
+	assert.Contains(t, buildJob.Steps[buildAt].Run, `-X main.commit=${{ needs.prepare.outputs.commit }}`)
+	archiveAt := stepIndex(buildJob, func(step releaseWorkflowStep) bool {
+		return strings.Contains(step.Run, "Commit:")
+	})
+	require.NotEqual(t, -1, archiveAt)
+	assert.Contains(t, buildJob.Steps[archiveAt].Run, `Commit: ${{ needs.prepare.outputs.commit }}`)
+
+	releaseJob := wf.Jobs["release"]
+	releaseAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool {
+		return strings.HasPrefix(step.Uses, "softprops/action-gh-release@")
+	})
+	require.NotEqual(t, -1, releaseAt)
+	releaseStep := releaseJob.Steps[releaseAt]
+	assert.Equal(t, "${{ needs.prepare.outputs.tag }}", stepWithString(releaseStep, "tag_name"))
+	assert.Equal(t, "${{ needs.prepare.outputs.commit }}", stepWithString(releaseStep, "target_commitish"))
+}
+
+func TestReleaseWorkflowDoesNotUseAmbientRefForReleaseIdentity(t *testing.T) {
+	source := loadReleaseWorkflowSource(t)
+	assert.Equal(t, 1, strings.Count(source, "github.ref_name"),
+		"github.ref_name is allowed only in the tag-push/manual-dispatch resolver")
+	assert.Contains(t, source, "RELEASE_TAG: \""+resolvedReleaseTagExpr+"\"")
+	assert.NotContains(t, source, "github.sha", "release identity must use the commit peeled from the resolved tag")
+	assert.NotContains(t, source, "..HEAD", "changelog ranges must terminate at the resolved tag commit")
+
+	wf := loadReleaseWorkflow(t)
+	prepare := wf.Jobs["prepare"]
+	versionAt := stepIndex(prepare, func(step releaseWorkflowStep) bool { return step.ID == "version" })
+	require.NotEqual(t, -1, versionAt)
+	assert.Contains(t, prepare.Steps[versionAt].Run, `VERSION="${{ steps.identity.outputs.tag }}"`)
+
+	releaseJob := wf.Jobs["release"]
+	changelogAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool { return step.ID == "changelog" })
+	require.NotEqual(t, -1, changelogAt)
+	assert.Contains(t, releaseJob.Steps[changelogAt].Run, `RELEASE_COMMIT="${{ needs.prepare.outputs.commit }}"`)
+	assert.Contains(t, releaseJob.Steps[changelogAt].Run, `git log "${PREVIOUS_TAG}..${RELEASE_COMMIT}"`)
+
+	releaseAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool {
+		return strings.HasPrefix(step.Uses, "softprops/action-gh-release@")
+	})
+	require.NotEqual(t, -1, releaseAt)
+	releaseStep := releaseJob.Steps[releaseAt]
+	assert.Equal(t, "DDx ${{ needs.prepare.outputs.tag }}", stepWithString(releaseStep, "name"))
+	assert.Equal(t, "${{ needs.prepare.outputs.tag }}", stepWithString(releaseStep, "tag_name"))
+	assert.Equal(t, "${{ contains(needs.prepare.outputs.tag, '-') }}", stepWithString(releaseStep, "prerelease"))
+
+	finalAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool {
+		return strings.Contains(step.Run, "/releases/tag/")
+	})
+	require.NotEqual(t, -1, finalAt)
+	assert.Contains(t, releaseJob.Steps[finalAt].Run, `/releases/tag/${{ needs.prepare.outputs.tag }}`)
+}
+
+func TestReleaseChecklistNamesNineAssetAndSmokeProofs(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "docs", "releasing.md"))
+	require.NoError(t, err)
+	doc := string(data)
+
+	archives := []string{
+		"ddx-linux-amd64.tar.gz",
+		"ddx-linux-arm64.tar.gz",
+		"ddx-darwin-amd64.tar.gz",
+		"ddx-darwin-arm64.tar.gz",
+	}
+	for _, archive := range archives {
+		assert.Contains(t, doc, archive)
+		assert.Contains(t, doc, archive+".sha256")
+	}
+	for _, proof := range []string{
+		"checksums.sha256",
+		"Release workflow conclusion: success",
+		"sha256sum -c checksums.sha256",
+		"./ddx version",
+		`DDX_VERSION="$TAG"`,
+		"Tag commit SHA",
+		"Workflow URL",
+		"Go/No-Go",
+	} {
+		assert.Contains(t, doc, proof)
+	}
+	assert.Contains(t, doc, "not bit-for-bit reproducibility")
+}
+
+func TestContributingReleaseGuidanceUsesDurableChecklist(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "CONTRIBUTING.md"))
+	require.NoError(t, err)
+	doc := string(data)
+	assert.Contains(t, doc, "[release checklist](docs/releasing.md)")
+	assert.NotContains(t, doc, ".ddx/skills/ddx-release")
+	assert.NotContains(t, doc, "/ddx-release")
 }
 
 func TestReleaseWorkflowBuildsAndVerifiesFrontendArtifact(t *testing.T) {
@@ -235,12 +375,18 @@ func TestReleaseWorkflowFreshCheckoutCannotShipGitkeepOnlyBundle(t *testing.T) {
 
 func loadReleaseWorkflow(t *testing.T) releaseWorkflow {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "release.yml"))
-	require.NoError(t, err)
+	data := []byte(loadReleaseWorkflowSource(t))
 	var wf releaseWorkflow
 	require.NoError(t, yaml.Unmarshal(data, &wf))
 	require.NotEmpty(t, wf.Jobs)
 	return wf
+}
+
+func loadReleaseWorkflowSource(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "release.yml"))
+	require.NoError(t, err)
+	return string(data)
 }
 
 func validateReleaseFrontendProducer(job releaseWorkflowJob) error {

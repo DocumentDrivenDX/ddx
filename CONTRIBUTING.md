@@ -135,18 +135,14 @@ cd cli && make lint && make test && make build
 
 ## Releasing
 
-DDx uses a structured release pipeline managed by the `ddx-release` skill.
-The skill lives at `.ddx/skills/ddx-release/SKILL.md` and covers all release
-phases: clean tree → tests → lint → cross-platform build → demos + website
-(Docker) → push + CI → tag → verify.
+Follow the checked-in [release checklist](docs/releasing.md). It covers the
+pre-tag gates, immutable annotated tag, automatic or manual workflow entry
+point, nine expected assets, checksum and binary smoke checks, installer
+selection, and the evidence required for the final Go/No-Go decision.
 
-To cut a release, invoke the skill in an AI-assisted session:
-
-```
-/ddx-release
-```
-
-Or follow the phases in `.ddx/skills/ddx-release/SKILL.md` manually.
+Do not move or rewrite a published release tag. If a released candidate is
+bad, preserve its audit trail and cut a higher patch or prerelease tag from the
+corrected commit.
 
 ## Testing
 

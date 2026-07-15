@@ -17,43 +17,63 @@ permissions:
   attestations: write
   id-token: write
 
+env:
+  RELEASE_TAG: "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+
 jobs:
   # Validate and prepare release
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      commit: ${{ steps.identity.outputs.commit }}
       version: ${{ steps.version.outputs.version }}
       previous_tag: ${{ steps.previous.outputs.tag }}
     steps:
     - uses: actions/checkout@v4
       with:
+        ref: ${{ env.RELEASE_TAG }}
         fetch-depth: 0
-    
-    - name: Validate tag format
+
+    - name: Resolve immutable release identity
+      id: identity
+      shell: bash
       run: |
-        TAG="${{ github.ref_name }}"
+        TAG="${RELEASE_TAG}"
         if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
           echo "❌ Invalid tag format: $TAG"
           echo "Expected format: vX.Y.Z or vX.Y.Z-suffix"
           exit 1
         fi
+        if ! git show-ref --verify --quiet "refs/tags/${TAG}"; then
+          echo "❌ Release tag does not exist: $TAG"
+          exit 1
+        fi
+        TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
+        CHECKOUT_COMMIT="$(git rev-parse HEAD)"
+        if [ "$CHECKOUT_COMMIT" != "$TAG_COMMIT" ]; then
+          echo "❌ Checked out commit ${CHECKOUT_COMMIT} does not match ${TAG} (${TAG_COMMIT})"
+          exit 1
+        fi
+        echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+        echo "commit=${TAG_COMMIT}" >> "${GITHUB_OUTPUT}"
         echo "✅ Valid tag format: $TAG"
-    
+
     - name: Extract version
       id: version
       run: |
-        VERSION="${{ github.ref_name }}"
+        VERSION="${{ steps.identity.outputs.tag }}"
         VERSION="${VERSION#v}"  # Remove 'v' prefix
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "📦 Version: $VERSION"
-    
+
     - name: Get previous tag
       id: previous
       run: |
-        CURRENT_TAG="${{ github.ref_name }}"
-        PREVIOUS_TAG=$(git describe --tags --abbrev=0 "$CURRENT_TAG^" 2>/dev/null || echo "")
-        echo "tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+        RELEASE_COMMIT="${{ steps.identity.outputs.commit }}"
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${RELEASE_COMMIT}^" 2>/dev/null || echo "")
+        echo "tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
         if [ -n "$PREVIOUS_TAG" ]; then
           echo "📊 Previous tag: $PREVIOUS_TAG"
         else
@@ -70,6 +90,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
 
     - name: Set up Bun
       uses: oven-sh/setup-bun@v2
@@ -101,6 +123,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
 
     - name: Download verified frontend bundle
       uses: actions/download-artifact@v4
@@ -156,6 +180,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
 
     - name: Download verified frontend bundle
       uses: actions/download-artifact@v4
@@ -182,7 +208,7 @@ jobs:
         VERSION: ${{ needs.prepare.outputs.version }}
       run: |
         # Build with version information
-        LDFLAGS="-X main.version=${VERSION} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        LDFLAGS="-X main.version=${VERSION} -X main.commit=${{ needs.prepare.outputs.commit }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         
         if [ "${{ matrix.goos }}" = "windows" ]; then
           go build -ldflags "$LDFLAGS" -o build/ddx.exe .
@@ -206,7 +232,7 @@ jobs:
         echo "DDx v${{ needs.prepare.outputs.version }}" > VERSION
         echo "Platform: ${{ matrix.goos }}-${{ matrix.goarch }}" >> VERSION
         echo "Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> VERSION
-        echo "Commit: ${{ github.sha }}" >> VERSION
+        echo "Commit: ${{ needs.prepare.outputs.commit }}" >> VERSION
         
         # Create appropriate archive
         if [ "${{ matrix.goos }}" = "windows" ]; then
@@ -249,6 +275,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
+        ref: ${{ needs.prepare.outputs.commit }}
         fetch-depth: 0
     
     - name: Download all artifacts
@@ -262,12 +289,13 @@ jobs:
       id: changelog
       run: |
         PREVIOUS_TAG="${{ needs.prepare.outputs.previous_tag }}"
+        RELEASE_COMMIT="${{ needs.prepare.outputs.commit }}"
         
         # Generate changelog
         if [ -z "$PREVIOUS_TAG" ]; then
-          COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges)
+          COMMITS=$(git log "$RELEASE_COMMIT" --pretty=format:"- %s (%an)" --no-merges)
         else
-          COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges)
+          COMMITS=$(git log "${PREVIOUS_TAG}..${RELEASE_COMMIT}" --pretty=format:"- %s (%an)" --no-merges)
         fi
         
         # Categorize commits
@@ -321,17 +349,19 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        name: DDx ${{ github.ref_name }}
+        name: DDx ${{ needs.prepare.outputs.tag }}
+        tag_name: ${{ needs.prepare.outputs.tag }}
+        target_commitish: ${{ needs.prepare.outputs.commit }}
         body_path: CHANGELOG.md
         files: |
           artifacts/*
         draft: false
-        prerelease: ${{ contains(github.ref_name, '-') }}
+        prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Update installation script
       run: |
-        echo "✅ Release ${{ github.ref_name }} created successfully!"
-        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+        echo "✅ Release ${{ needs.prepare.outputs.tag }} created successfully!"
+        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }}"
