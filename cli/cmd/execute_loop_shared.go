@@ -472,7 +472,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			agent.MarkResultExecutionError(res, execErr)
 			return reportFromResult(res), nil
 		}
-		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+		if prepareCandidateCycleLanding(res) {
 			targetBead, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
 				if store == nil {
 					return nil
