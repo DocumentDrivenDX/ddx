@@ -10,25 +10,10 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
-// Config holds agent service configuration.
-type Config struct {
-	Profile         string              `yaml:"profile"`          // default routing intent: default, cheap, fast, smart
-	Harness         string              `yaml:"harness"`          // optional forced harness override
-	Model           string              `yaml:"model"`            // optional default model ref or exact pin
-	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
-	ReasoningLevels map[string][]string `yaml:"reasoning_levels"` // per-harness reasoning-level options
-	TimeoutMS       int                 `yaml:"timeout_ms"`       // idle (inactivity) timeout in ms — resets on every stream/event
-	WallClockMS     int                 `yaml:"wall_clock_ms"`    // absolute wall-clock cap in ms — fires regardless of activity
-	SessionLogDir   string              `yaml:"session_log_dir"`  // log directory
-	Permissions     string              `yaml:"permissions"`      // permission level: safe, supervised, unrestricted
-}
-
 // RunArgs holds options for a single agent invocation.
 type RunArgs struct {
-	// Context is the caller's context. When non-nil, the Runner derives its
-	// internal cancel context from this so upstream cancellation (e.g.
-	// server.WorkerManager.Stop) propagates into the provider HTTP call.
-	// Nil defaults to context.Background().
+	// Context is the caller's context. Test-injected AgentRunner implementations
+	// use it to preserve upstream cancellation. Nil means context.Background().
 	Context       context.Context
 	Harness       string
 	Prompt        string // prompt text (or path to file)
@@ -36,10 +21,10 @@ type RunArgs struct {
 	PromptSource  string
 	Correlation   map[string]string
 	Model         string
-	Provider      string // explicit provider name (e.g. "vidar", "openrouter"); bypasses default provider selection
+	Provider      string // explicit opaque operator passthrough for an injected test runner
 	Effort        string
-	Timeout       time.Duration // idle (inactivity) timeout; nonzero overrides Config.TimeoutMS
-	WallClock     time.Duration // absolute wall-clock cap; nonzero overrides Config.WallClockMS
+	Timeout       time.Duration // idle (inactivity) timeout for an injected test runner
+	WallClock     time.Duration // absolute wall-clock cap for an injected test runner
 	WorkDir       string
 	Permissions   string // permission level override: safe, supervised, unrestricted
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
@@ -88,19 +73,15 @@ type AgentRunRuntime struct {
 	// MinPowerOverride, when > 0, overrides rcfg.MinPower() for this single
 	// invocation. Used by the post-merge reviewer to pin MinPower above the
 	// implementer's actual selected power, biasing routing toward a stronger
-	// reviewer model (R4 pairing: reviewer >= impl + 1 power).
+	// reviewer (reviewer >= implementer + 1 power).
 	MinPowerOverride int
 	// ClearMinPower drops rcfg.MinPower() for this single invocation. Auxiliary
 	// lifecycle classifier calls should not inherit implementation power bounds;
 	// Fizeau owns routing for those hidden dispatches.
 	ClearMinPower bool
-	// ClearMaxPower drops rcfg.MaxPower() for this single invocation. This is
-	// for auxiliary classifier/reviewer-style calls that deliberately want the
-	// strongest viable route instead of the worker attempt's cost cap.
-	ClearMaxPower bool
 	// ClearProfile drops rcfg.Profile() for this single invocation. Auxiliary
-	// calls select their own fizeau profile hints instead of inheriting the
-	// worker attempt's profile.
+	// calls normally route by abstract power bounds; an explicit runtime profile
+	// override is still passed through unchanged.
 	ClearProfile bool
 	// OnRouteResolved, when non-nil, is called once when the upstream service
 	// emits a routing decision. Arguments are the resolved harness, provider,
@@ -108,6 +89,10 @@ type AgentRunRuntime struct {
 	// the worker's liveness sidecar so the progress watchdog can distinguish a
 	// healthy long-running attempt from a wedge (ddx-6190edc6).
 	OnRouteResolved func(harness, provider, model string)
+	// OnExecuteStart, when non-nil, is called immediately before invoking
+	// FizeauService.Execute. The worker uses this boundary to arm its route-stage
+	// timeout after DDx-local worktree and prompt preparation has completed.
+	OnExecuteStart func()
 }
 
 const (
@@ -131,9 +116,8 @@ type Result struct {
 	Output                      string  `json:"output"`
 	CondensedOutput             string  `json:"condensed_output,omitempty"`
 	Stderr                      string  `json:"stderr,omitempty"`
-	// Routing evidence populated by the embedded agent harness (RunAgent) or
-	// the script harness (RunScript). Used by ExecuteBead to record kind:routing
-	// evidence on the bead.
+	// Audit-only routing evidence returned by Fizeau. Used by ExecuteBead to
+	// record kind:routing evidence on the bead; never fed back into selection.
 	RouteReason     string          `json:"route_reason,omitempty"`
 	ResolvedBaseURL string          `json:"resolved_base_url,omitempty"`
 	Tokens          int             `json:"tokens,omitempty"`
@@ -406,7 +390,6 @@ type CandidatePlan struct {
 
 // Default configuration values.
 const (
-	DefaultHarness = "codex"
 	// DefaultTimeoutMS is the default idle (inactivity) timeout — resets on
 	// every stdout/stderr byte or agent event. 2 hours is long enough for any
 	// task where the provider streams progress; a stuck provider still needs
@@ -436,9 +419,8 @@ const (
 )
 
 // ResolveLogDir returns an absolute session-log directory path anchored at
-// projectRoot. Callers that construct an agent.Runner must use this to avoid
-// the Runner's relative DefaultLogDir resolving against process CWD — which
-// historically wrote logs to stray locations like cli/internal/server/.ddx/.
+// projectRoot so service execution never resolves DefaultLogDir against the
+// process CWD and writes stray logs under a package directory.
 func ResolveLogDir(projectRoot, configured string) string {
 	if configured == "" {
 		configured = DefaultLogDir

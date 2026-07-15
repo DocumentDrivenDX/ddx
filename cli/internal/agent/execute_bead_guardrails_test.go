@@ -5,21 +5,22 @@ import (
 	"testing"
 )
 
-// renderInstructionsForGuardrails returns the pre-XML-escape instructions
-// string for the given harness selector. Guardrail tests assert on this form
+// renderInstructionsForGuardrails returns the pre-XML-escape, harness-neutral
+// instructions string. Guardrail tests assert on this form
 // so substring checks against `<bead-id>`, `<specific-paths>`, etc. are not
 // distorted by XML entity encoding (the rendered prompt encloses instructions
 // in <instructions>...</instructions> and so escapes angle brackets and
 // apostrophes). The bead body itself is excluded — invariants must come from
 // the static prompt, not the bead.
-func renderInstructionsForGuardrails(t *testing.T, harness, contextBudget string) string {
+func renderInstructionsForGuardrails(t *testing.T, _ string, _ string) string {
 	t.Helper()
-	return executeBeadInstructionsText(harness)
+	return executeBeadInstructionsText
 }
 
 // renderFullPromptForGuardrails returns the byte-for-byte rendered prompt
-// (XML-wrapped, attempt-dir-substituted) for the given harness and
-// contextBudget. Used by tests that need to verify buildPrompt-level
+// (XML-wrapped, attempt-dir-substituted) for the given contextBudget. The
+// harness label is retained only for readable test failures. Used by tests
+// that need to verify buildPrompt-level
 // behaviour (governing fallback, minimal-budget gating).
 func renderFullPromptForGuardrails(t *testing.T, harness, contextBudget string) string {
 	t.Helper()
@@ -33,7 +34,7 @@ func renderFullPromptForGuardrails(t *testing.T, harness, contextBudget string) 
 		UsageRel:    ".ddx/executions/" + attemptID + "/usage.json",
 	}
 	b := representativePromptBead()
-	content, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeefdeadbeef", "", harness, contextBudget)
+	content, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeefdeadbeef", "", contextBudget)
 	if err != nil {
 		t.Fatalf("buildPrompt(%s, %q): %v", harness, contextBudget, err)
 	}
@@ -43,7 +44,7 @@ func renderFullPromptForGuardrails(t *testing.T, harness, contextBudget string) 
 // TestExecuteBeadInstructionsLoadBearingGuardrails enforces FEAT-022's
 // static-prompt minimum-prompt rule: every guardrail listed in the
 // file-level comment block above the constants in execute_bead.go MUST
-// appear in the rendered prompt for each (harness, variant). This is the
+// appear in the rendered harness-neutral prompt. This is the
 // regression test for the comment-list contract — adding a new guardrail
 // requires adding it to BOTH the comment block AND this list.
 func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
@@ -53,7 +54,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 	type guardrail struct {
 		name     string
 		any      []string // pass if ANY of these substrings is present
-		variants []string // empty = both; "claude" or "agent" = that variant only
+		variants []string // retained for compatibility with the guardrail table
 	}
 	guardrails := []guardrail{
 		{name: "ac_anti_handwave", any: []string{
@@ -87,8 +88,6 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "review_is_a_gate", any: []string{"review is a gate", "review is a gate, not an escape hatch"}},
 		{name: "blocking_review_findings", any: []string{"BLOCKING `<review-findings>`", "BLOCKING <review-findings>"}},
 		{name: "no_no_changes_with_blocking", any: []string{"do not declare `no_changes` with blocking findings open"}},
-		{name: "stop_after_commit", variants: []string{"agent"}, any: []string{"Stop immediately after the commit"}},
-		{name: "agent_use_tools_not_bash", variants: []string{"agent"}, any: []string{"`bash: cat`", "`bash: rg`"}},
 		{name: "long_running_matrix_plan", any: []string{"Long-running matrix/benchmark beads", "matrix plan", "output paths", "completion criteria"}},
 		{name: "long_running_rerun_justification", any: []string{"Do not re-run the same long-running command", "document why prior output is invalid"}},
 	}
@@ -114,43 +113,13 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 	}
 }
 
-// TestExecuteBeadInstructionsHarnessSelector covers the routing at
-// executeBeadInstructionsText: agent/fiz/embedded route to the Agent
-// variant; claude/codex/opencode/unknown/empty route to the Claude
-// variant. AC10 forbids any new per-harness branches beyond Claude/Agent.
-func TestExecuteBeadInstructionsHarnessSelector(t *testing.T) {
-	cases := []struct {
-		harness string
-		want    string // "agent" or "claude"
-	}{
-		{"agent", "agent"},
-		{"fiz", "agent"},
-		{"embedded", "agent"},
-		{"AGENT", "agent"},
-		{"  Fiz  ", "agent"},
-
-		{"claude", "claude"},
-		{"codex", "claude"},
-		{"opencode", "claude"},
-		{"unknown", "claude"},
-		{"", "claude"},
-		{"GPT-4", "claude"},
-	}
-	for _, c := range cases {
-		c := c
-		t.Run(c.harness+"_to_"+c.want, func(t *testing.T) {
-			got := executeBeadInstructionsText(c.harness)
-			switch c.want {
-			case "agent":
-				if got != executeBeadInstructionsAgentText {
-					t.Errorf("harness %q: expected Agent variant, got Claude", c.harness)
-				}
-			case "claude":
-				if got != executeBeadInstructionsClaudeText {
-					t.Errorf("harness %q: expected Claude variant, got Agent", c.harness)
-				}
-			}
-		})
+// TestExecuteBeadInstructionsHarnessNeutral guards against reintroducing
+// concrete-harness prompt selection in DDx.
+func TestExecuteBeadInstructionsHarnessNeutral(t *testing.T) {
+	for _, harness := range []string{"", "claude", "codex", "agent", "fiz", " opaque-harness "} {
+		if got := renderInstructionsForGuardrails(t, harness, ""); got != executeBeadInstructionsText {
+			t.Errorf("harness %q changed execute-bead instructions", harness)
+		}
 	}
 }
 
@@ -348,14 +317,10 @@ func TestExecuteBeadInstructionsMissingGoverningGate(t *testing.T) {
 	if !strings.Contains(minimal, "No governing references") {
 		t.Errorf("minimal-budget render must contain its short fallback note")
 	}
-	fullA := renderFullPromptForGuardrails(t, "agent", "")
-	if !strings.Contains(fullA, executeBeadMissingGoverningText) {
-		t.Fatalf("agent variant full-budget render with empty refs must include executeBeadMissingGoverningText")
-	}
 }
 
-// TestExecuteBeadInstructionsSizeFloor is AC1 for ddx-fcdbc731: both
-// prompt variants must be at least 30% shorter (word count) than the
+// TestExecuteBeadInstructionsSizeFloor is AC1 for ddx-fcdbc731: the
+// harness-neutral prompt must be at least 30% shorter (word count) than the
 // pre-tightening baseline. Hard-coded baselines from TestPromptSizeReport
 // at HEAD before the shared-block extraction dep landed.
 func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
@@ -363,15 +328,13 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 	// Updated for FEAT-010 (long-running matrix guardrails).
 	const (
 		baselineClaude = 1105
-		baselineAgent  = 1065
 		floor          = 0.70 // ≥30% reduction; words ≤ 0.70 * baseline
 	)
 	cases := []struct {
 		variant, harness string
 		baseline         int
 	}{
-		{"claude", "claude", baselineClaude},
-		{"agent", "agent", baselineAgent},
+		{"route-neutral", "", baselineClaude},
 	}
 	for _, c := range cases {
 		c := c
@@ -392,7 +355,7 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 // TestPromptGuardrails_AllPresent is AC2 for ddx-fcdbc731: enumerates the
 // 22 load-bearing guardrails from the FEAT-022 comment block above the
 // instr* constants and asserts each is present in the rendered full prompt
-// for both variants. Adding or removing a guardrail must update both the
+// for the harness-neutral prompt. Adding or removing a guardrail must update the
 // comment block and this test.
 func TestPromptGuardrails_AllPresent(t *testing.T) {
 	// 21 instruction-level guardrails. Probes are XML-safe (no angle brackets)
@@ -447,42 +410,10 @@ func TestPromptGuardrails_AllPresent(t *testing.T) {
 	}
 }
 
-// TestPromptSelector_CorrectBlock is AC4 for ddx-fcdbc731: the
-// executeBeadInstructionsText selector must route each harness to its
-// designated variant. agent/fiz/embedded route to the Agent variant;
-// claude/codex/opencode/unknown/empty route to the Claude variant.
+// TestPromptSelector_CorrectBlock is retained as a regression name for the old
+// selector: every former selector input now produces the single neutral block.
 func TestPromptSelector_CorrectBlock(t *testing.T) {
-	cases := []struct {
-		harness   string
-		wantAgent bool
-	}{
-		{"agent", true},
-		{"fiz", true},
-		{"embedded", true},
-		{"AGENT", true},
-		{"claude", false},
-		{"codex", false},
-		{"opencode", false},
-		{"unknown", false},
-		{"", false},
-	}
-	for _, c := range cases {
-		c := c
-		t.Run(c.harness+"_to_agent="+func() string {
-			if c.wantAgent {
-				return "true"
-			}
-			return "false"
-		}(), func(t *testing.T) {
-			got := executeBeadInstructionsText(c.harness)
-			if c.wantAgent && got != executeBeadInstructionsAgentText {
-				t.Errorf("harness %q: want Agent variant, got Claude", c.harness)
-			}
-			if !c.wantAgent && got != executeBeadInstructionsClaudeText {
-				t.Errorf("harness %q: want Claude variant, got Agent", c.harness)
-			}
-		})
-	}
+	TestExecuteBeadInstructionsHarnessNeutral(t)
 }
 
 // TestPromptSelector_MissingGoverning is AC5 for ddx-fcdbc731: when no

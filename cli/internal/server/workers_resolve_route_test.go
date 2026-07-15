@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -38,9 +40,15 @@ func (s *resolveRouteFailingService) Execute(_ context.Context, req agentlib.Ser
 	s.mu.Unlock()
 
 	ch := make(chan agentlib.ServiceEvent, 1)
+	finalText := "ok"
+	if req.Role != "implementer" {
+		// One permissive lifecycle payload satisfies readiness and lint hooks so
+		// tests can observe the eventual implementation Execute request.
+		finalText = `{"classification":"atomic","confidence":0.99,"reasoning":"ready","score":9,"rationale":"ready","suggested_fixes":[],"waivers_applied":[],"recommended_action":"release_claim_retry","suggested_amendments":[],"suggested_followup_beads":[]}`
+	}
 	final := map[string]any{
 		"status":      "success",
-		"final_text":  "ok",
+		"final_text":  finalText,
 		"exit_code":   0,
 		"error":       "",
 		"session_log": "session.log",
@@ -141,6 +149,8 @@ library:
   repository:
     url: "https://example.com/lib"
     branch: "main"
+agent:
+  model: configured-project-model-must-not-leak
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 
@@ -148,6 +158,91 @@ library:
 	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
 	require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: bead-lifecycle\ndescription: test fixture marker\n---\n"), 0o644))
 	return root
+}
+
+func TestServerWorkerSpecDoesNotInheritProjectAgentModel(t *testing.T) {
+	root := setupWorkerResolveRouteRepo(t)
+	spec, err := prepareExecuteLoopWorkerSpec(root, executeloop.ExecuteLoopSpec{}, executeloop.ModeWatch)
+	require.NoError(t, err)
+	require.True(t, spec.OpaquePassthrough)
+
+	rcfg, err := config.LoadAndResolve(root, config.CLIOverrides{
+		Harness:           spec.Harness,
+		Model:             spec.Model,
+		Provider:          spec.Provider,
+		Profile:           spec.Profile,
+		OpaquePassthrough: spec.OpaquePassthrough,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, rcfg.Model(), "unconfigured server worker must not inherit project agent.model")
+}
+
+func TestServerWorkerPropagatesRouteResolutionTimeout(t *testing.T) {
+	spec := ExecuteLoopWorkerSpec{
+		RouteResolutionTimeout: executeloop.Duration{Duration: 37 * time.Millisecond},
+	}
+	assert.Equal(t, 37*time.Millisecond, executeLoopRouteResolutionTimeout(spec))
+}
+
+func assertServerManagedUnpinnedExecute(t *testing.T) {
+	t.Helper()
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	svc := &workerIntakeServiceStub{}
+	installWorkerIntakeStub(t, svc)
+	root := setupWorkerResolveRouteRepo(t)
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:          "ddx-server-unpinned-route",
+		Title:       "execution: prove server route neutrality",
+		IssueType:   bead.DefaultType,
+		Description: "PROBLEM\nA server worker could inherit project agent.model.\n\nROOT CAUSE\ncli/internal/server/workers.go resolves worker config.\n\nPROPOSED FIX\nCapture the implementation Execute request.\n\nNON-SCOPE\nDo not select a route.\n",
+		Acceptance:  "1. TestUnpinnedEntryPointsIgnoreConfiguredProjectModel passes\n2. cd cli && go test ./internal/server/... passes\n3. lefthook run pre-commit passes\n",
+		Labels:      []string{"phase:build", "area:server", "kind:test"},
+	}))
+	runCmd(t, root, "git", "add", ".")
+	runCmd(t, root, "git", "commit", "-m", "seed unpinned server bead")
+
+	manager := NewWorkerManager(root)
+	defer manager.StopWatchdog()
+	manager.LandCoordinators.gitOpsOverride = &fakeLandingGitOps{}
+	t.Cleanup(func() {
+		stopProjectWorkers(t, manager, root)
+		manager.LandCoordinators.StopAll()
+	})
+	record, err := manager.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:     executeloop.ModeOnce,
+		NoReview: true,
+	})
+	require.NoError(t, err)
+	ok := assert.Eventually(t, func() bool {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		for _, req := range svc.requests {
+			if req.Role == "implementer" {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 10*time.Millisecond, "server worker must reach implementation Execute")
+	if !ok {
+		logs, events, logsErr := manager.Logs(record.ID)
+		svc.mu.Lock()
+		modes := append([]string(nil), svc.modes...)
+		requests := append([]agentlib.ServiceExecuteRequest(nil), svc.requests...)
+		svc.mu.Unlock()
+		t.Fatalf("server worker stopped before implementation Execute: modes=%v requests=%d logs_err=%v logs=%s events=%s", modes, len(requests), logsErr, logs, events)
+	}
+
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	for _, req := range svc.requests {
+		if req.Role == "implementer" {
+			assertOpaqueUnpinnedExecuteRequest(t, req)
+			return
+		}
+	}
+	t.Fatal("server worker never emitted an implementation Execute request")
 }
 
 // TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel verifies

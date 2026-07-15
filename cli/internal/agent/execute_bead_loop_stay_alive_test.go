@@ -1621,56 +1621,6 @@ drainLoop:
 	assert.Less(t, strings.Index(out, transition), strings.Index(out, header))
 }
 
-// TestDrain_RoutingPreflightRunsOnce covers the bootstrap behavior required
-// by ddx-848069a3: routing preflight runs once before the drain loop starts
-// and does not repeat as additional beads are processed.
-func TestDrain_RoutingPreflightRunsOnce(t *testing.T) {
-	inner, first, second := newExecuteLoopTestStore(t)
-	store := &claimCountingStore{Store: inner}
-
-	var executed []string
-	var preflightCalls int32
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			executed = append(executed, beadID)
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-after-preflight",
-				ResultRev: "deadbeef",
-			}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "claude", Model: "gpt-5"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Mode: executeloop.ModeDrain,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			atomic.AddInt32(&preflightCalls, 1)
-			return nil
-		},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	assert.Equal(t, int32(1), atomic.LoadInt32(&preflightCalls), "preflight must run once at startup")
-	assert.Equal(t, int32(2), atomic.LoadInt32(&store.claimCalls), "both ready beads must still be claimed")
-	require.Len(t, executed, 2, "both ready beads must execute")
-	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)
-	assert.Equal(t, 2, result.Attempts)
-	assert.Equal(t, 2, result.Successes)
-
-	gotFirst, err := inner.Get(context.Background(), first.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, gotFirst.Status)
-	gotSecond, err := inner.Get(context.Background(), second.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
-}
-
 // TestLoop_OnceFlagStillExits covers ddx-dc157075 back-compat: --once must
 // still terminate the loop after exactly one ready bead is processed, even
 // when more beads are queue-ready. This guards against an over-eager fix

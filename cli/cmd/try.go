@@ -8,13 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	agentlib "github.com/easel/fizeau"
-
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	workguard "github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
@@ -89,7 +85,7 @@ Exit codes:
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
 	cmd.Flags().String("harness", "", "Agent harness constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx try does not validate)")
-	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
+	cmd.Flags().String("profile", "", "Opaque Fizeau routing profile (empty = unconstrained)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().String("attempt-backend", "", "Attempt backend: worktree, local-clone, docker-clone, or in-tree (default: executions.attempt_backend)")
@@ -97,10 +93,10 @@ Exit codes:
 	cmd.Flags().String("reason", "", "Operator reason required by --force-claim")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
-	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
-	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart powerClass)")
+	cmd.Flags().String("review-harness", "", "Explicit reviewer harness override (empty = Fizeau selects)")
+	cmd.Flags().String("review-model", "", "Explicit reviewer model override (empty = Fizeau selects from the stronger review power floor)")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
-	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout bounding routing preflight and the resolveRoute viability check; on expiry the lease is released and the bead is flagged for operator attention")
+	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout from Fizeau Execute dispatch to routing_decision; on expiry the lease is released and the bead is flagged for operator attention")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
@@ -146,6 +142,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
+	routeResolutionTimeout, _ := cmd.Flags().GetDuration("route-resolution-timeout")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
@@ -157,24 +154,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if forceClaim && forceReason == "" {
 		return fmt.Errorf("--force-claim requires --reason \"<text>\"")
 	}
-	profile = agent.NormalizeRoutingProfile(profile)
-
-	if f.tryExecutorOverride == nil {
-		if harness != "" && model == "" {
-			routeTimeout := agent.DefaultRouteResolutionTimeout
-			if timeout, _ := cmd.Flags().GetDuration("route-resolution-timeout"); timeout > 0 {
-				routeTimeout = timeout
-			}
-			preflightCtx, cancel := context.WithTimeout(cmd.Context(), routeTimeout)
-			defer cancel()
-			if err := agent.ValidateHarnessOnlyRouteViaService(preflightCtx, f.WorkingDir, harness, provider, profile, minPower, maxPower); err != nil {
-				return err
-			}
-		} else if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
-			return err
-		}
-	}
-
 	store := bead.NewStore(beadStoreRoot)
 
 	// Pre-flight: look up the bead.
@@ -275,33 +254,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	noRoutingFlags := harness == "" && model == "" && provider == "" &&
 		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
 		!cmd.Flags().Changed("max-power")
-	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
-	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
-	var ladderOnce sync.Once
-	var ladder escalationFloorFinder
-	loadLadder := func() escalationFloorFinder {
-		ladderOnce.Do(func() {
-			ladder = powerladder.NewLadder(nil)
-			svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot)
-			if svcErr != nil {
-				return
-			}
-			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
-			defer cancel()
-			modelFilter := agentlib.ModelFilter{}
-			if harness != "" {
-				modelFilter.Harness = harness
-			}
-			models, listErr := svc.ListModels(modelCtx, modelFilter)
-			if listErr != nil {
-				return
-			}
-			ladder = powerladder.NewLadder(models)
-		})
-		return ladder
-	}
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
-	profileSelector := newImplementationProfileSelector(projectRoot, harness)
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}
 	if f.executeBeadGitOverride != nil {
@@ -327,51 +280,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				if err != nil {
 					return agent.ExecuteBeadReport{}, err
 				}
-				routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
-				inferredPolicy := routingIntent.InferredPowerClass
+				routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags)
 				reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
 					report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
 					applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 					return report
 				}
-				if harness != "" && model == "" && requestProfile != "" && requestMinPower == 0 {
-					if selection, selectErr := profileSelector.Select(ctx, escalation.PowerClass(requestProfile), requestMinPower); selectErr == nil && selection.Name != "" {
-						requestProfile = selection.Name
-						routingNote = selection.Note
-						if selection.MinPower > requestMinPower {
-							requestMinPower = selection.MinPower
-						}
-						if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
-							unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
-							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
-							return unavailableReport, nil
-						}
-					}
-				}
-				if autoInferPowerClass {
-					var unavailableReport agent.ExecuteBeadReport
-					var unavailable bool
-					if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestMinPower); selectErr == nil && selection.Name != "" {
-						requestProfile = selection.Name
-						routingNote = selection.Note
-						if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
-							unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
-							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
-							return unavailableReport, nil
-						}
-					} else {
-						var degradeNote string
-						requestMinPower, unavailableReport, degradeNote, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, requestMinPower, maxPower, loadLadder())
-						if unavailable {
-							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
-							return unavailableReport, nil
-						}
-						if degradeNote != "" {
-							routingNote = degradeNote
-						}
-					}
-				}
-
 				loopOverrides := config.CLIOverrides{
 					Harness:           harness,
 					Model:             model,
@@ -497,7 +411,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 				return report, nil
 			}
-			return runEscalatingPowerAttempts(ctx, minPower, loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			return runEscalatingPowerAttempts(ctx, minPower, maxPower, func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return singleAttempt(ctx, execBeadID, requestedMinPower)
 			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "",
 				agent.ProviderPin{Harness: harness, Provider: provider, Model: model})
@@ -511,13 +425,16 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 
 	overrides := config.CLIOverrides{
-		Assignee:       resolveClaimAssignee(),
-		Harness:        harness,
-		Model:          model,
-		Provider:       provider,
-		Profile:        profile,
-		Effort:         effort,
-		AttemptBackend: attemptBackend,
+		Assignee:          resolveClaimAssignee(),
+		Harness:           harness,
+		Model:             model,
+		Provider:          provider,
+		Profile:           profile,
+		Effort:            effort,
+		MinPower:          minPower,
+		MaxPower:          maxPower,
+		OpaquePassthrough: true,
+		AttemptBackend:    attemptBackend,
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
@@ -557,6 +474,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		ResourceChecker:         resourceChecker,
 		ResourcePressureChecker: buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride),
 		SessionID:               loopSessionID,
+		RouteResolutionTimeout:  routeResolutionTimeout,
 		PreClaimHook:            buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreDispatchLintHook:     lintHook,
 		PostAttemptTriageHook:   triageHook,

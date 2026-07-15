@@ -22,6 +22,7 @@ import (
 type workerIntakeServiceStub struct {
 	mu         sync.Mutex
 	modes      []string
+	requests   []agentlib.ServiceExecuteRequest
 	listModels []agentlib.ModelInfo
 	executeErr error
 	intakeErr  error // when set, returned from Execute for intake-mode calls
@@ -39,6 +40,7 @@ func (s *workerIntakeServiceStub) Execute(_ context.Context, req agentlib.Servic
 	}
 	s.mu.Lock()
 	s.modes = append(s.modes, mode)
+	s.requests = append(s.requests, req)
 	s.mu.Unlock()
 
 	if s.executeErr != nil && mode == "execute" {

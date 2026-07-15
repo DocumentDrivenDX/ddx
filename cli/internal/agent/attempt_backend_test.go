@@ -51,7 +51,7 @@ func TestExecuteBeadWithConfig_LocalCloneBackendImportsResult(t *testing.T) {
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath})
 	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
-		AgentRunner:    NewRunner(Config{}),
+		AgentRunner:    scriptHarnessAgentRunner{},
 		AttemptBackend: LocalCloneAttemptBackend{},
 	}, &RealGitOps{})
 	require.NoError(t, err)
@@ -310,7 +310,7 @@ func TestResourceExhaustedWorktreeCreationReleasesClaim(t *testing.T) {
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{})
 	rcfg := cfg.Resolve(config.CLIOverrides{})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
-		AgentRunner: NewRunner(Config{}),
+		AgentRunner: scriptHarnessAgentRunner{},
 		AttemptBackend: failingPrepareAttemptBackend{
 			prepareErr: fmt.Errorf("creating isolated worktree: git worktree add: fatal: could not create work tree dir: No space left on device"),
 		},

@@ -186,9 +186,8 @@ func TestIsRateLimitResult(t *testing.T) {
 
 // TestRunWithRateLimitRetry_RetryAfterRespected covers AC #1, #3, #6, #7:
 // a rate-limited result is retried with the exact Retry-After-derived wait,
-// the OnRetry hook fires (this is the channel callers use to invoke
-// RecordRouteAttempt), and a subsequent non-rate-limit result terminates the
-// loop.
+// the OnRetry hook fires for DDx audit telemetry, and a subsequent
+// non-rate-limit result terminates the loop.
 func TestRunWithRateLimitRetry_RetryAfterRespected(t *testing.T) {
 	var sleepCalls []time.Duration
 	var hookCalls []RateLimitRetryInfo
@@ -319,7 +318,7 @@ func TestRunWithRateLimitRetry_BudgetExhausted(t *testing.T) {
 	if len(hookCalls) == 0 {
 		t.Fatal("OnRetry never invoked")
 	}
-	// Last hook call must mark OverBudget so RecordRouteAttempt can record
+	// Last hook call must mark OverBudget so DDx audit telemetry can record
 	// the budget-exhausted terminal event.
 	last := hookCalls[len(hookCalls)-1]
 	if !last.OverBudget {
@@ -385,47 +384,5 @@ func TestRunWithRateLimitRetry_ContextCancel(t *testing.T) {
 	_, err := RunWithRateLimitRetry(context.Background(), cfg, attempt)
 	if err == nil {
 		t.Fatal("expected error from cancelled sleep")
-	}
-}
-
-// TestBuildRateLimitRouteAttempt_ProvidesTransparency covers AC #6: the
-// helper that callers feed into svc.RecordRouteAttempt fills in Status,
-// Reason, Harness/Provider/Model so the routing engine has signal even
-// though provider availability is intentionally unchanged.
-func TestBuildRateLimitRouteAttempt_ProvidesTransparency(t *testing.T) {
-	res := &Result{
-		Harness:  "claude",
-		Provider: "anthropic",
-		Model:    "claude-opus-4-7",
-		Error:    "cancelled: auth/rate-limit detected",
-	}
-	att := BuildRateLimitRouteAttempt(RateLimitRetryInfo{
-		Attempt: 2,
-		Wait:    7 * time.Second,
-		Source:  "retry-after",
-		Result:  res,
-	})
-	if att.Status != "rate_limited" {
-		t.Errorf("Status = %q; want rate_limited", att.Status)
-	}
-	if att.Reason != "retry-after" {
-		t.Errorf("Reason = %q; want retry-after", att.Reason)
-	}
-	if att.Harness != "claude" || att.Provider != "anthropic" || att.Model != "claude-opus-4-7" {
-		t.Errorf("provenance not propagated: %+v", att)
-	}
-	if att.Duration != 7*time.Second {
-		t.Errorf("Duration = %v; want 7s", att.Duration)
-	}
-}
-
-func TestBuildRateLimitRouteAttempt_OverBudgetReason(t *testing.T) {
-	att := BuildRateLimitRouteAttempt(RateLimitRetryInfo{
-		Source:     "retry-after",
-		Result:     &Result{Harness: "claude"},
-		OverBudget: true,
-	})
-	if att.Reason != RateLimitBudgetExhaustedReason {
-		t.Errorf("Reason = %q; want %q", att.Reason, RateLimitBudgetExhaustedReason)
 	}
 }

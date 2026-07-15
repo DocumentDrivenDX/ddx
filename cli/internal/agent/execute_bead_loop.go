@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	agentlib "github.com/easel/fizeau"
-
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
@@ -77,14 +75,6 @@ type ExecuteBeadLoopRuntime struct {
 	// ReviewCostCap, when non-nil, accumulates reviewer cost on the same
 	// loop budget tracker used by the implementer attempts.
 	ReviewCostCap *escalation.CostCapTracker
-	// RoutePreflight, when non-nil, runs once during Run bootstrap before
-	// the drain loop starts. It is expected to call upstream ResolveRoute
-	// against the loop's resolved (harness, model) and return whatever typed
-	// routing error the upstream surfaced — notably
-	// agent.ErrHarnessModelIncompatible when the harness allow-list rejects
-	// the model. Any non-nil error stops the worker before any bead is
-	// claimed; DDx does NOT duplicate the upstream allow-list.
-	RoutePreflight func(ctx context.Context, harness, model string) error
 	// PreClaimTimeout bounds the pre-claim readiness hooks. Zero means use the
 	// binary default so a hanging readiness check cannot park the worker
 	// forever.
@@ -93,11 +83,14 @@ type ExecuteBeadLoopRuntime struct {
 	// fingerprints across distinct bead IDs that trips the operator-attention
 	// guard. Zero means use DefaultPreClaimWarnRepeatThreshold.
 	PreClaimWarnRepeatThreshold int
-	// RouteResolutionTimeout bounds the routing preflight (RoutePreflight) and
-	// the resolveRoute viability check so a hung resolver cannot wedge the
-	// single-threaded worker for hours while a lease is held (ddx-8f2e0ebf).
+	// RouteResolutionTimeout bounds the Fizeau route stage, from Execute dispatch
+	// until the first routing_decision event. It does not bound provider execution.
 	// Zero means use DefaultRouteResolutionTimeout (60s).
 	RouteResolutionTimeout time.Duration
+	// routeGuardStartGate is a test-only scheduling seam. When non-nil, the
+	// route guard waits for the gate before observing the Execute-relative deadline.
+	// Production callers leave it nil.
+	routeGuardStartGate <-chan struct{}
 	// ConsecutiveWedgeThreshold is the number of consecutive wedges
 	// (route_resolution_timeout / progress_watchdog) on the same bead that
 	// trips the consecutive-wedge guard: the worker stops re-claiming the bead
@@ -221,11 +214,9 @@ func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
 	return mode, idleInterval
 }
 
-// DefaultRouteResolutionTimeout bounds routing preflight and the resolveRoute
-// viability check when ExecuteBeadLoopRuntime.RouteResolutionTimeout is unset.
-// A hung resolver previously wedged the single-threaded worker for hours while
-// holding a lease (ddx-8f2e0ebf); 60s is short enough to release promptly and
-// long enough not to false-trip a slow-but-healthy resolver.
+// DefaultRouteResolutionTimeout bounds only Fizeau's opaque route stage: from
+// Execute dispatch until the service emits routing_decision. The timer is
+// permanently disarmed at that event and never bounds provider execution.
 const DefaultRouteResolutionTimeout = 60 * time.Second
 
 // effectiveRouteResolutionTimeout returns the configured route-resolution
@@ -713,7 +704,7 @@ type ExecuteBeadReport struct {
 	// ActualPower is the routing-decision power of the model that actually
 	// served the implementer's call. Forwarded to the post-merge reviewer so
 	// it can request MinPower=actualPower+1 and bias routing toward a
-	// stronger reviewer (R4 pairing).
+	// stronger reviewer without selecting a concrete route.
 	ActualPower                 int           `json:"actual_power,omitempty"`
 	PredictedPower              int           `json:"predicted_power,omitempty"`
 	PredictedSpeedTPS           float64       `json:"predicted_speed_tps,omitempty"`
@@ -1669,11 +1660,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	// preflight_failed, resource_exhausted, and future provider exhaustion are
 	// still subsystem-specific exits.
 	exitReason := ""
-	setExit := func(condition, reason string) {
-		exitReason = reason
-		result.StopCondition = condition
-		result.ExitReason = reason
-	}
 
 	emit("loop.start", map[string]any{
 		"worker_id":    runtime.WorkerID,
@@ -1724,57 +1710,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		})
 	} else if reaped > 0 && runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper killed %d orphaned harness process(es)\n", reaped)
-	}
-	if runtime.RoutePreflight != nil {
-		routeTimeout := runtime.effectiveRouteResolutionTimeout()
-		rerr, timedOut := runRoutePreflightBounded(ctx, routeTimeout, func(c context.Context) error {
-			return runtime.RoutePreflight(c, harness, model)
-		})
-		if timedOut {
-			// Slow-but-live resolver: no bead lease is held at startup so there
-			// is nothing to release. Log, emit a non-fatal warning, and continue
-			// into the drain loop — the next claim iteration calls RoutePreflight
-			// again, giving a slow resolver another window to succeed (D1c).
-			detail := fmt.Sprintf("routing preflight timed out after %s (harness=%s model=%s); no lease held — continuing",
-				routeTimeout, harness, model)
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s\n", detail)
-			}
-			emit("loop.warn", map[string]any{
-				"reason":  "startup_route_preflight_timeout",
-				"harness": harness,
-				"model":   model,
-				"timeout": routeTimeout.String(),
-				"detail":  detail,
-			})
-		} else if rerr != nil {
-			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
-				harness, model, rerr.Error())
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (startup)\n", detail)
-			}
-			emit("preflight.rejected", map[string]any{
-				"harness": harness,
-				"model":   model,
-				"reason":  rerr.Error(),
-				"startup": true,
-			})
-			report := ExecuteBeadReport{
-				Status:           ExecuteBeadStatusExecutionFailed,
-				Detail:           detail,
-				Harness:          harness,
-				Model:            model,
-				Disrupted:        true,
-				DisruptionReason: "preflight_rejected",
-				OutcomeReason:    "preflight_failed",
-			}
-			emitDisruptionDetected(emit, w.Store, "", "preflight_rejected", detail, harness, model, assignee, now().UTC())
-			result.Failures++
-			result.LastFailureStatus = report.Status
-			result.Results = append(result.Results, report)
-			setExit("Preflight", "preflight_failed")
-			return result, nil
-		}
 	}
 	defer func() {
 		emit("loop.end", map[string]any{
@@ -3504,10 +3439,28 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	// mid-stream, UpdateRoute overwrites the liveness record so the
 	// progress watchdog sees a non-empty route field and does not mistake
 	// a healthy long-running attempt for a wedge (ddx-6190edc6).
-	var onRouteResolved func(harness, provider, model string)
-	if liveness != nil {
-		beadIDForRoute := candidate.ID
-		onRouteResolved = func(h, p, m string) { liveness.UpdateRoute(beadIDForRoute, h, m, p) }
+	routeResolved := make(chan struct{})
+	var routeResolvedOnce sync.Once
+	executeStarted := make(chan struct{})
+	var executeStartedOnce sync.Once
+	var executeStartedAt time.Time
+	beadIDForRoute := candidate.ID
+	routeGuardEnabled := candidate.IssueType != bead.IssueTypeReviewFinding && candidate.IssueType != bead.IssueTypeAlignmentReview
+	onExecuteStart := func() {
+		executeStartedOnce.Do(func() {
+			// Use the process's monotonic clock for the route deadline. w.Now is an
+			// audit/event clock and may be fixed in tests; it must not control a
+			// real cancellation deadline. Closing executeStarted publishes this
+			// timestamp to the guard without sharing a live timer across goroutines.
+			executeStartedAt = time.Now()
+			close(executeStarted)
+		})
+	}
+	onRouteResolved := func(h, p, m string) {
+		routeResolvedOnce.Do(func() { close(routeResolved) })
+		if liveness != nil {
+			liveness.UpdateRoute(beadIDForRoute, h, m, p)
+		}
 	}
 	attemptStarted = true
 
@@ -3522,6 +3475,68 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	term := &attemptTermination{}
 	var guardWG sync.WaitGroup
 	candidateID := candidate.ID
+	if routeGuardEnabled {
+		guardWG.Add(1)
+		go func() {
+			defer guardWG.Done()
+			if runtime.routeGuardStartGate != nil {
+				select {
+				case <-runtime.routeGuardStartGate:
+				case <-attemptCtx.Done():
+					return
+				}
+			}
+			// DDx-local worktree/prompt setup is outside the route-stage budget.
+			// Derive the remaining duration from the absolute Execute deadline so
+			// delayed goroutine scheduling cannot grant Fizeau a fresh budget.
+			select {
+			case <-executeStarted:
+			case <-routeResolved:
+				return
+			case <-attemptCtx.Done():
+				return
+			}
+			timeout := runtime.effectiveRouteResolutionTimeout()
+			remaining := time.Until(executeStartedAt.Add(timeout))
+			if remaining < 0 {
+				remaining = 0
+			}
+			routeStageTimer := time.NewTimer(remaining)
+			defer routeStageTimer.Stop()
+			select {
+			case <-routeResolved:
+				return
+			case <-attemptCtx.Done():
+				return
+			case <-routeStageTimer.C:
+				// Prefer a concurrently delivered routing_decision over the
+				// deadline tick; after that event this guard has no authority.
+				select {
+				case <-routeResolved:
+					return
+				default:
+				}
+				if term.set(FailureModeRouteResolutionTimeout) {
+					_, releaseErr := routeResolutionTimeoutReport(
+						w.Store,
+						candidateID,
+						assignee,
+						provAttemptID,
+						now().UTC(),
+						timeout,
+						executeStartedAt.UTC(),
+					)
+					if releaseErr != nil {
+						// A failed release is not a handled termination. Preserve the
+						// error and clear the reason so ordinary attempt cleanup still
+						// gets a chance to release the claim.
+						term.releaseFailed(FailureModeRouteResolutionTimeout, releaseErr)
+					}
+					attemptCancel()
+				}
+			}
+		}()
+	}
 	guardWG.Add(1)
 	go func() {
 		defer guardWG.Done()
@@ -3592,7 +3607,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 				return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 					Bead:                candidate,
-					Executor:            tryExecutor(w.Executor, onRouteResolved),
+					Executor:            tryExecutor(w.Executor, onExecuteStart, onRouteResolved),
 					Store:               w.Store,
 					ProjectRoot:         runtime.ProjectRoot,
 					SatisfactionChecker: w.SatisfactionChecker,
@@ -3612,7 +3627,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 				Bead:                candidate,
-				Executor:            tryExecutor(w.Executor, onRouteResolved),
+				Executor:            tryExecutor(w.Executor, onExecuteStart, onRouteResolved),
 				Store:               w.Store,
 				ProjectRoot:         runtime.ProjectRoot,
 				SatisfactionChecker: w.SatisfactionChecker,
@@ -3634,6 +3649,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	attemptCancel()
 	guardWG.Wait()
 	err = dispatchErr
+	if routeGuardErr := term.err(); routeGuardErr != nil {
+		err = errors.Join(err, routeGuardErr)
+	}
 	if liveness != nil {
 		liveness.ClearAttempt()
 		liveness.OnTick(now())
@@ -3644,6 +3662,12 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	// failure (ddx-dc23f001). The bead is either closed (external close) or
 	// released to open with an operator_attention event (wedge).
 	if termReason := term.get(); termReason != "" {
+		if termReason == FailureModeRouteResolutionTimeout {
+			// Keep draining the queue, but do not immediately reclaim the same
+			// bead after releasing its timed-out lease. The durable wedge marker
+			// remains for a later Run invocation and the consecutive-wedge guard.
+			transientCandidateSkips[candidate.ID] = routeStageTimeoutSkipReason
+		}
 		emit("loop.attempt_terminated", map[string]any{
 			"bead_id": candidate.ID,
 			"reason":  termReason,
@@ -3658,7 +3682,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	// consecutive-wedge marker so a single transient wedge does not
 	// permanently sideline a bead that subsequently makes progress
 	// (ddx-9714eaac AC #2).
-	clearConsecutiveWedge(w.Store, candidate.ID)
+	if term.err() == nil {
+		clearConsecutiveWedge(w.Store, candidate.ID)
+	}
 	report := fromTryReport(attemptOut.Report)
 	if report.BeadID == "" {
 		report.BeadID = candidate.ID
@@ -3668,6 +3694,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	}
 	if report.Detail == "" {
 		report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
+	}
+	if routeGuardErr := term.err(); routeGuardErr != nil {
+		report.Error = routeGuardErr.Error()
+		report.Detail = routeGuardErr.Error()
 	}
 	classifyLoopReportFailure(&report)
 	if gitRepairStop, detail, ok := preDispatchGitRepairStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
@@ -4177,7 +4207,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			return executeBeadIterationOutcome{Continue: true}, nil
 		}
-		appendLoopRoutingEvidence(w.Store, candidate, report, now().UTC(), readFailedRoutes(candidate.Extra))
+		appendLoopRoutingEvidence(w.Store, candidate, report, now().UTC())
 		// Story 15: when an operator-prompt bead succeeds, scan
 		// base..result for affected beads and artifacts, and append
 		// origin_operator_prompt_id back-link events. Failure is
@@ -4566,16 +4596,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				report.OutcomeReason = FailureModeProviderConnectivity
 				report.Disrupted = true
 				report.DisruptionReason = "provider_connectivity"
-				operatorPinned := isOperatorRoutingPinned(rcfg.Passthrough())
-				if err := applyProviderConnectivityRouteExclusion(w.Store, candidate.ID, assignee, report, operatorPinned, w.EscalationNextFloor, now().UTC()); err != nil {
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "route-exclusion update failed for %s: %v (continuing)\n", candidate.ID, err)
-					}
-				}
 				emitRouteFailureEvent(w.Store, candidate.ID, assignee, report, now().UTC())
-				// Route exclusion (TTL-based via RouteExclusionWindow) is the
-				// correct mechanism — no per-bead cooldown. Bead is immediately
-				// reclaimable; next attempt routes around the failed (provider,model).
 			} else if isNoViableProviderReport(report) {
 				report.OutcomeReason = FailureModeNoViableProvider
 				report.Disrupted = true
@@ -4911,10 +4932,16 @@ const staleCandidateSkipReason = "stale_candidate"
 // watcher keeps draining instead of exiting (ddx-a827d07f).
 const routingUnavailableSkipReason = "routing_unavailable"
 
+// routeStageTimeoutSkipReason keeps a route-wedged bead out of the remainder
+// of the current drain pass after its lease is released. This prevents an
+// immediate same-worker reclaim loop while preserving the durable wedge marker
+// for later Run invocations.
+const routeStageTimeoutSkipReason = "route_stage_timeout"
+
 func hasGuardSkips(skips []pickerSkip) bool {
 	for _, skip := range skips {
 		switch skip.Reason {
-		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason:
+		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason, routeStageTimeoutSkipReason:
 			continue
 		default:
 			return true
@@ -5364,8 +5391,8 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 			continue
 		}
 		if w.transientCandidateSkips != nil {
-			if _, skipped := w.transientCandidateSkips[candidate.ID]; skipped {
-				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: staleCandidateSkipReason})
+			if reason, skipped := w.transientCandidateSkips[candidate.ID]; skipped {
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: reason})
 				continue
 			}
 		}
@@ -5423,12 +5450,7 @@ func hasResultForBead(results []ExecuteBeadReport, beadID string) bool {
 // from the executor's ExecuteBeadReport, so that review-outcomes analytics can
 // attribute a subsequent review verdict to the originating provider/model powerClass.
 // Best-effort: errors and missing-provider cases are silently ignored.
-//
-// failedRoutes, when non-empty, populates fallback_chain so the routing event
-// records which earlier provider/model tuples were excluded before this
-// successful (or current) route was selected. Pass nil when there is no prior
-// route-failure evidence on the bead.
-func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report ExecuteBeadReport, createdAt time.Time, failedRoutes []FailedRouteEntry) {
+func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report ExecuteBeadReport, createdAt time.Time) {
 	if store == nil || target.ID == "" {
 		return
 	}
@@ -5439,20 +5461,11 @@ func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report
 	if provider == "" {
 		return
 	}
-	chain := make([]map[string]any, 0, len(failedRoutes))
-	for _, e := range failedRoutes {
-		chain = append(chain, map[string]any{
-			"provider":     e.Provider,
-			"model":        e.Model,
-			"actual_power": e.ActualPower,
-			"reason":       e.Reason,
-		})
-	}
 	intentSource, estimatedDifficulty, requestedPowerClass, _ := executionRoutingIntentFacts(target, report)
 	body, err := json.Marshal(map[string]any{
 		"resolved_provider":     provider,
 		"resolved_model":        report.Model,
-		"fallback_chain":        chain,
+		"fallback_chain":        []map[string]any{},
 		"routing_intent_source": intentSource,
 		"estimated_difficulty":  estimatedDifficulty,
 		"requested_profile":     report.RequestedProfile,
@@ -6901,11 +6914,10 @@ func isNoViableProviderReport(report ExecuteBeadReport) bool {
 	return ClassifyFailureMode(report.Status, 0, combined) == FailureModeNoViableProvider
 }
 
-// providerConnectivityMarkers names the substrings that indicate the routed
-// provider endpoint itself was unreachable (TCP-level dial failure, connection
-// refused, network down). These are stricter than the broader transport
-// markers because we only treat them as route-exclusion evidence when paired
-// with a non-empty Provider in the report.
+// providerConnectivityMarkers names the substrings that indicate the selected
+// endpoint was unreachable (TCP-level dial failure, connection refused,
+// network down). Concrete route identity is audit evidence only and must not
+// participate in this control-flow classification.
 var providerConnectivityMarkers = []string{
 	"dial tcp",
 	"connection refused",
@@ -6918,16 +6930,13 @@ var providerConnectivityMarkers = []string{
 }
 
 // isProviderConnectivityFailureReport reports whether a worker report describes
-// a routed provider endpoint that could not be reached. Requires both an
-// identified route (Provider) and a transport-level error marker. Reports that
-// already classify as no_viable_provider or routing-infrastructure failures
-// keep their own paths; this is for the narrower "fizeau picked a route, the
-// HTTP call to that endpoint failed" case.
+// an endpoint that could not be reached. It depends only on typed outcome,
+// status, and error text: Fizeau's returned harness/provider/model are retained
+// for audit but cannot change DDx retry, disruption, or triage behavior.
+// Reports that already classify as no_viable_provider or routing-infrastructure
+// failures keep their own paths.
 func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
 	if report.Status != ExecuteBeadStatusExecutionFailed {
-		return false
-	}
-	if strings.TrimSpace(report.Provider) == "" {
 		return false
 	}
 	if isNoViableProviderReport(report) || isRoutingInfrastructureReport(report) {
@@ -6988,306 +6997,35 @@ func parseProviderConnectivityFacts(report ExecuteBeadReport) (endpoint, timeout
 	return endpoint, timeoutClass
 }
 
-// executeLoopFailedRoutesKey is the bead Extra key holding the JSON-encoded
-// list of (provider, model, actual_power) tuples that have failed with a
-// provider-connectivity error. Subsequent routing-evidence events read this
-// list to populate fallback_chain so post-hoc review can see what was
-// excluded; the power-hint nudge on the same bead biases fizeau's next
-// RouteRequest off the failed power tier when a ladder is available.
-const executeLoopFailedRoutesKey = "work-failed-routes"
-
-// failedRoutesMaxEntries is the FIFO ring cap on the work-failed-routes list.
-// When the list is full, the oldest entry is evicted on insert.
-const failedRoutesMaxEntries = 32
-
-// RouteExclusionWindow is the time window within which a recorded
-// work-failed-routes entry suppresses a (provider, model) pair in
-// the next RouteRequest.ExcludedRoutes payload. Entries older than this
-// window remain in the bead's audit list but do not constrain routing,
-// allowing recovery once the provider returns.
-const RouteExclusionWindow = time.Hour
-
-// FailedRouteEntry is the JSON shape persisted under executeLoopFailedRoutesKey.
-// Exported so external callers (test helpers, tooling) can decode it without
-// duplicating the schema.
-type FailedRouteEntry struct {
-	Provider    string `json:"provider"`
-	Model       string `json:"model,omitempty"`
-	ActualPower int    `json:"actual_power,omitempty"`
-	Reason      string `json:"reason,omitempty"`
-	// Endpoint is the concrete provider URL the failed dispatch dialed
-	// (e.g. http://vidar:1235/v1/chat/completions), parsed from the worker's
-	// transport error. Actionable route fact for operators diagnosing an
-	// unreachable endpoint; empty when no URL could be parsed.
-	Endpoint string `json:"endpoint,omitempty"`
-	// TimeoutClass is the transport failure class parsed from the error
-	// (e.g. "i/o timeout", "connection refused", "no route to host"). It
-	// distinguishes a down endpoint (connection refused) from an unreachable
-	// one (i/o timeout / no route to host) so remediation can be targeted.
-	TimeoutClass string `json:"timeout_class,omitempty"`
-	At           string `json:"at,omitempty"`
-	Count        int    `json:"count,omitempty"`
-}
-
-// readFailedRoutes decodes the failed-route list from a bead's Extra. Returns
-// nil when absent or malformed; never errors. Transparently normalizes legacy
-// data: collapses duplicates by (provider, model) and caps at failedRoutesMaxEntries.
-func readFailedRoutes(extra map[string]any) []FailedRouteEntry {
-	if len(extra) == 0 {
-		return nil
-	}
-	raw, ok := extra[executeLoopFailedRoutesKey]
-	if !ok {
-		return nil
-	}
-	encoded, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-	var entries []FailedRouteEntry
-	if err := json.Unmarshal(encoded, &entries); err != nil {
-		return nil
-	}
-	return normalizeFailedRoutes(entries)
-}
-
-// normalizeFailedRoutes collapses duplicate (provider, model) entries keeping
-// the newest At timestamp and summing counts, then caps the list at
-// failedRoutesMaxEntries by evicting oldest entries (FIFO). Used by
-// readFailedRoutes to transparently migrate legacy bead data on read.
-func normalizeFailedRoutes(entries []FailedRouteEntry) []FailedRouteEntry {
-	if len(entries) == 0 {
-		return entries
-	}
-	type key struct{ provider, model string }
-	index := make(map[key]int, len(entries))
-	collapsed := make([]FailedRouteEntry, 0, len(entries))
-	for _, e := range entries {
-		k := key{e.Provider, e.Model}
-		if i, ok := index[k]; ok {
-			existingCount := collapsed[i].Count
-			if existingCount == 0 {
-				existingCount = 1
-			}
-			ec := e.Count
-			if ec == 0 {
-				ec = 1
-			}
-			if e.At > collapsed[i].At {
-				endpoint := e.Endpoint
-				if endpoint == "" {
-					endpoint = collapsed[i].Endpoint
-				}
-				timeoutClass := e.TimeoutClass
-				if timeoutClass == "" {
-					timeoutClass = collapsed[i].TimeoutClass
-				}
-				collapsed[i] = FailedRouteEntry{
-					Provider:     e.Provider,
-					Model:        e.Model,
-					ActualPower:  e.ActualPower,
-					Reason:       e.Reason,
-					Endpoint:     endpoint,
-					TimeoutClass: timeoutClass,
-					At:           e.At,
-					Count:        existingCount + ec,
-				}
-			} else {
-				collapsed[i].Count = existingCount + ec
-				if collapsed[i].Endpoint == "" {
-					collapsed[i].Endpoint = e.Endpoint
-				}
-				if collapsed[i].TimeoutClass == "" {
-					collapsed[i].TimeoutClass = e.TimeoutClass
-				}
-			}
-		} else {
-			index[k] = len(collapsed)
-			c := e
-			if c.Count == 0 {
-				c.Count = 1
-			}
-			collapsed = append(collapsed, c)
-		}
-	}
-	if len(collapsed) > failedRoutesMaxEntries {
-		collapsed = collapsed[len(collapsed)-failedRoutesMaxEntries:]
-	}
-	return collapsed
-}
-
-// appendFailedRoute records entry on b.Extra under executeLoopFailedRoutesKey.
-// If an identical (provider, model) already exists, its At timestamp is updated
-// and its Count is incremented rather than appending a duplicate. When the list
-// is at failedRoutesMaxEntries capacity, the oldest entry is evicted (FIFO).
-func appendFailedRoute(b *bead.Bead, entry FailedRouteEntry) {
-	ensureBeadExtra(b)
-	existing := readFailedRoutes(b.Extra)
-	for i, e := range existing {
-		if e.Provider == entry.Provider && e.Model == entry.Model {
-			existing[i].At = entry.At
-			if entry.ActualPower != 0 {
-				existing[i].ActualPower = entry.ActualPower
-			}
-			if entry.Reason != "" {
-				existing[i].Reason = entry.Reason
-			}
-			if entry.Endpoint != "" {
-				existing[i].Endpoint = entry.Endpoint
-			}
-			if entry.TimeoutClass != "" {
-				existing[i].TimeoutClass = entry.TimeoutClass
-			}
-			existing[i].Count = e.Count + 1
-			b.Extra[executeLoopFailedRoutesKey] = existing
-			return
-		}
-	}
-	if len(existing) >= failedRoutesMaxEntries {
-		existing = existing[1:]
-	}
-	entry.Count = 1
-	b.Extra[executeLoopFailedRoutesKey] = append(existing, entry)
-}
-
-// buildExcludedRoutes converts FailedRouteEntry values whose At timestamp
-// falls within [now-window, now] into agentlib.ExcludedRoute entries for
-// inclusion in a Fizeau RouteRequest.ExcludedRoutes payload. Entries outside
-// the window are omitted from the result; the caller's input slice is never
-// modified. An empty or nil input returns nil.
-func buildExcludedRoutes(failedRoutes []FailedRouteEntry, now time.Time, window time.Duration) []agentlib.ExcludedRoute {
-	if len(failedRoutes) == 0 {
-		return nil
-	}
-	var out []agentlib.ExcludedRoute
-	for _, r := range failedRoutes {
-		if r.Provider == "" || r.At == "" {
-			continue
-		}
-		at, err := time.Parse(time.RFC3339, r.At)
-		if err != nil {
-			continue
-		}
-		if now.Sub(at) > window {
-			continue
-		}
-		out = append(out, agentlib.ExcludedRoute{
-			Provider: r.Provider,
-			Model:    r.Model,
-		})
-	}
-	return out
-}
-
-// filterShieldedExcludedRoutes drops any ExcludedRoute whose Provider names a
-// shielded subscription CLI harness (binary on PATH, billing==subscription).
-// Such a route must never be hard-excluded from a RouteRequest just because a
-// recent connectivity blip was recorded against it: doing so can empty the
-// candidate set during a local-fleet outage where the subscription harness is
-// the only live option (the no_viable_provider bug). shielded is the set
-// returned by shieldedSubscriptionHarnesses; an empty set is a no-op.
-func filterShieldedExcludedRoutes(excluded []agentlib.ExcludedRoute, shielded map[string]struct{}) []agentlib.ExcludedRoute {
-	if len(excluded) == 0 || len(shielded) == 0 {
-		return excluded
-	}
-	out := excluded[:0:0]
-	for _, e := range excluded {
-		if isShieldedSubscriptionHarness(e.Provider, shielded) {
-			continue
-		}
-		out = append(out, e)
-	}
-	return out
-}
-
-// leaseReleaser is the narrow capability CheckAndApplyRouteExclusions needs to
-// atomically release a held lease on a route-resolution timeout. The tracker
-// backend satisfies it via Store.Release (ddx-449baa1d).
+// leaseReleaser is the narrow capability attempt guards use to atomically
+// release a held lease when the Fizeau route stage times out.
 type leaseReleaser interface {
 	Release(id, assignee, targetStatus string) error
 }
 
-// resolveRouteBounded runs resolveRoute under a route-resolution deadline. The
-// resolver is invoked in a goroutine and selected against the deadline so a
-// resolver that ignores context cancellation cannot wedge the single-threaded
-// worker past the timeout (the hang observed in ddx-8f2e0ebf). timedOut is true
-// only when the deadline fired before the resolver returned; a parent-context
-// cancellation reports timedOut=false.
-func resolveRouteBounded(
-	ctx context.Context,
-	timeout time.Duration,
-	resolveRoute func(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error),
-	req agentlib.RouteRequest,
-) (decision *agentlib.RouteDecision, err error, timedOut bool) {
-	tctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	type routeResult struct {
-		decision *agentlib.RouteDecision
-		err      error
+// routeResolutionTimeoutReport releases the bead's lease, records the
+// consecutive wedge, emits operator_attention evidence, and returns a typed
+// disrupted report. lastActivityAt identifies the last observed execution
+// activity before Fizeau's routing_decision deadline expired. If lease release
+// fails it returns that error without recording the timeout as handled.
+func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now time.Time, timeout time.Duration, lastActivityAt time.Time) (ExecuteBeadReport, error) {
+	if err := releaseWorkerClaim(store, beadID, assignee); err != nil {
+		return ExecuteBeadReport{}, fmt.Errorf("release route-timed-out bead %s: %w", beadID, err)
 	}
-	done := make(chan routeResult, 1)
-	go func() {
-		d, e := resolveRoute(tctx, req)
-		done <- routeResult{decision: d, err: e}
-	}()
-	select {
-	case res := <-done:
-		return res.decision, res.err, false
-	case <-tctx.Done():
-		return nil, tctx.Err(), errors.Is(tctx.Err(), context.DeadlineExceeded)
-	}
-}
-
-// runRoutePreflightBounded runs fn under a route-resolution deadline, returning
-// timedOut=true only when the deadline fired before fn returned. fn runs in a
-// goroutine so a preflight resolver that ignores context cancellation cannot
-// wedge the worker past the timeout.
-func runRoutePreflightBounded(ctx context.Context, timeout time.Duration, fn func(ctx context.Context) error) (err error, timedOut bool) {
-	tctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	done := make(chan error, 1)
-	go func() { done <- fn(tctx) }()
-	select {
-	case e := <-done:
-		return e, false
-	case <-tctx.Done():
-		return tctx.Err(), errors.Is(tctx.Err(), context.DeadlineExceeded)
-	}
-}
-
-// routeResolutionTimeoutReport atomically releases the bead's lease (via
-// Store.Release when the store supports it), appends a route.timeout event
-// carrying bead-id, attempt-id, last_activity_at, and a diagnosis, and returns
-// the execution_failed / route_resolution_timeout report marked Disrupted=true
-// so the loop does not apply a no-progress cooldown — with fizeau quota
-// fail-open (F1) a slow-but-live resolver is retryable without operator
-// attention (D1c). lastActivityAt is reserved for D3 wedge-counter gating.
-func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now time.Time, timeout time.Duration, lastActivityAt time.Time) ExecuteBeadReport {
 	diagnosis := fmt.Sprintf(
-		"route resolution exceeded %s; released lease (retryable — next claim will re-resolve)",
+		"Fizeau route stage exceeded %s before routing_decision; released lease and flagged for operator attention",
 		timeout,
 	)
-	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
-		_ = releaser.Release(beadID, assignee, "")
-	}
+	recordConsecutiveWedge(store, beadID, FailureModeRouteResolutionTimeout, now)
 	if store != nil && beadID != "" {
-		body, _ := json.Marshal(map[string]any{
+		appendWorkEvent(store, beadID, "operator_attention", FailureModeRouteResolutionTimeout, map[string]any{
 			"reason":           FailureModeRouteResolutionTimeout,
 			"bead_id":          beadID,
 			"attempt_id":       attemptID,
-			"last_activity_at": now.UTC().Format(time.RFC3339),
-			"heartbeat_at":     lastActivityAt.UTC().Format(time.RFC3339),
+			"last_activity_at": lastActivityAt.UTC().Format(time.RFC3339),
 			"diagnosis":        diagnosis,
 			"timeout":          timeout.String(),
-		})
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
-			Kind:      "route.timeout",
-			Summary:   FailureModeRouteResolutionTimeout,
-			Body:      string(body),
-			Actor:     assignee,
-			Source:    "ddx work",
-			CreatedAt: now.UTC(),
-		})
+		}, assignee, now)
 	}
 	return ExecuteBeadReport{
 		BeadID:           beadID,
@@ -7296,7 +7034,7 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 		OutcomeReason:    FailureModeRouteResolutionTimeout,
 		Disrupted:        true,
 		DisruptionReason: FailureModeRouteResolutionTimeout,
-	}
+	}, nil
 }
 
 // attemptTermination records which guard (the progress watchdog or the
@@ -7305,8 +7043,9 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 // is read after the guards have stopped so the loop knows to skip normal
 // failure escalation for an already-handled termination.
 type attemptTermination struct {
-	mu     sync.Mutex
-	reason string
+	mu       sync.Mutex
+	reason   string
+	guardErr error
 }
 
 // set records reason and reports whether this caller was the first to fire. A
@@ -7322,11 +7061,29 @@ func (t *attemptTermination) set(reason string) bool {
 	return true
 }
 
+// releaseFailed rolls back a reserved termination when its lease mutation
+// failed. The worker may still cancel the wedged subprocess, but normal attempt
+// cleanup remains authoritative because the bead is still claimed.
+func (t *attemptTermination) releaseFailed(reason string, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.reason == reason {
+		t.reason = ""
+	}
+	t.guardErr = err
+}
+
 // get returns the recorded termination reason, or "" when no guard fired.
 func (t *attemptTermination) get() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.reason
+}
+
+func (t *attemptTermination) err() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.guardErr
 }
 
 // beadStatusReader is the narrow read capability the external-close watcher
@@ -7428,9 +7185,8 @@ type WedgeMarker struct {
 }
 
 // readWedgeMarker decodes the consecutive-wedge marker from a bead's Extra.
-// Returns a zero-value marker when absent or malformed; never errors. Mirrors
-// readFailedRoutes' marshal-then-unmarshal round-trip so a marker reloaded from
-// JSONL (a map[string]any) decodes the same as one set in-process.
+// Returns a zero-value marker when absent or malformed; never errors. The
+// marshal-then-unmarshal round trip also handles a marker reloaded from JSONL.
 func readWedgeMarker(extra map[string]any) WedgeMarker {
 	if len(extra) == 0 {
 		return WedgeMarker{}
@@ -7537,161 +7293,6 @@ func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assigne
 		"last_activity_at": marker.At,
 		"diagnosis":        diagnosis,
 	}, assignee, at)
-	return nil
-}
-
-// CheckAndApplyRouteExclusions builds ExcludedRoutes from the bead's
-// failed-routes list, calls resolveRoute to verify a viable candidate
-// remains, and when none does returns a no-viable-provider report so the
-// current execution path can escalate without mutating bead metadata.
-//
-// The resolveRoute viability check is bounded by timeout (defaulting to
-// DefaultRouteResolutionTimeout): on timeout the lease is released atomically,
-// an operator-attention event is emitted, and a route_resolution_timeout report
-// is returned (ddx-d8970a7b).
-//
-// Returns (report, true) when dispatch should be skipped (all routes
-// excluded, resolveRoute returned an error, or route resolution timed out);
-// (zero, false) when the caller may proceed with dispatch normally.
-// A nil resolveRoute is treated as a no-op and returns false.
-func CheckAndApplyRouteExclusions(
-	ctx context.Context,
-	svc agentlib.FizeauService,
-	store ExecuteBeadLoopStore,
-	beadID, assignee string,
-	extra map[string]any,
-	now time.Time,
-	minPower int,
-	resolveRoute func(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error),
-	nextFloorFn func(int) (int, error),
-	timeout time.Duration,
-	attemptID string,
-	lastActivityAt time.Time,
-) (ExecuteBeadReport, bool) {
-	if resolveRoute == nil {
-		return ExecuteBeadReport{}, false
-	}
-	failedRoutes := readFailedRoutes(extra)
-	excluded := buildExcludedRoutes(failedRoutes, now, RouteExclusionWindow)
-	// Never hard-exclude a subscription CLI harness whose binary is on PATH:
-	// the failed-route entries replay connectivity blips that must not empty
-	// the candidate set during a local-fleet outage (same shield as the
-	// tracker-seeding path in service_run.go — single source of truth).
-	shielded := shieldedSubscriptionHarnesses(ctx, svc)
-	excluded = filterShieldedExcludedRoutes(excluded, shielded)
-	if len(excluded) == 0 {
-		return ExecuteBeadReport{}, false
-	}
-	req := agentlib.RouteRequest{
-		MinPower:       minPower,
-		ExcludedRoutes: excluded,
-	}
-	if timeout <= 0 {
-		timeout = DefaultRouteResolutionTimeout
-	}
-	_, routeErr, timedOut := resolveRouteBounded(ctx, timeout, resolveRoute, req)
-	if timedOut {
-		return routeResolutionTimeoutReport(store, beadID, assignee, attemptID, now, timeout, lastActivityAt), true
-	}
-	if routeErr == nil {
-		return ExecuteBeadReport{}, false
-	}
-	// No viable candidate at minPower with the current exclusions: let the
-	// current execution path escalate in-memory rather than persisting a bead
-	// retry floor.
-	nextFloor := minPower + 1
-	if nextFloorFn != nil {
-		if floor, err := nextFloorFn(minPower); err == nil {
-			nextFloor = floor
-		}
-	}
-	detail := fmt.Sprintf(
-		"ResolveRoute: no viable routing candidate: all routes at power %d excluded by recent failures; escalating current retry floor to %d",
-		minPower, nextFloor,
-	)
-	return ExecuteBeadReport{
-		BeadID:        beadID,
-		Status:        ExecuteBeadStatusExecutionFailed,
-		Detail:        detail,
-		OutcomeReason: FailureModeNoViableProvider,
-	}, true
-}
-
-// isOperatorRoutingPinned reports whether the resolved passthrough envelope
-// carries any explicit operator pin (harness, model, or provider). When true,
-// the route-exclusion path records the failure but does not bump the power
-// hint — pinned routes must retry exactly as the operator requested.
-func isOperatorRoutingPinned(pt config.AgentPassthrough) bool {
-	return strings.TrimSpace(pt.Harness) != "" ||
-		strings.TrimSpace(pt.Model) != "" ||
-		strings.TrimSpace(pt.Provider) != ""
-}
-
-// applyProviderConnectivityRouteExclusion appends the failed (provider, model)
-// to the bead's failed-route list. The lifecycle status is unchanged (bead
-// stays open). Retry power escalation is derived from route-failure evidence
-// in the current execution path rather than a persisted bead floor.
-//
-// When the ladder is exhausted, it emits an execution-escalation-aborted event.
-// Repeated provider connectivity failures remain retryable route-health
-// evidence: the bead stays open and Fizeau receives recent failed routes so it
-// can pick another viable route without blocking the dependency tree behind an
-// operator-attention state.
-func applyProviderConnectivityRouteExclusion(
-	store ExecuteBeadLoopStore,
-	beadID string,
-	actor string,
-	report ExecuteBeadReport,
-	operatorPinned bool,
-	nextFloorFn func(int) (int, error),
-	at time.Time,
-) error {
-	var (
-		repeatFailure bool
-		repeatCount   int
-	)
-	endpoint, timeoutClass := parseProviderConnectivityFacts(report)
-	if err := store.Update(context.Background(), beadID, func(b *bead.Bead) {
-		existing := readFailedRoutes(b.Extra)
-		for _, e := range existing {
-			if e.Provider == report.Provider && e.Model == report.Model {
-				repeatFailure = true
-				repeatCount = e.Count + 1
-				break
-			}
-		}
-		appendFailedRoute(b, FailedRouteEntry{
-			Provider:     report.Provider,
-			Model:        report.Model,
-			ActualPower:  report.ActualPower,
-			Reason:       FailureModeProviderConnectivity,
-			Endpoint:     endpoint,
-			TimeoutClass: timeoutClass,
-			At:           at.UTC().Format(time.RFC3339),
-		})
-	}); err != nil {
-		return err
-	}
-	if repeatFailure {
-		body, _ := json.Marshal(map[string]any{
-			"provider":      report.Provider,
-			"model":         report.Model,
-			"actual_power":  report.ActualPower,
-			"count":         repeatCount,
-			"reason":        FailureModeProviderConnectivity,
-			"endpoint":      endpoint,
-			"timeout_class": timeoutClass,
-			"action":        "keep_open_for_autonomous_retry",
-		})
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
-			Kind:      "provider_connectivity.auto_retry",
-			Summary:   "repeated provider connectivity failure kept open for autonomous retry",
-			Body:      string(body),
-			Actor:     actor,
-			Source:    "ddx work",
-			CreatedAt: at,
-		})
-	}
 	return nil
 }
 

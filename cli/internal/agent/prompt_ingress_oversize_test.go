@@ -99,7 +99,7 @@ func TestPromptIngressOversize(t *testing.T) {
 	t.Run("execute_bead_buildPrompt", func(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
-		_, _, err := buildPrompt(t.TempDir(), &bead.Bead{ID: "ddx-test"}, nil, nil, "", fixture, "claude", "")
+		_, _, err := buildPrompt(t.TempDir(), &bead.Bead{ID: "ddx-test"}, nil, nil, "", fixture, "")
 		assertOversizeErrorMessage(t, err, fixture)
 	})
 }

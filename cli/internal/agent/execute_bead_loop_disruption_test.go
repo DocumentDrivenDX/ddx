@@ -10,7 +10,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,51 +137,6 @@ func TestLoop_GenuineNoProgress_NoDefaultCooldown(t *testing.T) {
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 }
 
-// TestLoop_PreflightRejection_NoCooldown asserts ddx-5b3e57f4 AC #1: a
-// routing preflight rejection is classified as Disrupted (operator config
-// issue, not model failure). The bead must not be parked under any cooldown.
-func TestLoop_PreflightRejection_NoCooldown(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
-	store := &claimCountingStore{Store: inner}
-
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run on preflight rejection")
-			return ExecuteBeadReport{}, nil
-		}),
-	}
-	rejected := agentlib.ErrHarnessModelIncompatible{
-		Harness: "claude", Model: "gpt-5", SupportedModels: []string{"claude-opus-4-7"},
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "claude", Model: "gpt-5"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			return rejected
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-
-	report := result.Results[0]
-	assert.True(t, report.Disrupted, "preflight rejection must be Disrupted")
-	assert.Equal(t, "preflight_rejected", report.DisruptionReason)
-	assert.Empty(t, report.RetryAfter,
-		"preflight-rejected bead must not carry retry_after")
-
-	got, err := inner.Get(context.Background(), candidate.ID)
-	require.NoError(t, err)
-	if got.Extra != nil {
-		_, hasRetry := got.Extra["work-retry-after"]
-		assert.False(t, hasRetry,
-			"preflight-rejected bead must not have work-retry-after persisted")
-	}
-}
-
 // TestLoop_DisruptionEventEmitted asserts ddx-5b3e57f4 AC #5: a
 // `disruption_detected` event is appended to the bead and to the loop event
 // sink when a Disrupted classification fires.
@@ -217,11 +171,13 @@ func TestLoop_DisruptionEventEmitted(t *testing.T) {
 	require.Len(t, result.Results, 1)
 
 	report := result.Results[0]
-	assert.True(t, report.Disrupted, "transport error must be classified Disrupted")
-	assert.Equal(t, "transport_error", report.DisruptionReason)
-	assert.Empty(t, report.RetryAfter, "transport-error Disrupted bead must skip cooldown")
+	assert.True(t, report.Disrupted, "connectivity error must be classified Disrupted")
+	assert.Equal(t, "provider_connectivity", report.DisruptionReason)
+	assert.Empty(t, report.RetryAfter, "provider-connectivity Disrupted bead must skip cooldown")
 
 	// Sink event surface
+	// The disruption event is emitted at the generic transport classifier;
+	// the returned report is subsequently refined to provider_connectivity.
 	var found bool
 	for _, line := range sink.all() {
 		if strings.Contains(line, `"type":"disruption_detected"`) &&

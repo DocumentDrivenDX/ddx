@@ -109,11 +109,12 @@ func PrepareAgentRunDispatch(workDir string, spec AgentRunDispatchSpec) (Prepare
 		return PreparedAgentRunDispatch{}, err
 	}
 	overrides := config.CLIOverrides{
-		Harness:     spec.Harness,
-		Model:       spec.Model,
-		Profile:     NormalizeRoutingProfile(spec.Profile),
-		Effort:      spec.Effort,
-		Permissions: spec.Permissions,
+		Harness:           spec.Harness,
+		Model:             spec.Model,
+		Profile:           NormalizeRoutingProfile(spec.Profile),
+		Effort:            spec.Effort,
+		Permissions:       spec.Permissions,
+		OpaquePassthrough: true,
 	}
 	if timeout > 0 {
 		overrides.Timeout = &timeout

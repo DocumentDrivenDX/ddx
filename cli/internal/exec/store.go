@@ -189,9 +189,10 @@ func (s *Store) RunWithOptions(ctx context.Context, definitionID string, opts Ru
 		}
 
 		overrides := config.CLIOverrides{
-			Harness: def.Executor.Env["DDX_AGENT_HARNESS"],
-			Model:   def.Executor.Env["DDX_AGENT_MODEL"],
-			Effort:  def.Executor.Env["DDX_AGENT_EFFORT"],
+			Harness:           def.Executor.Env["DDX_AGENT_HARNESS"],
+			Model:             def.Executor.Env["DDX_AGENT_MODEL"],
+			Effort:            def.Executor.Env["DDX_AGENT_EFFORT"],
+			OpaquePassthrough: true,
 		}
 		if def.Executor.TimeoutMS > 0 {
 			timeout := time.Duration(def.Executor.TimeoutMS) * time.Millisecond

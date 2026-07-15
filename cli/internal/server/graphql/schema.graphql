@@ -1934,9 +1934,9 @@ input StartWorkerInput {
   projectId: String!
   """Optional harness override"""
   harness: String
-  """Routing profile, defaulting to smart when omitted"""
+  """Optional opaque routing profile constraint"""
   profile: String
-  """Reasoning effort, defaulting to medium when omitted"""
+  """Optional opaque reasoning effort; omitted remains unconstrained"""
   effort: String
   """Optional label filter for ready beads"""
   labelFilter: String

@@ -50,7 +50,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	}
 
 	reviewHarness := r.Harness
-	priorErrors := countPriorEscalationTriggers(r.EventReader, beadID, resultRev)
+	priorErrors := countPriorReviewErrors(r.EventReader, beadID, resultRev)
 	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
 	// Emit reviewer-escalated event when MinPower is bumped above baseline.
 	if priorErrors > 0 && r.BeadEvents != nil {
@@ -78,7 +78,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 
 	var firstErr error
 	for reviewerIndex := 0; reviewerIndex < 2; reviewerIndex++ {
-		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, reviewProfile.Name, ReviewGroupDispatchMeta{
+		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, "", ReviewGroupDispatchMeta{
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
@@ -91,7 +91,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 		slotRuntime.PromptFile = artifacts.PromptAbs
 		slotRuntime.WorkDir = reviewWorkDir
 
-		slotResult, slotErr := r.reviewGroupSlot(ctx, b, impl, resultRev, built, artifacts, reviewHarness, reviewRouteLabel, slotRuntime, caps.MaxPromptBytes)
+		slotResult, slotErr := r.reviewGroupSlot(ctx, b, resultRev, built, artifacts, reviewHarness, reviewRouteLabel, slotRuntime, caps.MaxPromptBytes)
 		slot := ReviewGroupSlotResult{
 			ReviewerIndex: reviewerIndex,
 			Runtime:       slotRuntime,
@@ -133,7 +133,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	return out, firstErr
 }
 
-func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead, impl ImplementerRouting, resultRev string, built BuildReviewPromptResult, artifacts *executeBeadArtifacts, reviewHarness, reviewModel string, runtime AgentRunRuntime, maxPromptBytes int) (*ReviewResult, error) {
+func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead, resultRev string, built BuildReviewPromptResult, artifacts *executeBeadArtifacts, reviewHarness, reviewModel string, runtime AgentRunRuntime, maxPromptBytes int) (*ReviewResult, error) {
 	prompt := built.Prompt
 	if built.Overflow {
 		return &ReviewResult{
@@ -230,6 +230,7 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 		ReviewerHarness:  actualHarness,
 		ReviewerModel:    actualModel,
 		ReviewerProvider: actualProvider,
+		ActualPower:      actualPower,
 		SessionID:        sessionID,
 		BaseRev:          baseRev,
 		ResultRev:        resultRev,
@@ -247,15 +248,6 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 		}
 		reviewRes.Error = class
 		return reviewRes, fmt.Errorf("review-group: %s: %w (raw output %d bytes; see %s)", class, parseErr, len(output), artifacts.DirRel)
-	}
-	if r.BeadEvents != nil && actualProvider != "" && impl.Provider != "" && actualProvider == impl.Provider {
-		_ = r.BeadEvents.AppendEvent(b.ID, bead.BeadEvent{
-			Kind:      ReviewPairingDegradedEventKind,
-			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
-			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower, resultRev),
-			Source:    "ddx work",
-			CreatedAt: time.Now().UTC(),
-		})
 	}
 	return reviewRes, nil
 }

@@ -316,6 +316,7 @@ type ExecuteBeadRuntime struct {
 }
 
 type onRouteResolvedKeyType struct{}
+type onExecuteStartKeyType struct{}
 
 // contextWithOnRouteResolved stores fn in ctx so execute-bead can retrieve it
 // after the Executor dispatches through agenttry.Attempt.
@@ -327,6 +328,17 @@ func contextWithOnRouteResolved(ctx context.Context, fn func(harness, provider, 
 // contextWithOnRouteResolved, or nil if none was stored.
 func onRouteResolvedFromContext(ctx context.Context) func(harness, provider, model string) {
 	fn, _ := ctx.Value(onRouteResolvedKeyType{}).(func(harness, provider, model string))
+	return fn
+}
+
+// contextWithOnExecuteStart stores the Fizeau Execute boundary callback so
+// execute-bead can forward it through AgentRunRuntime after local preparation.
+func contextWithOnExecuteStart(ctx context.Context, fn func()) context.Context {
+	return context.WithValue(ctx, onExecuteStartKeyType{}, fn)
+}
+
+func onExecuteStartFromContext(ctx context.Context) func() {
+	fn, _ := ctx.Value(onExecuteStartKeyType{}).(func())
 	return fn
 }
 
@@ -827,10 +839,8 @@ func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info R
 //
 // Agent dispatch: tests may set runtime.AgentRunner to inject a fake that
 // returns canned Result values; when set, it takes precedence over the normal
-// dispatch path. Production execute-bead runs with an explicit harness use the
-// local Runner path so the worker subprocess receives the execute-bead Git
-// isolation environment (PATH wrapper + scrubbed Git-local env). Unpinned
-// routes still fall back to the service path.
+// dispatch path. Production execute-bead always dispatches through Fizeau,
+// including when the operator supplies opaque harness/provider/model pins.
 func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (result *ExecuteBeadResult, retErr error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1145,12 +1155,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	} else if !os.IsNotExist(statErr) || runtime.AgentRunner == nil {
 		return nil, fmt.Errorf("preparing execute-bead git isolation: stat worktree .git: %w", statErr)
 	}
-	if guardedEnv, err := applyPinnedProviderGuard(gitIsolationEnv, rcfg.Harness(), embeddedStateDir); err != nil {
-		return nil, fmt.Errorf("preparing pinned provider guard: %w", err)
-	} else {
-		gitIsolationEnv = guardedEnv
-	}
-
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
 	runState.SessionID = sessionID
@@ -1165,6 +1169,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	providerGuard := newRunningProviderGuard(projectRoot, beadID, attemptID, os.Getpid())
 	providerGuard.UpdateRoute(rcfg.Harness(), "", rcfg.Model())
 	baseOnRouteResolved := onRouteResolvedFromContext(ctx)
+	baseOnExecuteStart := onExecuteStartFromContext(ctx)
 
 	runRuntime := AgentRunRuntime{
 		PromptFile: artifacts.PromptAbs,
@@ -1191,6 +1196,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				baseOnRouteResolved(harness, provider, model)
 			}
 		},
+		OnExecuteStart: baseOnExecuteStart,
 	}
 	if minPowerOverride > 0 {
 		runRuntime.MinPowerOverride = minPowerOverride
@@ -1201,14 +1207,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 	runRuntime.Env[DDXBeadIDEnvKey] = beadID
 	runRuntime.Env[DDXAttemptIDEnvKey] = attemptID
-
-	if runtime.AgentRunner == nil && runtime.Service == nil {
-		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" && strings.TrimSpace(rcfg.Model()) != "" {
-			runner := NewRunner(Config{SessionLogDir: ResolveLogDir(projectRoot, "")})
-			runner.WorkDir = projectRoot
-			runtime.AgentRunner = runner
-		}
-	}
 
 	// Operator-cancel mid-attempt poll (ADR-022 §Cancel SLA). The poll
 	// re-reads the bead's Extra every CancelPollInterval; on
@@ -1743,9 +1741,9 @@ func isEvidenceOnlyNoChangesCommit(wtPath, baseRev, resultRev, artifactsDirRel s
 // per-invocation plumbing from runtime through the shared dispatch seam in
 // service_run.go.
 //
-// The script and virtual harnesses are DDx-side helpers that the agent service
-// does not implement; the underlying RunViaServiceWith path delegates those to
-// a private Runner internally, so they continue to work through this path.
+// Production dispatch always goes through Fizeau, including explicit script
+// and virtual harness constraints. A non-nil AgentRunner is retained only as
+// an explicitly injected test seam.
 func dispatchAgentRun(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	return dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
@@ -1897,7 +1895,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		return artifacts, nil, err
 	}
 
-	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.Harness(), rcfg.ContextBudget())
+	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.ContextBudget())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2230,11 +2228,11 @@ For expensive commands (benchmarks, load tests, validation > 60s per variant):
 - Do not re-run the same long-running command unless: (1) the command fingerprint changed (args/env/config), AND (2) you document why prior output is invalid and what changed.
 - If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.`
 
-// executeBeadInstructionsClaudeText is the <instructions> body used when the
-// harness carries its own rich system prompt (claude, codex, opencode,
-// unknown). It composes a Claude-specific preamble + process body with the
-// shared instr* blocks.
-const executeBeadInstructionsClaudeText = `You are executing one bead in an isolated DDx execution worktree. The bead's <description> and <acceptance> are the contract: every AC must be provably satisfied by a specific code, test, or file after your commit.` +
+// executeBeadInstructionsText is the harness-neutral <instructions> body sent
+// for every execute-bead dispatch. Fizeau owns concrete harness selection and
+// capability details, so DDx must not vary its prompt by requested or resolved
+// harness identity.
+const executeBeadInstructionsText = `You are executing one bead in an isolated DDx execution worktree. The bead's <description> and <acceptance> are the contract: every AC must be provably satisfied by a specific code, test, or file after your commit.` +
 	instrStep0SizeCheck +
 	`
 
@@ -2261,51 +2259,6 @@ const executeBeadInstructionsClaudeText = `You are executing one bead in an isol
 ## When the work is done
 
 After the commit succeeds and every AC is verified, stop. Return control to the orchestrator.`
-
-// executeBeadInstructionsAgentText is the <instructions> body used when the
-// harness selector routes to the embedded Fizeau agent (agent / fiz /
-// embedded). It composes an agent-specific preamble + tool-aware process
-// body with the shared instr* blocks. The Agent variant carries the
-// stop-after-commit runaway guard (codex catch).
-const executeBeadInstructionsAgentText = `You are a coding agent executing one bead in an isolated DDx execution worktree. Tools: read, write, edit, bash, ls, grep, find. Use them, not ` + "`bash: cat`" + `, ` + "`bash: rg`" + `, or ` + "`bash: ls`" + `.
-
-The bead's <description> and <acceptance> are the contract. Every AC must be satisfied by code here.` +
-	instrStep0SizeCheck +
-	`
-
-## Process
-
-- Read first. Read the files the bead names before editing — do not guess.
-- Use ` + "`edit`" + `, ` + "`write`" + `, ` + "`read`" + `, ` + "`grep`" + `, and ` + "`ls`" + `; never the bash equivalents.
-- Run the project's test and lint commands before committing. **Do not commit red code**.
-- Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
-- Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + `.
-- If ` + "`lefthook run pre-commit`" + ` depends on staged files, rerun it after staging the exact commit set. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
-- Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `.
-- Stop immediately after the commit succeeds. Do not keep reading or testing.
-- Do not modify files outside the bead's scope.
-- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
-- If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit or rationale ⇒ ` + "`no_evidence_produced`" + `.` +
-	instrNoChangesContract +
-	instrInvestigationReports +
-	instrBeadOverride +
-	instrReviewGate +
-	instrCoreConstraints +
-	instrLongRunningMatrixGuards
-
-// executeBeadInstructionsText selects the right instructions variant for the
-// given harness. Harnesses with rich system prompts (claude, codex, opencode)
-// get the terser claude variant; the embedded Fizeau harness gets the
-// fuller agent variant with explicit tool names and stop-after-commit
-// scaffolding.
-func executeBeadInstructionsText(harness string) string {
-	switch strings.ToLower(strings.TrimSpace(harness)) {
-	case "agent", "fiz", "embedded":
-		return executeBeadInstructionsAgentText
-	default:
-		return executeBeadInstructionsClaudeText
-	}
-}
 
 // executeBeadMissingGoverningText is emitted inside <governing> when no
 // governing references were pre-resolved for the bead. The bead description
@@ -2334,7 +2287,7 @@ func xmlAttrEscape(s string) string {
 	return r.Replace(s)
 }
 
-func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, harness string, contextBudget string) ([]byte, string, error) {
+func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, contextBudget string) ([]byte, string, error) {
 	if strings.TrimSpace(promptOverride) != "" {
 		path := promptOverride
 		if !filepath.IsAbs(path) {
@@ -2350,7 +2303,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	var sb strings.Builder
 	sb.WriteString("<execute-bead>\n")
 
-	instructions := executeBeadInstructionsText(harness) + executeBeadDynamicStep0Hints(workDir, b)
+	instructions := executeBeadInstructionsText + executeBeadDynamicStep0Hints(workDir, b)
 	// Keep the initial prefix stable for provider prefix caches: the shared
 	// instructions render first, bead-specific hints append at the end of that
 	// block, and the attempt-specific bundle path only appears later on

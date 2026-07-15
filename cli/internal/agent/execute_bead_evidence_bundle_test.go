@@ -183,7 +183,7 @@ func TestPublishEvidenceFailurePreservesAttemptWorktreeAndSurfacesError(t *testi
 	copyCalls := 0
 	injectedErr := errors.New("injected mid-copy execution evidence failure")
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-		AgentRunner: NewRunner(Config{}),
+		AgentRunner: scriptHarnessAgentRunner{},
 		NoReview:    true,
 		EvidenceFileCopier: func(source, target string, mode os.FileMode) error {
 			copyCalls++
@@ -257,7 +257,7 @@ func TestPublishResultFailureReturnsErrorWithoutMovingTarget(t *testing.T) {
 	publishErr := errors.New("injected post-bundle PublishResult failure")
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-		AgentRunner: NewRunner(Config{}),
+		AgentRunner: scriptHarnessAgentRunner{},
 		NoReview:    true,
 		AttemptBackend: failingPublishAttemptBackend{
 			inner: WorktreeAttemptBackend{},
@@ -304,7 +304,7 @@ func TestEarlyResultPublicationFailureDemotesResultAndPreservesSource(t *testing
 			injectedErr := errors.New("injected early-result evidence publication failure")
 
 			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, tt.beadID, rcfg, ExecuteBeadRuntime{
-				AgentRunner: NewRunner(Config{}),
+				AgentRunner: scriptHarnessAgentRunner{},
 				NoReview:    true,
 				EvidenceFileCopier: func(source, target string, mode os.FileMode) error {
 					copyCalls++
@@ -345,7 +345,7 @@ func TestExecuteBeadScriptHarnessForceAddedEvidenceNeverPublishesCandidate(t *te
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-		AgentRunner: NewRunner(Config{}),
+		AgentRunner: scriptHarnessAgentRunner{},
 		NoReview:    true,
 	}, &RealGitOps{})
 	if err == nil || !strings.Contains(err.Error(), "candidate history commit") {
@@ -432,7 +432,7 @@ func TestExecuteBeadLocalCloneInstallsRootAndAttemptEvidenceExcludesBeforePublic
 	statusDuringPublication := "not observed"
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-		AgentRunner:    NewRunner(Config{}),
+		AgentRunner:    scriptHarnessAgentRunner{},
 		NoReview:       true,
 		AttemptBackend: backend,
 		EvidenceFileCopier: func(source, target string, mode os.FileMode) error {

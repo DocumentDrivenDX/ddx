@@ -316,8 +316,11 @@ func tryAutoRecover(fn func(wd, preserveRef string, gitOps LandingGitOps) (strin
 	}
 }
 
-func tryExecutor(executor ExecuteBeadExecutor, onRouteResolved func(harness, provider, model string)) agenttry.Executor {
+func tryExecutor(executor ExecuteBeadExecutor, onExecuteStart func(), onRouteResolved func(harness, provider, model string)) agenttry.Executor {
 	return agenttry.ExecutorFunc(func(ctx context.Context, beadID string) (agenttry.Report, error) {
+		if onExecuteStart != nil {
+			ctx = contextWithOnExecuteStart(ctx, onExecuteStart)
+		}
 		if onRouteResolved != nil {
 			ctx = contextWithOnRouteResolved(ctx, onRouteResolved)
 		}

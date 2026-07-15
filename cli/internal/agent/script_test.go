@@ -1,14 +1,12 @@
 package agent
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
@@ -110,13 +108,13 @@ func writeDirectives(t *testing.T, content string) string {
 	return f.Name()
 }
 
-// runScript is a convenience wrapper that calls RunViaService with the script harness.
+// runScript exercises the local directive interpreter directly. Production
+// dispatch treats "script" as an opaque Fizeau harness constraint.
 func runScript(t *testing.T, workDir, directivePath string, corr map[string]string) (*Result, error) {
 	t.Helper()
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: directivePath,
-	}).Resolve(config.CLIOverrides{Harness: "script"})
-	return RunWithConfigViaService(context.Background(), workDir, rcfg, AgentRunRuntime{
+	return runScriptFn(RunArgs{
+		Harness:     "script",
+		Model:       directivePath,
 		WorkDir:     workDir,
 		Correlation: corr,
 	})

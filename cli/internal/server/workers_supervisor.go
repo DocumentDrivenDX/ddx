@@ -21,13 +21,13 @@ import (
 )
 
 const (
-	workerDesiredStateVersion = 1
-	defaultWorkerCount        = 0
-	defaultWorkerProfile      = "default"
-	defaultWorkerIdleInterval = 30 * time.Second
-	defaultRestartBackoff     = 30 * time.Second
-	defaultRestartBackoffMax  = 10 * time.Minute
-	defaultRestartLimit       = 6
+	workerDesiredStateVersion       = 2
+	legacyWorkerDesiredStateVersion = 1
+	defaultWorkerCount              = 0
+	defaultWorkerIdleInterval       = 30 * time.Second
+	defaultRestartBackoff           = 30 * time.Second
+	defaultRestartBackoffMax        = 10 * time.Minute
+	defaultRestartLimit             = 6
 
 	// DefaultTerminalBlockTTL bounds how long a restart-blocked terminal
 	// record (operator_attention, dirty_root, ...) can suppress restart
@@ -67,7 +67,6 @@ func DefaultWorkerDesiredState(projectRoot string) WorkerDesiredState {
 		DefaultSpec: ExecuteLoopWorkerSpec{
 			Mode:         executeloop.ModeWatch,
 			IdleInterval: executeloop.Duration{Duration: defaultWorkerIdleInterval},
-			Profile:      defaultWorkerProfile,
 		},
 		Restart: WorkerRestartPolicy{
 			Enabled:            true,
@@ -100,9 +99,6 @@ func (s *WorkerDesiredState) ApplyDefaults(projectRoot string) {
 	if s.DefaultSpec.Mode == executeloop.ModeWatch && s.DefaultSpec.IdleInterval.Duration == 0 {
 		s.DefaultSpec.IdleInterval = executeloop.Duration{Duration: defaultWorkerIdleInterval}
 	}
-	if s.DefaultSpec.Profile == "" {
-		s.DefaultSpec.Profile = defaultWorkerProfile
-	}
 	s.DefaultSpec.ApplyDefaults()
 
 	if s.Restart.Enabled {
@@ -116,6 +112,22 @@ func (s *WorkerDesiredState) ApplyDefaults(projectRoot string) {
 			s.Restart.BackoffMax = executeloop.Duration{Duration: defaultRestartBackoffMax}
 		}
 	}
+}
+
+// migrateWorkerDesiredState upgrades persisted desired state before defaults
+// or validation run. Version 1 was written while DDx synthesized profile
+// "default" for otherwise unpinned workers. Because v1 stored no provenance,
+// that value is ambiguous with an operator explicitly choosing a Fizeau profile
+// named "default". The route-neutral migration fails safe by clearing exactly
+// that ambiguous value; every other explicit legacy profile is preserved.
+func migrateWorkerDesiredState(s *WorkerDesiredState) {
+	if s == nil || s.Version != legacyWorkerDesiredStateVersion {
+		return
+	}
+	if s.DefaultSpec.Profile == "default" {
+		s.DefaultSpec.Profile = ""
+	}
+	s.Version = workerDesiredStateVersion
 }
 
 // Validate checks the normalized desired state for internal consistency.
@@ -236,6 +248,7 @@ func (s *WorkerSupervisor) LoadDesiredState() (WorkerDesiredState, error) {
 	if state.ProjectRoot != "" && state.ProjectRoot != s.manager.projectRoot {
 		return WorkerDesiredState{}, fmt.Errorf("worker desired state: project_root %q does not match manager root %q", state.ProjectRoot, s.manager.projectRoot)
 	}
+	migrateWorkerDesiredState(&state)
 	state.ApplyDefaults(s.manager.projectRoot)
 	if err := state.Validate(); err != nil {
 		return WorkerDesiredState{}, err

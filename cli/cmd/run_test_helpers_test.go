@@ -92,24 +92,36 @@ type executeCapturingStubService struct {
 }
 
 type executeCapturingStub struct {
-	mu             sync.Mutex
-	executeCalled  bool
-	lastReq        agentlib.ServiceExecuteRequest
-	requests       []agentlib.ServiceExecuteRequest
-	executeFn      func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
-	resolveRouteFn func(agentlib.RouteRequest) (*agentlib.RouteDecision, error)
-	listModels     []agentlib.ModelInfo
-	listPolicies   []agentlib.PolicyInfo
-	routeRequests  []agentlib.RouteRequest
-	modelFilters   []agentlib.ModelFilter
+	mu               sync.Mutex
+	executeCalled    bool
+	lastReq          agentlib.ServiceExecuteRequest
+	requests         []agentlib.ServiceExecuteRequest
+	executeFn        func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+	executeContextFn func(context.Context, agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+	resolveRouteFn   func(agentlib.RouteRequest) (*agentlib.RouteDecision, error)
+	listModels       []agentlib.ModelInfo
+	listPolicies     []agentlib.PolicyInfo
+	routeRequests    []agentlib.RouteRequest
+	modelFilters     []agentlib.ModelFilter
+	modelsPreExec    int
+	harnessQueries   int
+	providerQueries  int
+	modelQueries     int
+	policyQueries    int
+	healthQueries    int
+	statusQueries    int
+	recordAttempts   int
 }
 
-func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+func (s *executeCapturingStub) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	s.mu.Lock()
 	s.executeCalled = true
 	s.lastReq = req
 	s.requests = append(s.requests, req)
 	s.mu.Unlock()
+	if s.executeContextFn != nil {
+		return s.executeContextFn(ctx, req)
+	}
 	if s.executeFn != nil {
 		return s.executeFn(req)
 	}
@@ -136,33 +148,55 @@ func (s *executeCapturingStub) TailSessionLog(_ context.Context, _ string) (<-ch
 }
 
 func (s *executeCapturingStub) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
+	s.mu.Lock()
+	s.harnessQueries++
+	s.mu.Unlock()
 	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}, {Name: "codex", Available: true}}, nil
 }
 
 func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
+	s.mu.Lock()
+	s.providerQueries++
+	s.mu.Unlock()
 	return nil, nil
 }
 
 func (s *executeCapturingStub) ListModels(_ context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	s.mu.Lock()
+	if !s.executeCalled {
+		s.modelsPreExec++
+	}
+	s.modelQueries++
 	s.modelFilters = append(s.modelFilters, filter)
 	s.mu.Unlock()
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
 func (s *executeCapturingStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+	s.mu.Lock()
+	s.policyQueries++
+	s.mu.Unlock()
 	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 
 func (s *executeCapturingStub) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
+	s.mu.Lock()
+	s.healthQueries++
+	s.mu.Unlock()
 	return nil
 }
 
 func (s *executeCapturingStub) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
+	s.mu.Lock()
+	s.recordAttempts++
+	s.mu.Unlock()
 	return nil
 }
 
 func (s *executeCapturingStub) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
+	s.mu.Lock()
+	s.statusQueries++
+	s.mu.Unlock()
 	return nil, nil
 }
 
@@ -227,6 +261,25 @@ func capturedModelFilters(stub *executeCapturingStub) []agentlib.ModelFilter {
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
 	return append([]agentlib.ModelFilter(nil), stub.modelFilters...)
+}
+
+func modelQueriesBeforeExecute(stub *executeCapturingStub) int {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return stub.modelsPreExec
+}
+
+func capturedPolicyQueries(stub *executeCapturingStub) int {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return stub.policyQueries
+}
+
+func capturedCatalogPreflightQueries(stub *executeCapturingStub) int {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return len(stub.routeRequests) + stub.harnessQueries + stub.providerQueries +
+		stub.modelQueries + stub.policyQueries + stub.healthQueries + stub.statusQueries + stub.recordAttempts
 }
 
 func minimalProjectDir(t *testing.T) string {

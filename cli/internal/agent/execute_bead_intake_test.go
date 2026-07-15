@@ -114,14 +114,10 @@ func TestIntake_InfrastructureErrorFailsOpen(t *testing.T) {
 
 func TestIntake_HookRunsAfterClaim(t *testing.T) {
 	inner, _, _ := newExecuteLoopTestStore(t)
-	var preflightSeen int32
 	var intakeSeen int32
 	store := &claimCountingStore{
 		Store: inner,
 		beforeClaim: func() {
-			if atomic.LoadInt32(&preflightSeen) == 0 {
-				t.Fatal("route preflight must run before Claim")
-			}
 			// Claim now happens BEFORE intake: intake must NOT have run yet.
 			if atomic.LoadInt32(&intakeSeen) != 0 {
 				t.Fatal("Claim must run before PreClaimIntakeHook")
@@ -146,14 +142,7 @@ func TestIntake_HookRunsAfterClaim(t *testing.T) {
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			atomic.StoreInt32(&preflightSeen, 1)
-			return nil
-		},
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-			if atomic.LoadInt32(&preflightSeen) == 0 {
-				t.Fatal("PreClaimIntakeHook must run after route preflight")
-			}
 			if atomic.LoadInt32(&store.claimCalls) == 0 {
 				t.Fatal("PreClaimIntakeHook must run after Claim")
 			}
@@ -164,7 +153,6 @@ func TestIntake_HookRunsAfterClaim(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&preflightSeen), "route preflight must run")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&intakeSeen), "intake hook must run")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "Claim must run before intake")
 }

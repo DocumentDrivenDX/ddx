@@ -263,7 +263,7 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, stub.executeCalled, "RunWithConfigViaService must use the Fizeau service adapter")
-	assert.Equal(t, "fiz", stub.lastReq.Harness)
+	assert.Equal(t, "agent", stub.lastReq.Harness, "operator harness must reach Fizeau unchanged")
 	assert.Equal(t, "hello", stub.lastReq.Prompt)
 	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
 	assert.Equal(t, "done", result.Output)

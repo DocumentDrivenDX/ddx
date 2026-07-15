@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -103,7 +104,7 @@ library:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
-				ddxDir := ".ddx"
+				ddxDir := ddxroot.JoinProject(testDir)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(configContent), 0644))
 
@@ -147,7 +148,7 @@ library:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
-				ddxDir := ".ddx"
+				ddxDir := ddxroot.JoinProject(testDir)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(configContent), 0644))
 
@@ -175,7 +176,7 @@ library:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
-				ddxDir := ".ddx"
+				ddxDir := ddxroot.JoinProject(testDir)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(configContent), 0644))
 
@@ -223,7 +224,7 @@ library:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
-				ddxDir := ".ddx"
+				ddxDir := ddxroot.JoinProject(testDir)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(configContent), 0644))
 

@@ -650,11 +650,9 @@ func reviewResultHasACEvidence(res *ReviewResult) bool {
 
 // applyReviewTriageDecision runs the triage policy after a BLOCK or
 // REQUEST_CHANGES review verdict has been recorded for `beadID`. It reads
-// prior review events to compute the BLOCK count, biases the result toward
-// re-attempt when the latest BLOCK was paired with a degraded reviewer
-// (kind:review-pairing-degraded), then applies the chosen action by recording
-// triage-decision evidence and, for operator-required, parking with legacy
-// cleanup.
+// prior review events to compute the BLOCK count, then applies the chosen
+// action by recording triage-decision evidence and, for operator-required,
+// parking with legacy cleanup. Non-BLOCK events are deliberately ignored.
 //
 // Errors from the underlying store are best-effort: callers continue
 // regardless so a triage-side failure cannot strand a bead in an
@@ -669,13 +667,9 @@ func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string,
 	}
 
 	var blockTimestamps []time.Time
-	var pairingDegraded []time.Time
 	for _, ev := range events {
-		switch {
-		case ev.Kind == "review" && strings.TrimSpace(ev.Summary) == "BLOCK":
+		if ev.Kind == "review" && strings.TrimSpace(ev.Summary) == "BLOCK" {
 			blockTimestamps = append(blockTimestamps, ev.CreatedAt)
-		case ev.Kind == ReviewPairingDegradedEventKind:
-			pairingDegraded = append(pairingDegraded, ev.CreatedAt)
 		}
 	}
 
@@ -694,32 +688,7 @@ func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string,
 	policy := triage.DefaultPolicy()
 	action := policy.Decide(beadID, triage.FailureModeReviewBlock, history)
 
-	pairedDegraded := latestBlockPairedDegraded(blockTimestamps, pairingDegraded)
-	if pairedDegraded && action == triage.ActionEscalatePower {
-		action = triage.ActionReAttemptWithContext
-	}
-
-	return applyTriageAction(store, beadID, actor, now, action, currentPowerClass, pairedDegraded)
-}
-
-// latestBlockPairedDegraded reports whether the most recent BLOCK event was
-// paired with a review-pairing-degraded event from the same attempt window
-// (between the previous BLOCK and this one).
-func latestBlockPairedDegraded(blocks, pairing []time.Time) bool {
-	if len(blocks) == 0 || len(pairing) == 0 {
-		return false
-	}
-	latest := blocks[len(blocks)-1]
-	var prev time.Time
-	if len(blocks) >= 2 {
-		prev = blocks[len(blocks)-2]
-	}
-	for _, t := range pairing {
-		if t.After(prev) && !t.After(latest) {
-			return true
-		}
-	}
-	return false
+	return applyTriageAction(store, beadID, actor, now, action, currentPowerClass)
 }
 
 // applyTriageAction performs the side effects for a chosen Action. Review-block
@@ -727,13 +696,10 @@ func latestBlockPairedDegraded(blocks, pairing []time.Time) bool {
 // event body. Operator-required outcomes may park the bead to proposed while
 // clearing stale legacy retry-hint metadata, and every path records a
 // triage-decision event.
-func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, action triage.Action, currentPowerClass string, pairedDegraded bool) error {
+func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, action triage.Action, currentPowerClass string) error {
 	body := map[string]any{
 		"action": string(action),
 		"mode":   string(triage.FailureModeReviewBlock),
-	}
-	if pairedDegraded {
-		body["pairing_degraded"] = true
 	}
 
 	switch action {

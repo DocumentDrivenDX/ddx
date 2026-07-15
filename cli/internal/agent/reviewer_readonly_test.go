@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"errors"
+	"context"
 	"testing"
 )
 
@@ -25,66 +25,37 @@ func TestReviewerRuntime_ReadOnlyProfilePlumbed(t *testing.T) {
 	}
 }
 
-// TestReviewerRuntime_MutationDenied verifies that dispatching a reviewer
-// runtime with the read-only profile against a "script" harness is rejected
-// before the script can execute, ensuring no worktree mutation is possible.
-func TestReviewerRuntime_MutationDenied(t *testing.T) {
-	// Build the reviewer runtime exactly as production dispatch does.
-	impl := ImplementerRouting{Harness: "claude", ActualPower: 3}
-	rt := BuildReviewExecuteRequest(impl, "script", "")
-
-	// Validate as RunWithConfigViaService does before branching.
-	err := ValidateReadOnlyReviewerDispatch("script", rt.PermissionsOverride)
-	if err == nil {
-		t.Fatal("expected error for script harness with read-only reviewer profile; got nil")
-	}
-	var roErr *ReviewReadOnlyEnforcementError
-	if !errors.As(err, &roErr) {
-		t.Fatalf("expected *ReviewReadOnlyEnforcementError; got %T: %v", err, err)
-	}
-	// The dispatch was rejected: no script ran, no mutation occurred.
-	if roErr.Harness != "script" {
-		t.Errorf("Harness = %q; want script", roErr.Harness)
-	}
-}
-
-// TestReviewerRuntime_UnsupportedReadOnlyFailsClosed verifies that any harness
-// not in readOnlyCapableHarnesses produces a typed ReviewReadOnlyEnforcementError
-// rather than a nil or generic error, so callers can classify it as a
-// review-error without running unrestricted.
-func TestReviewerRuntime_UnsupportedReadOnlyFailsClosed(t *testing.T) {
-	cases := []struct {
+func TestReviewerReadOnlyConstraintPassesThroughWithoutHarnessCatalog(t *testing.T) {
+	tests := []struct {
+		name    string
 		harness string
 	}{
-		{"script"},
-		{"unknown_harness"},
-		{""},
-	}
-	for _, tc := range cases {
-		err := ValidateReadOnlyReviewerDispatch(tc.harness, PermissionsReadOnlyReviewer)
-		if err == nil {
-			t.Errorf("harness=%q: expected ReviewReadOnlyEnforcementError; got nil", tc.harness)
-			continue
-		}
-		var roErr *ReviewReadOnlyEnforcementError
-		if !errors.As(err, &roErr) {
-			t.Errorf("harness=%q: expected *ReviewReadOnlyEnforcementError; got %T: %v", tc.harness, err, err)
-			continue
-		}
-		if roErr.Harness != tc.harness {
-			t.Errorf("harness=%q: Harness field = %q; want %q", tc.harness, roErr.Harness, tc.harness)
-		}
+		{name: "unpinned"},
+		{name: "explicit opaque harness", harness: " opaque-review-harness "},
 	}
 
-	// Capable harnesses must not return an error.
-	for h := range readOnlyCapableHarnesses {
-		if err := ValidateReadOnlyReviewerDispatch(h, PermissionsReadOnlyReviewer); err != nil {
-			t.Errorf("harness=%q: expected nil for capable harness; got %v", h, err)
-		}
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &passthroughTestService{}
+			rcfg := resolvedWithPassthrough(tt.harness, "", "", 0, 0)
 
-	// Non-readonly permissions must never trigger the check.
-	if err := ValidateReadOnlyReviewerDispatch("script", "safe"); err != nil {
-		t.Errorf("non-readonly permissions: expected nil; got %v", err)
+			_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+				Prompt:              "review this",
+				PermissionsOverride: PermissionsReadOnlyReviewer,
+				Role:                "reviewer",
+			})
+			if err != nil {
+				t.Fatalf("executeOnService returned error: %v", err)
+			}
+			if svc.lastReq.Permissions != PermissionsReadOnlyReviewer {
+				t.Errorf("Permissions = %q; want %q", svc.lastReq.Permissions, PermissionsReadOnlyReviewer)
+			}
+			if svc.lastReq.Harness != tt.harness {
+				t.Errorf("Harness = %q; want byte-identical %q", svc.lastReq.Harness, tt.harness)
+			}
+			if svc.listHarnessesCalled {
+				t.Error("review dispatch queried Fizeau harness inventory")
+			}
+		})
 	}
 }

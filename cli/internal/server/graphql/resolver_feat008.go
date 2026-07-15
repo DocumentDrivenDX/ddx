@@ -77,47 +77,24 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 
 // StartWorker is the resolver for the startWorker field.
 //
-// SD-024 Stage 1: the resolver flows through config.LoadAndResolve so the
-// project's .ddx/config.yaml drives default harness/profile/effort/label
-// values when the GraphQL input leaves them unset. Input fields are layered
-// onto config as CLIOverrides — when present they win over the on-disk
-// values. The resolved values are forwarded to ActionDispatcher (and ultimately
-// to runWorker, which re-loads config to drive the loop's durable knobs like
-// review_max_retries / no_progress_cooldown / heartbeat_interval). This
-// closes the GraphQL bypass where hardcoded "smart"/"medium" defaults
-// shadowed the on-disk config.
+// Routing fields are optional opaque operator constraints. When omitted, this
+// resolver leaves them absent so Fizeau owns the concrete route.
 func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInput) (*WorkerDispatchResult, error) {
 	if r.Actions == nil {
 		return nil, fmt.Errorf("work worker dispatcher is not configured")
 	}
 	projectRoot := r.projectRoot(ctx, input.ProjectID)
 
-	overrides := config.CLIOverrides{}
+	args := map[string]string{}
 	if input.Harness != nil {
-		overrides.Harness = strings.TrimSpace(*input.Harness)
+		args["harness"] = *input.Harness
 	}
 	if input.Profile != nil {
-		overrides.Profile = strings.TrimSpace(*input.Profile)
+		args["profile"] = *input.Profile
 	}
 	if input.Effort != nil {
-		overrides.Effort = strings.TrimSpace(*input.Effort)
+		args["effort"] = *input.Effort
 	}
-	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
-
-	args := map[string]string{}
-	if v := rcfg.Harness(); v != "" {
-		args["harness"] = v
-	}
-	profile := rcfg.Profile()
-	if profile == "" {
-		profile = "smart"
-	}
-	args["profile"] = profile
-	effort := rcfg.Effort()
-	if effort == "" {
-		effort = "medium"
-	}
-	args["effort"] = effort
 	if input.LabelFilter != nil && strings.TrimSpace(*input.LabelFilter) != "" {
 		args["label_filter"] = strings.TrimSpace(*input.LabelFilter)
 	}

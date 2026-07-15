@@ -13,23 +13,16 @@ import (
 // by checking that config files are created in isolated directories
 func TestNoContamination(t *testing.T) {
 	t.Run("tests_use_isolated_directories", func(t *testing.T) {
-		// Get current working directory at start
+		// Run contamination assertions inside a disposable sentinel directory.
+		// Package tests may be interrupted before defers run; they must never
+		// create or remove cli/cmd/.ddx in the source checkout.
+		t.Chdir(t.TempDir())
 		startDir, err := os.Getwd()
 		require.NoError(t, err)
-
-		// Ensure cleanup of any stray config files
-		defer func() {
-			_ = os.Remove(".ddx.yml")
-			_ = os.RemoveAll(".ddx")
-		}()
 
 		// Create first test environment
 		env1 := NewTestEnvironment(t)
 		env1.CreateDefaultConfig()
-
-		// Clean up any stray files that might have been created
-		_ = os.Remove(".ddx.yml")
-		_ = os.RemoveAll(".ddx")
 
 		// Verify config was created in env1's directory, not current directory
 		assert.FileExists(t, env1.ConfigPath, "Config should exist in env1")

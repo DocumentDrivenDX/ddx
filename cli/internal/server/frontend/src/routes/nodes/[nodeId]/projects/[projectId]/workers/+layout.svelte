@@ -48,7 +48,7 @@
 	let stoppingId = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
 	let harness = $state('');
-	let profile = $state('smart');
+	let profile = $state('');
 	let effort = $state('medium');
 	let labelFilter = $state('');
 	let adding = $state(false);
@@ -114,8 +114,8 @@
 
 	async function startWorker() {
 		actionError = null;
-		if (!profile.trim() || !effort.trim()) {
-			actionError = 'Profile and effort are required.';
+		if (!effort.trim()) {
+			actionError = 'Effort is required.';
 			return;
 		}
 		starting = true;
@@ -125,7 +125,7 @@
 				input: {
 					projectId: data.projectId,
 					harness: harness.trim() || null,
-					profile: profile.trim(),
+					profile: profile || null,
 					effort: effort.trim(),
 					labelFilter: labelFilter.trim() || null
 				}
@@ -340,15 +340,11 @@
 			</label>
 			<label class="space-y-1">
 				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Profile</span>
-				<select
+				<input
 					bind:value={profile}
-					required
+					placeholder="auto (opaque Fizeau profile)"
 					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
-				>
-					<option value="cheap">cheap</option>
-					<option value="fast">fast</option>
-					<option value="smart">smart</option>
-				</select>
+				/>
 			</label>
 			<label class="space-y-1">
 				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Effort</span>
@@ -373,7 +369,7 @@
 			<div class="flex items-end gap-2 sm:col-span-4">
 				<button
 					type="submit"
-					disabled={starting || !profile.trim() || !effort.trim()}
+					disabled={starting || !effort.trim()}
 					class="border border-fg-ink bg-fg-ink px-3 py-1.5 text-body-sm font-medium text-bg-canvas hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-fg-ink dark:bg-dark-fg-ink dark:text-dark-bg-canvas"
 				>
 					{starting ? 'Starting…' : 'Start'}

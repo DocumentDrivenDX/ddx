@@ -23,17 +23,9 @@ type ReviewDispatcher struct {
 // incoming user turn, invokes the reviewer harness in no-tool mode, records
 // the resulting reviewer turn in turns.jsonl, and returns that turn.
 //
-// No-tool enforcement:
-//   - claude harness: agent.PermissionsReadOnlyReviewer ("readonly") is set on
-//     every dispatch request. The claude CLI permission system enforces this by
-//     disabling tool use before the request reaches the model. The dispatch
-//     boundary (agent.ValidateReadOnlyReviewerDispatch) gates the call and
-//     returns agent.ReviewReadOnlyEnforcementError for incapable harnesses.
-//   - codex harness: best-effort. Codex is not in agent.readOnlyCapableHarnesses;
-//     when the resolved harness is codex, ValidateReadOnlyReviewerDispatch
-//     returns ReviewReadOnlyEnforcementError and the dispatch is rejected.
-//     Callers that require codex must switch to a harness that supports
-//     read-only enforcement (e.g., claude or agent).
+// The readonly permissions constraint is forwarded unchanged to Fizeau, which
+// owns harness selection and capability enforcement. DDx does not inspect or
+// reject a concrete harness based on a local capability catalog.
 func (d *ReviewDispatcher) DispatchReviewTurn(ctx context.Context, session ReviewSession, userTurn ReviewTurn) (ReviewTurn, error) {
 	// Include the incoming user turn before rendering so the reviewer sees
 	// the full turn history including the latest message.
@@ -66,7 +58,6 @@ func (d *ReviewDispatcher) DispatchReviewTurn(ctx context.Context, session Revie
 			PermissionsOverride: agent.PermissionsReadOnlyReviewer,
 			ClearRoutingPins:    true,
 			ClearProfile:        true,
-			ClearMaxPower:       true,
 			Role:                "reviewer",
 		}
 		result, err = agent.RunWithConfigViaService(ctx, d.ProjectRoot, rcfg, runtime)

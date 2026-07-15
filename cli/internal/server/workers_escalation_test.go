@@ -5,20 +5,12 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
-	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestEscalationLadder_WiredIntoExecutor(t *testing.T) {
-	ladder := powerladder.NewLadder([]agentlib.ModelInfo{
-		{Power: 10, Available: true, AutoRoutable: true},
-		{Power: 20, Available: true, AutoRoutable: true},
-		{Power: 30, Available: true, AutoRoutable: true},
-	})
-
+func TestEscalationUsesAbstractMinPower(t *testing.T) {
 	var requestedMinPowers []int
 	var recordedAttempts []escalation.PowerAttemptRecord
 	attempts := []agent.ExecuteBeadReport{
@@ -38,7 +30,7 @@ func TestEscalationLadder_WiredIntoExecutor(t *testing.T) {
 		},
 	}
 
-	report, err := runEscalatingPowerAttempts(context.Background(), 10, ladder, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+	report, err := runEscalatingPowerAttempts(context.Background(), 10, 0, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 		requestedMinPowers = append(requestedMinPowers, requestedMinPower)
 		if len(requestedMinPowers) > len(attempts) {
 			t.Fatalf("attempt helper was called too many times: %v", requestedMinPowers)
@@ -57,31 +49,78 @@ func TestEscalationLadder_WiredIntoExecutor(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
-	assert.Equal(t, []int{10, 20}, requestedMinPowers)
+	assert.Equal(t, []int{10, 11}, requestedMinPowers)
 	require.Len(t, recordedAttempts, 2)
 	assert.Equal(t, []string{"cheap", "standard"}, []string{recordedAttempts[0].PowerClass, recordedAttempts[1].PowerClass})
 	assert.Equal(t, []string{agent.ExecuteBeadStatusExecutionFailed, agent.ExecuteBeadStatusSuccess}, []string{recordedAttempts[0].Status, recordedAttempts[1].Status})
 }
 
-func TestEscalationLadder_StopsAtFinalRung(t *testing.T) {
-	ladder := powerladder.NewLadder([]agentlib.ModelInfo{
-		{Power: 10, Available: true, AutoRoutable: true},
-		{Power: 20, Available: true, AutoRoutable: true},
-	})
-
+func TestEscalationRaisesAboveCurrentWhenActualPowerIsLower(t *testing.T) {
 	var requestedMinPowers []int
-	report, err := runEscalatingPowerAttempts(context.Background(), 10, ladder, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+	attempt := 0
+	report, err := runEscalatingPowerAttempts(context.Background(), 10, 0, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 		requestedMinPowers = append(requestedMinPowers, requestedMinPower)
+		attempt++
+		if attempt == 2 {
+			return agent.ExecuteBeadReport{Status: agent.ExecuteBeadStatusSuccess}, nil
+		}
 		return agent.ExecuteBeadReport{
 			BeadID:      "ddx-bead-2",
 			PowerClass:  "cheap",
 			Status:      agent.ExecuteBeadStatusExecutionFailed,
 			Detail:      "build failed",
+			ActualPower: 5,
+		}, nil
+	}, nil, true)
+
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
+	assert.Equal(t, []int{10, 11}, requestedMinPowers)
+}
+
+func TestEscalationDoesNotNeedRouteCatalog(t *testing.T) {
+	report, err := runEscalatingPowerAttempts(context.Background(), 10, 0, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+		return agent.ExecuteBeadReport{
+			Status:      agent.ExecuteBeadStatusSuccess,
 			ActualPower: requestedMinPower,
 		}, nil
 	}, nil, true)
 
 	require.NoError(t, err)
-	require.Equal(t, agent.ExecuteBeadStatusExecutionFailed, report.Status)
-	assert.Equal(t, []int{10, 20}, requestedMinPowers)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
+}
+
+func TestEscalationMaxPowerStopsBeforeInvalidSecondExecute(t *testing.T) {
+	requested := make([]int, 0, 2)
+	report, err := runEscalatingPowerAttempts(context.Background(), 10, 11, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+		requested = append(requested, requestedMinPower)
+		return agent.ExecuteBeadReport{
+			Status:      agent.ExecuteBeadStatusExecutionFailed,
+			Detail:      "build failed",
+			ActualPower: 10,
+		}, nil
+	}, nil, true)
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{10}, requested, "MinPower must remain strictly below MaxPower")
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, report.Status)
+}
+
+func TestEscalationMaxPowerAllowsValidStrongerFloor(t *testing.T) {
+	requested := make([]int, 0, 2)
+	report, err := runEscalatingPowerAttempts(context.Background(), 9, 11, func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+		requested = append(requested, requestedMinPower)
+		if len(requested) == 2 {
+			return agent.ExecuteBeadReport{Status: agent.ExecuteBeadStatusSuccess}, nil
+		}
+		return agent.ExecuteBeadReport{
+			Status:      agent.ExecuteBeadStatusExecutionFailed,
+			Detail:      "build failed",
+			ActualPower: 9,
+		}, nil
+	}, nil, true)
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{9, 10}, requested)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
 }

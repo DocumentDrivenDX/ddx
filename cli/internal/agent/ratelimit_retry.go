@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ratelimitpolicy"
-	agentlib "github.com/easel/fizeau"
 )
 
 // RateLimitRetryDefaultBudget is the default per-bead total wait budget for
@@ -44,7 +43,7 @@ func EvaluateRateLimitWait(retryAfter time.Duration, attempt int, elapsed, budge
 	return ratelimitpolicy.EvaluateRateLimitWait(retryAfter, attempt, elapsed, budget, perWaitCap)
 }
 
-// IsRateLimitResult reports whether a Runner Result indicates a rate-limit
+// IsRateLimitResult reports whether a Result indicates a rate-limit
 // (HTTP 429) event that the per-bead retry policy should handle.
 //
 // Quota exhaustion (NoViableProviderForNow) is OUT of scope for
@@ -98,8 +97,7 @@ type RateLimitRetryConfig struct {
 	// time.Now.
 	Now func() time.Time
 	// OnRetry, when non-nil, is invoked after each wait + before the retry
-	// attempt fires. Used by integration to emit the rate-limit-retry bead
-	// event and the routing-engine RecordRouteAttempt feedback.
+	// attempt fires. Used by integration to emit DDx-owned retry telemetry.
 	OnRetry func(ctx context.Context, info RateLimitRetryInfo)
 }
 
@@ -151,9 +149,9 @@ func ctxSleep(ctx context.Context, d time.Duration) error {
 // is exhausted. Budget exhaustion mutates the final result's Error to
 // RateLimitBudgetExhaustedReason and returns it without further retries.
 //
-// The wrapper does NOT change provider availability state — the provider
-// stays in rotation per AC #2 of ddx-c6e3db02. Per AC #6, callers wire
-// RecordRouteAttempt via OnRetry for transparency.
+// The wrapper does NOT change provider availability state or feed concrete
+// route outcomes back into Fizeau. The provider stays in rotation per AC #2
+// of ddx-c6e3db02; callers may use OnRetry for DDx-owned audit telemetry.
 func RunWithRateLimitRetry(ctx context.Context, cfg RateLimitRetryConfig, attempt func(ctx context.Context) (*Result, error)) (*Result, error) {
 	if cfg.Budget < 0 {
 		// Negative budget disables the wrapper entirely (parity with
@@ -209,27 +207,4 @@ func RunWithRateLimitRetry(ctx context.Context, cfg RateLimitRetryConfig, attemp
 		}
 		elapsed += decision.Wait
 	}
-}
-
-// BuildRateLimitRouteAttempt constructs a fizeau.RouteAttempt that records a
-// rate-limit retry on the routing-engine feedback channel. The Status is
-// "rate_limited" so the engine has signal even though provider availability
-// remains unchanged per RateLimitRetryContract.
-func BuildRateLimitRouteAttempt(info RateLimitRetryInfo) agentlib.RouteAttempt {
-	att := agentlib.RouteAttempt{
-		Status:    "rate_limited",
-		Reason:    info.Source,
-		Duration:  info.Wait,
-		Timestamp: time.Now().UTC(),
-	}
-	if info.Result != nil {
-		att.Harness = info.Result.Harness
-		att.Provider = info.Result.Provider
-		att.Model = info.Result.Model
-		att.Error = info.Result.Error
-	}
-	if info.OverBudget {
-		att.Reason = RateLimitBudgetExhaustedReason
-	}
-	return att
 }

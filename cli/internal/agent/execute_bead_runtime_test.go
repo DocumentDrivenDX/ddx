@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -86,74 +85,6 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	}
 }
 
-func TestWorkPinnedRouteDoesNotLaunchUnrequestedProviderChild(t *testing.T) {
-	const beadID = "ddx-provider-guard-01"
-
-	fakeBin := t.TempDir()
-	writeExecutable(t, filepath.Join(fakeBin, "codex"), "#!/bin/sh\necho codex-ok\n")
-	writeExecutable(t, filepath.Join(fakeBin, "gemini"), "#!/bin/sh\necho gemini-leak\n")
-	writeExecutable(t, filepath.Join(fakeBin, "claude"), "#!/bin/sh\necho claude-leak\n")
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Model: "gpt-5.4-mini",
-	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "codex"})
-
-	runner := &capturingAgentRunner{}
-	projectRoot := setupArtifactTestProjectRoot(t)
-	gitOps := &artifactTestGitOps{
-		projectRoot: projectRoot,
-		baseRev:     "feedface00000001",
-		resultRev:   "feedface00000001",
-		wtSetupFn: func(wtPath string) {
-			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
-		},
-	}
-
-	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
-		WorkerID:    "worker-provider-guard",
-		AgentRunner: runner,
-	}, gitOps)
-	if err != nil {
-		t.Fatalf("ExecuteBeadWithConfig: %v", err)
-	}
-	if res == nil {
-		t.Fatal("nil result")
-	}
-
-	got := runner.lastOpts
-	if got.Harness != "codex" || got.Model != "gpt-5.4-mini" {
-		t.Fatalf("captured route = %s/%s, want codex/gpt-5.4-mini", got.Harness, got.Model)
-	}
-	if got.Env[pinnedProviderGuardLogEnv] == "" {
-		t.Fatalf("missing %s", pinnedProviderGuardLogEnv)
-	}
-	env := envWithOverrides(os.Environ(), got.Env)
-	cmd := exec.Command("sh", "-c", "codex && gemini")
-	cmd.Env = env
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("gemini unexpectedly ran successfully: %s", out)
-	}
-	if !strings.Contains(string(out), "codex-ok") {
-		t.Fatalf("allowed codex binary did not remain reachable: %s", out)
-	}
-	if strings.Contains(string(out), "gemini-leak") {
-		t.Fatalf("unrequested gemini binary was reached: %s", out)
-	}
-	if !strings.Contains(string(out), "blocked unrequested provider harness") {
-		t.Fatalf("blocked provider output missing guard message: %s", out)
-	}
-	logData, err := os.ReadFile(got.Env[pinnedProviderGuardLogEnv])
-	if err != nil {
-		t.Fatalf("read provider guard log: %v", err)
-	}
-	if !strings.Contains(string(logData), `"blocked_harness":"gemini"`) {
-		t.Fatalf("provider guard log missing blocked harness: %s", logData)
-	}
-}
-
 func TestLifecycleClearRoutingPinsRequiresExplicitAutonomousRouteEvidence(t *testing.T) {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-5.4-mini"})
 	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "codex"})
@@ -213,39 +144,6 @@ func TestDispatchViaResolvedConfig_UsesProviderShimExecutableResolver(t *testing
 	require.True(t, stub.executeCalled, "dispatchViaResolvedConfig must still reach the service adapter")
 	require.NotEqual(t, initialPATH, os.Getenv("PATH"), "dispatchViaResolvedConfig must install a provider PATH shim")
 	require.Contains(t, os.Getenv("PATH"), "ddx-provider-shim-", "dispatchViaResolvedConfig must prepend the provider shim dir")
-}
-
-func TestPinnedWorkerProviderChildEvidence(t *testing.T) {
-	fakeBin := t.TempDir()
-	writeExecutable(t, filepath.Join(fakeBin, "claude"), "#!/bin/sh\necho claude-leak\n")
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	stateDir := t.TempDir()
-	env, err := applyPinnedProviderGuard(map[string]string{
-		"PATH": os.Getenv("PATH"),
-	}, "codex", stateDir)
-	if err != nil {
-		t.Fatalf("applyPinnedProviderGuard: %v", err)
-	}
-	cmd := exec.Command("sh", "-c", "claude")
-	cmd.Env = envWithOverrides(os.Environ(), env)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("claude unexpectedly ran successfully: %s", out)
-	}
-	if strings.Contains(string(out), "claude-leak") {
-		t.Fatalf("unrequested claude binary was reached: %s", out)
-	}
-	logData, err := os.ReadFile(env[pinnedProviderGuardLogEnv])
-	if err != nil {
-		t.Fatalf("read guard log: %v", err)
-	}
-	log := string(logData)
-	for _, want := range []string{`"blocked_harness":"claude"`, `"requested_harness":"codex"`, `"argv":"`, `"pwd":"`} {
-		if !strings.Contains(log, want) {
-			t.Fatalf("guard log missing %s: %s", want, log)
-		}
-	}
 }
 
 // TestExecutionsMirrorFromConfig verifies that an ExecutionsConfig.Mirror

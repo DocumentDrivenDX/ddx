@@ -27,7 +27,7 @@ func runNoopExecuteBeadForCheckpoint(t *testing.T, projectRoot, beadID string) *
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{})
 
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
@@ -114,7 +114,7 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{})
 
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
 	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
@@ -499,7 +499,7 @@ func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{})
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
 	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
