@@ -30,8 +30,7 @@ func (g *preClaimHookGitOps) MergeInto(_, _, _ string) error                { re
 func (g *preClaimHookGitOps) HeadRevAt(_ string) (string, error)            { return "HEAD", nil }
 func (g *preClaimHookGitOps) PushFFOnly(_, _, _, _ string) error            { return nil }
 func (g *preClaimHookGitOps) CountCommits(_, _, _ string) int               { return 0 }
-func (g *preClaimHookGitOps) StageDir(_, _ string) error                    { return nil }
-func (g *preClaimHookGitOps) CommitStaged(_, _ string) (string, error)      { return "", nil }
+func (g *preClaimHookGitOps) VerifyCandidateHistory(_, _, _ string) error   { return nil }
 func (g *preClaimHookGitOps) DiffNumstat(_, _, _ string) (string, error)    { return "", nil }
 func (g *preClaimHookGitOps) DiffNameOnly(_, _, _ string) ([]string, error) { return nil, nil }
 func (g *preClaimHookGitOps) LocalAncestryCheck(_, _ string) (agent.PreClaimResult, error) {

@@ -32,9 +32,9 @@ Generates a review-ready prompt that includes:
 
 - Bead title, description, acceptance criteria (verbatim).
 - Governing artifact content (follows `spec-id`).
-- The diff since the bead's base commit (execution evidence commits
-  excluded — see the related bug ddx-39e27896 for exclusion
-  pathspec).
+- The diff since the bead's base commit. Paths from legacy execution-evidence
+  commits are excluded for backward-compatible review (see ddx-39e27896);
+  current attempts keep `.ddx/executions/` local and never commit it.
 - Review instructions: output contract, verdict taxonomy.
 
 The reviewer (whoever receives the prompt — a human, `ddx run`, or a workflow

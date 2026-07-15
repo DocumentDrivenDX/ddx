@@ -396,20 +396,29 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					Reviewer:        reviewer,
 					NoReview:        noReview,
 				}, gitOps)
-				// Safety net: commit any execution-evidence bundle that
-				// ExecuteBeadWithConfig published to the project root but the land
-				// flow did not pick up — e.g. a terminal provider_connectivity /
-				// route-failure that never produced a commit to land. Without this
-				// the project worktree is left dirty after the tracker commit
-				// already landed (ddx-ca94d157). Mirrors the server worker path
-				// (internal/server/workers.go).
-				if res != nil && res.AttemptID != "" {
-					defer func(attemptID string) {
-						_ = agent.VerifyCleanWorktree(projectRoot, attemptID)
-					}(res.AttemptID)
-				}
 				if execErr != nil && res == nil {
 					return agent.ExecuteBeadReport{}, execErr
+				}
+				// Execution evidence is local, per-machine state. Reconcile the
+				// repository-local exclude before any outcome-specific return, and
+				// fail closed if evidence is already staged or tracked.
+				if res != nil && res.AttemptID != "" {
+					if candidateErr := agent.VerifyCandidateHasNoExecutionEvidence(projectRoot, res.BaseRev, res.ResultRev); candidateErr != nil {
+						candidateErr = fmt.Errorf("validating local execution evidence boundary: %w", candidateErr)
+						if execErr != nil {
+							agent.MarkResultExecutionError(res, execErr)
+							candidateErr = errors.Join(execErr, candidateErr)
+						}
+						return reportFromResult(res), candidateErr
+					}
+					if retentionErr := agent.VerifyCleanWorktree(projectRoot, res.AttemptID); retentionErr != nil {
+						retentionErr = fmt.Errorf("retaining local execution evidence: %w", retentionErr)
+						if execErr != nil {
+							agent.MarkResultExecutionError(res, execErr)
+							retentionErr = errors.Join(execErr, retentionErr)
+						}
+						return reportFromResult(res), retentionErr
+					}
 				}
 				if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
 					return reportFromResult(res), nil

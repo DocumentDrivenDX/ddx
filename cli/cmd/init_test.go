@@ -654,8 +654,8 @@ library:
 	}
 }
 
-// TestInitGitignoreRules verifies that ddx init writes the correct .gitignore rules
-// for the tracked/ignored split: runtime scratch is ignored, execution evidence is tracked.
+// TestInitGitignoreRules verifies that ddx init ignores runtime scratch and
+// machine-local execution evidence without adding un-ignore exceptions.
 func TestInitGitignoreRules(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
 	_, err := te.RunCommand("init", "--no-git")

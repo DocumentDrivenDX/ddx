@@ -278,8 +278,8 @@ that exercise the new code:
 - **Closing on no_changes/no_evidence**: only `success` and `already_satisfied`
   close a bead. `no_changes` requires an explicit rationale. `no_evidence_produced`
   means the agent returned without a commit or rationale — unclaim and investigate.
-- **Squashing bead-attempt commits**: the per-attempt history is
-  an audit trail (evidence commits, heartbeats). Use only
+- **Squashing bead-attempt commits**: the execution-attempt, heartbeat, and
+  merge history is an audit trail. Local evidence bundles are not commits. Use only
   `git merge --ff-only` or `--no-ff`; never squash/rebase/filter.
 - **Running passthrough pins without a reason**: power-bound dispatch lets the
   agent choose an appropriate route. Use `--harness`, `--provider`, `--model`,

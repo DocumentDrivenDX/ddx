@@ -53,6 +53,26 @@ func TestApplyWorkerCandidateCycle_ReviewMalfunctionOverridesSuccess(t *testing.
 	assert.Equal(t, rev, got, "the candidate ref must resolve to the unreviewed candidate commit")
 }
 
+func TestProjectCandidateCycleReportPropagatesRepairedRevisions(t *testing.T) {
+	res := &ExecuteBeadResult{
+		ResultRev:         "initial-result",
+		ImplementationRev: "initial-implementation",
+		Status:            ExecuteBeadStatusSuccess,
+	}
+	report := ExecuteBeadReport{
+		ResultRev:         "repaired-result",
+		ImplementationRev: "repaired-implementation",
+		Status:            ExecuteBeadStatusSuccess,
+		CycleIndex:        1,
+	}
+
+	projectCandidateCycleReport(res, report)
+
+	assert.Equal(t, "repaired-result", res.ResultRev)
+	assert.Equal(t, "repaired-implementation", res.ImplementationRev)
+	assert.Equal(t, 1, res.CycleIndex)
+}
+
 // reviewMalfunctionReport drives the real applyWorkerCandidateCycle path for
 // beadID with a reviewer that returns an empty/unparseable result, then
 // converts the resulting ExecuteBeadResult into the loop-facing report shape

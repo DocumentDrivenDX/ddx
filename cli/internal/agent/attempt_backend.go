@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -38,6 +39,15 @@ type AttemptBackend interface {
 	Name() string
 	Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error)
 	Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error)
+	// ImportCandidate makes one validated candidate revision reachable from the
+	// project repository before the candidate-cycle coordinator pins it. Clone
+	// backends transport objects through a short-lived ref; linked/in-tree
+	// backends are already in the project object database and no-op.
+	ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error
+	// ReleaseCandidateImport removes the short-lived transport ref after the
+	// coordinator has pinned the candidate revision.
+	ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error
+	// PublishResult publishes only the final, projected, revalidated result.
 	PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error
 	Cleanup(ctx context.Context, ws *AttemptWorkspace) error
 }
@@ -137,6 +147,14 @@ func (WorktreeAttemptBackend) Run(ctx context.Context, req AttemptBackendRunRequ
 	return dispatchAgentRun(ctx, req.ProjectRoot, req.Service, req.AgentRunner, req.Config, req.Runtime)
 }
 
+func (WorktreeAttemptBackend) ImportCandidate(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (WorktreeAttemptBackend) ReleaseCandidateImport(context.Context, *AttemptWorkspace) error {
+	return nil
+}
+
 func (WorktreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
 	return nil
 }
@@ -214,8 +232,16 @@ func (LocalCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRunRe
 	return dispatchAgentRun(ctx, req.ProjectRoot, req.Service, req.AgentRunner, req.Config, req.Runtime)
 }
 
+func (LocalCloneAttemptBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return transportCloneResult(ctx, ws, res, "candidate-source", "candidate-import")
+}
+
+func (LocalCloneAttemptBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return releaseCloneCandidateImport(ctx, ws)
+}
+
 func (LocalCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
-	return publishCloneResult(ctx, ws, res)
+	return transportCloneResult(ctx, ws, res, "source", "result")
 }
 
 func (LocalCloneAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) error {
@@ -345,7 +371,15 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 }
 
 func (DockerCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
-	return publishCloneResult(ctx, ws, res)
+	return transportCloneResult(ctx, ws, res, "source", "result")
+}
+
+func (DockerCloneAttemptBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return transportCloneResult(ctx, ws, res, "candidate-source", "candidate-import")
+}
+
+func (DockerCloneAttemptBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return releaseCloneCandidateImport(ctx, ws)
 }
 
 func (DockerCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
@@ -402,6 +436,14 @@ func (InTreeAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepa
 
 func (InTreeAttemptBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
 	return dispatchAgentRun(ctx, req.Workspace.ProjectRoot, req.Service, req.AgentRunner, req.Config, req.Runtime)
+}
+
+func (InTreeAttemptBackend) ImportCandidate(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (InTreeAttemptBackend) ReleaseCandidateImport(context.Context, *AttemptWorkspace) error {
+	return nil
 }
 
 func (InTreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
@@ -580,7 +622,7 @@ func gitConfigValue(ctx context.Context, dir, key string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func publishCloneResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+func transportCloneResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult, sourceKind, destinationKind string) error {
 	if ws == nil || res == nil || ws.WorkDir == "" || ws.ProjectRoot == "" {
 		return nil
 	}
@@ -588,8 +630,8 @@ func publishCloneResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteB
 	if resultRev == "" || resultRev == res.BaseRev {
 		return nil
 	}
-	srcRef := attemptBackendResultRef("source", ws.BeadID, ws.AttemptID)
-	dstRef := attemptBackendResultRef("result", ws.BeadID, ws.AttemptID)
+	srcRef := attemptBackendResultRef(sourceKind, ws.BeadID, ws.AttemptID)
+	dstRef := attemptBackendResultRef(destinationKind, ws.BeadID, ws.AttemptID)
 	if out, err := internalgit.Command(ctx, ws.WorkDir, "update-ref", srcRef, resultRev).CombinedOutput(); err != nil {
 		return fmt.Errorf("pinning clone result ref: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -598,6 +640,22 @@ func publishCloneResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteB
 		return fmt.Errorf("importing clone result: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
+}
+
+func releaseCloneCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || ws.WorkDir == "" || ws.ProjectRoot == "" {
+		return nil
+	}
+	srcRef := attemptBackendResultRef("candidate-source", ws.BeadID, ws.AttemptID)
+	dstRef := attemptBackendResultRef("candidate-import", ws.BeadID, ws.AttemptID)
+	var releaseErr error
+	if out, err := internalgit.Command(ctx, ws.ProjectRoot, "update-ref", "-d", dstRef).CombinedOutput(); err != nil {
+		releaseErr = errors.Join(releaseErr, fmt.Errorf("releasing project candidate import ref: %s: %w", strings.TrimSpace(string(out)), err))
+	}
+	if out, err := internalgit.Command(ctx, ws.WorkDir, "update-ref", "-d", srcRef).CombinedOutput(); err != nil {
+		releaseErr = errors.Join(releaseErr, fmt.Errorf("releasing source candidate import ref: %s: %w", strings.TrimSpace(string(out)), err))
+	}
+	return releaseErr
 }
 
 func attemptBackendResultRef(kind, beadID, attemptID string) string {

@@ -55,7 +55,7 @@ func cleanSyncSequence() []fakeGitResp {
 		outOK(""), // status --porcelain -- .ddx paths (clean)
 		ok(),      // merge origin/main
 		outOK(""), // status --porcelain -- .ddx/beads.jsonl (clean)
-		outOK(""), // status --porcelain -- .ddx/executions .ddx/plugins (clean)
+		outOK(""), // status --porcelain -- .ddx/plugins (clean)
 		ok(),      // push origin HEAD:main
 	}
 }
@@ -72,7 +72,7 @@ func dirtySyncSequence() []fakeGitResp {
 		outOK(" M .ddx/beads.jsonl\n"), // status before commit beads.jsonl
 		ok(),                           // git add .ddx/beads.jsonl
 		ok(),                           // git commit "chore: tracker"
-		outOK(""),                      // status before commit executions/plugins
+		outOK(""),                      // status before commit plugins
 		ok(),                           // push origin HEAD:main
 	}
 }
@@ -200,7 +200,7 @@ func TestSync_DoublePushFailAborts(t *testing.T) {
 		outOK(""), // status --porcelain -- .ddx paths (clean)
 		ok(),      // merge origin/main
 		outOK(""), // status beads.jsonl
-		outOK(""), // status executions/plugins
+		outOK(""), // status plugins
 		outErr("error: failed to push some refs\nhint: Updates were rejected because the remote contains work that you\nhint: do not have locally. Integrate the remote changes (e.g.\nhint: 'git pull ...') before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.\nnon-fast-forward", "exit status 1"),
 		outOK(headSHA + "\n"),   // rev-parse HEAD
 		outOK(originSHA + "\n"), // rev-parse origin/main (diverged → retry)
@@ -209,7 +209,7 @@ func TestSync_DoublePushFailAborts(t *testing.T) {
 		outOK(""), // status --porcelain -- .ddx paths
 		ok(),      // merge origin/main
 		outOK(""), // status beads.jsonl
-		outOK(""), // status executions/plugins
+		outOK(""), // status plugins
 		outErr("non-fast-forward", "exit status 1"), // push fails again
 		outOK(headSHA + "\n"),                       // rev-parse HEAD
 		outOK(originSHA + "\n"),                     // rev-parse origin/main (still diverged → abort)
@@ -312,6 +312,107 @@ func TestSync_CommitsOnlyDDxPaths(t *testing.T) {
 	}
 }
 
+func TestSyncNeverStagesOrCommitsExecutionEvidence(t *testing.T) {
+	repoRoot := t.TempDir()
+	initGitRepo(t, repoRoot)
+	ddxDir := filepath.Join(repoRoot, ddxroot.DirName)
+	pluginPath := filepath.Join(ddxDir, "plugins", "plugin.txt")
+	visiblePath := filepath.Join(ddxDir, "executions", "visible-attempt", "result.json")
+	ignoredPath := filepath.Join(ddxDir, "executions", "ignored-attempt", "result.json")
+	stagedPath := filepath.Join(ddxDir, "executions", "staged-attempt", "result.json")
+	for _, path := range []string{pluginPath, visiblePath, ignoredPath, stagedPath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(pluginPath, []byte("plugin\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(visiblePath, []byte("visible evidence\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ignoredPath, []byte("ignored evidence\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stagedBefore := []byte("force-added staged evidence\n")
+	if err := os.WriteFile(stagedPath, stagedBefore, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := realSyncGitRun(context.Background(), repoRoot, "add", "-f", "--", ".ddx/executions/staged-attempt/result.json"); err != nil {
+		t.Fatalf("force-stage execution evidence: %s: %v", out, err)
+	}
+	excludeOut, err := realSyncGitRun(context.Background(), repoRoot, "rev-parse", "--git-path", "info/exclude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	excludePath := strings.TrimSpace(string(excludeOut))
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(repoRoot, excludePath)
+	}
+	if err := os.WriteFile(excludePath, []byte("/.ddx/executions/ignored-attempt/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	visibleBefore, err := os.ReadFile(visiblePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ignoredBefore, err := os.ReadFile(ignoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := &syncer{
+		repoRoot: repoRoot,
+		ddxDir:   ddxDir,
+		runner:   realSyncGitRun,
+		out:      &bytes.Buffer{},
+	}
+	if err := s.commitDDxPaths(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	assertFileBytes := func(path string, want []byte) {
+		t.Helper()
+		got, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("%s changed: got %q want %q", path, got, want)
+		}
+	}
+	assertFileBytes(visiblePath, visibleBefore)
+	assertFileBytes(ignoredPath, ignoredBefore)
+	assertFileBytes(stagedPath, stagedBefore)
+
+	run := func(args ...string) string {
+		t.Helper()
+		out, runErr := realSyncGitRun(context.Background(), repoRoot, args...)
+		if runErr != nil {
+			t.Fatalf("git %v: %s: %v", args, out, runErr)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if got := run("status", "--porcelain", "--untracked-files=all", "--", ".ddx/executions/visible-attempt"); !strings.Contains(got, "?? .ddx/executions/visible-attempt/result.json") {
+		t.Fatalf("visible evidence status = %q", got)
+	}
+	if got := run("status", "--porcelain", "--untracked-files=all", "--ignored=matching", "--", ".ddx/executions/ignored-attempt"); !strings.Contains(got, "!! .ddx/executions/ignored-attempt/") {
+		t.Fatalf("ignored evidence status = %q", got)
+	}
+	if got := run("diff", "--cached", "--name-only", "--", ".ddx/executions"); got != ".ddx/executions/staged-attempt/result.json" {
+		t.Fatalf("pre-existing staged execution evidence changed: %q", got)
+	}
+	if got := run("show", ":.ddx/executions/staged-attempt/result.json"); got != strings.TrimSpace(string(stagedBefore)) {
+		t.Fatalf("staged execution evidence bytes changed: %q", got)
+	}
+	if got := run("log", "--all", "--format=%H", "--", ".ddx/executions"); got != "" {
+		t.Fatalf("execution evidence appeared in history: %q", got)
+	}
+	if got := run("diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"); got != ".ddx/plugins/plugin.txt" {
+		t.Fatalf("sync commit paths = %q, want plugin only", got)
+	}
+}
+
 // ---- Watch mode: exits cleanly on context cancel ----
 
 // TestSync_WatchExitsOnContextCancel verifies that --watch mode exits promptly
@@ -397,7 +498,7 @@ func TestSync_NonFastForwardButHeadAlreadyEqualsOriginMainTreatsAsSuccess(t *tes
 		outOK(""), // status --porcelain -- .ddx paths (clean)
 		ok(),      // merge origin/main
 		outOK(""), // status beads.jsonl (clean)
-		outOK(""), // status executions/plugins (clean)
+		outOK(""), // status plugins (clean)
 		outErr("error: failed to push\nnon-fast-forward", "exit status 1"), // push rejected
 		outOK(sha + "\n"), // rev-parse HEAD
 		outOK(sha + "\n"), // rev-parse origin/main (same SHA → already aligned)

@@ -84,14 +84,15 @@ Legacy compatibility:
 - new authoritative writes target the bead-backed collections and attachment
   directories above
 
-This storage model does not own the tracked `execute-bead` attempt bundle under
+This storage model does not own the local-only `execute-bead` attempt bundle under
 `.ddx/executions/<attempt-id>/`.
 
 - `exec-runs` / `exec-runs.d` remain the generic runtime substrate for
   execution definitions and reusable run history
-- `.ddx/executions/<attempt-id>/` is a tracked git artifact for one
+- `.ddx/executions/<attempt-id>/` is a machine-local, untracked artifact for one
   `execute-bead` attempt, containing prompt/manifest/result/check provenance
-  for implementation replay and audit
+  for recent implementation replay and audit; ADR-026 governs retention and
+  optional external mirroring
 
 If an `execute-bead` iteration runs graph-authored execution definitions, it
 may reference `exec-runs` records from its bundle, but it must not collapse the

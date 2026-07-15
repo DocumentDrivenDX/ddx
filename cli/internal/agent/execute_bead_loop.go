@@ -420,6 +420,9 @@ func SubmitWithPreMergeChecks(
 	if submit == nil {
 		return nil, nil, fmt.Errorf("submit-with-pre-merge-checks: submit callback required")
 	}
+	if err := VerifyCandidateHasNoExecutionEvidence(projectRoot, res.BaseRev, res.ResultRev); err != nil {
+		return nil, nil, fmt.Errorf("submit-with-pre-merge-checks: %w", err)
+	}
 	evidenceDir := filepath.Join(projectRoot, res.ExecutionDir)
 	outcome, err := RunPreMergeChecks(ctx, projectRoot, b, res.BaseRev, res.ResultRev, evidenceDir)
 	if err != nil {
@@ -733,8 +736,8 @@ type ExecuteBeadReport struct {
 	// TargetBranch is the resolved landing branch. The JSON field is named
 	// landed_branch because it denotes the branch that now carries the result.
 	TargetBranch string `json:"landed_branch,omitempty"`
-	// EvidenceRev is the trailing evidence commit SHA when distinct from
-	// ImplementationRev. Empty when not separately committed.
+	// EvidenceRev is retained for legacy execution records. Current attempts
+	// keep local evidence out of Git and leave this empty.
 	EvidenceRev string `json:"evidence_rev,omitempty"`
 	// ProjectRoot is the worktree root ddx try/work operated on for this report.
 	ProjectRoot string `json:"project_root,omitempty"`

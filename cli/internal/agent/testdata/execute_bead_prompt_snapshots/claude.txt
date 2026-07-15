@@ -48,7 +48,7 @@ For orchestrator decomposition, add `orchestrator_action: decompose` alongside `
 
 ## Reports
 
-Reports go under the bead metadata `bundle` path in `.ddx/executions/`. **Never write reports to `/tmp` or outside the repo**. Use a named in-repo path when given; otherwise write `<short-name>.md` there. Commit it with the code.
+Write reports to the metadata `bundle` under `.ddx/executions/`, never `/tmp` or elsewhere. Use the named path or `<short-name>.md`. Bundle files are local-only: never stage or commit them. Commit only requested deliverables outside the bundle.
 
 ## Mode and overrides
 
@@ -62,7 +62,7 @@ DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward de
 ## Constraints
 
 - Work only inside this execution worktree.
-- Keep `.ddx/executions/` intact — DDx uses it as execution evidence.
+- Keep `.ddx/executions/` intact, local, and untracked; never stage or commit it.
 - **Never run `ddx init`** — the workspace is initialized.
 - Do not modify files outside the bead's named scope.
 - Do not rewrite CLAUDE.md, AGENTS.md, or other instruction files unless the bead asks.

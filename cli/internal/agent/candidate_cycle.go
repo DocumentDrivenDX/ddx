@@ -204,15 +204,18 @@ type AttemptCycleResult struct {
 // Repair loops are reserved for future implementation. When Reviewer is non-nil
 // the coordinator runs one pre-land candidate review before landing.
 type AttemptCycleCoordinator struct {
-	Pass        ImplementationPass
-	Checks      CandidateCheckRunner // nil → skip pre-land checks
-	Reviewer    CandidateReviewer    // nil → skip candidate review (future)
-	NoReview    bool                 // true → skip review with durable no-review reason
-	Repair      RepairPass           // nil → skip repair loops (future)
-	Lander      CandidateLander
-	RefStore    CandidateRefStore // nil → no ref pinning
-	ProjectRoot string            // required when RefStore non-nil
-	BeadEvents  BeadEventAppender // nil → no candidate-cycle event emission
+	Pass                   ImplementationPass
+	Checks                 CandidateCheckRunner // nil → skip pre-land checks
+	Reviewer               CandidateReviewer    // nil → skip candidate review (future)
+	NoReview               bool                 // true → skip review with durable no-review reason
+	Repair                 RepairPass           // nil → skip repair loops (future)
+	Lander                 CandidateLander
+	RefStore               CandidateRefStore                     // nil → no ref pinning
+	ProjectRoot            string                                // required when RefStore non-nil
+	BeadEvents             BeadEventAppender                     // nil → no candidate-cycle event emission
+	ValidateCandidate      func(candidate CandidateResult) error // nil → no candidate validation
+	ImportCandidate        func(candidate CandidateResult) error // nil → candidate is already project-reachable
+	ReleaseCandidateImport func(candidate CandidateResult) error // nil → no transient import ref
 	// RepairMaxCycles caps append-only repair attempts after review_fixable_gap.
 	// Values <=0 default to one repair cycle.
 	RepairMaxCycles int
@@ -250,15 +253,63 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	}
 	var pinnedRefs []string
 	var cycleReview *CandidateReviewResult
+	cleanupPinnedRefs := func() {
+		if c.RefStore == nil || c.ProjectRoot == "" {
+			return
+		}
+		for _, ref := range pinnedRefs {
+			_ = c.RefStore.UnpinCandidateRef(c.ProjectRoot, ref)
+		}
+	}
+	failCandidate := func(prefix string, failure error, reason string) (AttemptCycleResult, error) {
+		report := candidate.Report
+		report.CandidateRef = ""
+		report.Status = ExecuteBeadStatusExecutionFailed
+		report.Detail = prefix + ": " + failure.Error()
+		report.Error = failure.Error()
+		report.OutcomeReason = reason
+		recordCycle(&report, cycleReview, report.Status)
+		cleanupPinnedRefs()
+		return AttemptCycleResult{Report: report}, fmt.Errorf("%s cycle %d: %w", prefix, candidate.CycleIndex, failure)
+	}
 	for {
+		// Validate every candidate revision, including append-only repair output,
+		// before any project-root ref, event, check, review, or landing side
+		// effect makes that revision durable or externally visible.
+		if c.ValidateCandidate != nil {
+			if validateErr := c.ValidateCandidate(candidate); validateErr != nil {
+				return failCandidate("validating candidate", validateErr, FailureModeAttemptIntegrity)
+			}
+		}
+		// Clone backends import the validated object through a short-lived ref.
+		// Linked and in-tree backends no-op. No project candidate ref is created
+		// until import succeeds.
+		if c.ImportCandidate != nil {
+			if importErr := c.ImportCandidate(candidate); importErr != nil {
+				if c.ReleaseCandidateImport != nil {
+					importErr = errors.Join(importErr, c.ReleaseCandidateImport(candidate))
+				}
+				return failCandidate("importing candidate", importErr, FailureModeLandRetry)
+			}
+		}
 		c.recordCandidateCycleState(candidate, CandidateCycleState{
 			Active:       true,
 			Phase:        "candidate",
 			CandidateRev: candidate.Report.ResultRev,
 			CycleIndex:   candidate.CycleIndex,
 		})
-		c.pinCandidateRef(beadID, &candidate)
+		if pinErr := c.pinCandidateRef(beadID, &candidate); pinErr != nil {
+			if c.ReleaseCandidateImport != nil {
+				pinErr = errors.Join(pinErr, c.ReleaseCandidateImport(candidate))
+			}
+			return failCandidate("pinning candidate", pinErr, FailureModeLandRetry)
+		}
 		pinnedRefs = appendUniqueString(pinnedRefs, candidate.Report.CandidateRef)
+		if c.ReleaseCandidateImport != nil {
+			if releaseErr := c.ReleaseCandidateImport(candidate); releaseErr != nil {
+				return failCandidate("releasing candidate import", releaseErr, FailureModeLandRetry)
+			}
+		}
 		c.recordCandidateCycleState(candidate, CandidateCycleState{
 			Active:       true,
 			Phase:        "candidate_pinned",
@@ -458,12 +509,12 @@ func appendUniqueString(items []string, item string) []string {
 	return append(items, item)
 }
 
-func (c *AttemptCycleCoordinator) pinCandidateRef(beadID string, candidate *CandidateResult) {
+func (c *AttemptCycleCoordinator) pinCandidateRef(beadID string, candidate *CandidateResult) error {
 	if candidate == nil || c.RefStore == nil || c.ProjectRoot == "" {
-		return
+		return nil
 	}
 	if candidate.Report.CandidateRef != "" {
-		return
+		return nil
 	}
 	ref, pinErr := c.RefStore.PinCandidateRef(
 		c.ProjectRoot,
@@ -472,12 +523,12 @@ func (c *AttemptCycleCoordinator) pinCandidateRef(beadID string, candidate *Cand
 		candidate.Report.ResultRev,
 	)
 	if pinErr != nil {
-		return
+		return pinErr
 	}
 	candidate.Report.CandidateRef = ref
 	candidate.Report.CycleIndex = candidate.CycleIndex
 	if c.BeadEvents == nil {
-		return
+		return nil
 	}
 	body, _ := json.Marshal(CandidateCycleEventBody{
 		CandidateRef: ref,
@@ -490,6 +541,7 @@ func (c *AttemptCycleCoordinator) pinCandidateRef(beadID string, candidate *Cand
 		Kind: "candidate_cycle_pinned",
 		Body: string(body),
 	})
+	return nil
 }
 
 func (c *AttemptCycleCoordinator) appendCandidateChecksFailedEvent(beadID string, report ExecuteBeadReport, checksResult CandidateCheckResult) {
@@ -559,6 +611,14 @@ func normalizeRepairedCandidate(previous, repaired CandidateResult) CandidateRes
 	}
 	if repaired.Report.BaseRev == "" {
 		repaired.Report.BaseRev = previous.Report.BaseRev
+	}
+	if repaired.Report.ResultRev != "" && repaired.Report.ResultRev != previous.Report.ResultRev {
+		// Local-only evidence means the final candidate revision is also the
+		// implementation revision. A repaired append-only commit must replace,
+		// not trail behind, the provisional implementation SHA.
+		repaired.Report.ImplementationRev = repaired.Report.ResultRev
+	} else if repaired.Report.ImplementationRev == "" {
+		repaired.Report.ImplementationRev = previous.Report.ImplementationRev
 	}
 	if repaired.Report.Status == "" {
 		repaired.Report.Status = ExecuteBeadStatusSuccess
