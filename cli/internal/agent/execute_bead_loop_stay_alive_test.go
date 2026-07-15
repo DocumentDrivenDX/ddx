@@ -932,38 +932,50 @@ func TestPreDispatchDirtyPreserveRequiresStableImplementationDirt(t *testing.T) 
 	var eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		Mode:         executeloop.ModeWatch,
-		IdleInterval: time.Hour,
-		EventSink:    &eventSink,
-		ProjectRoot:  projectRoot,
-		SessionID:    "sess-watch-transient-predispatch",
-		WorkerID:     "worker-watch-transient-predispatch",
-	})
 
-	if err != nil {
-		require.True(t,
-			errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
-			"worker.Run should return context.Canceled or context.DeadlineExceeded, got %v", err,
-		)
+	type runOutcome struct {
+		result *ExecuteBeadLoopResult
+		err    error
 	}
+	runCh := make(chan runOutcome, 1)
+	go func() {
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Mode:         executeloop.ModeWatch,
+			IdleInterval: time.Hour,
+			EventSink:    &eventSink,
+			ProjectRoot:  projectRoot,
+			SessionID:    "sess-watch-transient-predispatch",
+			WorkerID:     "worker-watch-transient-predispatch",
+		})
+		runCh <- runOutcome{result: result, err: err}
+	}()
+
+	require.Eventually(t, func() bool {
+		got, err := store.Get(context.Background(), "ddx-int-0001")
+		return err == nil && got.Status == bead.StatusClosed
+	}, 25*time.Second, 10*time.Millisecond, "bead must close within the safety net")
+
+	cancel()
+	outcome := <-runCh
+	result, err := outcome.result, outcome.err
+
+	require.Error(t, err)
+	require.True(t,
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
+		"worker.Run should return context.Canceled or context.DeadlineExceeded, got %v", err,
+	)
 	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+	assert.Nil(t, result.OperatorAttention)
 	assert.NotContains(t, eventSink.String(), `"type":"loop.pre_dispatch_dirty_preserved"`)
 
-	if result.OperatorAttention != nil {
-		assert.Equal(t, "pre_dispatch_git_repair_failed", result.OperatorAttention.Reason)
-	} else {
-		assert.Equal(t, 1, result.Attempts)
-		assert.Equal(t, 1, result.Successes)
-		assert.Equal(t, 0, result.Failures)
-		assert.Nil(t, result.OperatorAttention)
-
-		got, getErr := store.Get(context.Background(), "ddx-int-0001")
-		require.NoError(t, getErr)
-		assert.Equal(t, bead.StatusClosed, got.Status)
-	}
+	got, getErr := store.Get(context.Background(), "ddx-int-0001")
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusClosed, got.Status)
 
 	refsOut, refsErr := runGitIntegOutput(projectRoot, "for-each-ref", "--format=%(refname)", "refs/ddx/pre-dispatch")
 	require.NoError(t, refsErr)
