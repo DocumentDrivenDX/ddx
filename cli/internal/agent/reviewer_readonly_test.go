@@ -20,8 +20,11 @@ func TestReviewerRuntime_ReadOnlyProfilePlumbed(t *testing.T) {
 	if rt.Role != "reviewer" {
 		t.Errorf("Role = %q; want reviewer", rt.Role)
 	}
-	if !rt.ClearRoutingPins {
-		t.Errorf("ClearRoutingPins = false; want true")
+	if rt.ClearRoutingPins {
+		t.Error("ClearRoutingPins = true; reviewer must inherit the immutable primary operator envelope")
+	}
+	if rt.ClearProfile {
+		t.Error("ClearProfile = true; reviewer must inherit the operator's public Policy")
 	}
 }
 

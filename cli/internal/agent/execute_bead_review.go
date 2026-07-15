@@ -225,10 +225,6 @@ type ReviewGroupDispatchMeta struct {
 	ReviewerIndex int
 }
 
-type reviewerDispatchProfile struct {
-	MinPower int
-}
-
 type reviewArtifactManifest struct {
 	Harness          string                     `json:"harness,omitempty"`
 	Model            string                     `json:"model,omitempty"`
@@ -771,6 +767,13 @@ func reviewXMLEscape(s string) string {
 type DefaultBeadReviewer struct {
 	ProjectRoot string
 	BeadStore   BeadReader
+	// PrimaryConfigSnapshot is the sealed configuration used for the primary
+	// implementation request. Review dispatch inherits its operator-owned
+	// Harness, Provider, Model, public Policy, and MaxPower byte-for-byte and
+	// changes only the DDx-owned MinPower floor. Production callers set this
+	// once before an attempt starts; nil retains the standalone-review fallback
+	// of resolving project configuration at dispatch time.
+	PrimaryConfigSnapshot *ddxconfig.ResolvedConfig
 	// Service, when non-nil, is the agentlib.FizeauService used to dispatch the
 	// review invocation. Production callers leave this nil — ReviewBead
 	// constructs a fresh service from ProjectRoot via NewServiceFromWorkDir.
@@ -835,8 +838,6 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, meta ReviewGroupDis
 		Role:                "reviewer",
 		CorrelationID:       correlationID,
 		PermissionsOverride: PermissionsReadOnlyReviewer,
-		ClearRoutingPins:    true,
-		ClearProfile:        true,
 	}
 }
 
@@ -849,11 +850,11 @@ func isImplementerRouteMetadataKey(key string) bool {
 	}
 }
 
-// reviewerDispatchProfile returns the abstract MinPower constraint for a
-// reviewer dispatch. DDx never selects a Fizeau policy or model here: review
-// starts at the strong lifecycle floor and escalates above the implementer's
-// actual power and prior review failures. Fizeau owns the concrete route.
-func (r *DefaultBeadReviewer) reviewerDispatchProfile(_ context.Context, impl ImplementerRouting, priorErrors int) reviewerDispatchProfile {
+// reviewerMinPower returns the sole routing-policy change DDx makes for a
+// review operation. The operator's concrete passthrough and MaxPower remain in
+// the immutable primary configuration snapshot; Fizeau owns route selection
+// within that envelope.
+func reviewerMinPower(impl ImplementerRouting, priorErrors int) int {
 	floor := lifecycleStrongMinPower
 	if impl.ActualPower > 0 {
 		if stronger := impl.ActualPower + 1; stronger > floor {
@@ -863,7 +864,7 @@ func (r *DefaultBeadReviewer) reviewerDispatchProfile(_ context.Context, impl Im
 	if priorErrors > 0 {
 		floor += priorErrors
 	}
-	return reviewerDispatchProfile{MinPower: floor}
+	return floor
 }
 
 func reviewCorrelationID(correlation map[string]string) string {
@@ -1042,7 +1043,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// Determine iteration number from bead events.
 	iter := 1
 
-	// Count prior escalation triggers so reviewerDispatchProfile can bump
+	// Count prior escalation triggers so reviewerMinPower can bump
 	// MinPower on retries.
 	priorErrors := countPriorReviewErrors(r.EventReader, beadID, resultRev)
 
@@ -1101,14 +1102,15 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
 	}
 
-	// DDx sends only the reviewer MinPower floor. Fizeau owns concrete routing.
-	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
+	// DDx changes only the reviewer MinPower floor. Fizeau owns concrete routing
+	// within the immutable operator envelope inherited at dispatch.
+	reviewMinPower := reviewerMinPower(impl, priorErrors)
 	// Emit reviewer-escalated event when MinPower is bumped above baseline.
 	if priorErrors > 0 && r.BeadEvents != nil {
 		_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      ReviewerEscalatedEventKind,
-			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
-			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
+			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewMinPower, priorErrors),
+			Body:      reviewerEscalatedEventBody(reviewMinPower, priorErrors, resultRev),
 			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
@@ -1116,10 +1118,10 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 
 	start := time.Now()
 	runRuntime := BuildReviewExecuteRequest(impl)
-	// Apply escalated MinPower: use the higher of the base R4 floor and the
-	// escalated profile floor so retries reach a stronger reviewer powerClass.
-	if reviewProfile.MinPower > runRuntime.MinPowerOverride {
-		runRuntime.MinPowerOverride = reviewProfile.MinPower
+	// Apply the stronger abstract floor without changing the primary request's
+	// concrete passthrough, public Policy, or MaxPower.
+	if reviewMinPower > runRuntime.MinPowerOverride {
+		runRuntime.MinPowerOverride = reviewMinPower
 	}
 	runRuntime.Prompt = prompt
 	runRuntime.WorkDir = reviewWorkDir
@@ -1280,14 +1282,24 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 }
 
 // dispatchReviewRun is a thin SD-024 wrapper around dispatchViaResolvedConfig
-// for the post-merge reviewer. The reviewer carries no persistent
-// ResolvedConfig of its own. Each call loads the baseline execution config,
-// while the runtime supplies DDx-owned abstract MinPower, read-only permission,
-// and correlation constraints and clears concrete route/profile pins. Fizeau
-// alone selects the reviewer harness, provider, and model. Resolution order
+// for the post-merge reviewer. Production callers provide the same sealed
+// ResolvedConfig used by the primary attempt, making the operator-owned
+// Harness, Provider, Model, public Policy, and MaxPower an immutable envelope.
+// The runtime changes only DDx-owned abstract MinPower, read-only permission,
+// and route-neutral correlation. Standalone callers without a snapshot resolve
+// project configuration once as a compatibility fallback. Resolution order
 // matches the execute-bead worker (runner > pre-built service > fresh service).
 func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runtime AgentRunRuntime) (*Result, error) {
-	rcfg, _ := ddxconfig.LoadAndResolve(r.ProjectRoot, ddxconfig.CLIOverrides{})
+	var rcfg ddxconfig.ResolvedConfig
+	if r.PrimaryConfigSnapshot != nil {
+		rcfg = *r.PrimaryConfigSnapshot
+	} else {
+		resolved, err := ddxconfig.LoadAndResolve(r.ProjectRoot, ddxconfig.CLIOverrides{})
+		if err != nil {
+			return nil, fmt.Errorf("reviewer: resolve primary configuration: %w", err)
+		}
+		rcfg = resolved
+	}
 	return dispatchViaResolvedConfig(ctx, r.ProjectRoot, r.Service, r.Runner, rcfg, runtime)
 }
 

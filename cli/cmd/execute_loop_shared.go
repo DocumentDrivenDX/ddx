@@ -143,10 +143,10 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
 	return true
 }
 
-func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string) agent.ExecuteBeadRuntime {
+func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string, primaryConfig *config.ResolvedConfig) agent.ExecuteBeadRuntime {
 	var reviewer agent.CandidateReviewer
 	if !spec.NoReview {
-		reviewer = newCommandReviewer(spec.ProjectRoot, beadStoreRoot, spec.ReviewTier)
+		reviewer = newCommandReviewer(spec.ProjectRoot, beadStoreRoot, spec.ReviewTier, primaryConfig)
 	}
 	return agent.ExecuteBeadRuntime{
 		FromRev:          spec.FromRev,
@@ -161,12 +161,13 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
 	}
 }
 
-func newCommandReviewer(projectRoot, beadStoreRoot, reviewTier string) *agent.DefaultBeadReviewer {
+func newCommandReviewer(projectRoot, beadStoreRoot, reviewTier string, primaryConfig *config.ResolvedConfig) *agent.DefaultBeadReviewer {
 	return &agent.DefaultBeadReviewer{
-		ProjectRoot: projectRoot,
-		BeadStore:   bead.NewStore(beadStoreRoot),
-		BeadEvents:  bead.NewStore(beadStoreRoot),
-		ReviewTier:  reviewTier,
+		ProjectRoot:           projectRoot,
+		BeadStore:             bead.NewStore(beadStoreRoot),
+		BeadEvents:            bead.NewStore(beadStoreRoot),
+		ReviewTier:            reviewTier,
+		PrimaryConfigSnapshot: primaryConfig,
 	}
 }
 
@@ -268,11 +269,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
 	defer localCoord.Stop()
 
-	var reviewer agent.BeadReviewer
-	if !spec.NoReview {
-		reviewer = newCommandReviewer(projectRoot, beadStoreRoot, spec.ReviewTier)
-	}
-
 	overrides := config.CLIOverrides{
 		Assignee:          resolveClaimAssignee(),
 		Harness:           spec.Harness,
@@ -287,6 +283,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
 		return fmt.Errorf("load resolved config: %w", err)
+	}
+	var reviewer agent.BeadReviewer
+	if !spec.NoReview {
+		reviewer = newCommandReviewer(projectRoot, beadStoreRoot, spec.ReviewTier, &rcfg)
 	}
 	serverHealthProbe := func(ctx context.Context) (bool, error) {
 		addr := serverpkg.ReadServerAddr()
@@ -410,6 +410,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			f.AgentRunnerOverride,
 			resourceChecker,
 			beadStoreRoot,
+			&attemptRcfg,
 		), gitOps)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr
