@@ -1888,6 +1888,60 @@ func assertNoExecutionEvidenceOnBranch(t *testing.T, r *landTestRepo, branch str
 	}
 }
 
+func TestLand_PreservesProjectRootEvidenceAfterLanding(t *testing.T) {
+	r := newLandTestRepo(t)
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature content\n", "feat: retain local evidence")
+
+	attemptID := "20260715T070000-retained"
+	evidenceDir := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", attemptID))
+	prelim := &ExecuteBeadResult{
+		BeadID:            "ddx-retain-local-evidence",
+		AttemptID:         attemptID,
+		BaseRev:           r.baseSHA,
+		ResultRev:         workerSHA,
+		ImplementationRev: workerSHA,
+		ExecutionDir:      evidenceDir,
+		ManifestFile:      filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json")),
+		ResultFile:        filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
+		Outcome:           ExecuteBeadOutcomeTaskSucceeded,
+		Status:            ExecuteBeadStatusSuccess,
+		ExitCode:          0,
+	}
+	writeExecuteBeadBundle(t, r.dir, prelim, map[string]string{
+		"checks.json": `{"summary":"pass"}` + "\n",
+	})
+
+	land, err := Land(r.dir, LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       prelim.BeadID,
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  evidenceDir,
+	}, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if land.EvidenceCommitSHA != "" {
+		t.Fatalf("evidence must not be committed; got %q", land.EvidenceCommitSHA)
+	}
+
+	for _, name := range []string{"manifest.json", "result.json", "checks.json"} {
+		path := filepath.Join(r.dir, filepath.FromSlash(evidenceDir), name)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("canonical evidence %s did not survive landing: %v", name, err)
+		}
+	}
+	if tracked := strings.TrimSpace(r.runGit("ls-files", "--", evidenceDir)); tracked != "" {
+		t.Fatalf("execution evidence became tracked after landing:\n%s", tracked)
+	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
+}
+
 func TestExecuteBeadLandingCommitsFinalResultArtifact(t *testing.T) {
 	r := newLandTestRepo(t)
 	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature content\n", "feat: worker change [ddx-final-result]")

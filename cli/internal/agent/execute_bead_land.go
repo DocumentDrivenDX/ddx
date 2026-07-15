@@ -96,15 +96,14 @@ type LandRequest struct {
 
 	// EvidenceDir is the relative path to the per-attempt execution evidence
 	// directory (e.g. ".ddx/executions/20260416T181205-b5419982"). When
-	// non-empty and the main land succeeds, Land() creates a trailing
-	// evidence commit that folds these files into the target branch. The
-	// agent's commit SHA is NOT amended — the evidence commit is a separate
-	// child commit, preserving closing_commit_sha references.
+	// non-empty and the main land succeeds, Land() uses a temporary copy while
+	// finalizing the result. The canonical project-root bundle remains local
+	// and uncommitted; the temporary finalization worktree is removed afterward.
 	EvidenceDir string
 
 	// PostLandCommand is an optional project verification command run after
 	// Land() advances the local target ref and syncs the worktree, but before
-	// evidence commit creation or checkout sync. A failure restores the target
+	// local evidence finalization or checkout sync. A failure restores the target
 	// ref to its pre-land SHA and preserves ResultRev under refs/ddx/iterations.
 	PostLandCommand []string
 
@@ -1215,10 +1214,11 @@ func buildPreservedResult(req LandRequest, preserveRef, reason string, contribCo
 	}
 }
 
-// prepareLandEvidence copies the execution evidence into the landing worktree,
-// rewrites the result artifact, and stages the evidence files. It runs outside
-// the main-git lock so large evidence directories do not hold the shared lock
-// while the filesystem work is in progress.
+// prepareLandEvidence copies the execution evidence into the temporary landing
+// worktree and rewrites the result artifact there. It runs outside the main-git
+// lock so large evidence directories do not hold the shared lock while the
+// filesystem work is in progress. The canonical project-root bundle remains
+// untouched and the temporary copy is removed with the finalization worktree.
 func prepareLandEvidence(projectRoot, wd string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
 	if req.EvidenceDir == "" {
 		return nil
@@ -1377,29 +1377,6 @@ func copyEvidenceDirForLanding(projectRoot, landingWD, relPath string) error {
 		}
 		return os.WriteFile(target, data, info.Mode().Perm())
 	})
-}
-
-func cleanupProjectEvidenceCopy(projectRoot, relPath string) {
-	cleanRel, ok := cleanRelativePath(relPath)
-	if !ok {
-		return
-	}
-	evidenceRoot := filepath.Join(projectRoot, cleanRel)
-	embeddedDir := filepath.Join(evidenceRoot, "embedded")
-	if info, err := os.Stat(embeddedDir); err == nil && info.IsDir() {
-		entries, err := os.ReadDir(evidenceRoot)
-		if err != nil {
-			return
-		}
-		for _, entry := range entries {
-			if entry.Name() == "embedded" {
-				continue
-			}
-			_ = os.RemoveAll(filepath.Join(evidenceRoot, entry.Name()))
-		}
-		return
-	}
-	_ = os.RemoveAll(evidenceRoot)
 }
 
 func cleanRelativePath(path string) (string, bool) {
@@ -1700,7 +1677,6 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 					syncFromRev = result.NewTip
 					return nil
 				}
-				cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
 			}
 			syncFromRev = prep.currentTip
 			if result != nil && syncOperatorAfterLand && syncFromRev != "" {
