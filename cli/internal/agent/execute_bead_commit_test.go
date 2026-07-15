@@ -280,7 +280,7 @@ func TestSynthesizeCommitMessage_InExecuteBead(t *testing.T) {
 		},
 	}
 
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: "test-model"}).Resolve(config.CLIOverrides{Harness: "test-harness"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: "test-model"}).Resolve(config.CLIOverrides{Harness: "test-harness", Model: "test-model"})
 	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: &artifactTestAgentRunner{},
 	}, gitOps)

@@ -144,7 +144,7 @@ func TestRunWithConfigViaService_InstallsProviderShim(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "haiku",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "haiku"})
 
 	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "test",
@@ -183,9 +183,7 @@ func TestRunWithConfigViaService_UsesProviderShimExecutableResolver(t *testing.T
 	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
 	t.Cleanup(func() { providerShimExecutableLookup = oldLookup })
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "haiku",
-	}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{})
 	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "test",
 	})
@@ -216,7 +214,7 @@ func TestAgentPackageSuite_DoesNotExecTestBinaryAsProviderLauncher(t *testing.T)
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "haiku",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "haiku"})
 
 	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "test",

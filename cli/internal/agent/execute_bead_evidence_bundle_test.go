@@ -178,7 +178,7 @@ func TestPublishEvidenceFailurePreservesAttemptWorktreeAndSurfacesError(t *testi
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	directivePath := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, directivePath, []string{"no-op"})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 	copyCalls := 0
 	injectedErr := errors.New("injected mid-copy execution evidence failure")
@@ -253,7 +253,7 @@ func TestPublishResultFailureReturnsErrorWithoutMovingTarget(t *testing.T) {
 		"create-file publish-result.txt valid-candidate",
 		"commit feat: create publish-result candidate",
 	})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 	publishErr := errors.New("injected post-bundle PublishResult failure")
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
@@ -299,7 +299,7 @@ func TestEarlyResultPublicationFailureDemotesResultAndPreservesSource(t *testing
 			projectRoot, _ := newScriptHarnessRepo(t, 1)
 			directivePath := filepath.Join(t.TempDir(), "directive.txt")
 			writeDirectiveFile(t, directivePath, []string{"no-op"})
-			rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
+			rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 			copyCalls := 0
 			injectedErr := errors.New("injected early-result evidence publication failure")
 
@@ -342,7 +342,7 @@ func TestExecuteBeadScriptHarnessForceAddedEvidenceNeverPublishesCandidate(t *te
 		"run git add -f .ddx/executions/$DDX_ATTEMPT_ID/custom-report.md",
 		"commit feat: force-add escape attempt",
 	})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
 		AgentRunner: scriptHarnessAgentRunner{},
@@ -377,7 +377,7 @@ func TestExecuteBeadNilResultPublicationFailurePreservesSource(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	directivePath := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, directivePath, []string{"no-op"})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 	var sourceWorktree string
 	runner := evidenceAgentRunnerFunc(func(opts RunArgs) (*Result, error) {
@@ -426,6 +426,7 @@ func TestExecuteBeadLocalCloneInstallsRootAndAttemptEvidenceExcludesBeforePublic
 	writeDirectiveFile(t, directivePath, []string{"no-op"})
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{
 		Harness:        "script",
+		Model:          directivePath,
 		AttemptBackend: AttemptBackendLocalClone,
 	})
 	backend := &retainingAttemptBackend{inner: LocalCloneAttemptBackend{}}

@@ -37,6 +37,7 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	})
 	rcfg := cfg.Resolve(config.CLIOverrides{
 		Harness:  "claude",
+		Model:    "claude-test-model",
 		Provider: "anthropic",
 		Effort:   "high",
 	})
@@ -87,7 +88,7 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 
 func TestLifecycleClearRoutingPinsRequiresExplicitAutonomousRouteEvidence(t *testing.T) {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-5.4-mini"})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "codex"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "codex", Model: "gpt-5.4-mini"})
 	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
 		return &Result{ExitCode: 0, Harness: opts.Harness, Model: opts.Model}, nil
 	})
@@ -135,7 +136,7 @@ func TestDispatchViaResolvedConfig_UsesProviderShimExecutableResolver(t *testing
 
 	initialPATH := os.Getenv("PATH")
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "haiku"})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "agent"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "agent", Model: "haiku"})
 
 	_, err := dispatchViaResolvedConfig(context.Background(), t.TempDir(), nil, nil, rcfg, AgentRunRuntime{
 		Prompt: "test",
@@ -165,7 +166,7 @@ func TestExecutionsMirrorFromConfig(t *testing.T) {
 			Async: &async,
 		},
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "claude"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "claude", Model: "claude-test-model"})
 
 	if rcfg.MirrorConfig() == nil {
 		t.Fatal("ResolvedConfig.MirrorConfig() must be non-nil after Resolve")

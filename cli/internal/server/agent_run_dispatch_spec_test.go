@@ -157,6 +157,10 @@ func assertOpaqueUnpinnedExecuteRequest(t *testing.T, req agentlib.ServiceExecut
 		t.Fatalf("unpinned Execute request leaked a concrete route: harness=%q provider=%q model=%q policy=%q",
 			req.Harness, req.Provider, req.Model, req.Policy)
 	}
+	if req.Reasoning != "" || req.ProviderTimeout != 0 {
+		t.Fatalf("unpinned Execute request leaked DDx reasoning/timeout policy: reasoning=%q provider_timeout=%s",
+			req.Reasoning, req.ProviderTimeout)
+	}
 }
 
 type expectedPreparedAgentRunDispatch struct {

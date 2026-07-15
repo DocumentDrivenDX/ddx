@@ -151,6 +151,12 @@ library:
     branch: "main"
 agent:
   model: configured-project-model-must-not-leak
+  reasoning_levels:
+    codex: [configured-project-reasoning-must-not-leak]
+  endpoints:
+    - type: openai
+      base_url: http://127.0.0.1:1/v1
+      api_key: configured-project-credential-must-not-load
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 
@@ -175,6 +181,10 @@ func TestServerWorkerSpecDoesNotInheritProjectAgentModel(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, rcfg.Model(), "unconfigured server worker must not inherit project agent.model")
+}
+
+func TestServerManagedProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+	assertServerManagedUnpinnedExecute(t)
 }
 
 func TestServerWorkerPropagatesRouteResolutionTimeout(t *testing.T) {

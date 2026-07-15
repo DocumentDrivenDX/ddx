@@ -23,7 +23,7 @@ func TestAgentRunRuntimeDelegation(t *testing.T) {
 		Timeout:     30 * time.Second,
 	}
 	cfg := config.NewTestConfigForRun(opts)
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: opts.Harness, Effort: "high"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: opts.Harness, Model: opts.Model, Effort: "high"})
 
 	mock := &mockExecutor{output: "agent output here\n"}
 	r := newTestRunner(mock)
@@ -55,7 +55,7 @@ func TestAgentRunRuntimePropagatesDDXMode(t *testing.T) {
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Harness: "codex",
 		Model:   "gpt-test",
-	}).Resolve(config.CLIOverrides{Harness: "codex"})
+	}).Resolve(config.CLIOverrides{Harness: "codex", Model: "gpt-test"})
 
 	runtime := AgentRunRuntime{
 		Prompt: "do bead work",

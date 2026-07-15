@@ -85,7 +85,7 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 		rcfgs[i] = config.NewTestConfigForBead(config.TestBeadConfigOpts{
 			Harness: "script",
 			Model:   dirFiles[i],
-		}).Resolve(config.CLIOverrides{})
+		}).Resolve(config.CLIOverrides{Harness: "script", Model: dirFiles[i]})
 	}
 
 	// Seed durable DDx bookkeeping dirt in the parent so the checkpoint
@@ -187,7 +187,7 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace_DoesNotSpawnProviders(t *te
 	runner := &hermeticNoopAgentRunner{rationale: "already satisfied in base"}
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: "claude-test-model",
-	}).Resolve(config.CLIOverrides{Harness: "claude"})
+	}).Resolve(config.CLIOverrides{Harness: "claude", Model: "claude-test-model"})
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, cfg, ExecuteBeadRuntime{
 		AgentRunner: runner,

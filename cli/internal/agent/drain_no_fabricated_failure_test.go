@@ -96,7 +96,7 @@ func scriptHarnessExecutorWithTempSessions(t *testing.T, projectRoot, directiveP
 		Model: directivePath,
 	})
 	cfg.Agent.SessionLogDir = filepath.Join(t.TempDir(), "sessions")
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 	return ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 		repoMu.Lock()

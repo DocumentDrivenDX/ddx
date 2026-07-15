@@ -395,8 +395,10 @@ func TestPreClaimDecomposerHonorsWorkerHarnessModel(t *testing.T) {
 		}, nil
 	})
 
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "gpt-5.4-mini"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex"}
+	cfg := config.NewTestConfigForLoop(cfgOpts)
+	cfg.Agent.Model = "gpt-5.4-mini"
+	rcfg := cfg.Resolve(config.TestLoopOverrides(cfgOpts))
 
 	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
 	require.NoError(t, err)
@@ -452,8 +454,10 @@ func TestPostAttemptDecomposerHonorsWorkerHarnessModel(t *testing.T) {
 		}, nil
 	})
 
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "gpt-5.4-mini"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex"}
+	cfg := config.NewTestConfigForLoop(cfgOpts)
+	cfg.Agent.Model = "gpt-5.4-mini"
+	rcfg := cfg.Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result := runDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
 	require.False(t, result.Failed)
@@ -500,8 +504,10 @@ func TestPreClaimDecomposerFallsBackDeterministicallyWhenRequestedRouteUnavailab
 		return nil, fmt.Errorf("route unavailable for requested %s/%s", opts.Harness, opts.Model)
 	})
 
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "gpt-5.4-mini"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex"}
+	cfg := config.NewTestConfigForLoop(cfgOpts)
+	cfg.Agent.Model = "gpt-5.4-mini"
+	rcfg := cfg.Resolve(config.TestLoopOverrides(cfgOpts))
 
 	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
 	require.NoError(t, err)
