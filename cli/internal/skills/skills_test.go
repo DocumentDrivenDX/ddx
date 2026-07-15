@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 )
 
 func TestEmbeddedSkillsHaveValidMetadata(t *testing.T) {
@@ -48,12 +48,11 @@ func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
 	skillGlobs := []string{
-		filepath.Join(repoRoot, "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, "library", "skills", "*", "SKILL.md"),
 		filepath.Join(repoRoot, "cli", "internal", "skills", "*", "SKILL.md"),
-		filepath.Join(repoRoot, "library", ".agents", "skills", "*", "SKILL.md"),
-		filepath.Join(repoRoot, ".agents", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
-		filepath.Join(repoRoot, ".claude", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
-		filepath.Join(repoRoot, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, "cli", "internal", "registry", "defaultplugin", "library", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".claude", "skills", "*", "SKILL.md"),
 	}
 
 	var matches []string
@@ -77,9 +76,10 @@ func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 	}
 }
 
-// TestHumanWritingSupportSkillContent verifies every tracked copy of the
-// human-writing-support skill includes the required workflow command and
-// preservation rules. Equivalent to the docs-edit-runs-check and
+// TestHumanWritingSupportSkillContent verifies the canonical
+// human-writing-support skill is embedded in the default plugin and that the
+// embedded package installs byte-identical agent and Claude copies into an
+// otherwise empty project. Equivalent to the docs-edit-runs-check and
 // preserves-technical-structure evals from the prose-quality plan.
 func TestHumanWritingSupportSkillContent(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
@@ -88,11 +88,36 @@ func TestHumanWritingSupportSkillContent(t *testing.T) {
 	}
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
 
-	skillPaths := []string{
-		filepath.Join(repoRoot, "library", ".agents", "skills", "human-writing-support", "SKILL.md"),
-		filepath.Join(repoRoot, ".agents", "skills", "human-writing-support", "SKILL.md"),
-		filepath.Join(repoRoot, ".claude", "skills", "human-writing-support", "SKILL.md"),
-		filepath.Join(repoRoot, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"),
+	canonicalPath := filepath.Join(repoRoot, "library", "skills", "human-writing-support", "SKILL.md")
+	canonical, err := os.ReadFile(canonicalPath)
+	if err != nil {
+		t.Fatalf("read canonical human-writing-support skill: %v", err)
+	}
+	if issues := ValidateContent(canonicalPath, canonical); len(issues) > 0 {
+		t.Fatalf("canonical human-writing-support skill validation failed: %v", issues[0])
+	}
+
+	embeddedPath := "skills/human-writing-support/SKILL.md"
+	embedded, err := fs.ReadFile(defaultplugin.FS(), embeddedPath)
+	if err != nil {
+		t.Fatalf("read embedded human-writing-support skill: %v", err)
+	}
+	if string(embedded) != string(canonical) {
+		t.Fatalf("embedded %s differs from canonical %s", embeddedPath, canonicalPath)
+	}
+
+	embeddedSkills, err := fs.Sub(defaultplugin.FS(), "skills")
+	if err != nil {
+		t.Fatalf("open embedded default-plugin skills: %v", err)
+	}
+	projectRoot := t.TempDir()
+	if err := Install(embeddedSkills, projectRoot, Options{}); err != nil {
+		t.Fatalf("install embedded default-plugin skills: %v", err)
+	}
+
+	installedPaths := []string{
+		filepath.Join(projectRoot, ".agents", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(projectRoot, ".claude", "skills", "human-writing-support", "SKILL.md"),
 	}
 
 	// Required substrings: workflow command (AC3) and preservation rule
@@ -107,11 +132,13 @@ func TestHumanWritingSupportSkillContent(t *testing.T) {
 		"acceptance criteria",
 	}
 
-	for _, p := range skillPaths {
+	for _, p := range installedPaths {
 		data, err := os.ReadFile(p)
 		if err != nil {
-			t.Errorf("read %s: %v", p, err)
-			continue
+			t.Fatalf("read installed skill %s: %v", p, err)
+		}
+		if string(data) != string(canonical) {
+			t.Errorf("installed skill %s differs from canonical %s", p, canonicalPath)
 		}
 		text := string(data)
 		for _, want := range required {

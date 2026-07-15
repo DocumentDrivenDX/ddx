@@ -44,6 +44,11 @@ func toTryReport(report ExecuteBeadReport) agenttry.Report {
 		RoutingIntentSource:         report.RoutingIntentSource,
 		EstimatedDifficulty:         report.EstimatedDifficulty,
 		InferredPowerClass:          report.InferredPowerClass,
+		RequestedPolicy:             report.RequestedPolicy,
+		InferredMinPower:            report.InferredMinPower,
+		InferredMinPowerPresent:     report.InferredMinPowerPresent,
+		RequestedMinPower:           report.RequestedMinPower,
+		RequestedMaxPower:           report.RequestedMaxPower,
 		ResolvedPowerClass:          report.ResolvedPowerClass,
 		EscalationCount:             report.EscalationCount,
 		FinalPowerClass:             report.FinalPowerClass,
@@ -99,6 +104,11 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 		RoutingIntentSource:         report.RoutingIntentSource,
 		EstimatedDifficulty:         report.EstimatedDifficulty,
 		InferredPowerClass:          report.InferredPowerClass,
+		RequestedPolicy:             report.RequestedPolicy,
+		InferredMinPower:            report.InferredMinPower,
+		InferredMinPowerPresent:     report.InferredMinPowerPresent,
+		RequestedMinPower:           report.RequestedMinPower,
+		RequestedMaxPower:           report.RequestedMaxPower,
 		ResolvedPowerClass:          report.ResolvedPowerClass,
 		EscalationCount:             report.EscalationCount,
 		FinalPowerClass:             report.FinalPowerClass,
@@ -149,14 +159,19 @@ func toTryCycleTrace(entry ExecutionCycleTrace) agenttry.ExecutionCycleTrace {
 			ResolvedBaseURL: entry.ImplementerRoute.ResolvedBaseURL,
 		},
 		RequestedRoute: agenttry.ExecutionCycleRequestedRouteFacts{
-			Harness:             entry.RequestedRoute.Harness,
-			Provider:            entry.RequestedRoute.Provider,
-			Model:               entry.RequestedRoute.Model,
-			Profile:             entry.RequestedRoute.Profile,
-			RoutingIntentSource: entry.RequestedRoute.RoutingIntentSource,
-			EstimatedDifficulty: entry.RequestedRoute.EstimatedDifficulty,
-			InferredPowerClass:  entry.RequestedRoute.InferredPowerClass,
-			RequestedPowerClass: entry.RequestedRoute.RequestedPowerClass,
+			Harness:                 entry.RequestedRoute.Harness,
+			Provider:                entry.RequestedRoute.Provider,
+			Model:                   entry.RequestedRoute.Model,
+			Profile:                 entry.RequestedRoute.Profile,
+			RoutingIntentSource:     entry.RequestedRoute.RoutingIntentSource,
+			EstimatedDifficulty:     entry.RequestedRoute.EstimatedDifficulty,
+			InferredPowerClass:      entry.RequestedRoute.InferredPowerClass,
+			RequestedPowerClass:     entry.RequestedRoute.RequestedPowerClass,
+			RequestedPolicy:         entry.RequestedRoute.RequestedPolicy,
+			InferredMinPower:        entry.RequestedRoute.InferredMinPower,
+			InferredMinPowerPresent: entry.RequestedRoute.InferredMinPowerPresent,
+			RequestedMinPower:       entry.RequestedRoute.RequestedMinPower,
+			RequestedMaxPower:       entry.RequestedRoute.RequestedMaxPower,
 		},
 		ActualRoute: agenttry.ExecutionCycleRouteFacts{
 			Harness:         entry.ActualRoute.Harness,
@@ -204,14 +219,19 @@ func fromTryCycleTrace(entry agenttry.ExecutionCycleTrace) ExecutionCycleTrace {
 			ResolvedBaseURL: entry.ImplementerRoute.ResolvedBaseURL,
 		},
 		RequestedRoute: ExecutionCycleRequestedRouteFacts{
-			Harness:             entry.RequestedRoute.Harness,
-			Provider:            entry.RequestedRoute.Provider,
-			Model:               entry.RequestedRoute.Model,
-			Profile:             entry.RequestedRoute.Profile,
-			RoutingIntentSource: entry.RequestedRoute.RoutingIntentSource,
-			EstimatedDifficulty: entry.RequestedRoute.EstimatedDifficulty,
-			InferredPowerClass:  entry.RequestedRoute.InferredPowerClass,
-			RequestedPowerClass: entry.RequestedRoute.RequestedPowerClass,
+			Harness:                 entry.RequestedRoute.Harness,
+			Provider:                entry.RequestedRoute.Provider,
+			Model:                   entry.RequestedRoute.Model,
+			Profile:                 entry.RequestedRoute.Profile,
+			RoutingIntentSource:     entry.RequestedRoute.RoutingIntentSource,
+			EstimatedDifficulty:     entry.RequestedRoute.EstimatedDifficulty,
+			InferredPowerClass:      entry.RequestedRoute.InferredPowerClass,
+			RequestedPowerClass:     entry.RequestedRoute.RequestedPowerClass,
+			RequestedPolicy:         entry.RequestedRoute.RequestedPolicy,
+			InferredMinPower:        entry.RequestedRoute.InferredMinPower,
+			InferredMinPowerPresent: entry.RequestedRoute.InferredMinPowerPresent,
+			RequestedMinPower:       entry.RequestedRoute.RequestedMinPower,
+			RequestedMaxPower:       entry.RequestedRoute.RequestedMaxPower,
 		},
 		ActualRoute: ExecutionCycleRouteFacts{
 			Harness:         entry.ActualRoute.Harness,
@@ -316,8 +336,11 @@ func tryAutoRecover(fn func(wd, preserveRef string, gitOps LandingGitOps) (strin
 	}
 }
 
-func tryExecutor(executor ExecuteBeadExecutor, onRouteResolved func(harness, provider, model string)) agenttry.Executor {
+func tryExecutor(executor ExecuteBeadExecutor, onExecuteStart func(), onRouteResolved func(harness, provider, model string)) agenttry.Executor {
 	return agenttry.ExecutorFunc(func(ctx context.Context, beadID string) (agenttry.Report, error) {
+		if onExecuteStart != nil {
+			ctx = contextWithOnExecuteStart(ctx, onExecuteStart)
+		}
 		if onRouteResolved != nil {
 			ctx = contextWithOnRouteResolved(ctx, onRouteResolved)
 		}

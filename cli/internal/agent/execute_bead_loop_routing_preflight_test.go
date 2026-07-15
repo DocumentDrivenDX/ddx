@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,10 +64,6 @@ func (s *claimCountingStore) Reopen(id, reason, notes string) error {
 	return s.Store.Reopen(id, reason, notes)
 }
 
-// TestRoutingPreflightRejectionExitsLoopWithoutClaim covers ddx-98e6e9ef:
-// when RoutePreflight returns the upstream typed-incompatibility error
-// (agent.ErrHarnessModelIncompatible), the loop must fail during startup
-// before any bead is claimed or executed.
 // TestWatchSurvivesPerBeadRoutingFailureAndContinues verifies that a per-bead
 // no_viable_provider routing failure no longer terminates a ddx work --watch
 // drain (ddx-a827d07f). The watcher must attempt the next ready bead instead of
@@ -131,169 +125,6 @@ func TestWatchSurvivesPerBeadRoutingFailureAndContinues(t *testing.T) {
 			assert.False(t, hasRetry, "routing failure must not park the bead with a cooldown")
 		}
 	}
-}
-
-func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
-	store := &claimCountingStore{Store: inner}
-
-	var execCount int32
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			atomic.AddInt32(&execCount, 1)
-			return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess}, nil
-		}),
-	}
-
-	// Fabricate a typed-incompatibility error via the upstream test seam:
-	// the preflight callback returns the same error type that upstream
-	// ResolveRoute returns when a harness allow-list rejects the model.
-	rejected := agentlib.ErrHarnessModelIncompatible{
-		Harness:         "claude",
-		Model:           "gpt-5",
-		SupportedModels: []string{"claude-opus-4-7", "claude-sonnet-4-6"},
-	}
-	var preflightCalls int32
-	preflight := func(ctx context.Context, harness, model string) error {
-		atomic.AddInt32(&preflightCalls, 1)
-		return rejected
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{
-		Assignee: "worker",
-		Harness:  "claude",
-		Model:    "gpt-5",
-	}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once:           true,
-		RoutePreflight: preflight,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// AC#1: preflight ran exactly once during startup.
-	assert.Equal(t, int32(1), atomic.LoadInt32(&preflightCalls), "preflight must be invoked")
-
-	// AC#2: Claim was NEVER called on the store.
-	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls),
-		"beadStore.Claim must not be called when preflight rejects")
-
-	// Executor must not have been invoked either.
-	assert.Equal(t, int32(0), atomic.LoadInt32(&execCount),
-		"executor must not run when preflight rejects")
-
-	// AC#3: startup failure is surfaced once as a worker-level
-	// execution_failed record before any bead-specific attempt exists.
-	require.Len(t, result.Results, 1, "exactly one worker-level failure record")
-	report := result.Results[0]
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
-	assert.Empty(t, report.BeadID)
-	assert.Equal(t, "claude", report.Harness)
-	assert.Equal(t, "gpt-5", report.Model)
-	assert.Contains(t, report.Detail, "claude", "detail must name rejected harness")
-	assert.Contains(t, report.Detail, "gpt-5", "detail must name rejected model")
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.LastFailureStatus)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, 0, result.Attempts)
-	assert.Equal(t, "Preflight", result.StopCondition)
-	assert.Equal(t, "preflight_failed", result.ExitReason)
-
-	// AC#4: no bead-specific attempt events were appended.
-	events, err := store.Events(candidate.ID)
-	require.NoError(t, err)
-	for _, ev := range events {
-		assert.NotEqual(t, "power-attempt", ev.Kind,
-			"no power-attempt event must be recorded when preflight rejects at startup")
-	}
-
-	// Bead must remain open with no owner — confirms no Claim side-effects.
-	got, err := store.Get(context.Background(), candidate.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Empty(t, got.Owner)
-}
-
-// TestRoutingPreflightSuccessAllowsClaim verifies the gate is non-disruptive
-// on the happy path: when RoutePreflight returns nil the loop proceeds to
-// Claim and executor as normal.
-func TestRoutingPreflightSuccessAllowsClaim(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
-	store := &claimCountingStore{Store: inner}
-
-	var execCount int32
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			atomic.AddInt32(&execCount, 1)
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-ok",
-				ResultRev: "abc1234",
-			}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "claude", Model: "claude-opus-4-7"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			return nil
-		},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "Claim must run when preflight passes")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&execCount), "executor must run when preflight passes")
-	assert.Equal(t, 1, result.Successes)
-
-	got, err := store.Get(context.Background(), candidate.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status)
-}
-
-// TestRoutingPreflightDetailFormat asserts the worker-level failure detail
-// format (AC#3 evidence) includes both the rejected harness and the rejected
-// model in a stable, greppable form.
-func TestRoutingPreflightDetailFormat(t *testing.T) {
-	inner, _, _ := newExecuteLoopTestStore(t)
-	store := &claimCountingStore{Store: inner}
-
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run")
-			return ExecuteBeadReport{}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "qwen3"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			return agentlib.ErrHarnessModelIncompatible{
-				Harness:         harness,
-				Model:           model,
-				SupportedModels: []string{"gpt-5"},
-			}
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-
-	detail := result.Results[0].Detail
-	assert.True(t, strings.Contains(detail, "harness=codex"),
-		"detail should carry harness=codex; got %q", detail)
-	assert.True(t, strings.Contains(detail, "model=qwen3"),
-		"detail should carry model=qwen3; got %q", detail)
 }
 
 func TestLoop_LintHook_FiresAfterClaim(t *testing.T) {
@@ -514,63 +345,4 @@ func runLintWarningProceedTest(t *testing.T, warning string, preClaimTimeout tim
 	}
 	require.NotNil(t, lintEvent, "warning lint must append the lint event")
 	assert.Contains(t, lintEvent.Body, warning)
-}
-
-// TestStartupRoutePreflightTimeoutContinuesDrain verifies AC #1 of D1c:
-// a slow-but-live startup route preflight that times out must NOT halt the
-// worker with setExit("OperatorAttention") — the loop continues and claims
-// the next ready bead normally.
-func TestStartupRoutePreflightTimeoutContinuesDrain(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
-	store := &claimCountingStore{Store: inner}
-
-	var execCount int32
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			atomic.AddInt32(&execCount, 1)
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-after-timeout",
-				ResultRev: "abc1234",
-			}, nil
-		}),
-	}
-
-	// RoutePreflight hangs until the test cleans up — simulates a slow resolver
-	// that exceeds the timeout. The new behavior must continue the drain loop.
-	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
-	preflight := func(ctx context.Context, harness, model string) error {
-		<-release
-		return nil
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "claude", Model: "claude-opus-4-7"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once:                   true,
-		RoutePreflight:         preflight,
-		RouteResolutionTimeout: 20 * time.Millisecond, // very short to fire quickly
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// AC #1: startup preflight timeout must NOT halt the worker.
-	assert.NotEqual(t, "OperatorAttention", result.StopCondition,
-		"startup route preflight timeout must not produce an OperatorAttention stop")
-	assert.NotEqual(t, "operator_attention", result.ExitReason,
-		"startup route preflight timeout must not set operator_attention exit reason")
-	assert.Nil(t, result.OperatorAttention,
-		"startup route preflight timeout must not populate result.OperatorAttention")
-
-	// The loop continued and claimed + executed the ready bead.
-	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls),
-		"Claim must run after a startup preflight timeout — worker continued into drain loop")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&execCount),
-		"executor must run after a startup preflight timeout")
-	assert.Equal(t, 1, result.Successes, "bead must succeed after the startup preflight timeout")
-	_ = candidate // referenced above via newExecuteLoopTestStore
 }

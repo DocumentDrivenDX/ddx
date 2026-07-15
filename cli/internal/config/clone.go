@@ -40,9 +40,6 @@ func (r *RoutingConfig) Clone() *RoutingConfig {
 		return nil
 	}
 	out := *r
-	if r.ProfilePriority != nil {
-		out.ProfilePriority = append([]string(nil), r.ProfilePriority...)
-	}
 	return &out
 }
 

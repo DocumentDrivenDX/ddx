@@ -88,7 +88,7 @@ func TestExecuteBeadLongRunningMatrixFixture_NiflheimScenario(t *testing.T) {
 	for _, c := range cases {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
-			instructions := executeBeadInstructionsText(c.harness)
+			instructions := executeBeadInstructionsText
 			c.validate(t, instructions)
 
 			// Additional validation: verify the guardrail is in the load-bearing list
@@ -121,7 +121,7 @@ func TestExecuteBeadLongRunningMatrixPromptSnapshotValidation(t *testing.T) {
 		"2. Run arch-c-default; if latency_report.json is incomplete, exit with status:open + retryable reason\n" +
 		"3. Only continue to arch-c-aggressive if arch-c-default completed successfully"
 
-	prompt, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeef", "", "claude", "")
+	prompt, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeef", "", "")
 	if err != nil {
 		t.Fatalf("buildPrompt failed: %v", err)
 	}

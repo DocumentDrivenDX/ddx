@@ -1056,7 +1056,7 @@ func TestGitShowExcludesEvidenceNoiseFromReviewDiff(t *testing.T) {
 	// Force-add the evidence (the pre-fix landEvidence behavior) plus the real change.
 	runGitInteg(t, root, "add", "-f", ".ddx/executions/")
 	runGitInteg(t, root, "add", "implementation.go")
-	runGitInteg(t, root, "commit", "-m", "chore: add execution evidence [testattempt] + impl")
+	runGitInteg(t, root, "commit", "-m", "legacy: execution artifact [testattempt] + impl")
 
 	// Get the HEAD sha (the evidence commit).
 	headSha := strings.TrimSpace(runGitInteg(t, root, "rev-parse", "HEAD"))

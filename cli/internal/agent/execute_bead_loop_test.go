@@ -721,17 +721,18 @@ func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
-				BeadID:             beadID,
-				AttemptID:          "20260515T185832-loop",
-				Status:             ExecuteBeadStatusSuccess,
-				Detail:             "merged cleanly",
-				SessionID:          "sess-1",
-				ResultRev:          "deadbeef",
-				RequestedProfile:   "default",
-				InferredPowerClass: "smart",
-				Harness:            "claude",
-				Provider:           "anthropic",
-				Model:              "claude-sonnet-4-6",
+				BeadID:                  beadID,
+				AttemptID:               "20260515T185832-loop",
+				Status:                  ExecuteBeadStatusSuccess,
+				Detail:                  "merged cleanly",
+				SessionID:               "sess-1",
+				ResultRev:               "deadbeef",
+				InferredMinPower:        9,
+				InferredMinPowerPresent: true,
+				RequestedMinPower:       9,
+				Harness:                 "claude",
+				Provider:                "anthropic",
+				Model:                   "claude-sonnet-4-6",
 			}, nil
 		}),
 	}
@@ -757,11 +758,12 @@ func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(intent.Body), &body))
 	assert.Equal(t, "hard", body["estimated_difficulty"])
-	assert.Equal(t, "smart", body["requested_power_class"])
-	assert.Equal(t, "default", body["requested_profile"])
-	assert.NotContains(t, body, "smart_justification")
+	assert.Equal(t, float64(9), body["inferred_min_power"])
+	assert.Equal(t, float64(9), body["requested_min_power"])
+	assert.NotContains(t, body, "requested_power_class")
+	assert.NotContains(t, body, "requested_profile")
 	assert.Contains(t, intent.Summary, "difficulty=hard")
-	assert.Contains(t, intent.Summary, "powerClass=smart")
+	assert.Contains(t, intent.Summary, "minPower=9")
 }
 
 func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
@@ -1357,10 +1359,10 @@ func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
 	assert.Empty(t, got.Extra["work-retry-after"], "SetExecutionCooldown must NOT fire for provider_connectivity")
 }
 
-// TestProviderConnectivityFailure_RouteExclusionStillRecorded: AC #2 — removing
-// the bead cooldown must NOT remove the work-failed-routes entry that prevents
-// the same (provider, model) from being re-selected by Fizeau routing.
-func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
+// TestProviderConnectivityFailure_RouteEvidenceRecordedWithoutRouteMutation
+// proves DDx retains Fizeau's returned route as failure evidence without
+// storing a concrete exclusion that would bias Fizeau's next selection.
+func TestProviderConnectivityFailure_RouteEvidenceRecordedWithoutRouteMutation(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-pc-excl", Title: "Route exclusion regression"}
@@ -1390,8 +1392,18 @@ func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
 	got, err := store.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Extra["work-retry-after"], "no bead cooldown")
-	// work-failed-routes must be set — the exclusion mechanism is intact.
-	assert.NotNil(t, got.Extra["work-failed-routes"], "work-failed-routes must be recorded even when no bead cooldown is set")
+	assert.Nil(t, got.Extra["work-failed-routes"], "DDx must not persist concrete route exclusions")
+	events, err := store.Events(target.ID)
+	require.NoError(t, err)
+	var routeFailure *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "route-failure" {
+			routeFailure = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, routeFailure, "returned route failure must remain auditable evidence")
+	assert.Contains(t, routeFailure.Body, `"provider":"local-ollama"`)
 }
 
 // TestNoViableProvider_TransitionsToPausedInfra: AC #3 — a no_viable_provider outcome

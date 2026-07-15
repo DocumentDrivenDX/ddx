@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 const (
@@ -72,51 +71,4 @@ func appendJSONLRecord(path string, v any) error {
 		return err
 	}
 	return nil
-}
-
-func (r *Runner) recordRoutingOutcome(result *Result, elapsed time.Duration, opts RunArgs) {
-	if r == nil || result == nil || r.Config.SessionLogDir == "" {
-		return
-	}
-
-	harness, _ := r.registry.Get(result.Harness)
-	canonicalTarget := result.Model
-	if canonicalTarget == "" {
-		canonicalTarget = opts.Model
-	}
-	if canonicalTarget == "" && harness.DefaultModel != "" {
-		canonicalTarget = harness.DefaultModel
-	}
-	if canonicalTarget == "" {
-		canonicalTarget = result.Harness
-	}
-
-	outcome := RoutingOutcome{
-		Harness:         result.Harness,
-		Surface:         harness.Surface,
-		CanonicalTarget: canonicalTarget,
-		Provider:        result.Provider,
-		Model:           result.Model,
-		RouteReason:     result.RouteReason,
-		ObservedAt:      time.Now().UTC(),
-		Success:         result.ExitCode == 0 && result.Error == "",
-		LatencyMS:       int(elapsed.Milliseconds()),
-		InputTokens:     result.InputTokens,
-		OutputTokens:    result.OutputTokens,
-		CostUSD:         result.CostUSD,
-		NativeSessionID: result.AgentSessionID,
-	}
-
-	if opts.Correlation != nil {
-		outcome.TraceID = opts.Correlation["trace_id"]
-		outcome.SpanID = opts.Correlation["span_id"]
-		if outcome.NativeSessionID == "" {
-			outcome.NativeSessionID = opts.Correlation["native_session_id"]
-		}
-		if outcome.NativeLogRef == "" {
-			outcome.NativeLogRef = opts.Correlation["native_log_ref"]
-		}
-	}
-
-	_ = NewRoutingMetricsStore(r.Config.SessionLogDir).AppendOutcome(outcome)
 }

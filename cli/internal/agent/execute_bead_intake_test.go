@@ -114,14 +114,10 @@ func TestIntake_InfrastructureErrorFailsOpen(t *testing.T) {
 
 func TestIntake_HookRunsAfterClaim(t *testing.T) {
 	inner, _, _ := newExecuteLoopTestStore(t)
-	var preflightSeen int32
 	var intakeSeen int32
 	store := &claimCountingStore{
 		Store: inner,
 		beforeClaim: func() {
-			if atomic.LoadInt32(&preflightSeen) == 0 {
-				t.Fatal("route preflight must run before Claim")
-			}
 			// Claim now happens BEFORE intake: intake must NOT have run yet.
 			if atomic.LoadInt32(&intakeSeen) != 0 {
 				t.Fatal("Claim must run before PreClaimIntakeHook")
@@ -146,14 +142,7 @@ func TestIntake_HookRunsAfterClaim(t *testing.T) {
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			atomic.StoreInt32(&preflightSeen, 1)
-			return nil
-		},
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-			if atomic.LoadInt32(&preflightSeen) == 0 {
-				t.Fatal("PreClaimIntakeHook must run after route preflight")
-			}
 			if atomic.LoadInt32(&store.claimCalls) == 0 {
 				t.Fatal("PreClaimIntakeHook must run after Claim")
 			}
@@ -164,7 +153,6 @@ func TestIntake_HookRunsAfterClaim(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&preflightSeen), "route preflight must run")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&intakeSeen), "intake hook must run")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "Claim must run before intake")
 }
@@ -276,13 +264,15 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 				require.NotContains(t, got.Extra, legacyPowerKey)
 			}
 			return ExecuteBeadReport{
-				BeadID:              beadID,
-				Status:              ExecuteBeadStatusSuccess,
-				SessionID:           "sess-readiness-power",
-				ResultRev:           "readiness-power",
-				RoutingIntentSource: "readiness",
-				EstimatedDifficulty: difficulty,
-				InferredPowerClass:  "smart",
+				BeadID:                  beadID,
+				Status:                  ExecuteBeadStatusSuccess,
+				SessionID:               "sess-readiness-power",
+				ResultRev:               "readiness-power",
+				RoutingIntentSource:     "readiness",
+				EstimatedDifficulty:     difficulty,
+				InferredMinPower:        9,
+				InferredMinPowerPresent: true,
+				RequestedMinPower:       9,
 			}, nil
 		}),
 	}
@@ -324,7 +314,9 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 	require.NotNil(t, intentBody, "readiness routing intent evidence must be recorded")
 	assert.Equal(t, "readiness", intentBody["routing_intent_source"])
 	assert.Equal(t, "hard", intentBody["estimated_difficulty"])
-	assert.Equal(t, "smart", intentBody["requested_power_class"])
+	assert.Equal(t, float64(9), intentBody["inferred_min_power"])
+	assert.Equal(t, float64(9), intentBody["requested_min_power"])
+	assert.NotContains(t, intentBody, "requested_power_class")
 }
 
 func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {

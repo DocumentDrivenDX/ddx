@@ -18,13 +18,11 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
-	agentlib "github.com/easel/fizeau"
 )
 
 type ExecuteLoopWorkerSpec = executeloop.ExecuteLoopSpec
@@ -355,6 +353,10 @@ func executeLoopPollInterval(spec ExecuteLoopWorkerSpec) time.Duration {
 	return spec.IdleInterval.Duration
 }
 
+func executeLoopRouteResolutionTimeout(spec ExecuteLoopWorkerSpec) time.Duration {
+	return spec.RouteResolutionTimeout.Duration
+}
+
 func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
 	if spec.MaxCostUSD == 0 {
 		return policyescalation.DefaultMaxCostUSD
@@ -364,6 +366,9 @@ func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
 
 func prepareExecuteLoopWorkerSpec(projectRoot string, spec executeloop.ExecuteLoopSpec, defaultMode executeloop.Mode) (ExecuteLoopWorkerSpec, error) {
 	spec.ProjectRoot = projectRoot
+	// Server-created workers use the same route-neutral request boundary as the
+	// CLI: only fields present in this dispatch spec may reach Fizeau.
+	spec.OpaquePassthrough = true
 	if spec.Mode == "" && defaultMode != "" {
 		spec.Mode = defaultMode
 	}
@@ -402,7 +407,10 @@ func looksLikeDDXBinary(path string) bool {
 	return base == "ddx" || base == "ddx.exe"
 }
 
-func managedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
+// ManagedWorkerCommandArgs reconstructs the CLI invocation for a persisted
+// server-managed worker spec. MinPower presence is preserved so an omitted
+// floor does not become an explicit --min-power=0 constraint.
+func ManagedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
 	args := []string{"work", "--server-managed", workerID}
 	if spec.ProjectRoot != "" {
 		args = append(args, "--project", spec.ProjectRoot)
@@ -463,9 +471,11 @@ func managedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []str
 		"--route-resolution-timeout", spec.RouteResolutionTimeout.String(),
 		"--request-timeout", spec.RequestTimeout.String(),
 		"--rate-limit-max-wait", spec.RateLimitMaxWait.String(),
-		"--min-power", fmt.Sprintf("%d", spec.MinPower),
 		"--max-power", fmt.Sprintf("%d", spec.MaxPower),
 	)
+	if spec.MinPowerSet || spec.MinPower != 0 {
+		args = append(args, "--min-power", fmt.Sprintf("%d", spec.MinPower))
+	}
 	return args
 }
 
@@ -519,16 +529,6 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
 		return WorkerRecord{}, err
-	}
-
-	// Pre-flight: validate harness availability and model compatibility
-	// before creating the worker record or claiming any beads.
-	// Skipped when OpaquePassthrough=true (ddx work path): routing belongs to
-	// the agent service; DDx must not pre-resolve or validate the route.
-	if !spec.OpaquePassthrough {
-		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider); err != nil {
-			return WorkerRecord{}, fmt.Errorf("work: %w", err)
-		}
 	}
 
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
@@ -640,7 +640,7 @@ func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoo
 		return WorkerRecord{}, err
 	}
 
-	cmd := exec.Command(binary, managedWorkerCommandArgs(spec, id)...)
+	cmd := exec.Command(binary, ManagedWorkerCommandArgs(spec, id)...)
 	cmd.Dir = projectRoot
 	cmd.Stdout = log
 	cmd.Stderr = log
@@ -886,43 +886,28 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
 
-func nextEscalationFloor(l *powerladder.Ladder, actualPower int) (int, error) {
-	if l == nil {
-		return 0, powerladder.ErrLadderExhausted
+func applyServerExecutionRoutingIntent(report *agent.ExecuteBeadReport, intent policyescalation.ExecutionHint, requestedPolicy string, requestedMinPower, requestedMaxPower int) {
+	if report == nil {
+		return
 	}
-	floor := actualPower
-	for {
-		next, err := l.Next(floor)
-		if err == nil {
-			return next, nil
-		}
-		var nvp *powerladder.NoViableProviderError
-		if errors.As(err, &nvp) {
-			floor = nvp.Floor
-			continue
-		}
-		return 0, err
-	}
-}
-
-type tryLoopFloorFinder struct {
-	ladder *powerladder.Ladder
-}
-
-func (f tryLoopFloorFinder) Next(actualPower int) (int, error) {
-	return nextEscalationFloor(f.ladder, actualPower)
+	report.RoutingIntentSource = string(intent.Source)
+	report.EstimatedDifficulty = string(intent.EstimatedDifficulty)
+	report.InferredMinPower = intent.InferredMinPower
+	report.InferredMinPowerPresent = intent.HasInferredMinPower
+	report.RequestedPolicy = requestedPolicy
+	report.RequestedMinPower = requestedMinPower
+	report.RequestedMaxPower = requestedMaxPower
 }
 
 func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
-	ladder *powerladder.Ladder,
+	maxPower int,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
 	allowInfrastructureRetry bool,
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
-	floors := tryLoopFloorFinder{ladder: ladder}
 	for {
 		report, err := attempt(ctx, minPower)
 		if recordAttempt != nil && report.BeadID != "" {
@@ -935,11 +920,12 @@ func runEscalatingPowerAttempts(
 			Status:                   report.Status,
 			Detail:                   report.Detail,
 			CurrentMinPower:          minPower,
+			MaxPower:                 maxPower,
 			ActualPower:              report.ActualPower,
 			Disrupted:                report.Disrupted,
 			BudgetExhausted:          isBudgetExhaustedFailure(report),
 			AllowInfrastructureRetry: allowInfrastructureRetry,
-		}, floors)
+		})
 		if transition.Action != executeloop.TryLoopActionRetryPower {
 			return report, nil
 		}
@@ -976,11 +962,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Harness:           spec.Harness,
 		Model:             spec.Model,
 		Provider:          spec.Provider,
-		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
+		Profile:           spec.Profile,
 		Effort:            spec.Effort,
 		MinPower:          spec.MinPower,
 		MaxPower:          spec.MaxPower,
-		OpaquePassthrough: spec.OpaquePassthrough,
+		OpaquePassthrough: true,
 	}
 	requestTimeout := spec.RequestTimeout.Duration
 	if requestTimeout > 0 {
@@ -1029,11 +1015,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Harness:           resolvedHarness,
 				Model:             resolvedModel,
 				Provider:          attemptProvider,
-				Profile:           rcfg.Profile(),
+				Profile:           spec.Profile,
 				Effort:            spec.Effort,
 				MinPower:          requestedMinPower,
 				MaxPower:          spec.MaxPower,
-				OpaquePassthrough: spec.OpaquePassthrough,
+				OpaquePassthrough: true,
 			}
 			if requestTimeout > 0 {
 				loopOverrides.ProviderRequestTimeout = &requestTimeout
@@ -1051,12 +1037,22 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
 			}
+			// Verify local evidence before landing. A staged/tracked evidence
+			// violation must stop here, before the coordinator can mutate history.
+			if res != nil && res.AttemptID != "" {
+				if candidateErr := agent.VerifyCandidateHasNoExecutionEvidence(projectRoot, res.BaseRev, res.ResultRev); candidateErr != nil {
+					return agent.ExecuteBeadReport{}, errors.Join(err, fmt.Errorf("validating local execution evidence boundary: %w", candidateErr))
+				}
+				if retentionErr := agent.VerifyCleanWorktree(projectRoot, res.AttemptID); retentionErr != nil {
+					return agent.ExecuteBeadReport{}, errors.Join(err, fmt.Errorf("retaining local execution evidence: %w", retentionErr))
+				}
+			}
 			// Preserve operator-cancel results as-is; the worker has already
 			// classified them (preserved / operator_cancel / preserved_needs_review)
 			// and overriding here would lose the cancel signal.
 			operatorCancel := res != nil && res.Reason == agent.OperatorCancelReason
-			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 && !operatorCancel {
-				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, landSafetyConfigFromConfig(projectRoot), log); landErr != nil && err == nil {
+			if err == nil && !operatorCancel && agent.PrepareCandidateCycleLanding(res) {
+				if landErr := evaluateGatesAndSubmit(projectRoot, res, nil, gitOps, coordinator, landSafetyConfigFromConfig(projectRoot), log); landErr != nil {
 					err = landErr
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev && !operatorCancel {
@@ -1065,11 +1061,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			} else if res != nil && res.ExitCode != 0 && !operatorCancel {
 				res.Outcome = "preserved"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-			}
-			// Safety net: commit any leftover evidence files that Land()
-			// did not pick up (e.g. HEAD was detached, or no land ran).
-			if res != nil && res.AttemptID != "" {
-				_ = agent.VerifyCleanWorktree(projectRoot, res.AttemptID)
 			}
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
@@ -1097,50 +1088,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}, nil
 		}
 
-		// Cost-cap state for this worker run. Subscription / local providers do
-		// not contribute (see escalation.CountsTowardCostCap).
+		// Cost-cap state for this worker run consumes the cost Fizeau reports.
+		// DDx does not inspect harness inventory or infer billing properties.
 		maxCostUSD := executeLoopMaxCostUSD(spec)
-		var ladderOnce sync.Once
-		var ladder *powerladder.Ladder
-		loadLadder := func() *powerladder.Ladder {
-			ladderOnce.Do(func() {
-				ladder = powerladder.NewLadder(nil)
-				modelCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-				defer cancel()
-				// Tie the fizeau service to modelCtx so its background probe
-				// goroutines terminate when this short-lived lookup ends.
-				if svc, svcErr := agent.NewServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
-					modelFilter := agentlib.ModelFilter{}
-					if harness := rcfg.Harness(); harness != "" {
-						modelFilter.Harness = harness
-					}
-					if models, listErr := svc.ListModels(modelCtx, modelFilter); listErr == nil {
-						ladder = powerladder.NewLadder(models)
-					}
-				}
-			})
-			return ladder
-		}
-		costCap = policyescalation.NewCostCapTracker(maxCostUSD, func(harnessName string) bool {
-			// Per-callback bounded ctx so fizeau probe goroutines do not
-			// outlive this cost-cap check.
-			cbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-			svc, svcErr := agent.NewServiceFromWorkDirCtx(cbCtx, projectRoot)
-			if svcErr != nil {
-				return true
-			}
-			infos, err := svc.ListHarnesses(cbCtx)
-			if err != nil {
-				return true
-			}
-			for _, h := range infos {
-				if h.Name == harnessName {
-					return policyescalation.CountsTowardCostCap(h.CostClass == "local", h.Billing == agentlib.BillingModelSubscription, h.CostClass)
-				}
-			}
-			return true
-		})
+		costCap = policyescalation.NewCostCapTracker(maxCostUSD, nil)
 		accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 			costCap.Add(report.Harness, report.CostUSD)
 		}
@@ -1151,19 +1102,22 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			spent := costCap.Spent()
 			return agent.ExecuteBeadReport{
 				Status: agent.ExecuteBeadStatusExecutionFailed,
-				Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, maxCostUSD),
+				Detail: fmt.Sprintf("cost cap reached: $%.2f reported >= $%.2f cap; raise the cap or set 0 to disable.", spent, maxCostUSD),
 			}, true
 		}
-		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int, intent policyescalation.ExecutionHint) (agent.ExecuteBeadReport, error) {
 			if cappedReport, capped := costCapTripped(); capped {
 				cappedReport.BeadID = beadID
+				applyServerExecutionRoutingIntent(&cappedReport, intent, spec.Profile, requestedMinPower, spec.MaxPower)
 				return cappedReport, nil
 			}
 			report, err := singlePolicyAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
+			applyServerExecutionRoutingIntent(&report, intent, spec.Profile, requestedMinPower, spec.MaxPower)
 			if err == nil {
 				accumulateBilledCost(report)
 				if cappedReport, capped := costCapTripped(); capped {
 					cappedReport.BeadID = beadID
+					applyServerExecutionRoutingIntent(&cappedReport, intent, spec.Profile, requestedMinPower, spec.MaxPower)
 					return cappedReport, nil
 				}
 			}
@@ -1171,6 +1125,23 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		}
 
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			target, err := store.Get(ctx, beadID)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			intent := policyescalation.ResolveExecutionHint(policyescalation.ExecutionHintInput{
+				Bead:                         target,
+				ReadinessEstimatedDifficulty: agent.ReadinessEstimatedDifficultyFromContext(ctx),
+				ExplicitMinPower:             spec.MinPowerSet || spec.MinPower != 0,
+				PublicPolicy:                 spec.Profile,
+			})
+			initialMinPower := rcfg.MinPower()
+			if intent.HasInferredMinPower {
+				initialMinPower = intent.InferredMinPower
+			}
+			if spec.MaxPower > 0 && initialMinPower > spec.MaxPower {
+				return agent.ExecuteBeadReport{}, fmt.Errorf("inferred MinPower %d conflicts with requested MaxPower %d", initialMinPower, spec.MaxPower)
+			}
 			attempts := make([]policyescalation.PowerAttemptRecord, 0, 3)
 			recordAttempt := func(report agent.ExecuteBeadReport) {
 				if report.PowerClass == "" && report.Harness == "" && report.Model == "" && report.ProbeResult == "" && report.CostUSD == 0 && report.DurationMS == 0 {
@@ -1186,8 +1157,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				})
 				appendPowerAttemptEvent(store, beadID, report, "ddx", time.Now().UTC())
 			}
-			report, err := runEscalatingPowerAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
-				return attemptWithCostCap(ctx, beadID, requestedMinPower)
+			report, err := runEscalatingPowerAttempts(ctx, initialMinPower, rcfg.MaxPower(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+				return attemptWithCostCap(ctx, beadID, requestedMinPower, intent)
 			}, recordAttempt, strings.TrimSpace(spec.Harness) == "" && strings.TrimSpace(spec.Provider) == "" && strings.TrimSpace(spec.Model) == "")
 			if len(attempts) > 0 {
 				winningPowerClass := ""
@@ -1221,23 +1192,24 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	landingOps := agent.RealLandingGitOps{}
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                  spec.Mode,
-		IdleInterval:          executeLoopPollInterval(spec),
-		Log:                   log,
-		CleanupLog:            log,
-		EventSink:             eventSink,
-		WorkerID:              id,
-		ProjectRoot:           projectRoot,
-		CleanupRunner:         agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
-		LabelFilter:           spec.LabelFilter,
-		ProgressCh:            progressCh,
-		PreClaimHook:          buildPreClaimHook(projectRoot, landingOps),
-		PreClaimIntakeHook:    intakeHook,
-		PreDispatchLintHook:   lintHook,
-		PostAttemptTriageHook: triageHook,
-		NoReview:              spec.NoReview,
-		ReviewCostCap:         costCap,
-		WakeCh:                handle.wakeCh,
+		Mode:                   spec.Mode,
+		IdleInterval:           executeLoopPollInterval(spec),
+		Log:                    log,
+		CleanupLog:             log,
+		EventSink:              eventSink,
+		WorkerID:               id,
+		ProjectRoot:            projectRoot,
+		CleanupRunner:          agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		LabelFilter:            spec.LabelFilter,
+		ProgressCh:             progressCh,
+		PreClaimHook:           buildPreClaimHook(projectRoot, landingOps),
+		PreClaimIntakeHook:     intakeHook,
+		RouteResolutionTimeout: executeLoopRouteResolutionTimeout(spec),
+		PreDispatchLintHook:    lintHook,
+		PostAttemptTriageHook:  triageHook,
+		NoReview:               spec.NoReview,
+		ReviewCostCap:          costCap,
+		WakeCh:                 handle.wakeCh,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
@@ -2350,11 +2322,28 @@ type landSafetyConfig struct {
 func evaluateGatesAndSubmit(
 	projectRoot string,
 	res *agent.ExecuteBeadResult,
+	executionErr error,
 	gitOps agent.GitOps,
 	coordinator gateLandSubmitter,
 	safety landSafetyConfig,
 	log io.Writer,
 ) error {
+	// A non-nil execution error is authoritative even when the paired result
+	// still carries a success-looking outcome. In particular, isolated-clone
+	// publication can fail after the candidate and evidence bundle exist; no
+	// such result may reach a preserve ref, gate worktree, or coordinator.
+	if executionErr != nil {
+		return executionErr
+	}
+	if res == nil {
+		return fmt.Errorf("cannot evaluate landing gates for a nil result")
+	}
+	// Defense in depth at the server's final submit boundary: scan every
+	// candidate commit before gates can preserve it or the coordinator can land
+	// it. This catches add-then-delete histories whose final tree is clean.
+	if err := agent.VerifyCandidateHasNoExecutionEvidence(projectRoot, res.BaseRev, res.ResultRev); err != nil {
+		return fmt.Errorf("validating server landing candidate: %w", err)
+	}
 	wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps)
 	if ctxErr != nil {
 		// Soft-fail: log and skip gate eval rather than abort the land.

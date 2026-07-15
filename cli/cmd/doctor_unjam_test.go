@@ -70,20 +70,33 @@ func TestDoctorUnjam_PrunesStaleWorktrees(t *testing.T) {
 	runGit(t, projectRoot, "worktree", "add", "--detach", worktreePath, "HEAD")
 }
 
-func TestDoctorUnjam_CheckpointsDDXOwnedState(t *testing.T) {
+func TestDoctorUnjamNeverStagesOrCommitsExecutionEvidence(t *testing.T) {
 	projectRoot := setupDoctorUnjamRepo(t)
-	execPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", "20260710T000000-deadbeef", "result.json")
+	visibleExecPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", "visible-attempt", "result.json")
+	ignoredExecPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", "ignored-attempt", "result.json")
 	metricsPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(execPath), 0o755))
-	require.NoError(t, os.WriteFile(execPath, []byte(`{"status":"done"}`+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(visibleExecPath), 0o755))
+	require.NoError(t, os.WriteFile(visibleExecPath, []byte("visible evidence\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(ignoredExecPath), 0o755))
+	require.NoError(t, os.WriteFile(ignoredExecPath, []byte("ignored evidence\n"), 0o644))
+	excludePath := runGitCapture(t, projectRoot, "rev-parse", "--git-path", "info/exclude")
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(projectRoot, excludePath)
+	}
+	require.NoError(t, os.WriteFile(excludePath, []byte("/.ddx/executions/ignored-attempt/\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
 	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"attempt_id":"test"}`+"\n"), 0o644))
+	visibleBefore, err := os.ReadFile(visibleExecPath)
+	require.NoError(t, err)
+	ignoredBefore, err := os.ReadFile(ignoredExecPath)
+	require.NoError(t, err)
 
 	factory := NewCommandFactory(projectRoot)
 	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
 	require.NoError(t, err)
 
 	report := decodeDoctorUnjamReport(t, output)
+	assert.False(t, report.Clean)
 	require.NotNil(t, report.DDXStateCheckpoint)
 	assert.NotEmpty(t, report.DDXStateCheckpoint.CommitSHA)
 
@@ -93,8 +106,19 @@ func TestDoctorUnjam_CheckpointsDDXOwnedState(t *testing.T) {
 	subject := runGitCapture(t, projectRoot, "log", "-1", "--format=%s")
 	assert.Equal(t, ddxStateCheckpointCommitMessage, subject)
 
-	status := runGitCapture(t, projectRoot, "status", "--porcelain", "--", ".ddx/executions", ".ddx/metrics")
-	assert.Empty(t, status, "checkpoint must leave .ddx/executions and .ddx/metrics clean")
+	assert.Equal(t, []string{".ddx/metrics/attempts.jsonl"}, report.DDXStateCheckpoint.CommittedPaths)
+	assert.Equal(t, visibleBefore, readDoctorUnjamFile(t, visibleExecPath))
+	assert.Equal(t, ignoredBefore, readDoctorUnjamFile(t, ignoredExecPath))
+	assert.Contains(t, runGitCapture(t, projectRoot, "status", "--porcelain", "--untracked-files=all", "--", ".ddx/executions/visible-attempt"), "?? .ddx/executions/visible-attempt/result.json")
+	assert.Contains(t, runGitCapture(t, projectRoot, "status", "--porcelain", "--untracked-files=all", "--ignored=matching", "--", ".ddx/executions/ignored-attempt"), "!! .ddx/executions/ignored-attempt/")
+	assert.Empty(t, runGitCapture(t, projectRoot, "diff", "--cached", "--name-only", "--", ".ddx/executions"))
+	assert.Empty(t, runGitCapture(t, projectRoot, "ls-files", "--", ".ddx/executions"))
+	assert.Empty(t, runGitCapture(t, projectRoot, "log", "--all", "--format=%H", "--", ".ddx/executions"))
+	assert.Equal(t, ".ddx/metrics/attempts.jsonl", runGitCapture(t, projectRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"))
+	assert.ElementsMatch(t, []doctorUnjamDirtyPath{
+		{Path: ".ddx/executions/visible-attempt/result.json", Untouched: true},
+		{Path: ".ddx/executions/ignored-attempt", Untouched: true},
+	}, report.ReportOnlyDirtyPaths)
 
 	secondOutput, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
 	require.NoError(t, err)
@@ -103,6 +127,8 @@ func TestDoctorUnjam_CheckpointsDDXOwnedState(t *testing.T) {
 
 	secondHead := runGitCapture(t, projectRoot, "rev-parse", "HEAD")
 	assert.Equal(t, head, secondHead, "rerun must not add a duplicate checkpoint commit")
+	assert.Equal(t, visibleBefore, readDoctorUnjamFile(t, visibleExecPath))
+	assert.Equal(t, ignoredBefore, readDoctorUnjamFile(t, ignoredExecPath))
 }
 
 func TestDoctorUnjam_CheckpointSummaryListsCommittedPaths(t *testing.T) {
@@ -120,14 +146,18 @@ func TestDoctorUnjam_CheckpointSummaryListsCommittedPaths(t *testing.T) {
 
 	report := decodeDoctorUnjamReport(t, output)
 	require.NotNil(t, report.DDXStateCheckpoint)
-	assert.ElementsMatch(t, []string{
-		".ddx/executions/20260710T000000-deadbeef/result.json",
-		".ddx/metrics/attempts.jsonl",
-	}, report.DDXStateCheckpoint.CommittedPaths)
+	assert.Equal(t, []string{".ddx/metrics/attempts.jsonl"}, report.DDXStateCheckpoint.CommittedPaths)
 
 	require.NotEmpty(t, report.Actions)
 	assert.Equal(t, "ddx_state_checkpoint", report.Actions[0].Kind)
-	assert.Equal(t, 2, report.Actions[0].Count)
+	assert.Equal(t, 1, report.Actions[0].Count)
+}
+
+func readDoctorUnjamFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return data
 }
 
 func TestDoctorUnjam_StashesPreserveDerivedPaths(t *testing.T) {
@@ -155,6 +185,42 @@ func TestDoctorUnjam_StashesPreserveDerivedPaths(t *testing.T) {
 
 	stashList = runGitCapture(t, projectRoot, "stash", "list")
 	assert.Equal(t, 1, strings.Count(stashList, preserveRef), "rerunning doctor --unjam must not create a duplicate preserve-ref stash")
+}
+
+func TestDoctorUnjamPreserveRefNeverStashesExecutionEvidence(t *testing.T) {
+	projectRoot := setupDoctorUnjamRepo(t)
+	evidenceRel := ".ddx/executions/legacy-attempt/result.json"
+	evidencePath := filepath.Join(projectRoot, filepath.FromSlash(evidenceRel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
+	require.NoError(t, os.WriteFile(evidencePath, []byte("legacy committed evidence\n"), 0o644))
+	runGit(t, projectRoot, "add", "-f", "--", evidenceRel)
+	runGit(t, projectRoot, "commit", "-m", "legacy: commit execution evidence")
+	preserveRef := "refs/ddx/iterations/ddx-unjam-preserve/20260715T120000Z-legacy"
+	runGit(t, projectRoot, "update-ref", preserveRef, "HEAD")
+	runGit(t, projectRoot, "reset", "--hard", "HEAD^")
+
+	excludePath := runGitCapture(t, projectRoot, "rev-parse", "--git-path", "info/exclude")
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(projectRoot, excludePath)
+	}
+	require.NoError(t, os.WriteFile(excludePath, []byte("/.ddx/executions/\n"), 0o644))
+	want := []byte("local evidence must remain on disk\n")
+	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
+	require.NoError(t, os.WriteFile(evidencePath, want, 0o644))
+	headBefore := runGitCapture(t, projectRoot, "rev-parse", "HEAD")
+
+	factory := NewCommandFactory(projectRoot)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--unjam")
+	require.NoError(t, err)
+	report := decodeDoctorUnjamReport(t, output)
+
+	assert.False(t, report.Clean)
+	assert.Nil(t, findDoctorUnjamAction(report.Actions, doctorUnjamPreserveRefStashActionKind))
+	assert.Contains(t, report.ReportOnlyDirtyPaths, doctorUnjamDirtyPath{Path: ".ddx/executions", Untouched: true})
+	assert.Equal(t, want, readDoctorUnjamFile(t, evidencePath))
+	assert.Contains(t, runGitCapture(t, projectRoot, "status", "--porcelain", "--untracked-files=all", "--ignored=matching", "--", evidenceRel), "!! .ddx/executions/")
+	assert.Empty(t, runGitCapture(t, projectRoot, "stash", "list"))
+	assert.Equal(t, headBefore, runGitCapture(t, projectRoot, "rev-parse", "HEAD"))
 }
 
 func TestDoctorUnjam_ReportsUnknownDirtyPathsOnly(t *testing.T) {

@@ -458,16 +458,7 @@
         "routing": {
           "type": "object",
           "description": "Model routing configuration",
-          "properties": {
-            "profile_priority": {
-              "type": "array",
-              "description": "DEPRECATED: flat ordered list of profiles to prefer.",
-              "deprecated": true,
-              "items": {
-                "type": "string"
-              }
-            }
-          },
+          "properties": {},
           "additionalProperties": false
         },
         "virtual": {

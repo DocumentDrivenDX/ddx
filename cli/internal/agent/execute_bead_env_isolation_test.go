@@ -209,7 +209,7 @@ func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
 
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: directivePath,
-	}).Resolve(config.CLIOverrides{Harness: "script"})
+	}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealGitOps{}

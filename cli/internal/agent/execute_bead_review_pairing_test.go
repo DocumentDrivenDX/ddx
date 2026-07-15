@@ -15,9 +15,9 @@ import (
 )
 
 // TestBuildReviewExecuteRequest verifies that the helper produces the runtime
-// fields demanded by R4 pairing: Role=reviewer in the correlation map, the
-// implementer's correlation keys are propagated, and MinPower is bumped one
-// above the implementer's actual selected power.
+// fields demanded by R4 pairing: Role=reviewer in the correlation map,
+// route-neutral implementer correlation keys are propagated, concrete route
+// metadata is omitted, and MinPower is bumped one above actual selected power.
 func TestBuildReviewExecuteRequest(t *testing.T) {
 	impl := ImplementerRouting{
 		Harness:     "codex",
@@ -37,7 +37,6 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.Equal(t, "review-strong", got.ProfileOverride)
 	assert.True(t, got.ClearRoutingPins)
 	assert.True(t, got.ClearProfile)
-	assert.True(t, got.ClearMaxPower)
 	assert.Equal(t, 71, got.MinPowerOverride, "MinPower must be impl.ActualPower+1 (R4 pairing)")
 	assert.Equal(t, "reviewer", got.Role, "Role=reviewer must be set so the dispatch request is tagged correctly")
 	assert.Equal(t, "ddx-pairing-1", got.CorrelationID, "single-review correlation ID should be derived from bead_id when no review_group_id is present")
@@ -47,10 +46,10 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.Equal(t, "ddx-pairing-1", got.Correlation["bead_id"], "implementer correlation keys must propagate")
 	assert.Equal(t, "att-1", got.Correlation["attempt_id"])
 	assert.Equal(t, "sess-1", got.Correlation["session_id"])
-	assert.Equal(t, "codex", got.Correlation["impl_harness"])
-	assert.Equal(t, "openai", got.Correlation["impl_provider"])
-	assert.Equal(t, "gpt-5", got.Correlation["impl_model"])
-	assert.Equal(t, "70", got.Correlation["impl_actual_power"])
+	assert.NotContains(t, got.Correlation, "impl_harness")
+	assert.NotContains(t, got.Correlation, "impl_provider")
+	assert.NotContains(t, got.Correlation, "impl_model")
+	assert.NotContains(t, got.Correlation, "impl_actual_power")
 }
 
 func TestReviewerDispatch_UsesProfilePin(t *testing.T) {
@@ -101,9 +100,11 @@ func reviewPairingTestSetup(t *testing.T) (projectRoot, head string, store *bead
 // inside a ```json``` fence; anything else returns review-error: unparseable.
 const reviewerOutputApprove = "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\",\"per_ac\":[{\"number\":1,\"item\":\"AC one\",\"grade\":\"pass\",\"evidence\":\"reviewed cli/internal/agent\"}]}\n```"
 
+const legacyReviewPairingDegradedEventKind = "review-pairing-degraded"
+
 // TestReviewBead_HappyPath_DifferentProvider_NoDegradedEvent verifies that
-// when the reviewer's resolved provider differs from the implementer's, no
-// kind:review-pairing-degraded event is appended.
+// returned provider identity remains result evidence and does not produce a
+// route-comparison control event.
 func TestReviewBead_HappyPath_DifferentProvider_NoDegradedEvent(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	events := &stubBeadEventAppender{}
@@ -134,16 +135,14 @@ func TestReviewBead_HappyPath_DifferentProvider_NoDegradedEvent(t *testing.T) {
 	assert.Equal(t, "anthropic", res.ReviewerProvider)
 
 	for _, ev := range events.events {
-		assert.NotEqual(t, ReviewPairingDegradedEventKind, ev.Event.Kind,
+		assert.NotEqual(t, legacyReviewPairingDegradedEventKind, ev.Event.Kind,
 			"happy path (different provider) must not emit review-pairing-degraded")
 	}
 }
 
-// TestReviewBead_DegradedPath_SameProvider_EmitsEvent verifies that when the
-// reviewer's resolved provider matches the implementer's, a typed
-// kind:review-pairing-degraded event is appended whose body carries both
-// implementer and reviewer routing details.
-func TestReviewBead_DegradedPath_SameProvider_EmitsEvent(t *testing.T) {
+// TestReviewBead_SameProviderIdentityIsEvidenceOnly verifies that provider
+// equality is retained in the review result but is never classified by DDx.
+func TestReviewBead_SameProviderIdentityIsEvidenceOnly(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	events := &stubBeadEventAppender{}
 
@@ -169,31 +168,13 @@ func TestReviewBead_DegradedPath_SameProvider_EmitsEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
+	assert.Equal(t, VerdictApprove, res.Verdict)
 	assert.Equal(t, "anthropic", res.ReviewerProvider)
 
-	var degraded *bead.BeadEvent
-	for i := range events.events {
-		ev := &events.events[i]
-		if ev.Event.Kind == ReviewPairingDegradedEventKind {
-			degraded = &ev.Event
-			assert.Equal(t, "ddx-pairing", ev.BeadID)
-			break
-		}
+	for _, ev := range events.events {
+		assert.NotEqual(t, legacyReviewPairingDegradedEventKind, ev.Event.Kind,
+			"same-provider identity must remain evidence, not become DDx control")
 	}
-	require.NotNil(t, degraded, "degraded path (same provider) must emit kind:review-pairing-degraded")
-	assert.Contains(t, degraded.Summary, "anthropic")
-
-	// Body must include both implementer and reviewer routing details.
-	body := degraded.Body
-	assert.Contains(t, body, "impl_harness=claude")
-	assert.Contains(t, body, "impl_provider=anthropic")
-	assert.Contains(t, body, "impl_model=claude-sonnet-4-6")
-	assert.Contains(t, body, "impl_actual_power=70")
-	assert.Contains(t, body, "reviewer_harness=claude")
-	assert.Contains(t, body, "reviewer_provider=anthropic")
-	assert.Contains(t, body, "reviewer_model=claude-opus-4-7")
-	assert.Contains(t, body, "reviewer_actual_power=95")
-	assert.Contains(t, body, "min_power_requested=71")
 }
 
 func TestReviewBead_DoesNotInheritImplementerHarness(t *testing.T) {
@@ -219,8 +200,7 @@ func TestReviewBead_DoesNotInheritImplementerHarness(t *testing.T) {
 	assert.Empty(t, res.ReviewerHarness)
 }
 
-func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t *testing.T) {
-	resetProfileSnapshotCacheForTest(t)
+func TestPostMergeReviewer_DispatchesWithStrongerMinPowerAndNoConcretePin(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
@@ -254,15 +234,68 @@ func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t 
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "frontier", svc.lastReq.Policy)
+	assert.Empty(t, svc.lastReq.Policy)
 	assert.Equal(t, 71, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_harness")
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_provider")
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_model")
+	assert.NotContains(t, svc.lastReq.Metadata, "impl_actual_power")
+	assert.False(t, svc.listPoliciesCalled)
+	assert.False(t, svc.listModelsCalled)
 }
 
-func TestReviewRouting_MissingActualPowerUsesMetadataSelectedReviewerProfile(t *testing.T) {
-	resetProfileSnapshotCacheForTest(t)
+func TestPostMergeReviewer_RequestIsInvariantAcrossImplementerRouteIdentity(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	newService := func() *passthroughTestService {
+		return &passthroughTestService{executeEvents: []agentlib.ServiceEvent{{
+			Type: "final",
+			Data: []byte(`{"status":"success","final_text":"{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}"}`),
+		}}}
+	}
+
+	run := func(impl ImplementerRouting) agentlib.ServiceExecuteRequest {
+		svc := newService()
+		reviewer := &DefaultBeadReviewer{ProjectRoot: projectRoot, BeadStore: store, Service: svc}
+		res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, impl)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		return svc.lastReq
+	}
+
+	commonCorrelation := map[string]string{
+		"bead_id":    "ddx-pairing",
+		"attempt_id": "att-identity-invariant",
+		"result_rev": head,
+	}
+	first := run(ImplementerRouting{
+		Harness: "codex", Provider: "openai", Model: "gpt-5", ActualPower: 70,
+		Correlation: commonCorrelation,
+	})
+	second := run(ImplementerRouting{
+		Harness: "claude", Provider: "anthropic", Model: "claude-opus", ActualPower: 70,
+		Correlation: commonCorrelation,
+	})
+
+	assert.Equal(t, first.Prompt, second.Prompt)
+	assert.Equal(t, first.MinPower, second.MinPower)
+	assert.Equal(t, first.Metadata, second.Metadata)
+	for _, req := range []agentlib.ServiceExecuteRequest{first, second} {
+		assert.Empty(t, req.Harness)
+		assert.Empty(t, req.Provider)
+		assert.Empty(t, req.Model)
+		assert.Empty(t, req.Policy)
+		assert.Equal(t, 71, req.MinPower)
+		assert.NotContains(t, req.Metadata, "impl_harness")
+		assert.NotContains(t, req.Metadata, "impl_provider")
+		assert.NotContains(t, req.Metadata, "impl_model")
+		assert.NotContains(t, req.Metadata, "impl_actual_power")
+	}
+}
+
+func TestReviewRouting_MissingActualPowerUsesStrongAbstractFloor(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	profiles := []agentlib.PolicyInfo{
 		{Name: "review-mid", MinPower: 9, MaxPower: 10},
@@ -295,77 +328,14 @@ func TestReviewRouting_MissingActualPowerUsesMetadataSelectedReviewerProfile(t *
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	expected := reviewerProfileForTest(ProfileSnapshot{Profiles: profiles, Models: models})
-	require.NotEmpty(t, expected.Name)
-	assert.Equal(t, expected.Name, svc.lastReq.Policy)
-	assert.Equal(t, expected.MinPower, svc.lastReq.MinPower)
+	assert.Empty(t, svc.lastReq.Policy)
+	assert.Equal(t, lifecycleStrongMinPower, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
-}
-
-// TestReviewPairingDegraded_IsTelemetryOnly verifies AC 4: when the reviewer
-// resolves to the same provider as the implementer, only a
-// kind:review-pairing-degraded event is appended. Harness/model/profile pins
-// are not mutated, no downgrade re-dispatch occurs, and the review verdict is
-// still returned normally.
-func TestReviewPairingDegraded_IsTelemetryOnly(t *testing.T) {
-	projectRoot, head, store := reviewPairingTestSetup(t)
-	events := &stubBeadEventAppender{}
-
-	runner := &reviewRunnerStub{result: &Result{
-		Harness:     "claude",
-		Provider:    "anthropic", // same as implementer below — degraded pairing
-		Model:       "claude-opus-4-7",
-		ActualPower: 95,
-		Output:      reviewerOutputApprove,
-	}}
-
-	reviewer := &DefaultBeadReviewer{
-		ProjectRoot: projectRoot,
-		BeadStore:   store,
-		BeadEvents:  events,
-		Harness:     "claude",
-		Runner:      runner,
-	}
-
-	impl := ImplementerRouting{
-		Harness:     "claude",
-		Provider:    "anthropic", // SAME provider as reviewer → degraded
-		Model:       "claude-sonnet-4-6",
-		ActualPower: 70,
-	}
-	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, impl)
-	require.NoError(t, err)
-	require.NotNil(t, res)
-
-	// The reviewer result must be a normal verdict — degraded pairing must not
-	// block, error, or change the review outcome.
-	assert.Equal(t, VerdictApprove, res.Verdict,
-		"review verdict must not be affected by pairing degradation")
-
-	// The runner must have been called exactly once — no downgrade re-dispatch
-	// should have changed the Harness or Model in lastOpts beyond what
-	// BuildReviewExecuteRequest would set.
-	assert.Equal(t, "claude", runner.lastOpts.Harness,
-		"dispatch harness must not be downgraded when pairing is degraded")
-
-	// Exactly one review-pairing-degraded event.
-	var degradedCount int
-	for _, ev := range events.events {
-		if ev.Event.Kind == ReviewPairingDegradedEventKind {
-			degradedCount++
-			// Body must NOT carry any downgrade_* mutation fields.
-			assert.NotContains(t, ev.Event.Body, "downgraded_harness=",
-				"pairing-degraded event body must not carry downgrade mutation fields")
-			assert.NotContains(t, ev.Event.Body, "downgraded_model=",
-				"pairing-degraded event body must not carry downgrade mutation fields")
-		}
-	}
-	assert.Equal(t, 1, degradedCount,
-		"degraded pairing must emit exactly one review-pairing-degraded event")
+	assert.False(t, svc.listPoliciesCalled)
+	assert.False(t, svc.listModelsCalled)
 }
 
 func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
-	resetProfileSnapshotCacheForTest(t)
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
@@ -397,20 +367,9 @@ func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "frontier", svc.lastReq.Policy)
+	assert.Empty(t, svc.lastReq.Policy)
 	assert.Equal(t, 71, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
-}
-
-func reviewerProfileForTest(snap ProfileSnapshot) reviewerDispatchProfile {
-	name := SelectReviewerProfile(snap)
-	if name == "" {
-		return reviewerDispatchProfile{}
-	}
-	for _, profile := range snap.Profiles {
-		if profile.Name == name {
-			return reviewerDispatchProfile{Name: name, MinPower: profile.MinPower}
-		}
-	}
-	return reviewerDispatchProfile{Name: name}
+	assert.False(t, svc.listPoliciesCalled)
+	assert.False(t, svc.listModelsCalled)
 }

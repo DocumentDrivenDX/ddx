@@ -27,8 +27,8 @@ func runNoopExecuteBeadForCheckpoint(t *testing.T, projectRoot, beadID string) *
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{})
 
-	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
+	runner := scriptHarnessAgentRunner{}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})
@@ -114,8 +114,8 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{})
 
-	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
+	runner := scriptHarnessAgentRunner{}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})
@@ -499,8 +499,8 @@ func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{})
-	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
+	runner := scriptHarnessAgentRunner{}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})

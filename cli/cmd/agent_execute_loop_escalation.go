@@ -2,30 +2,12 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"strings"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
-	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
-
-type escalationFloorFinder interface {
-	Next(actualPower int) (int, error)
-}
-
-type tryLoopFloorFinder struct {
-	ladder escalationFloorFinder
-}
-
-func (f tryLoopFloorFinder) Next(actualPower int) (int, error) {
-	return nextEscalationFloor(f.ladder, actualPower)
-}
 
 func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
@@ -101,7 +83,7 @@ func applyProviderFallbackEvidence(report *agent.ExecuteBeadReport, pf agent.Pro
 		Harness:  pin.Harness,
 		Provider: pin.Provider,
 		Model:    pin.Model,
-		Profile:  report.RequestedProfile,
+		Profile:  firstNonEmpty(report.RequestedPolicy, report.RequestedProfile),
 	}, resolved, pf, decision)
 	report.ProviderFailureEvidence = &evidence
 	if pin.Any() {
@@ -109,287 +91,10 @@ func applyProviderFallbackEvidence(report *agent.ExecuteBeadReport, pf agent.Pro
 	}
 }
 
-func nextEscalationFloor(l escalationFloorFinder, actualPower int) (int, error) {
-	if l == nil {
-		return 0, powerladder.ErrLadderExhausted
-	}
-	floor := actualPower
-	for {
-		next, err := l.Next(floor)
-		if err == nil {
-			return next, nil
-		}
-		var nvp *powerladder.NoViableProviderError
-		if errors.As(err, &nvp) {
-			floor = nvp.Floor
-			continue
-		}
-		return 0, err
-	}
-}
-
-func highestViableEscalationFloor(l escalationFloorFinder) (int, error) {
-	if l == nil {
-		return 0, powerladder.ErrLadderExhausted
-	}
-	floor := 0
-	highest := 0
-	for {
-		next, err := nextEscalationFloor(l, floor)
-		if err != nil {
-			if errors.Is(err, powerladder.ErrLadderExhausted) && highest > 0 {
-				return highest, nil
-			}
-			return 0, err
-		}
-		if next <= floor {
-			if highest > 0 {
-				return highest, nil
-			}
-			return 0, powerladder.ErrLadderExhausted
-		}
-		highest = next
-		floor = next
-	}
-}
-
-func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
-	return baseMinPower, agent.ExecuteBeadReport{}, false
-}
-
-func recentProviderConnectivityMinPower(store bead.Backend, now time.Time, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
-	if store == nil || ladder == nil {
-		return baseMinPower, agent.ExecuteBeadReport{}, false
-	}
-	beads, err := store.List("", "", nil)
-	if err != nil {
-		return baseMinPower, agent.ExecuteBeadReport{}, false
-	}
-	floor := baseMinPower
-	for _, b := range beads {
-		events, err := store.Events(b.ID)
-		if err != nil {
-			continue
-		}
-		if next, ok := recentProviderConnectivityMinPowerFromEvents(events, now, floor, maxPower, ladder); ok {
-			if next >= maxPower && maxPower > 0 {
-				return baseMinPower, routeUnavailableReport(&b, next, maxPower, nil), true
-			}
-			if next > floor {
-				floor = next
-			}
-		}
-	}
-	if floor > baseMinPower {
-		return floor, agent.ExecuteBeadReport{}, true
-	}
-	return baseMinPower, agent.ExecuteBeadReport{}, false
-}
-
-func recentProviderConnectivityMinPowerFromEvents(events []bead.BeadEvent, now time.Time, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, bool) {
-	if len(events) == 0 || ladder == nil {
-		return baseMinPower, false
-	}
-	floor := baseMinPower
-	var last recentRouteEvent
-	for _, ev := range events {
-		if ev.CreatedAt.IsZero() || now.Sub(ev.CreatedAt) > agent.ProviderUnavailableCooldown || ev.CreatedAt.After(now.Add(time.Minute)) {
-			continue
-		}
-		if route, ok := routeEventFromBeadEvent(ev); ok {
-			last = route
-			continue
-		}
-		if ev.Kind == "route-failure" {
-			route, ok := routeFailureEventFromBeadEvent(ev)
-			if !ok {
-				continue
-			}
-			if next, ok := nextFloorForRecentConnectivity(route.ActualPower, maxPower, ladder); ok && next > floor {
-				floor = next
-			}
-			continue
-		}
-		if ev.Kind == "execute-bead" && strings.EqualFold(strings.TrimSpace(ev.Summary), "execution_failed") && isProviderConnectivityEventBody(ev.Body) && last.Provider != "" {
-			if next, ok := nextFloorForRecentConnectivity(last.ActualPower, maxPower, ladder); ok && next > floor {
-				floor = next
-			}
-		}
-	}
-	return floor, floor > baseMinPower
-}
-
-type recentRouteEvent struct {
-	Provider    string
-	Model       string
-	ActualPower int
-}
-
-func routeEventFromBeadEvent(ev bead.BeadEvent) (recentRouteEvent, bool) {
-	if ev.Kind != "routing" && ev.Kind != "execution-routing-intent" {
-		return recentRouteEvent{}, false
-	}
-	var body map[string]any
-	if err := json.Unmarshal([]byte(ev.Body), &body); err != nil {
-		return recentRouteEvent{}, false
-	}
-	route := recentRouteEvent{
-		Provider:    firstNonEmptyString(body["resolved_provider"], body["actual_provider"], body["provider"]),
-		Model:       firstNonEmptyString(body["resolved_model"], body["actual_model"], body["model"]),
-		ActualPower: intFromAny(body["actual_power"]),
-	}
-	if route.Provider == "" {
-		return recentRouteEvent{}, false
-	}
-	return route, true
-}
-
-func routeFailureEventFromBeadEvent(ev bead.BeadEvent) (recentRouteEvent, bool) {
-	var body map[string]any
-	if err := json.Unmarshal([]byte(ev.Body), &body); err != nil {
-		return recentRouteEvent{}, false
-	}
-	if reason := strings.TrimSpace(fmt.Sprint(body["outcome_reason"])); reason != "" && reason != agent.FailureModeProviderConnectivity {
-		return recentRouteEvent{}, false
-	}
-	route := recentRouteEvent{
-		Provider:    firstNonEmptyString(body["provider"]),
-		Model:       firstNonEmptyString(body["model"]),
-		ActualPower: intFromAny(body["actual_power"]),
-	}
-	if route.Provider == "" {
-		return recentRouteEvent{}, false
-	}
-	return route, true
-}
-
-func nextFloorForRecentConnectivity(actualPower, maxPower int, ladder escalationFloorFinder) (int, bool) {
-	next, err := nextEscalationFloor(ladder, actualPower)
-	if err != nil {
-		return 0, false
-	}
-	if maxPower > 0 && next >= maxPower {
-		return next, true
-	}
-	return next, next > 0
-}
-
-func isProviderConnectivityEventBody(body string) bool {
-	lower := strings.ToLower(body)
-	for _, marker := range []string{"dial tcp", "i/o timeout", "connection refused", "connection reset", "no route to host", "provider error"} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func firstNonEmptyString(values ...any) string {
-	for _, value := range values {
-		if s := strings.TrimSpace(fmt.Sprint(value)); s != "" && s != "<nil>" {
-			return s
-		}
-	}
-	return ""
-}
-
-func intFromAny(value any) int {
-	switch v := value.(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	case json.Number:
-		i, _ := v.Int64()
-		return int(i)
-	default:
-		return 0
-	}
-}
-
-// resolvePowerFloor maps an inferred power class to a concrete ladder floor.
-// When the ladder cannot satisfy the requested class, it degrades through the
-// hierarchy (Smart → Standard → Cheap) per ADR-024 P1 ("cheapest first") so
-// dispatch hands the bead to Fizeau with a viable bound rather than failing
-// outright. Returning (0, false) means "no MinPower pin; let Fizeau pick".
-func resolvePowerFloor(powerClass policyescalation.PowerClass, ladder escalationFloorFinder) (int, bool) {
-	switch powerClass {
-	case policyescalation.PowerSmart:
-		if floor, err := highestViableEscalationFloor(ladder); err == nil {
-			return floor, true
-		}
-		return resolvePowerFloor(policyescalation.PowerStandard, ladder)
-	case policyescalation.PowerStandard:
-		first, err := nextEscalationFloor(ladder, 0)
-		if err != nil {
-			return 0, false
-		}
-		second, err := nextEscalationFloor(ladder, first)
-		if err != nil {
-			return first, true
-		}
-		return second, true
-	default:
-		return 0, false
-	}
-}
-
-// zeroConfigInitialMinPower selects the initial MinPower for a bead when the
-// caller has no explicit routing flags or project routing config. The third
-// return value carries a degradation note when the inferred class could not
-// be pinned to a ladder floor and was downgraded to Cheap-equivalent
-// (no MinPower pin). Callers should propagate the note into RoutingIntentNote
-// so the evidence stream records why dispatch ended up unpinned.
-func zeroConfigInitialMinPower(b *bead.Bead, powerClass policyescalation.PowerClass, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, string, bool) {
-	if powerClass == "" {
-		return baseMinPower, agent.ExecuteBeadReport{}, "", false
-	}
-	powerFloor, hasPowerFloor := resolvePowerFloor(powerClass, ladder)
-	if !hasPowerFloor {
-		note := ""
-		if powerClass != policyescalation.PowerCheap {
-			note = fmt.Sprintf(
-				"no ladder floor for inferred powerClass %s; degraded to cheap-equivalent (no MinPower pin)",
-				powerClass,
-			)
-		}
-		return baseMinPower, agent.ExecuteBeadReport{}, note, false
-	}
-	if powerFloor > baseMinPower {
-		if maxPower > 0 && powerFloor >= maxPower {
-			return baseMinPower, routeUnavailableReport(b, powerFloor, maxPower, nil), "", true
-		}
-		return powerFloor, agent.ExecuteBeadReport{}, "", false
-	}
-	return baseMinPower, agent.ExecuteBeadReport{}, "", false
-}
-
-func routeUnavailableReport(b *bead.Bead, minPower, maxPower int, cause error) agent.ExecuteBeadReport {
-	beadID := ""
-	if b != nil {
-		beadID = b.ID
-	}
-	detail := fmt.Sprintf("route unavailable: no viable routing candidate satisfies requested MinPower %d", minPower)
-	if maxPower > 0 {
-		detail += fmt.Sprintf(" and MaxPower %d", maxPower)
-	}
-	if cause != nil {
-		detail += ": " + cause.Error()
-	}
-	return agent.ExecuteBeadReport{
-		BeadID:        beadID,
-		Status:        agent.ExecuteBeadStatusExecutionFailed,
-		Detail:        detail,
-		OutcomeReason: agent.FailureModeNoViableProvider,
-	}
-}
-
 func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
-	ladder escalationFloorFinder,
+	maxPower int,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
 	perBeadTracker *policyescalation.PerBeadCostTracker,
@@ -397,7 +102,6 @@ func runEscalatingPowerAttempts(
 	pin agent.ProviderPin,
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
-	floors := tryLoopFloorFinder{ladder: ladder}
 	for {
 		report, err := attempt(ctx, minPower)
 		if err == nil {
@@ -429,12 +133,13 @@ func runEscalatingPowerAttempts(
 			Status:                   report.Status,
 			Detail:                   report.Detail,
 			CurrentMinPower:          minPower,
+			MaxPower:                 maxPower,
 			ActualPower:              report.ActualPower,
 			OutcomeReason:            report.OutcomeReason,
 			Disrupted:                report.Disrupted,
 			BudgetExhausted:          isBudgetExhaustedFailure(report),
 			AllowInfrastructureRetry: allowInfrastructureRetry,
-		}, floors)
+		})
 		if transition.Action != executeloop.TryLoopActionRetryPower {
 			return report, nil
 		}

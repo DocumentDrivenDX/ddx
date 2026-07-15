@@ -41,9 +41,7 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 
 	caps := opts.EvidenceCaps
 
-	agentCfg := &AgentConfig{
-		Model: opts.Model,
-	}
+	agentCfg := &AgentConfig{}
 	if opts.MaxDecompositionDepth > 0 {
 		agentCfg.Triage = &TriageConfig{MaxDecompositionDepth: &opts.MaxDecompositionDepth}
 	}
@@ -88,13 +86,12 @@ type TestRunConfigOpts struct {
 // NewTestConfigForRun returns a *Config that, when Resolve()d with the
 // matching CLIOverrides, produces a ResolvedConfig whose run-path
 // accessors return the values supplied in opts. Pure CLI-override
-// fields (Provider, Effort) have no durable home on
+// fields (Harness, Model, Provider, Effort) have no durable home on
 // AgentConfig and must be applied at Resolve time via CLIOverrides.
 func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
 	return &Config{
 		Version: "1.0",
 		Agent: &AgentConfig{
-			Model:         opts.Model,
 			TimeoutMS:     int(opts.Timeout / time.Millisecond),
 			WallClockMS:   int(opts.WallClock / time.Millisecond),
 			SessionLogDir: opts.SessionLogDir,
@@ -121,14 +118,12 @@ type TestBeadConfigOpts struct {
 // NewTestConfigForBead returns a *Config that, when Resolve()d with
 // the matching CLIOverrides, produces a ResolvedConfig whose
 // execute-bead-relevant accessors return the values supplied in opts.
-// Pure CLI-override fields (Provider, Effort) have no durable home on
+// Pure CLI-override fields (Harness, Model, Provider, Effort) have no durable home on
 // AgentConfig and must be applied at Resolve time via CLIOverrides.
 func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
 	cfg := &Config{
 		Version: "1.0",
-		Agent: &AgentConfig{
-			Model: opts.Model,
-		},
+		Agent:   &AgentConfig{},
 	}
 	if opts.Mirror != nil {
 		cfg.Executions = &ExecutionsConfig{Mirror: opts.Mirror}
@@ -138,12 +133,13 @@ func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
 
 // TestBeadOverrides returns the CLIOverrides that, combined with the
 // *Config produced by NewTestConfigForBead(opts), drive a Resolve call
-// to a ResolvedConfig matching opts. Pure-override fields (Provider,
-// Effort) have no durable home on *Config; they are applied at Resolve
+// to a ResolvedConfig matching opts. Pure-override fields (Harness, Model,
+// Provider, Effort) have no durable home on *Config; they are applied at Resolve
 // time only.
 func TestBeadOverrides(opts TestBeadConfigOpts) CLIOverrides {
 	return CLIOverrides{
 		Harness:  opts.Harness,
+		Model:    opts.Model,
 		Provider: opts.Provider,
 		Effort:   opts.Effort,
 	}
@@ -157,6 +153,18 @@ func TestLoopOverrides(opts TestLoopConfigOpts) CLIOverrides {
 	return CLIOverrides{
 		Assignee: opts.Assignee,
 		Harness:  opts.Harness,
+		Model:    opts.Model,
 		Profile:  opts.Profile,
+	}
+}
+
+// TestRunOverrides returns the explicit request constraints for a test run.
+// Model and routing identity never come from durable DDx project config.
+func TestRunOverrides(opts TestRunConfigOpts) CLIOverrides {
+	return CLIOverrides{
+		Harness:  opts.Harness,
+		Model:    opts.Model,
+		Provider: opts.Provider,
+		Effort:   opts.Effort,
 	}
 }

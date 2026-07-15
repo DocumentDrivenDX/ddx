@@ -21,6 +21,8 @@ const (
 	// stricter internal readonly marker.
 	PermissionsReadOnlyLifecycle = "safe"
 	lifecycleScratchDirPrefix    = "ddx-lifecycle-"
+	lifecycleStandardMinPower    = 7
+	lifecycleStrongMinPower      = 9
 )
 
 type lifecycleProjectStatusSnapshot struct {

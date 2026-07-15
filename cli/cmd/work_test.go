@@ -19,6 +19,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -538,7 +539,7 @@ func TestWork_WarnsStaleSourceBinaryButProceeds(t *testing.T) {
 		"stderr must include the stale-binary warning")
 }
 
-func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *testing.T) {
+func TestWorkEstimatedDifficultySeedsFirstMinPower(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -562,6 +563,9 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 		ID:        "ddx-zero-config-work-powerClass-standard",
 		Title:     "Work with inferred standard routing powerClass",
 		IssueType: "bug",
+		Extra: map[string]any{
+			policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyHard),
+		},
 	}))
 
 	factory := NewCommandFactory(dir)
@@ -578,8 +582,8 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 	requests := capturedImplementationRequests(stub)
 	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
 	lastReq := requests[0]
-	assert.Equal(t, "default", lastReq.Policy, "work should request the ordinary no-requirement Fizeau policy by metadata")
-	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
+	assert.Empty(t, lastReq.Policy, "zero-config work must not select a Fizeau policy")
+	assert.Equal(t, 9, lastReq.MinPower, "hard difficulty must seed the first abstract floor")
 	assert.Empty(t, lastReq.Harness, "zero-config work must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config work must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config work must not hard-pin a model")
@@ -635,11 +639,11 @@ func TestWorkZeroConfigStandardPolicyDoesNotDowngradeToCheapPolicy(t *testing.T)
 	requests := capturedImplementationRequests(stub)
 	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
 	lastReq := requests[0]
-	assert.Equal(t, "default", lastReq.Policy, "standard-powerClass work must not downgrade to the weak policy when the model snapshot is stale")
-	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must keep power as Fizeau policy metadata, not DDx hardcoded floor")
+	assert.Empty(t, lastReq.Policy, "DDx must not inspect a model snapshot to choose a policy")
+	assert.Equal(t, 7, lastReq.MinPower)
 }
 
-func TestWorkHarnessOnlyAutoRoutesOrFailsBeforeClaim(t *testing.T) {
+func TestWorkHarnessOnlyProfileIsOpaquePassthrough(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -692,12 +696,13 @@ func TestWorkHarnessOnlyAutoRoutesOrFailsBeforeClaim(t *testing.T) {
 	lastReq := requests[0]
 	assert.Equal(t, "codex", lastReq.Harness)
 	assert.Equal(t, "smart", lastReq.Policy)
-	assert.Equal(t, 9, lastReq.MinPower)
+	assert.Equal(t, 0, lastReq.MinPower, "DDx must not translate an explicit profile into a power floor")
 	assert.Empty(t, lastReq.Model, "harness-only routing must keep model empty on the request")
-	assert.True(t, stub.executeCalled, "execute path must run after the route preflight succeeds")
+	assert.True(t, stub.executeCalled, "execute path must delegate directly to Fizeau")
+	assert.Empty(t, capturedRouteRequests(stub), "DDx must not pre-resolve the passthrough request")
 }
 
-func TestWorkExplicitHarnessScopesModelInventoryToHarness(t *testing.T) {
+func TestWorkExplicitHarnessDoesNotInspectModelInventory(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -749,11 +754,7 @@ func TestWorkExplicitHarnessScopesModelInventoryToHarness(t *testing.T) {
 	require.Len(t, requests, 1, "explicit harness work must execute exactly one implementer attempt; output=%q", out)
 	assert.Equal(t, "codex", requests[0].Harness)
 	assert.Equal(t, "smart", requests[0].Policy)
-	filters := capturedModelFilters(stub)
-	require.NotEmpty(t, filters, "work ladder inventory must list models through the preflight service")
-	for _, filter := range filters {
-		assert.Equal(t, "codex", filter.Harness, "pinned workers must not request all-harness model inventory")
-	}
+	assert.Empty(t, capturedModelFilters(stub), "explicit passthrough must not trigger DDx model discovery")
 }
 
 func TestWorkHarnessPinSkipsUnpinnedRouteExclusionPreflight(t *testing.T) {
@@ -811,15 +812,10 @@ func TestWorkHarnessPinSkipsUnpinnedRouteExclusionPreflight(t *testing.T) {
 	)
 	require.NoError(t, err, "output=%q", out)
 
-	requests := capturedRouteRequests(stub)
-	require.NotEmpty(t, requests, "harness-only workers still perform harness-scoped route viability preflight")
-	for _, req := range requests {
-		assert.Equal(t, "codex", req.Harness, "pinned work must not run an unpinned route-resolution probe")
-		assert.Empty(t, req.ExcludedRoutes, "pinned work must not run the unpinned failed-route exclusion probe")
-	}
+	assert.Empty(t, capturedRouteRequests(stub), "explicit pins are passed to Execute without a route viability probe")
 }
 
-func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
+func TestWorkUnderSpecifiedRoutingDelegatesToFizeau(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.resolveRouteFn = func(req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
@@ -844,7 +840,7 @@ func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
 	beadID := "ddx-work-harness-only-underspecified"
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        beadID,
-		Title:     "Work should stop before claim when routing is under-specified",
+		Title:     "Fizeau owns under-specified routing",
 		IssueType: "bug",
 	}))
 
@@ -860,129 +856,17 @@ func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
 		"--no-review-i-know-what-im-doing",
 	)
 	assert.NoError(t, err)
-	assert.Contains(t, out, "preflight failed", "under-specified harness-only routing should fail before claim")
-	assert.False(t, stub.executeCalled, "provider execute must not start when route preflight fails")
-
-	got, getErr := store.Get(context.Background(), beadID)
-	require.NoError(t, getErr)
-	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open when route preflight fails")
-	assert.Empty(t, got.Owner, "bead lease must not be held when route preflight fails")
+	assert.NotContains(t, out, "preflight failed")
+	assert.True(t, stub.executeCalled, "Fizeau Execute owns under-specified route handling")
+	assert.Empty(t, capturedRouteRequests(stub), "DDx must not reject under-specified routing itself")
 }
 
-// TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin covers
-// ddx-e0b95b4a. agent.endpoints declares where providers live (transport
-// config) — it does NOT pin a routing decision the way agent.model does.
-// Treating endpoints as a routing pin disables zero-config powerClass inference
-// (autoInferPowerClass in runAgentExecuteLoopImpl), so no-flag `ddx work` sends an
-// empty Policy and Fizeau resolves it via its default policy. In production
-// at /home/erik/Projects/ddx this scored Opus on ordinary implementation work
-// (see .ddx/attachments/ddx-c3219628/events.jsonl: actual_model=opus,
-// cost_usd=15.0776 on a worker-status bug; ddx-6cde5ffd: $6.83 on a registry
-// package task).
-//
-// The matrix verifies the new contract: only an explicit model pin in
-// agent.config.yaml suppresses zero-config powerClass inference; endpoints, an
-// empty agent block, or no config at all leave inference active so the
-// implementation profile selector can request a Fizeau policy by metadata.
-func TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin(t *testing.T) {
-	cases := []struct {
-		name     string
-		writeCfg bool
-		yaml     string
-		want     bool
-	}{
-		{
-			name:     "no .ddx/config.yaml",
-			writeCfg: false,
-			want:     false,
-		},
-		{
-			name:     "library-only config (zero-config baseline)",
-			writeCfg: true,
-			yaml: `version: "1.0"
-library:
-  path: ".ddx/plugins/ddx"
-  repository:
-    url: "https://example.com/lib"
-    branch: "main"
-`,
-			want: false,
-		},
-		{
-			name:     "endpoints only, no model pin (production scenario)",
-			writeCfg: true,
-			yaml: `version: "1.0"
-library:
-  path: ".ddx/plugins/ddx"
-  repository:
-    url: "https://example.com/lib"
-    branch: "main"
-agent:
-  endpoints:
-    - type: lmstudio
-      host: 127.0.0.1
-      port: 1234
-    - type: omlx
-      host: 127.0.0.1
-      port: 1235
-`,
-			want: false,
-		},
-		{
-			name:     "model pin counts as routing config",
-			writeCfg: true,
-			yaml: `version: "1.0"
-library:
-  path: ".ddx/plugins/ddx"
-  repository:
-    url: "https://example.com/lib"
-    branch: "main"
-agent:
-  model: pinned-model
-`,
-			want: true,
-		},
-		{
-			name:     "model pin coexists with endpoints (still routing config)",
-			writeCfg: true,
-			yaml: `version: "1.0"
-library:
-  path: ".ddx/plugins/ddx"
-  repository:
-    url: "https://example.com/lib"
-    branch: "main"
-agent:
-  model: pinned-model
-  endpoints:
-    - type: lmstudio
-      host: 127.0.0.1
-      port: 1234
-`,
-			want: true,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			ddxDir := filepath.Join(dir, ddxroot.DirName)
-			require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-			if tc.writeCfg {
-				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(tc.yaml), 0o644))
-			}
-			got := projectHasRoutingConfig(dir)
-			assert.Equalf(t, tc.want, got,
-				"projectHasRoutingConfig(%s) = %v, want %v — endpoints alone must not gate zero-config powerClass inference",
-				tc.name, got, tc.want)
-		})
-	}
-}
-
-func TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor(t *testing.T) {
+func TestWorkZeroConfigSemanticRetryRaisesAbstractPowerFloor(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
 	implementerCalls := 0
+	policyQueriesAtFirstAttempt := 0
 	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		ch := make(chan agentlib.ServiceEvent, 1)
 		if req.Role != "implementer" {
@@ -992,8 +876,10 @@ func TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor(t *testing.T) {
 		}
 		implementerCalls++
 		if implementerCalls == 1 {
+			policyQueriesAtFirstAttempt = capturedPolicyQueries(stub)
 			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"build failed","routing_actual":{"power":5}}`)}
 		} else {
+			assert.Equal(t, policyQueriesAtFirstAttempt, capturedPolicyQueries(stub), "semantic escalation must not inspect Fizeau's policy catalog")
 			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
 		}
 		close(ch)
@@ -1011,7 +897,7 @@ func TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        "ddx-zero-config-work-powerClass-retry",
-		Title:     "Work retries semantic failures at the next viable MinPower",
+		Title:     "Work retries semantic failures at a stronger MinPower",
 		IssueType: "bug",
 	}))
 
@@ -1028,10 +914,13 @@ func TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor(t *testing.T) {
 
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx work should retry an escalatable implementation failure; output=%q err=%v", out, err)
-	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred no-requirement default policy")
-	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
-	assert.Equal(t, "default", requests[1].Policy, "retry should stay within the selected policy band")
-	assert.Equal(t, 7, requests[1].MinPower, "semantic retry should use the next viable model-power floor")
+	assert.Empty(t, requests[0].Policy, "DDx must not select a policy before the first attempt")
+	assert.Equal(t, 7, requests[0].MinPower, "default difficulty inference must seed MinPower=7")
+	assert.Empty(t, requests[1].Policy, "retry changes only the existing MinPower policy")
+	assert.Equal(t, 8, requests[1].MinPower, "semantic retry must ask Fizeau for a strictly stronger abstract floor")
+	assert.Empty(t, capturedModelFilters(stub), "semantic escalation must not inspect Fizeau's model catalog")
+	assert.Empty(t, capturedRouteRequests(stub), "semantic escalation must not pre-resolve a route")
+	assert.Equal(t, policyQueriesAtFirstAttempt, capturedPolicyQueries(stub), "semantic escalation must not inspect Fizeau's policy catalog")
 }
 
 func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testing.T) {
@@ -1084,10 +973,10 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx work should retry provider connectivity with a higher floor; output=%q err=%v", out, err)
-	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred no-requirement default policy")
-	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
+	assert.Empty(t, requests[0].Policy, "DDx must not select a policy before the first attempt")
+	assert.Equal(t, 7, requests[0].MinPower, "default difficulty inference must seed MinPower=7")
 	assert.Equal(t, requests[0].Policy, requests[1].Policy, "retry should preserve the selected policy intent")
-	assert.Equal(t, 6, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
+	assert.Equal(t, 8, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
 }
 
 // TestWorkProviderConnectivityCommitsEvidence is the ddx-ca94d157 regression
@@ -1100,7 +989,7 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 // worker path) while still recording route-failure evidence on the bead.
 //
 // The route is pinned (--provider/--model, harness left empty so dispatch
-// still flows through the stubbed Fizeau service) so the escalation ladder is
+// still flows through the stubbed Fizeau service) so infrastructure fallback is
 // disabled: exactly one attempt runs, it fails connectivity, and ModeOnce
 // returns — the terminal failure path the bead describes.
 func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {

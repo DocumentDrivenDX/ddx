@@ -22,13 +22,15 @@ import (
 )
 
 type preClaimIntakeHookServiceStub struct {
-	executeCalls int32
-	lastReq      agentlib.ServiceExecuteRequest
-	listPolicies []agentlib.PolicyInfo
-	listModels   []agentlib.ModelInfo
-	executeErr   error
-	executeFunc  func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
-	finalText    string
+	executeCalls      int32
+	listPoliciesCalls int32
+	listModelsCalls   int32
+	lastReq           agentlib.ServiceExecuteRequest
+	listPolicies      []agentlib.PolicyInfo
+	listModels        []agentlib.ModelInfo
+	executeErr        error
+	executeFunc       func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+	finalText         string
 }
 
 type preClaimIntakeHookRunnerFunc func(RunArgs) (*Result, error)
@@ -75,6 +77,7 @@ func (s *preClaimIntakeHookServiceStub) ListProviders(_ context.Context) ([]agen
 }
 
 func (s *preClaimIntakeHookServiceStub) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	atomic.AddInt32(&s.listModelsCalls, 1)
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
@@ -83,6 +86,7 @@ func (s *preClaimIntakeHookServiceStub) HealthCheck(_ context.Context, _ agentli
 }
 
 func (s *preClaimIntakeHookServiceStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+	atomic.AddInt32(&s.listPoliciesCalls, 1)
 	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 
@@ -161,7 +165,7 @@ func preClaimPolicyInfo(name string, minPower, maxPower int) agentlib.PolicyInfo
 	return policy
 }
 
-func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *testing.T) {
+func TestPreClaimIntakeHook_DispatchesWithStandardAbstractPower(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -190,9 +194,11 @@ func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *t
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Equal(t, "default", svc.lastReq.Policy)
-	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Empty(t, svc.lastReq.Policy)
+	assert.Equal(t, lifecycleStandardMinPower, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
+	assert.Zero(t, atomic.LoadInt32(&svc.listPoliciesCalls))
+	assert.Zero(t, atomic.LoadInt32(&svc.listModelsCalls))
 	assert.Greater(t, svc.lastReq.EstimatedPromptTokens, 0)
 	assert.False(t, svc.lastReq.RequiresTools)
 }
@@ -525,7 +531,7 @@ func TestDecompositionHook_CatalogUnavailableUsesAutoRouteWithoutMagicPower(t *t
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Empty(t, svc.lastReq.Policy)
-	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Equal(t, lifecycleStandardMinPower, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
@@ -568,7 +574,7 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testin
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Empty(t, svc.lastReq.Policy)
-	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Equal(t, lifecycleStandardMinPower, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
@@ -593,13 +599,13 @@ func TestPreClaimIntakeHook_PreservesExplicitRoutingPins(t *testing.T) {
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Policy)
-	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Equal(t, lifecycleStandardMinPower, svc.lastReq.MinPower)
 }
 
-func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToFizeau(t *testing.T) {
+func TestLifecycleDispatchNeverQueriesFizeauCatalog(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
-	rcfg := intakeHookTestConfig()
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{MaxPower: 80})
 
 	intakeSvc := &preClaimIntakeHookServiceStub{
 		listPolicies: []agentlib.PolicyInfo{
@@ -618,10 +624,14 @@ func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToF
 	intake, err := intakeHook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, intake.Outcome)
-	assert.Equal(t, "default", intakeSvc.lastReq.Policy)
+	assert.Empty(t, intakeSvc.lastReq.Policy)
+	assert.Equal(t, lifecycleStandardMinPower, intakeSvc.lastReq.MinPower)
 	assert.Empty(t, intakeSvc.lastReq.Harness)
 	assert.Empty(t, intakeSvc.lastReq.Provider)
 	assert.Empty(t, intakeSvc.lastReq.Model)
+	assert.Equal(t, 80, intakeSvc.lastReq.MaxPower, "lifecycle dispatch must preserve the operator's power ceiling")
+	assert.Zero(t, atomic.LoadInt32(&intakeSvc.listPoliciesCalls))
+	assert.Zero(t, atomic.LoadInt32(&intakeSvc.listModelsCalls))
 
 	lintSvc := &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
@@ -645,6 +655,33 @@ func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToF
 	assert.Empty(t, lintSvc.lastReq.Harness)
 	assert.Empty(t, lintSvc.lastReq.Provider)
 	assert.Empty(t, lintSvc.lastReq.Model)
+	assert.Equal(t, 80, lintSvc.lastReq.MaxPower, "lint must preserve the operator's power ceiling")
+	assert.False(t, lintSvc.listHarnessesCalled)
+	assert.False(t, lintSvc.listModelsCalled)
+	assert.False(t, lintSvc.listPoliciesCalled)
+
+	decomposeSvc := &passthroughTestService{}
+	decomposeRuntime := decomposerRuntime(rcfg)
+	decomposeRuntime.Prompt = "return a decomposition"
+	_, err = dispatchLifecycleRun(context.Background(), root, decomposeSvc, nil, rcfg, decomposeRuntime)
+	require.NoError(t, err)
+	assert.Equal(t, lifecycleStrongMinPower, decomposeSvc.lastReq.MinPower)
+	assert.Equal(t, 80, decomposeSvc.lastReq.MaxPower, "decomposition and reframing share a runtime that must preserve the operator's ceiling")
+	assert.False(t, decomposeSvc.listHarnessesCalled)
+	assert.False(t, decomposeSvc.listModelsCalled)
+	assert.False(t, decomposeSvc.listPoliciesCalled)
+
+	reviewSvc := &passthroughTestService{}
+	reviewRuntime := BuildReviewExecuteRequest(ImplementerRouting{ActualPower: 7}, "", "")
+	reviewRuntime.MinPowerOverride = lifecycleStrongMinPower
+	reviewRuntime.Prompt = "review the candidate"
+	_, err = dispatchViaResolvedConfig(context.Background(), root, reviewSvc, nil, rcfg, reviewRuntime)
+	require.NoError(t, err)
+	assert.Equal(t, lifecycleStrongMinPower, reviewSvc.lastReq.MinPower)
+	assert.Equal(t, 80, reviewSvc.lastReq.MaxPower, "review may raise only the floor, never discard the operator's ceiling")
+	assert.False(t, reviewSvc.listHarnessesCalled)
+	assert.False(t, reviewSvc.listModelsCalled)
+	assert.False(t, reviewSvc.listPoliciesCalled)
 }
 
 func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T) {
@@ -667,7 +704,7 @@ func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
-func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
+func TestLifecycleDispatchPreservesExplicitMaxPower(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -680,11 +717,11 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 		},
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
-		assert.Zero(t, req.MinPower)
+		assert.Equal(t, lifecycleStandardMinPower, req.MinPower)
 		assert.Empty(t, req.Policy)
 		assert.Equal(t, "claude", req.Harness)
 		assert.Empty(t, req.Model)
-		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit implementation max_power pins")
+		assert.Equal(t, 8, req.MaxPower, "explicit operator max_power must remain sticky")
 		ch := make(chan agentlib.ServiceEvent, 1)
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"frontier-ready\"}"}`)}
 		close(ch)
@@ -703,10 +740,10 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "frontier-ready", got.Detail)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls), "pre-claim intake must still dispatch when the worker has a low max_power")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
-func TestDecompositionHook_RoutingFailureReturnsIntakeErrorWithoutDDxPins(t *testing.T) {
+func TestLifecycleRoutingFailurePreservesExplicitMaxPowerWithoutDDxPins(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -715,8 +752,8 @@ func TestDecompositionHook_RoutingFailureReturnsIntakeErrorWithoutDDxPins(t *tes
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		assert.Empty(t, req.Policy)
-		assert.Zero(t, req.MinPower)
-		assert.Zero(t, req.MaxPower)
+		assert.Equal(t, lifecycleStandardMinPower, req.MinPower)
+		assert.Equal(t, 8, req.MaxPower)
 		return nil, svc.executeErr
 	}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{

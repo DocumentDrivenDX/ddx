@@ -160,7 +160,7 @@ func TestFizeauPassthrough_RawModelUnchanged(t *testing.T) {
 
 			rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 				Model: model,
-			}).Resolve(config.CLIOverrides{Harness: "agent"})
+			}).Resolve(config.CLIOverrides{Harness: "agent", Model: model})
 
 			_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 				Prompt: "test",
@@ -212,7 +212,7 @@ func TestFizeauPassthrough_RecordsActualModelFromRouting(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "qwen36",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "qwen36"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "test",
@@ -252,7 +252,7 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "claude-sonnet-4-6"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "hello",
@@ -263,7 +263,7 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, stub.executeCalled, "RunWithConfigViaService must use the Fizeau service adapter")
-	assert.Equal(t, "fiz", stub.lastReq.Harness)
+	assert.Equal(t, "agent", stub.lastReq.Harness, "operator harness must reach Fizeau unchanged")
 	assert.Equal(t, "hello", stub.lastReq.Prompt)
 	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
 	assert.Equal(t, "done", result.Output)
@@ -289,7 +289,7 @@ func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "claude-sonnet-4-6"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "hello",

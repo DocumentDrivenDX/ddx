@@ -23,8 +23,8 @@ package agent
 //   4. If the merge conflicts — abort cleanly, preserve the original
 //      ResultRev under refs/ddx/iterations/<bead-id>/<attempt-id>-<short-tip>,
 //      and return preserved status. Target branch is never modified.
-//   5. If evidence needs to be folded in, stage and commit it locally, then
-//      sync the operator checkout to the new head when safe to do so.
+//   5. Finalize the local-only execution evidence without staging or committing
+//      it, then sync the operator checkout to the new head when safe to do so.
 //
 // Network sync is intentionally out of scope for Land(): no fetch and no
 // push happen here. Operators sync origin with raw git commands after the
@@ -96,15 +96,14 @@ type LandRequest struct {
 
 	// EvidenceDir is the relative path to the per-attempt execution evidence
 	// directory (e.g. ".ddx/executions/20260416T181205-b5419982"). When
-	// non-empty and the main land succeeds, Land() creates a trailing
-	// evidence commit that folds these files into the target branch. The
-	// agent's commit SHA is NOT amended — the evidence commit is a separate
-	// child commit, preserving closing_commit_sha references.
+	// non-empty and the main land succeeds, Land() uses a temporary copy while
+	// finalizing the result. The canonical project-root bundle remains local
+	// and uncommitted; the temporary finalization worktree is removed afterward.
 	EvidenceDir string
 
 	// PostLandCommand is an optional project verification command run after
 	// Land() advances the local target ref and syncs the worktree, but before
-	// evidence commit creation or checkout sync. A failure restores the target
+	// local evidence finalization or checkout sync. A failure restores the target
 	// ref to its pre-land SHA and preserves ResultRev under refs/ddx/iterations.
 	PostLandCommand []string
 
@@ -131,9 +130,7 @@ type LandResult struct {
 	NewTip string
 
 	// LandedTip is the target branch tip immediately after the implementation
-	// (or already-committed evidence bundle) lands, but before any trailing
-	// audit-only evidence/final-result commit. When no trailing commit is
-	// created it matches NewTip.
+	// lands. It matches NewTip for current results.
 	LandedTip string
 
 	// TargetBranch is the resolved branch name that Land() advanced or attempted
@@ -162,9 +159,8 @@ type LandResult struct {
 	// and merge-commit paths so metrics can compare contribution sizes.
 	MergedCommitCount int
 
-	// EvidenceCommitSHA is set when a trailing execution-evidence commit was
-	// created after the main land. When set, NewTip points at this commit
-	// (not at the original agent commit or merge commit).
+	// EvidenceCommitSHA is retained only for decoding legacy result shapes.
+	// Current landing code never assigns it because execution evidence is local.
 	EvidenceCommitSHA string
 
 	// CheckoutSyncDeferred is true when the target ref advanced but DDx left
@@ -262,13 +258,10 @@ type LandingGitOps interface {
 	// contribution size in land metrics. Returns 0 on error.
 	CountCommits(dir, base, tip string) int
 
-	// StageDir stages all files under relPath in dir for the next commit.
-	StageDir(dir, relPath string) error
-
-	// CommitStaged creates a commit from currently staged changes using msg
-	// as the commit message. Returns (sha, nil) when a commit was made,
-	// ("", nil) when nothing was staged, and ("", err) on failure.
-	CommitStaged(dir, msg string) (string, error)
+	// VerifyCandidateHistory rejects local-only execution evidence in any
+	// candidate commit. RealLandingGitOps performs the production history scan;
+	// synthetic Git implementations provide their own revision semantics.
+	VerifyCandidateHistory(dir, base, tip string) error
 
 	// DiffNumstat returns the output of `git diff --numstat base tip --` in
 	// dir. Used by the large-deletion gate. Returning ("", nil) indicates no
@@ -646,10 +639,18 @@ func skipLandingCheckpointPath(path string) bool {
 	if trackerpaths.IsManagedTrackerPath(clean) {
 		return true
 	}
-	return isLockMetricsPath(clean)
+	return isExecutionEvidencePath(clean) || isLockMetricsPath(clean)
 }
 
-func ensureLandingWorktreeReady(dir, targetBranch string, checkpointExecutionEvidence bool) error {
+func ensureLandingWorktreeReady(dir, targetBranch string) error {
+	return ensureLandingWorktreeReadyWithLockState(dir, targetBranch, false)
+}
+
+// ensureLandingWorktreeReadyWithLockState validates the landing checkout and
+// recovers a staged index. mainGitLockHeld must be true when the caller already
+// owns withMainGitLock; recovery then runs directly instead of recursively
+// acquiring the non-reentrant process-shared lock.
+func ensureLandingWorktreeReadyWithLockState(dir, targetBranch string, mainGitLockHeld bool) error {
 	if !isInsideGitWorktree(dir) {
 		return nil
 	}
@@ -665,7 +666,7 @@ func ensureLandingWorktreeReady(dir, targetBranch string, checkpointExecutionEvi
 	if targetBranch != "" && branch != targetBranch {
 		return fmt.Errorf("landing branch mismatch: on %q, want %q", branch, targetBranch)
 	}
-	return waitForEmptyGitIndex(dir, 2*time.Second, checkpointExecutionEvidence)
+	return waitForEmptyGitIndexWithLockState(dir, 2*time.Second, mainGitLockHeld)
 }
 
 func isInsideGitWorktree(dir string) bool {
@@ -673,7 +674,11 @@ func isInsideGitWorktree(dir string) bool {
 	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 
-func waitForEmptyGitIndex(dir string, timeout time.Duration, checkpointExecutionEvidence bool) error {
+func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
+	return waitForEmptyGitIndexWithLockState(dir, timeout, false)
+}
+
+func waitForEmptyGitIndexWithLockState(dir string, timeout time.Duration, mainGitLockHeld bool) error {
 	deadline := time.Now().Add(timeout)
 	repairedCorruptIndex := false
 	for {
@@ -693,61 +698,27 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration, checkpointExecution
 			return nil
 		}
 		if !repairedCorruptIndex && isRecoverableLandingIndexCorruption(string(out)) {
-			repairedCorruptIndex = true
-			if _, recErr := readTreeHeadWithRetry(dir); recErr != nil {
-				return fmt.Errorf("repairing landing worktree index: %w", recErr)
+			recovery, err := recoverLandingIndex(dir, mainGitLockHeld, &repairedCorruptIndex)
+			if err != nil {
+				return err
 			}
-			if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+			if recovery.clean {
 				return nil
+			}
+			if recovery.progressed {
+				continue
 			}
 		}
 		if time.Now().After(deadline) {
-			// The index drifted from HEAD. Two causes are possible:
-			//   1. A prior land's post-merge SyncWorkTreeToHead failed
-			//      (e.g. transient .git/index.lock contention) and its
-			//      error was swallowed by the best-effort caller. The
-			//      index now matches a recent ancestor of HEAD —
-			//      reverting the most recent merges. Recovering by
-			//      running read-tree HEAD is safe and unblocks the queue.
-			//   2. The operator staged real work that does not match any
-			//      ancestor tree. Recovery here would silently destroy
-			//      their changes — refuse, surface the error, and let
-			//      the operator resolve it.
-			if matches, _ := indexMatchesRecentAncestorTree(dir, 20); matches {
-				if _, recErr := readTreeHeadWithRetry(dir); recErr == nil {
-					if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
-						return nil
-					}
-				}
+			recovery, err := recoverLandingIndex(dir, mainGitLockHeld, &repairedCorruptIndex)
+			if err != nil {
+				return err
 			}
-			// Landing checkpoints may fold DDx-owned execution evidence into
-			// history so the land can proceed without losing per-attempt files.
-			// Pre-claim callers keep the old behavior and simply unstage that
-			// orphaned evidence instead.
-			if checkpointExecutionEvidence {
-				if committed, cpErr := checkpointOrphanedExecutionEvidence(dir); cpErr != nil {
-					return cpErr
-				} else if committed {
-					return nil
-				}
-			} else {
-				// A dead/interrupted attempt can leave DDx-managed execution
-				// evidence (.ddx/executions/*) staged-but-uncommitted in the landing
-				// worktree. That is per-machine working state, not real work (the
-				// durable audit trail is .ddx/attachments), so it must not jam the
-				// queue. When every staged path is execution evidence, unstage it —
-				// do not commit it — and re-check. A mixed or code-bearing staged set
-				// is still refused. See ddx-2ab14458.
-				if unstageOrphanedExecutionEvidence(dir) {
-					if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
-						return nil
-					}
-				}
-			}
-			// Real staged work is committed — never reset or refused.
-			// The checkpoint preserves it in history and unjams the land.
-			if committed, cpErr := checkpointLandingWorktreeLocalChanges(dir, "staged at land boundary"); cpErr == nil && committed {
+			if recovery.clean {
 				return nil
+			}
+			if recovery.progressed {
+				continue
 			}
 			stagedOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-status").CombinedOutput()
 			staged := strings.TrimSpace(string(stagedOut))
@@ -758,6 +729,70 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration, checkpointExecution
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+type landingIndexRecovery struct {
+	clean      bool
+	progressed bool
+}
+
+func recoverLandingIndex(dir string, mainGitLockHeld bool, repairedCorruptIndex *bool) (landingIndexRecovery, error) {
+	if mainGitLockHeld {
+		return recoverLandingIndexLocked(dir, repairedCorruptIndex)
+	}
+
+	var recovery landingIndexRecovery
+	err := withMainGitLock(dir, "landing_index_recovery", func() error {
+		var recoveryErr error
+		recovery, recoveryErr = recoverLandingIndexLocked(dir, repairedCorruptIndex)
+		return recoveryErr
+	})
+	return recovery, err
+}
+
+// recoverLandingIndexLocked performs one short mutation pass after the
+// read-only wait budget expires. The caller holds the process-shared main-Git
+// lock, so read-tree, reset, and checkpoint commits cannot race another land's
+// ref/index synchronization.
+func recoverLandingIndexLocked(dir string, repairedCorruptIndex *bool) (landingIndexRecovery, error) {
+	if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+		return landingIndexRecovery{clean: true}, nil
+	}
+	if repairedCorruptIndex != nil && !*repairedCorruptIndex {
+		out, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").CombinedOutput()
+		if isRecoverableLandingIndexCorruption(string(out)) {
+			*repairedCorruptIndex = true
+			if _, err := readTreeHeadWithRetry(dir); err != nil {
+				return landingIndexRecovery{}, fmt.Errorf("repairing landing worktree index: %w", err)
+			}
+			if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+				return landingIndexRecovery{clean: true, progressed: true}, nil
+			}
+		}
+	}
+
+	// A prior land can leave the index at a recent ancestor. Re-reading HEAD is
+	// safe only for that exact signature.
+	if matches, _ := indexMatchesRecentAncestorTree(dir, 20); matches {
+		if _, err := readTreeHeadWithRetry(dir); err == nil {
+			if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+				return landingIndexRecovery{clean: true, progressed: true}, nil
+			}
+		}
+	}
+
+	// An all-evidence staged set is local state: remove it only from the index
+	// and preserve the bytes. Mixed/code sets fall through to the real-work
+	// checkpoint, which explicitly excludes execution evidence.
+	if unstageOrphanedExecutionEvidence(dir) {
+		clean := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run() == nil
+		return landingIndexRecovery{clean: clean, progressed: true}, nil
+	}
+	committed, err := checkpointLandingWorktreeLocalChanges(dir, "staged at land boundary")
+	if err != nil {
+		return landingIndexRecovery{}, err
+	}
+	return landingIndexRecovery{progressed: committed}, nil
 }
 
 func isRecoverableLandingIndexCorruption(output string) bool {
@@ -772,31 +807,6 @@ func isRecoverableLandingIndexCorruption(output string) bool {
 func isExecutionEvidencePath(path string) bool {
 	p := strings.TrimSpace(path)
 	return p == ".ddx/executions" || strings.HasPrefix(p, ".ddx/executions/")
-}
-
-// checkpointOrphanedExecutionEvidence checkpoints staged DDx execution
-// evidence when every staged path lives under .ddx/executions/. Land callers
-// use this to preserve per-attempt evidence in history instead of unstaging it.
-func checkpointOrphanedExecutionEvidence(dir string) (bool, error) {
-	out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").CombinedOutput()
-	if err != nil {
-		return false, fmt.Errorf("listing staged paths: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	var staged []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if p := strings.TrimSpace(line); p != "" {
-			staged = append(staged, p)
-		}
-	}
-	if len(staged) == 0 {
-		return false, nil
-	}
-	for _, p := range staged {
-		if !isExecutionEvidencePath(p) {
-			return false, nil
-		}
-	}
-	return checkpointLandingWorktreeLocalChanges(dir, "staged execution evidence at land boundary")
 }
 
 // unstageOrphanedExecutionEvidence unstages staged .ddx/executions/* evidence
@@ -1002,39 +1012,8 @@ func (RealLandingGitOps) CountCommits(dir, base, tip string) int {
 	return n
 }
 
-func (RealLandingGitOps) StageDir(dir, relPath string) error {
-	// Exclude embedded session logs from the evidence commit — tracking
-	// multi-thousand-line .jsonl files caused retry review prompts to
-	// balloon past 2M tokens and crash every provider with n_keep > n_ctx
-	// (ddx-39e27896). manifest.json, result.json, prompt.md, and
-	// usage.json remain tracked for audit; the raw session log lives on
-	// disk, not in git history.
-	args := append([]string{"add", "--force", "--", relPath}, EvidenceLandExcludePathspecs()...)
-	out, err := internalgit.Command(context.Background(), dir, args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git add %s: %s: %w", relPath, strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
-	out, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").Output()
-	if len(strings.TrimSpace(string(out))) == 0 {
-		return "", nil
-	}
-	commitOut, err := internalgit.Command(context.Background(), dir,
-		"-c", "user.name=ddx-land-coordinator",
-		"-c", "user.email=coordinator@ddx.local",
-		"commit", "-m", msg,
-	).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	shaOut, err := internalgit.Command(context.Background(), dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return "", fmt.Errorf("rev-parse HEAD after evidence commit: %w", err)
-	}
-	return strings.TrimSpace(string(shaOut)), nil
+func (RealLandingGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return VerifyCandidateHasNoExecutionEvidence(dir, base, tip)
 }
 
 // DiffNumstat implements LandingGitOps.DiffNumstat.
@@ -1090,7 +1069,7 @@ func (RealLandingGitOps) LocalAncestryCheck(dir, targetBranch string) (PreClaimR
 }
 
 func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
-	if err := ensureLandingWorktreeReady(dir, targetBranch, false); err != nil {
+	if err := ensureLandingWorktreeReadyWithLockState(dir, targetBranch, true); err != nil {
 		return PreClaimResult{}, err
 	}
 
@@ -1112,7 +1091,7 @@ func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, e
 }
 
 func localAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
-	if err := ensureLandingWorktreeReady(dir, targetBranch, false); err != nil {
+	if err := ensureLandingWorktreeReady(dir, targetBranch); err != nil {
 		return PreClaimResult{}, err
 	}
 
@@ -1215,10 +1194,11 @@ func buildPreservedResult(req LandRequest, preserveRef, reason string, contribCo
 	}
 }
 
-// prepareLandEvidence copies the execution evidence into the landing worktree,
-// rewrites the result artifact, and stages the evidence files. It runs outside
-// the main-git lock so large evidence directories do not hold the shared lock
-// while the filesystem work is in progress.
+// prepareLandEvidence copies the execution evidence into the temporary landing
+// worktree and rewrites the result artifact there. It runs outside the main-git
+// lock so large evidence directories do not hold the shared lock while the
+// filesystem work is in progress. The canonical project-root bundle remains
+// untouched and the temporary copy is removed with the finalization worktree.
 func prepareLandEvidence(projectRoot, wd string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
 	if req.EvidenceDir == "" {
 		return nil
@@ -1232,19 +1212,6 @@ func prepareLandEvidence(projectRoot, wd string, req LandRequest, gitOps Landing
 	// Execution evidence is per-machine and must never be committed (ddx-d10073a8):
 	// it is copied onto disk for landing/review to read, but NOT staged, so it
 	// never rides a commit into the durable branch.
-	return nil
-}
-
-// landEvidence is intentionally a no-op: execution evidence is per-machine
-// working state and must NEVER be committed to the durable branch (ddx-d10073a8).
-// The bundle is already published to the project root and copied onto disk in the
-// landing worktree by prepareLandEvidence, where landing/review/audit read it
-// directly. No evidence commit is created, so EvidenceCommitSHA stays empty and
-// the durable branch never advances past the implementation merge.
-func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
-	if result != nil {
-		result.EvidenceCommitSHA = ""
-	}
 	return nil
 }
 
@@ -1290,6 +1257,9 @@ func rewriteFinalResultArtifactForLand(wd string, req LandRequest, land *LandRes
 	if res.ImplementationRev == "" && res.ResultRev != "" {
 		res.ImplementationRev = res.ResultRev
 	}
+	// Legacy result files could record the trailing evidence revision in the
+	// request revision. Preserve that shape when rewriting old on-disk bundles;
+	// current landing requests never create or assign an evidence revision.
 	if res.EvidenceRev == "" &&
 		req.ResultRev != "" &&
 		res.ImplementationRev != "" &&
@@ -1301,9 +1271,8 @@ func rewriteFinalResultArtifactForLand(wd string, req LandRequest, land *LandRes
 	return writeArtifactJSON(resultPath, &res)
 }
 
-// evidenceDirHasTrackedFiles reports whether any files under dirRel are tracked
-// in git at wd. Used by landEvidence to distinguish "nothing staged because
-// already committed" from "nothing staged because evidence is absent."
+// evidenceDirHasTrackedFiles reports whether legacy history already tracks
+// files under dirRel. Local publication must not overwrite such a checkout.
 func evidenceDirHasTrackedFiles(wd, dirRel string) bool {
 	out, err := internalgit.Command(context.Background(), wd, "ls-files", "--", filepath.FromSlash(dirRel)).Output()
 	return err == nil && len(strings.TrimSpace(string(out))) > 0
@@ -1379,29 +1348,6 @@ func copyEvidenceDirForLanding(projectRoot, landingWD, relPath string) error {
 	})
 }
 
-func cleanupProjectEvidenceCopy(projectRoot, relPath string) {
-	cleanRel, ok := cleanRelativePath(relPath)
-	if !ok {
-		return
-	}
-	evidenceRoot := filepath.Join(projectRoot, cleanRel)
-	embeddedDir := filepath.Join(evidenceRoot, "embedded")
-	if info, err := os.Stat(embeddedDir); err == nil && info.IsDir() {
-		entries, err := os.ReadDir(evidenceRoot)
-		if err != nil {
-			return
-		}
-		for _, entry := range entries {
-			if entry.Name() == "embedded" {
-				continue
-			}
-			_ = os.RemoveAll(filepath.Join(evidenceRoot, entry.Name()))
-		}
-		return
-	}
-	_ = os.RemoveAll(evidenceRoot)
-}
-
 func cleanRelativePath(path string) (string, bool) {
 	if path == "" || filepath.IsAbs(path) {
 		return "", false
@@ -1464,7 +1410,10 @@ func prepareLandTarget(projectRoot, wd string, req LandRequest, gitOps LandingGi
 		targetBranch = br
 	}
 	req.TargetBranch = targetBranch
-	if err := ensureLandingWorktreeReady(wd, targetBranch, true); err != nil {
+	if err := gitOps.VerifyCandidateHistory(wd, req.BaseRev, req.ResultRev); err != nil {
+		return nil, nil, err
+	}
+	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
 		return nil, nil, err
 	}
 	targetRef := "refs/heads/" + targetBranch
@@ -1675,7 +1624,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		if req.EvidenceDir != "" {
 			if prepareErr := prepareLandEvidence(projectRoot, finalWD, req, gitOps, result); prepareErr != nil {
 				err = withMainGitLock(projectRoot, "land_post_land_finalize", func() error {
-					preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, prepareErr)
+					preserved, preserveErr := preserveAfterLocalEvidencePreparationFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, prepareErr)
 					if preserveErr != nil {
 						return preserveErr
 					}
@@ -1690,18 +1639,6 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 			}
 		}
 		err = withMainGitLock(projectRoot, "land_post_land_finalize", func() error {
-			if req.EvidenceDir != "" {
-				if err := landEvidence(finalWD, prep.targetBranch, req, gitOps, result); err != nil {
-					preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, err)
-					if preserveErr != nil {
-						return preserveErr
-					}
-					result = preserved
-					syncFromRev = result.NewTip
-					return nil
-				}
-				cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
-			}
 			syncFromRev = prep.currentTip
 			if result != nil && syncOperatorAfterLand && syncFromRev != "" {
 				syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
@@ -1734,17 +1671,17 @@ func preserveIfPostLandGateFailsLocked(wd string, req LandRequest, gitOps Landin
 	return buildPreservedResult(req, preserveRef, reason, contribCount), nil
 }
 
-func preserveAfterEvidenceFailure(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, dirtyBefore []string, evidenceErr error) (*LandResult, error) {
+func preserveAfterLocalEvidencePreparationFailure(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, evidenceErr error) (*LandResult, error) {
 	preserveRef, err := pinPreserveRef(gitOps, wd, req, preLandTip)
 	if err != nil {
-		return nil, fmt.Errorf("preserving %s after evidence commit failure: %w", preserveRef, err)
+		return nil, fmt.Errorf("preserving %s after local evidence preparation failure: %w", preserveRef, err)
 	}
 	if landedTip != "" {
 		if revertErr := gitOps.UpdateRefTo(wd, targetRef, preLandTip, landedTip); revertErr != nil {
-			return nil, fmt.Errorf("restoring %s to %s after evidence commit failed: %w", targetRef, preLandTip, revertErr)
+			return nil, fmt.Errorf("restoring %s to %s after local evidence preparation failed: %w", targetRef, preLandTip, revertErr)
 		}
 	}
-	return buildPreservedResult(req, preserveRef, "evidence commit failed: "+evidenceErr.Error(), contribCount), nil
+	return buildPreservedResult(req, preserveRef, "local evidence preparation failed: "+evidenceErr.Error(), contribCount), nil
 }
 
 func runPostLandCommand(wd string, command []string) (string, error) {
@@ -2044,9 +1981,7 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		}
 		// LandedTip reflects the ref that actually landed the implementation:
 		// either ResultRev on the ff path or the merge commit SHA on the merge
-		// path. A trailing final-result/evidence audit commit may advance NewTip
-		// beyond this landed revision, but callers should keep ResultRev/LandedRev
-		// pointing at the landed implementation state.
+		// path. The compatibility aliases point at that implementation state.
 		if landedTip != "" {
 			// Preserve the implementation rev before rewriting the compat alias.
 			if res.ImplementationRev == "" {
@@ -2091,12 +2026,12 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 // workdir — the worker's original worktree has already been cleaned up by the
 // time Land() runs.
 func BuildLandRequestFromResult(projectRoot string, res *ExecuteBeadResult) LandRequest {
-	// Before the first land, ResultRev points at the candidate that must be
-	// submitted (either the implementation commit itself or a trailing
-	// evidence-bundle commit). After a result has already landed once,
-	// ResultRev is rewritten to the landed branch tip; in that case prefer the
-	// preserved ImplementationRev so re-submission does not try to land the
-	// already-landed branch tip.
+	// Before the first land, ResultRev points at the implementation candidate.
+	// After a result has already landed once, ResultRev is rewritten to the
+	// landed branch tip; in that case prefer the preserved ImplementationRev so
+	// re-submission does not try to land the already-landed branch tip. Legacy
+	// results may still describe a trailing evidence commit, but current
+	// execution evidence is local-only and never enters candidate history.
 	candidateRev := res.ResultRev
 	if res.LandedRev != "" && res.ImplementationRev != "" {
 		candidateRev = res.ImplementationRev

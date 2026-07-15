@@ -13,10 +13,33 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReplayOverridesAreOpaqueAndPreserveExplicitConstraints(t *testing.T) {
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "configured-project-model-must-not-leak",
+	})
+
+	unpinned := cfg.Resolve(replayCLIOverrides("", "", "", 0))
+	assert.Empty(t, unpinned.Passthrough().Harness)
+	assert.Empty(t, unpinned.Passthrough().Model)
+	assert.Empty(t, unpinned.Profile())
+
+	const (
+		harness = " opaque-replay-harness "
+		model   = " opaque-replay-model "
+		profile = " opaque-replay-profile "
+	)
+	explicit := cfg.Resolve(replayCLIOverrides(harness, model, profile, 7))
+	assert.Equal(t, harness, explicit.Passthrough().Harness)
+	assert.Equal(t, model, explicit.Passthrough().Model)
+	assert.Equal(t, profile, explicit.Profile())
+	assert.Equal(t, 7, explicit.MinPower())
+}
 
 // writeReplayManifest writes a minimal manifest.json and prompt.md to
 // .ddx/executions/<attemptID>/ under dir.

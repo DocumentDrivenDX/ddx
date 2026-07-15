@@ -66,6 +66,131 @@ func TestWorkerDesiredStateRoundTrip(t *testing.T) {
 	assert.True(t, loaded.UpdatedAt.Equal(desired.UpdatedAt))
 }
 
+func TestWorkerDesiredStateV1ProfileMigrationPreservesOnlyUnambiguousPins(t *testing.T) {
+	tests := []struct {
+		name        string
+		legacy      string
+		wantProfile string
+	}{
+		{
+			name:        "ambiguous synthesized default becomes unpinned",
+			legacy:      "default",
+			wantProfile: "",
+		},
+		{
+			name:        "unambiguous explicit profile is preserved",
+			legacy:      "operator-custom-profile",
+			wantProfile: "operator-custom-profile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			setupBeadStore(t, root)
+			manager := NewWorkerManager(root)
+			defer manager.StopWatchdog()
+			supervisor := NewWorkerSupervisor(manager)
+
+			legacy := DefaultWorkerDesiredState(root)
+			legacy.Version = legacyWorkerDesiredStateVersion
+			legacy.DefaultSpec.Profile = tt.legacy
+			require.NoError(t, os.MkdirAll(manager.rootDir, 0o755))
+			data, err := json.MarshalIndent(legacy, "", "  ")
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(supervisor.desiredStatePath(), append(data, '\n'), 0o644))
+
+			loaded, err := supervisor.LoadDesiredState()
+			require.NoError(t, err)
+			assert.Equal(t, workerDesiredStateVersion, loaded.Version)
+			assert.Equal(t, tt.wantProfile, loaded.DefaultSpec.Profile)
+		})
+	}
+}
+
+func TestWorkerDesiredStateV1ProfileMigrationReconcilesToOpaqueExecute(t *testing.T) {
+	tests := []struct {
+		name       string
+		legacy     string
+		wantPolicy string
+	}{
+		{
+			name:       "synthesized default becomes an unpinned Execute",
+			legacy:     "default",
+			wantPolicy: "",
+		},
+		{
+			name:       "operator profile remains byte-identical",
+			legacy:     " operator-custom-profile ",
+			wantPolicy: " operator-custom-profile ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+			svc := &workerIntakeServiceStub{}
+			installWorkerIntakeStub(t, svc)
+			root := setupWorkerResolveRouteRepo(t)
+			store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
+			require.NoError(t, store.Init(context.Background()))
+			require.NoError(t, store.Create(context.Background(), &bead.Bead{
+				ID:          "ddx-desired-state-profile-migration",
+				Title:       "execution: prove desired-state profile migration",
+				IssueType:   bead.DefaultType,
+				Description: "PROBLEM\nA migrated worker must preserve the route-neutral boundary.\n\nROOT CAUSE\ncli/internal/server/workers_supervisor.go migrates legacy desired state.\n\nPROPOSED FIX\nCapture the implementation Execute request.\n\nNON-SCOPE\nDo not select a concrete route.\n",
+				Acceptance:  "1. TestWorkerDesiredStateV1ProfileMigrationReconcilesToOpaqueExecute passes\n2. cd cli && go test ./internal/server/... passes\n3. lefthook run pre-commit passes\n",
+				Labels:      []string{"phase:build", "area:server", "kind:test"},
+			}))
+			runCmd(t, root, "git", "add", ".")
+			runCmd(t, root, "git", "commit", "-m", "seed desired-state migration bead")
+
+			manager := NewWorkerManager(root)
+			defer manager.StopWatchdog()
+			manager.LandCoordinators.gitOpsOverride = &fakeLandingGitOps{}
+			t.Cleanup(func() {
+				stopProjectWorkers(t, manager, root)
+				manager.LandCoordinators.StopAll()
+			})
+			supervisor := NewWorkerSupervisor(manager)
+			legacy := DefaultWorkerDesiredState(root)
+			legacy.Version = legacyWorkerDesiredStateVersion
+			legacy.DesiredCount = 1
+			legacy.DefaultSpec.Mode = executeloop.ModeOnce
+			legacy.DefaultSpec.IdleInterval = executeloop.Duration{}
+			legacy.DefaultSpec.NoReview = true
+			legacy.DefaultSpec.Profile = tt.legacy
+			require.NoError(t, os.MkdirAll(manager.rootDir, 0o755))
+			data, err := json.MarshalIndent(legacy, "", "  ")
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(supervisor.desiredStatePath(), append(data, '\n'), 0o644))
+
+			require.NoError(t, supervisor.Reconcile())
+			require.Eventually(t, func() bool {
+				svc.mu.Lock()
+				defer svc.mu.Unlock()
+				for _, req := range svc.requests {
+					if req.Role == "implementer" && req.Policy == tt.wantPolicy {
+						return true
+					}
+				}
+				return false
+			}, 10*time.Second, 10*time.Millisecond, "migrated desired state must reach Fizeau Execute with policy %q", tt.wantPolicy)
+
+			svc.mu.Lock()
+			defer svc.mu.Unlock()
+			for _, req := range svc.requests {
+				if req.Role != "implementer" {
+					continue
+				}
+				assert.Equal(t, tt.wantPolicy, req.Policy)
+				return
+			}
+			t.Fatal("worker never emitted an implementation Execute request")
+		})
+	}
+}
+
 func TestWorkerSupervisorReconcileStartsAndStopsToDesiredCount(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

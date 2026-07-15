@@ -1,12 +1,15 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/easel/fizeau"
 )
 
 func TestAgentRunRESTDispatchSpecParity(t *testing.T) {
@@ -38,7 +41,7 @@ func TestAgentRunRESTDispatchSpecParity(t *testing.T) {
 		promptSource: "rest-test",
 		harness:      "codex",
 		model:        "gpt-5.4-mini",
-		profile:      "smart",
+		profile:      " smart ",
 		effort:       "high",
 		permissions:  "unrestricted",
 		timeout:      45 * time.Second,
@@ -71,7 +74,7 @@ func TestAgentRunMCPDispatchSpecParity(t *testing.T) {
 		promptSource: "inline",
 		harness:      "claude",
 		model:        "sonnet",
-		profile:      "default",
+		profile:      " default ",
 		effort:       "medium",
 		permissions:  "safe",
 		timeout:      30 * time.Second,
@@ -104,6 +107,62 @@ func TestAgentRunDispatchUnsupportedFieldsFailExplicitly(t *testing.T) {
 	}
 }
 
+func TestUnpinnedEntryPointsIgnoreConfiguredProjectModel(t *testing.T) {
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "configured-project-model"})
+
+	t.Run("REST", func(t *testing.T) {
+		svc := installResolveRouteFailingService(t)
+		prepared, err := agent.PrepareAgentRunDispatch(t.TempDir(), agent.AgentRunDispatchSpec{Prompt: "hello"})
+		if err != nil {
+			t.Fatalf("prepare REST dispatch: %v", err)
+		}
+		rcfg := cfg.Resolve(prepared.Overrides)
+		if got := rcfg.Model(); got != "" {
+			t.Fatalf("unconfigured REST dispatch inherited project agent.model %q", got)
+		}
+		if _, err := agent.RunWithConfigViaService(context.Background(), prepared.Runtime.WorkDir, rcfg, prepared.Runtime); err != nil {
+			t.Fatalf("execute REST dispatch: %v", err)
+		}
+		assertOpaqueUnpinnedExecuteRequest(t, svc.lastExecuteReq)
+	})
+
+	t.Run("MCP", func(t *testing.T) {
+		svc := installResolveRouteFailingService(t)
+		spec, err := agentRunDispatchSpecFromMCPArguments(map[string]any{"text": "hello"})
+		if err != nil {
+			t.Fatalf("prepare MCP arguments: %v", err)
+		}
+		prepared, err := agent.PrepareAgentRunDispatch(t.TempDir(), spec)
+		if err != nil {
+			t.Fatalf("prepare MCP dispatch: %v", err)
+		}
+		rcfg := cfg.Resolve(prepared.Overrides)
+		if got := rcfg.Model(); got != "" {
+			t.Fatalf("unconfigured MCP dispatch inherited project agent.model %q", got)
+		}
+		if _, err := agent.RunWithConfigViaService(context.Background(), prepared.Runtime.WorkDir, rcfg, prepared.Runtime); err != nil {
+			t.Fatalf("execute MCP dispatch: %v", err)
+		}
+		assertOpaqueUnpinnedExecuteRequest(t, svc.lastExecuteReq)
+	})
+
+	t.Run("server-managed", func(t *testing.T) {
+		assertServerManagedUnpinnedExecute(t)
+	})
+}
+
+func assertOpaqueUnpinnedExecuteRequest(t *testing.T, req agentlib.ServiceExecuteRequest) {
+	t.Helper()
+	if req.Harness != "" || req.Provider != "" || req.Model != "" || req.Policy != "" {
+		t.Fatalf("unpinned Execute request leaked a concrete route: harness=%q provider=%q model=%q policy=%q",
+			req.Harness, req.Provider, req.Model, req.Policy)
+	}
+	if req.Reasoning != "" || req.ProviderTimeout != 0 {
+		t.Fatalf("unpinned Execute request leaked DDx reasoning/timeout policy: reasoning=%q provider_timeout=%s",
+			req.Reasoning, req.ProviderTimeout)
+	}
+}
+
 type expectedPreparedAgentRunDispatch struct {
 	workDir      string
 	prompt       string
@@ -118,6 +177,9 @@ type expectedPreparedAgentRunDispatch struct {
 
 func assertPreparedAgentRunDispatch(t *testing.T, got agent.PreparedAgentRunDispatch, want expectedPreparedAgentRunDispatch) {
 	t.Helper()
+	if !got.Overrides.OpaquePassthrough {
+		t.Fatal("REST/MCP dispatch must suppress project routing defaults")
+	}
 	if got.Runtime.WorkDir != want.workDir {
 		t.Fatalf("runtime WorkDir = %q, want %q", got.Runtime.WorkDir, want.workDir)
 	}

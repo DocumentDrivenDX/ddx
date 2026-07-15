@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,7 +31,11 @@ import (
 type passthroughTestService struct {
 	executeCalled       bool
 	lastReq             agentlib.ServiceExecuteRequest
+	executeRequests     []agentlib.ServiceExecuteRequest
 	listHarnessesCalled bool
+	listProvidersCalled bool
+	listModelsCalled    bool
+	listPoliciesCalled  bool
 	listModels          []agentlib.ModelInfo
 	listPolicies        []agentlib.PolicyInfo
 	executeEvents       []agentlib.ServiceEvent
@@ -38,16 +43,12 @@ type passthroughTestService struct {
 	// Execute so tests can exercise typed provider-failure classification
 	// (ddx-3b721804) without a real agent server.
 	executeErr error
-	// harnessInfos, when non-nil, overrides the harness list returned by
-	// ListHarnesses. Lets tests report a harness as available + subscription
-	// so seedRecentRouteAttemptsFromTracker skips exclusion-seeding for it.
+	// harnessInfos, when non-nil, overrides the harness inventory returned to
+	// status/display callers.
 	harnessInfos  []agentlib.HarnessInfo
 	routeAttempts []agentlib.RouteAttempt
-	// routeAttemptsAtExecute is the len(routeAttempts) at the moment Execute
-	// is first invoked; route-health seed entries land at indices
-	// [0, routeAttemptsAtExecute) and post-run entries (recordServiceRouteAttempt)
-	// land at indices >= routeAttemptsAtExecute. Lets tests verify the seed
-	// happens before the dispatched Execute call.
+	// routeAttemptsAtExecute is the len(routeAttempts) at the first Execute.
+	// It proves DDx does not feed historical concrete routes into dispatch.
 	routeAttemptsAtExecute int
 }
 
@@ -57,6 +58,7 @@ func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.Servi
 	}
 	s.executeCalled = true
 	s.lastReq = req
+	s.executeRequests = append(s.executeRequests, req)
 	if s.executeErr != nil {
 		return nil, s.executeErr
 	}
@@ -87,14 +89,17 @@ func (s *passthroughTestService) TailSessionLog(ctx context.Context, sessionID s
 }
 
 func (s *passthroughTestService) ListProviders(ctx context.Context) ([]agentlib.ProviderInfo, error) {
+	s.listProvidersCalled = true
 	return nil, nil
 }
 
 func (s *passthroughTestService) ListModels(ctx context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	s.listModelsCalled = true
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
 func (s *passthroughTestService) ListPolicies(ctx context.Context) ([]agentlib.PolicyInfo, error) {
+	s.listPoliciesCalled = true
 	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 
@@ -140,9 +145,103 @@ func resolvedWithPassthrough(harness, provider, model string, minPower, maxPower
 	return cfg.Resolve(config.CLIOverrides{
 		Harness:  harness,
 		Provider: provider,
+		Model:    model,
 		MinPower: minPower,
 		MaxPower: maxPower,
 	})
+}
+
+func TestProviderTimeoutIsExplicitOnly(t *testing.T) {
+	workDir := t.TempDir()
+	ddxDir := testutils.MakeInitializedDDxRoot(t, workDir)
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+agent:
+  endpoints:
+    - type: openai
+      base_url: http://127.0.0.1:1/v1
+      request_timeout_seconds: 17
+`), 0o600))
+
+	provider := "openai-127-0-0-1-1"
+	base := config.NewTestConfigForRun(config.TestRunConfigOpts{})
+	omitted := base.Resolve(config.CLIOverrides{Provider: provider})
+	omittedSvc := &passthroughTestService{}
+	_, err := executeOnService(context.Background(), omittedSvc, workDir, omitted, AgentRunRuntime{Prompt: "omitted timeout"})
+	require.NoError(t, err)
+	assert.Zero(t, omittedSvc.lastReq.ProviderTimeout, "omitted provider timeout must remain unset")
+	assert.False(t, omittedSvc.listHarnessesCalled)
+	assert.False(t, omittedSvc.listProvidersCalled)
+	assert.False(t, omittedSvc.listModelsCalled)
+	assert.False(t, omittedSvc.listPoliciesCalled)
+
+	explicitTimeout := 37*time.Second + 123*time.Millisecond
+	explicit := base.Resolve(config.CLIOverrides{
+		Provider:               provider,
+		ProviderRequestTimeout: &explicitTimeout,
+	})
+	explicitSvc := &passthroughTestService{}
+	_, err = executeOnService(context.Background(), explicitSvc, workDir, explicit, AgentRunRuntime{Prompt: "explicit timeout"})
+	require.NoError(t, err)
+	assert.Equal(t, explicitTimeout, explicitSvc.lastReq.ProviderTimeout)
+	assert.False(t, explicitSvc.listHarnessesCalled)
+	assert.False(t, explicitSvc.listProvidersCalled)
+	assert.False(t, explicitSvc.listModelsCalled)
+	assert.False(t, explicitSvc.listPoliciesCalled)
+}
+
+func TestExplicitPublicExecutionConstraintsSurviveProviderDetachment(t *testing.T) {
+	idleTimeout := 43*time.Second + 17*time.Millisecond
+	providerTimeout := 47*time.Second + 29*time.Millisecond
+	wallTimeout := 53*time.Second + 31*time.Millisecond
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		WallClock: wallTimeout,
+	}).Resolve(config.CLIOverrides{
+		Harness:                " opaque-harness ",
+		Provider:               " opaque-provider ",
+		Model:                  " opaque-model ",
+		Profile:                " opaque-policy ",
+		Effort:                 " opaque-reasoning ",
+		Permissions:            "unrestricted",
+		Timeout:                &idleTimeout,
+		ProviderRequestTimeout: &providerTimeout,
+		MinPower:               7,
+		MaxPower:               11,
+	})
+	svc := &passthroughTestService{}
+	runtime := AgentRunRuntime{
+		Prompt:        "preserve every public constraint",
+		WorkDir:       filepath.Join(t.TempDir(), " opaque-workdir "),
+		Role:          "implementer",
+		CorrelationID: "bead-123:attempt-456",
+		Correlation: map[string]string{
+			"bead_id": " bead-123 ",
+			"opaque":  " correlation-value ",
+		},
+		Env: map[string]string{
+			"OPAQUE_ENV": " env-value ",
+		},
+	}
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, runtime)
+	require.NoError(t, err)
+	req := svc.lastReq
+	assert.Equal(t, " opaque-harness ", req.Harness)
+	assert.Equal(t, " opaque-provider ", req.Provider)
+	assert.Equal(t, " opaque-model ", req.Model)
+	assert.Equal(t, " opaque-policy ", req.Policy)
+	assert.Equal(t, agentlib.Reasoning(" opaque-reasoning "), req.Reasoning)
+	assert.Equal(t, "unrestricted", req.Permissions)
+	assert.Equal(t, wallTimeout, req.Timeout)
+	assert.Equal(t, idleTimeout, req.IdleTimeout)
+	assert.Equal(t, providerTimeout, req.ProviderTimeout)
+	assert.Equal(t, 7, req.MinPower)
+	assert.Equal(t, 11, req.MaxPower)
+	assert.Equal(t, runtime.WorkDir, req.WorkDir)
+	assert.Equal(t, runtime.Role, req.Role)
+	assert.Equal(t, runtime.CorrelationID, req.CorrelationID)
+	assert.Equal(t, " bead-123 ", req.Metadata["bead_id"])
+	assert.Equal(t, " correlation-value ", req.Metadata["opaque"])
+	assert.Equal(t, " env-value ", req.Metadata["OPAQUE_ENV"])
 }
 
 // TestPassthroughEnvelope_InvariantUnderPowerEscalation (AC3): bumping MinPower
@@ -339,280 +438,85 @@ func TestExecuteOnService_FinalErrorWithZeroExitBecomesFailure(t *testing.T) {
 	assert.Contains(t, result.Error, "ResolveRoute: no viable routing candidate")
 }
 
-func TestExecuteOnService_RecordsFailedRouteAttempt(t *testing.T) {
-	finalPayload, err := json.Marshal(map[string]any{
-		"status":    "error",
-		"exit_code": 1,
-		"error":     `openai: Post "http://bragi:1234/v1/chat/completions": dial tcp 100.127.38.115:1234: i/o timeout`,
-		"routing_actual": map[string]any{
-			"harness":  "fiz",
-			"provider": "bragi",
-			"model":    "qwen3.5-27b",
-			"power":    5,
-		},
-	})
-	require.NoError(t, err)
+func TestConcreteRouteActualsRemainAuditOnlyAcrossDispatches(t *testing.T) {
+	failedFinal := func(harness, provider, model string) []byte {
+		payload, err := json.Marshal(map[string]any{
+			"status":    "error",
+			"exit_code": 1,
+			"error":     `openai: Post "http://opaque.invalid/v1/chat/completions": dial tcp: i/o timeout`,
+			"routing_actual": map[string]any{
+				"harness":  harness,
+				"provider": provider,
+				"model":    model,
+				"power":    5,
+			},
+		})
+		require.NoError(t, err)
+		return payload
+	}
 	svc := &passthroughTestService{
-		executeEvents: []agentlib.ServiceEvent{{Type: "final", Data: finalPayload}},
+		executeEvents: []agentlib.ServiceEvent{{Type: "final", Data: failedFinal("harness-a", "provider-a", "model-a")}},
 	}
 	rcfg := resolvedWithPassthrough("", "", "", 0, 0)
+	workDir := t.TempDir()
 
-	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+	first, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{
 		Prompt: "hello",
 	})
 	require.NoError(t, err)
-	require.NotNil(t, result)
+	require.NotNil(t, first)
+	assert.Equal(t, "harness-a", first.Harness)
+	assert.Equal(t, "provider-a", first.Provider)
+	assert.Equal(t, "model-a", first.Model)
+	assert.Equal(t, 5, first.ActualPower)
+	assert.Empty(t, svc.routeAttempts, "DDx must not feed a concrete outcome back into Fizeau")
 
-	require.Len(t, svc.routeAttempts, 1)
-	attempt := svc.routeAttempts[0]
-	assert.Equal(t, "failed", attempt.Status)
-	assert.Equal(t, "provider_error", attempt.Reason)
-	assert.Equal(t, "fiz", attempt.Harness)
-	assert.Equal(t, "bragi", attempt.Provider)
-	assert.Equal(t, "qwen3.5-27b", attempt.Model)
-	assert.Contains(t, attempt.Error, "i/o timeout")
+	// Vary only Fizeau's returned concrete identity. The next unpinned request
+	// must remain identical: actual route data is DDx audit telemetry, not
+	// routing input or a source of retry/triage policy.
+	svc.executeEvents = []agentlib.ServiceEvent{{Type: "final", Data: failedFinal("harness-b", "provider-b", "model-b")}}
+	second, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{Prompt: "hello"})
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, "harness-b", second.Harness)
+	assert.Equal(t, "provider-b", second.Provider)
+	assert.Equal(t, "model-b", second.Model)
+	assert.Equal(t, first.ActualPower, second.ActualPower)
+	require.Len(t, svc.executeRequests, 2)
+	assert.Equal(t, svc.executeRequests[0], svc.executeRequests[1],
+		"prior concrete actuals must not influence a subsequent dispatch")
+	assert.Empty(t, svc.routeAttempts, "DDx must never call RecordRouteAttempt from live execution")
 }
 
-func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing.T) {
-	root := t.TempDir()
-	testutils.MakeInitializedDDxRoot(t, root)
-	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-route-001", Title: "seed route"}))
-	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
-	require.NoError(t, store.AppendEvent("seed-route-001", bead.BeadEvent{
-		Kind:      "route-failure",
-		Summary:   "provider=bragi model=qwen3.5-27b connectivity failure",
-		Body:      `{"harness":"fiz","provider":"bragi","model":"qwen3.5-27b","error":"dial tcp 100.127.38.115:1234: i/o timeout","outcome_reason":"provider_connectivity"}`,
-		CreatedAt: now.Add(-time.Minute),
-	}))
-	svc := &passthroughTestService{}
-
-	seedRecentRouteAttemptsFromTracker(context.Background(), svc, root, now)
-
-	require.Len(t, svc.routeAttempts, 1)
-	assert.Equal(t, "failed", svc.routeAttempts[0].Status)
-	assert.Equal(t, FailureModeProviderConnectivity, svc.routeAttempts[0].Reason)
-	assert.Equal(t, "bragi", svc.routeAttempts[0].Provider)
-	assert.Equal(t, "qwen3.5-27b", svc.routeAttempts[0].Model)
-}
-
-func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T) {
-	root := t.TempDir()
-	testutils.MakeInitializedDDxRoot(t, root)
-	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init(context.Background()))
-	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:    "seed-extra-001",
-		Title: "seed extra",
-		Extra: map[string]any{
-			executeLoopFailedRoutesKey: []FailedRouteEntry{{
-				Provider:    "bragi",
-				Model:       "qwen3.5-27b",
-				ActualPower: 5,
-				Reason:      FailureModeProviderConnectivity,
-				At:          now.Add(-time.Minute).Format(time.RFC3339),
-			}},
-		},
-	}))
-	svc := &passthroughTestService{}
-
-	seedRecentRouteAttemptsFromTracker(context.Background(), svc, root, now)
-
-	require.Len(t, svc.routeAttempts, 1)
-	assert.Equal(t, "failed", svc.routeAttempts[0].Status)
-	assert.Equal(t, "bragi", svc.routeAttempts[0].Provider)
-	assert.Equal(t, "qwen3.5-27b", svc.routeAttempts[0].Model)
-}
-
-// TestSeedExclusionsSkipsAvailableSubscriptionHarness reproduces the
-// no_viable_provider regression: during a local-fleet outage, transient
-// connectivity blips on a subscription harness (claude) were recorded in the
-// tracker and replayed as HARD route exclusions. With local providers excluded
-// by config and openrouter blocked, excluding the only live subscription
-// harness empties the candidate set. The seed must replay the unreachable
-// local provider's failure but MUST NOT replay an available subscription
-// harness's blip.
-func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
-	root := t.TempDir()
-	testutils.MakeInitializedDDxRoot(t, root)
-	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-sub-001", Title: "seed subscription"}))
-	now := time.Date(2026, 5, 29, 8, 55, 0, 0, time.UTC)
-
-	// Transient connectivity blip on an available subscription harness (claude).
-	require.NoError(t, store.AppendEvent("seed-sub-001", bead.BeadEvent{
-		Kind:      "route-failure",
-		Summary:   "provider_connectivity claude",
-		Body:      `{"harness":"claude","provider":"claude","model":"claude-sonnet-4","error":"transient connection reset","outcome_reason":"provider_connectivity"}`,
-		CreatedAt: now.Add(-time.Minute),
-	}))
-	// Unreachable local/HTTP provider: still a meaningful exclusion.
-	require.NoError(t, store.AppendEvent("seed-sub-001", bead.BeadEvent{
-		Kind:      "route-failure",
-		Summary:   "provider_connectivity bragi",
-		Body:      `{"harness":"fiz","provider":"bragi","model":"qwen3.5-27b","error":"dial tcp 100.127.38.115:1234: i/o timeout","outcome_reason":"provider_connectivity"}`,
-		CreatedAt: now.Add(-time.Minute),
-	}))
-
-	svc := &passthroughTestService{
-		harnessInfos: []agentlib.HarnessInfo{
-			{Name: "claude", Available: true, Billing: agentlib.BillingModelSubscription},
-		},
-	}
-
-	seedRecentRouteAttemptsFromTracker(context.Background(), svc, root, now)
-
-	var sawClaude, sawBragi bool
-	for _, a := range svc.routeAttempts {
-		if a.Provider == "claude" || a.Harness == "claude" {
-			sawClaude = true
-		}
-		if a.Provider == "bragi" {
-			sawBragi = true
-		}
-	}
-	assert.False(t, sawClaude, "available subscription harness (claude) must not be seeded as a route exclusion; got %+v", svc.routeAttempts)
-	assert.True(t, sawBragi, "unreachable local provider (bragi) must still be seeded as a route exclusion; got %+v", svc.routeAttempts)
-}
-
-// TestExecutePolicySeedsRouteHealthFromTracker (ddx-d7c56c1b AC1) reproduces
-// the production failure: tracker evidence for a recent provider_connectivity
-// failure on bragi/qwen3.5-27b must be replayed into fizeau's route-health
-// store with a fresh-enough timestamp that fizeau's default 30s TTL still
-// considers it active when the routing engine reads ActiveAttempts. DDx's
-// ProviderUnavailableCooldown is 15 min; without rebasing the timestamp the
-// historical event is immediately expired by fizeau and policy/default routes
-// keep selecting the failed provider.
-func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
+// TestExecutePolicyDoesNotSeedConcreteRouteHealth proves historical route
+// identity remains evidence. DDx must not replay it into Fizeau before a new
+// Execute because doing so biases the route selected for the new operation.
+func TestExecutePolicyDoesNotSeedConcreteRouteHealth(t *testing.T) {
 	root := t.TempDir()
 	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
 
-	now := time.Now().UTC()
-	// 5 minutes old: well inside DDx's 15-min replay window but well outside
-	// fizeau's default 30s route-health TTL. This is the exact gap that lets
-	// dial-class failures keep re-burning the same provider in production.
-	failureAt := now.Add(-5 * time.Minute)
 	require.NoError(t, store.AppendEvent("seed-policy-001", bead.BeadEvent{
 		Kind:      "route-failure",
 		Summary:   "provider_connectivity bragi/qwen3.5-27b",
 		Body:      `{"harness":"fiz","provider":"bragi","model":"qwen3.5-27b","error":"dial tcp 100.127.38.115:1234: i/o timeout","outcome_reason":"provider_connectivity"}`,
-		CreatedAt: failureAt,
+		CreatedAt: time.Now().UTC().Add(-5 * time.Minute),
 	}))
 
 	svc := &passthroughTestService{}
 	rcfg := resolvedWithPassthrough("fiz", "", "", 0, 0)
 
-	// Drive executeOnService end-to-end: seed must run before Execute is
-	// dispatched, with the request still policy-driven (no provider/model pin
-	// injected by DDx — AC3).
 	_, err := executeOnService(context.Background(), svc, root, rcfg, AgentRunRuntime{Prompt: "hello"})
 	require.NoError(t, err)
 
 	require.True(t, svc.executeCalled, "executeOnService must dispatch Execute")
-	require.GreaterOrEqual(t, svc.routeAttemptsAtExecute, 1, "seed must record a route-health attempt before Execute is called")
-
-	seeded := svc.routeAttempts[:svc.routeAttemptsAtExecute]
-	var bragi *agentlib.RouteAttempt
-	for i := range seeded {
-		if seeded[i].Provider == "bragi" && seeded[i].Model == "qwen3.5-27b" {
-			bragi = &seeded[i]
-			break
-		}
-	}
-	require.NotNil(t, bragi, "tracker evidence for bragi/qwen3.5-27b must be replayed before Execute; got %+v", seeded)
-	assert.Equal(t, "failed", bragi.Status)
-	assert.Equal(t, FailureModeProviderConnectivity, bragi.Reason)
-
-	// The DDx-side route-health hard-gate only works if the replayed
-	// timestamp survives fizeau's default TTL window. routehealth.DefaultCooldown
-	// is 30s; if DDx replays the historical timestamp verbatim, fizeau's
-	// ActiveAttempts immediately expires the record and policy routing happily
-	// re-picks the failed provider. The rebase to `now` is the contract.
-	require.False(t, bragi.Timestamp.IsZero(), "Timestamp must be set")
-	age := now.Sub(bragi.Timestamp)
-	assert.LessOrEqual(t, age, 30*time.Second,
-		"replayed RouteAttempt.Timestamp must fall within fizeau's default 30s route-health TTL so the hard-gate is honored on the next routing decision; got age %v (original event at %v)",
-		age, failureAt)
-
-	// AC3: the dispatched request must remain policy-driven — DDx must not
-	// have pinned a provider/model in response to the failure.
+	assert.Zero(t, svc.routeAttemptsAtExecute, "DDx must not feed concrete route history into a new dispatch")
 	assert.Equal(t, "fiz", svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider, "DDx must not pin a provider in response to tracker evidence")
 	assert.Empty(t, svc.lastReq.Model, "DDx must not pin a model in response to tracker evidence")
 	assert.Zero(t, svc.lastReq.MinPower, "DDx must not raise MinPower floor in response to tracker evidence")
-}
-
-// TestRecordRouteAttemptRouteHealthGatesPolicyExecute (ddx-d7c56c1b AC2)
-// proves the seed-then-dispatch ordering executeOnService uses for
-// policy/default Execute: every Execute call first runs the route-health seed
-// from tracker evidence, then issues the actual Execute. This is the
-// DDx-side contract for AC2; fizeau v0.13.1 service_routing.go:102 already
-// applies route-attempt cooldowns inside ResolveRoute (which Execute's
-// under-specified path delegates to), so honoring the seed end-to-end through
-// Execute requires only that DDx populate the store before each dispatch.
-func TestRecordRouteAttemptRouteHealthGatesPolicyExecute(t *testing.T) {
-	root := t.TempDir()
-	testutils.MakeInitializedDDxRoot(t, root)
-	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:    "hardgate-001",
-		Title: "hard-gate via failed-route extra",
-		Extra: map[string]any{
-			executeLoopFailedRoutesKey: []FailedRouteEntry{{
-				Provider:    "bragi",
-				Model:       "qwen3.5-27b",
-				ActualPower: 5,
-				Reason:      FailureModeProviderConnectivity,
-				At:          time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
-			}},
-		},
-	}))
-
-	svc := &passthroughTestService{}
-	// Policy-driven request: no provider/model/min-power pin. The under-specified
-	// Execute path delegates to ResolveRoute which applies route-attempt
-	// cooldowns (fizeau v0.13.1 service_routing.go:102 -> applyRouteAttemptCooldowns).
-	rcfg := resolvedWithPassthrough("fiz", "", "", 0, 0)
-
-	_, err := executeOnService(context.Background(), svc, root, rcfg, AgentRunRuntime{Prompt: "hello"})
-	require.NoError(t, err)
-
-	require.True(t, svc.executeCalled)
-	require.GreaterOrEqual(t, svc.routeAttemptsAtExecute, 1, "RecordRouteAttempt must fire before Execute so the route-health hard-gate is in place")
-
-	// The pre-Execute seed must carry the failed marker, not a success — a
-	// success would clear the failure in routehealth.Store.
-	preExecute := svc.routeAttempts[:svc.routeAttemptsAtExecute]
-	var bragiSeed *agentlib.RouteAttempt
-	for i := range preExecute {
-		if preExecute[i].Provider == "bragi" && preExecute[i].Model == "qwen3.5-27b" {
-			bragiSeed = &preExecute[i]
-			break
-		}
-	}
-	require.NotNil(t, bragiSeed, "failed-route extra for bragi/qwen3.5-27b must be seeded before Execute")
-	assert.Equal(t, "failed", bragiSeed.Status)
-	assert.Equal(t, FailureModeProviderConnectivity, bragiSeed.Reason)
-
-	// Rebased timestamp survives fizeau's 30s default TTL.
-	now := time.Now().UTC()
-	require.False(t, bragiSeed.Timestamp.IsZero())
-	assert.LessOrEqual(t, now.Sub(bragiSeed.Timestamp), 30*time.Second,
-		"seeded Timestamp must fall within fizeau's default route-health TTL so policy Execute hard-gates the failed provider")
-
-	// AC3: the dispatched request stays policy-driven; DDx must not introduce
-	// a provider/model pin or a hardcoded MinPower floor in response to the
-	// failed-route extra.
-	assert.Empty(t, svc.lastReq.Provider)
-	assert.Empty(t, svc.lastReq.Model)
-	assert.Zero(t, svc.lastReq.MinPower)
 }
 
 // TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown
@@ -886,7 +790,6 @@ func TestFizeauAutoRoutingExplicitPinsRemainPassthrough(t *testing.T) {
 	assert.Equal(t, "review-model", pinned)
 	assert.True(t, runRuntime.ClearRoutingPins)
 	assert.True(t, runRuntime.ClearProfile)
-	assert.True(t, runRuntime.ClearMaxPower)
 }
 
 // TestRunServiceRequestCarriesPolicyForProfileDrivenHarnessRouting verifies

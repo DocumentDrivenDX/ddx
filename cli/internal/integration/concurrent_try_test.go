@@ -3,29 +3,95 @@ package integration
 // concurrent_try_test.go — subprocess integration tests for concurrent ddx try
 // invocations as required by TP-021-multi-worker-try-reliability.md.
 //
-// Three test functions are provided (each satisfying one TP-021 integration AC):
+// Four test functions are provided (the first three satisfy the TP-021
+// integration ACs and the fourth guards the hermetic provider boundary):
 //
 //   TestIntegration_ConcurrentTryDistinctBeads_LocalClone
 //   TestIntegration_ConcurrentTrySameBead_OneClaimWins
 //   TestIntegration_ConcurrentTryPreserveRefsUnique
+//   TestIntegration_ConcurrentTryFizeauSeamLaunchesNoLiveProvider
 //
-// All three use testutils.BuildDDxBinary, fixture repositories, and the
-// deterministic `script` harness with an isolated HOME/XDG_DATA_HOME. None of
-// them require network access or external agent CLIs.
+// All four use a ddx binary compiled with Fizeau's public testseam tag and a
+// deterministic FakeProvider with isolated HOME/XDG_DATA_HOME. None require
+// network access or external agent CLIs.
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
+
+const fizeauTestPlanEnv = "DDX_FIZEAU_TEST_PLAN"
+
+type concurrentTryFizeauPlan struct {
+	SleepMS          int      `json:"sleep_ms,omitempty"`
+	WritePath        string   `json:"write_path"`
+	WriteContent     string   `json:"write_content"`
+	CommitMessage    string   `json:"commit_message"`
+	SeamLog          string   `json:"seam_log,omitempty"`
+	TripwireBinDir   string   `json:"tripwire_bin_dir,omitempty"`
+	TripwireNames    []string `json:"tripwire_names,omitempty"`
+	TripwireSentinel string   `json:"tripwire_sentinel,omitempty"`
+}
+
+func withFizeauTestPlan(t *testing.T, env []string, plan concurrentTryFizeauPlan) ([]string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	plan.SeamLog = filepath.Join(dir, "fizeau-testseam.log")
+	raw, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatalf("marshal Fizeau test plan: %v", err)
+	}
+	planPath := filepath.Join(dir, "plan.json")
+	if err := os.WriteFile(planPath, raw, 0o600); err != nil {
+		t.Fatalf("write Fizeau test plan: %v", err)
+	}
+	return append(env, fizeauTestPlanEnv+"="+planPath), plan.SeamLog
+}
+
+func requireFizeauTestSeamExecutions(t *testing.T, logPath string, want int) {
+	t.Helper()
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read Fizeau test seam log: %v", err)
+	}
+	count := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if strings.Contains(line, "mode=bead_execution") {
+			count++
+			if !strings.Contains(line, "harness=fiz") {
+				t.Errorf("test-seam execution did not use Fizeau native harness: %s", line)
+			}
+		}
+	}
+	if count < want {
+		t.Errorf("Fizeau test-seam execution count=%d, want at least %d; log:\n%s", count, want, raw)
+	}
+}
+
+func setSubprocessEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	for i := range env {
+		if strings.HasPrefix(env[i], prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
+}
 
 // subprocessEnvFor builds the minimal isolated subprocess environment used by
 // all concurrent-try tests. HOME and XDG_DATA_HOME are set to fresh temp dirs
@@ -48,6 +114,7 @@ func subprocessEnvFor(t *testing.T, bin string) (env []string, home, xdg string)
 		"HOME=" + home,
 		"XDG_DATA_HOME=" + xdg,
 		"PATH=" + minimalPATH,
+		"DDX_DISABLE_UPDATE_CHECK=1",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_TERMINAL_PROMPT=0",
 	}
@@ -58,11 +125,10 @@ func subprocessEnvFor(t *testing.T, bin string) (env []string, home, xdg string)
 // started *exec.Cmd with stdout/stderr captured in buf. Callers must call
 // cmd.Wait() to collect the exit code and release resources. extraFlags are
 // appended to the base flags (e.g. "--from <sha>").
-func spawnTry(bin, proj, beadID, harness, directive string, env []string, extraFlags ...string) (*exec.Cmd, *bytes.Buffer) {
+func spawnTry(bin, proj, beadID string, env []string, extraFlags ...string) (*exec.Cmd, *bytes.Buffer) {
 	buf := &bytes.Buffer{}
 	args := []string{"try", beadID,
-		"--harness", harness,
-		"--model", directive,
+		"--harness", "fiz",
 		"--attempt-backend", "local-clone",
 		"--no-review", "--no-review-i-know-what-im-doing",
 		"--project", proj,
@@ -130,7 +196,7 @@ func gitRunIn(t *testing.T, dir string, args ...string) string {
 // TestIntegration_ConcurrentTryDistinctBeads_LocalClone satisfies TP-021 AC1.
 //
 // Seeds 8 independent beads and runs 4 concurrent `ddx try <id>` subprocesses
-// (each targeting a distinct bead) with the script harness and
+// (each targeting a distinct bead) through Fizeau's FakeProvider seam and
 // --attempt-backend local-clone. Asserts:
 //
 //   - all 4 subprocesses exit (success or preserved)
@@ -142,7 +208,7 @@ func TestIntegration_ConcurrentTryDistinctBeads_LocalClone(t *testing.T) {
 		t.Skip("integration: spawns ddx try subprocesses")
 	}
 
-	bin := testutils.BuildDDxBinary(t)
+	bin := testutils.BuildDDxFizeauTestSeamBinary(t)
 	t.Setenv("DDX_BIN", bin)
 	proj := testutils.NewFixtureRepo(t, "minimal")
 	env, home, _ := subprocessEnvFor(t, bin)
@@ -166,15 +232,12 @@ func TestIntegration_ConcurrentTryDistinctBeads_LocalClone(t *testing.T) {
 		t.Fatalf("commit beads: %v", err)
 	}
 
-	// Directive: simulate an LLM wait outside the lock, then create a file and
-	// commit so there are meaningful changes to land.
-	directive := filepath.Join(t.TempDir(), "directive.txt")
-	if err := os.WriteFile(directive, []byte(
-		"sleep-ms 300\n"+
-			"create-file out-${DDX_BEAD_ID}.txt done\n"+
-			"commit feat: ${DDX_BEAD_ID} done\n"), 0o644); err != nil {
-		t.Fatalf("write directive: %v", err)
-	}
+	env, seamLog := withFizeauTestPlan(t, env, concurrentTryFizeauPlan{
+		SleepMS:       300,
+		WritePath:     "out-${DDX_BEAD_ID}.txt",
+		WriteContent:  "done\n",
+		CommitMessage: "feat: ${DDX_BEAD_ID} done",
+	})
 
 	// Run concurrentWorkers concurrent ddx try subprocesses against distinct beads.
 	type result struct {
@@ -189,7 +252,7 @@ func TestIntegration_ConcurrentTryDistinctBeads_LocalClone(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			bid := beadIDs[idx]
-			cmd, buf := spawnTry(bin, proj, bid, "script", directive, env)
+			cmd, buf := spawnTry(bin, proj, bid, env)
 			if err := cmd.Start(); err != nil {
 				t.Errorf("start try for bead %s: %v", bid, err)
 				return
@@ -252,6 +315,7 @@ func TestIntegration_ConcurrentTryDistinctBeads_LocalClone(t *testing.T) {
 	if len(attemptIDs) < concurrentWorkers {
 		t.Errorf("expected at least %d evidence bundle dirs, found %d", concurrentWorkers, len(attemptIDs))
 	}
+	requireFizeauTestSeamExecutions(t, seamLog, concurrentWorkers)
 }
 
 // TestIntegration_ConcurrentTrySameBead_OneClaimWins satisfies TP-021 AC2.
@@ -268,7 +332,7 @@ func TestIntegration_ConcurrentTrySameBead_OneClaimWins(t *testing.T) {
 		t.Skip("integration: spawns ddx try subprocesses")
 	}
 
-	bin := testutils.BuildDDxBinary(t)
+	bin := testutils.BuildDDxFizeauTestSeamBinary(t)
 	t.Setenv("DDX_BIN", bin)
 	proj := testutils.NewFixtureRepo(t, "minimal")
 	env, _, _ := subprocessEnvFor(t, bin)
@@ -289,15 +353,12 @@ func TestIntegration_ConcurrentTrySameBead_OneClaimWins(t *testing.T) {
 	}
 	beadID := beadIDs[0]
 
-	// Directive with a long sleep so the winner holds the claim long enough for
-	// the losers to reach their not-claimable check.
-	directive := filepath.Join(t.TempDir(), "directive.txt")
-	if err := os.WriteFile(directive, []byte(
-		"sleep-ms 1200\n"+
-			"create-file out-race.txt done\n"+
-			"commit feat: race winner\n"), 0o644); err != nil {
-		t.Fatalf("write directive: %v", err)
-	}
+	env, seamLog := withFizeauTestPlan(t, env, concurrentTryFizeauPlan{
+		SleepMS:       1200,
+		WritePath:     "out-race.txt",
+		WriteContent:  "done\n",
+		CommitMessage: "feat: race winner",
+	})
 
 	const concurrentAttempts = 3
 	type result struct {
@@ -310,7 +371,7 @@ func TestIntegration_ConcurrentTrySameBead_OneClaimWins(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			cmd, buf := spawnTry(bin, proj, beadID, "script", directive, env)
+			cmd, buf := spawnTry(bin, proj, beadID, env)
 			if err := cmd.Start(); err != nil {
 				t.Errorf("start attempt %d: %v", idx, err)
 				return
@@ -374,14 +435,15 @@ func TestIntegration_ConcurrentTrySameBead_OneClaimWins(t *testing.T) {
 	if bundleCount > 1 {
 		t.Errorf("expected at most 1 result.json evidence bundle, found %d (losers created bundles)", bundleCount)
 	}
+	requireFizeauTestSeamExecutions(t, seamLog, 1)
 }
 
 // TestIntegration_ConcurrentTryPreserveRefsUnique satisfies TP-021 AC3.
 //
 // Forces two concurrent non-landed attempts (one per bead) by pinning both to
 // a stale base revision (--from <sha>) so every land attempt encounters a merge
-// conflict. Both attempts run in parallel; each worker writes "worker-version"
-// on top of staleSHA while main has already advanced to "main-advanced-version",
+// conflict. Both attempts run in parallel; each worker writes a bead-specific
+// worker version on top of staleSHA while main has advanced the same line,
 // producing a 3-way merge conflict. The land path calls landIterationRef to
 // create a preserve ref before attempting auto-recovery, so both attempts
 // produce a durable refs/ddx/iterations/<bead-id>/<attemptID>-<sha> ref even
@@ -396,7 +458,7 @@ func TestIntegration_ConcurrentTryPreserveRefsUnique(t *testing.T) {
 		t.Skip("integration: spawns ddx try subprocesses")
 	}
 
-	bin := testutils.BuildDDxBinary(t)
+	bin := testutils.BuildDDxFizeauTestSeamBinary(t)
 	t.Setenv("DDX_BIN", bin)
 	proj := testutils.NewFixtureRepo(t, "minimal")
 	env, _, _ := subprocessEnvFor(t, bin)
@@ -430,7 +492,7 @@ func TestIntegration_ConcurrentTryPreserveRefsUnique(t *testing.T) {
 	staleSHA := gitRunIn(t, proj, "rev-parse", "HEAD")
 
 	// Step 3: advance main with a conflicting change to conflict.txt.
-	// Workers pinned to staleSHA will commit "worker-version" on top of
+	// Workers pinned to staleSHA will commit a bead-specific worker version on top of
 	// staleSHA while main already has "main-advanced-version", so the merge
 	// always conflicts and landIterationRef always fires.
 	if err := os.WriteFile(conflictFile, []byte("main-advanced-version\n"), 0o644); err != nil {
@@ -440,15 +502,11 @@ func TestIntegration_ConcurrentTryPreserveRefsUnique(t *testing.T) {
 		t.Fatalf("advance commit: %v", err)
 	}
 
-	// Directive: overwrite conflict.txt and commit (exit 0 so the land path is
-	// attempted). The 3-way merge always conflicts → landIterationRef creates a
-	// preserve ref before auto-recovery resolves the conflict.
-	directive := filepath.Join(t.TempDir(), "directive.txt")
-	if err := os.WriteFile(directive, []byte(
-		"create-file conflict.txt worker-version\n"+
-			"commit chore: worker attempt\n"), 0o644); err != nil {
-		t.Fatalf("write directive: %v", err)
-	}
+	env, seamLog := withFizeauTestPlan(t, env, concurrentTryFizeauPlan{
+		WritePath:     "conflict.txt",
+		WriteContent:  "worker-${DDX_BEAD_ID}\n",
+		CommitMessage: "chore: worker attempt ${DDX_BEAD_ID}",
+	})
 
 	// Run numBeads concurrent ddx try subprocesses, one per bead, all pinned
 	// to staleSHA. Both workers experience a merge conflict on landing and each
@@ -464,7 +522,7 @@ func TestIntegration_ConcurrentTryPreserveRefsUnique(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			bid := beadIDs[idx]
-			cmd, buf := spawnTry(bin, proj, bid, "script", directive, env,
+			cmd, buf := spawnTry(bin, proj, bid, env,
 				"--from", staleSHA,
 			)
 			if startErr := cmd.Start(); startErr != nil {
@@ -524,5 +582,143 @@ func TestIntegration_ConcurrentTryPreserveRefsUnique(t *testing.T) {
 		if sha == "" {
 			t.Errorf("preserve ref %q not resolvable in git repo", ref)
 		}
+	}
+	requireFizeauTestSeamExecutions(t, seamLog, numBeads)
+}
+
+// TestIntegration_ConcurrentTryFizeauSeamLaunchesNoLiveProvider proves the
+// tagged subprocess path terminates through Fizeau's FakeProvider without
+// launching a subscription harness CLI or opening an HTTP provider
+// connection. Executable tripwires fail loudly if a known harness is spawned;
+// a local proxy listener counts any attempted network-provider connection.
+func TestIntegration_ConcurrentTryFizeauSeamLaunchesNoLiveProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: spawns ddx try subprocess")
+	}
+
+	bin := testutils.BuildDDxFizeauTestSeamBinary(t)
+	t.Setenv("DDX_BIN", bin)
+	proj := testutils.NewFixtureRepo(t, "minimal")
+	env, _, _ := subprocessEnvFor(t, bin)
+
+	if err := appendGitignore(proj, ".agents/", ".claude/", ".ddx/lifecycle-schema.json"); err != nil {
+		t.Fatalf("append gitignore: %v", err)
+	}
+	if err := gitCommitAll(proj, "test: ignore auto-materialized paths"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+	beadIDs, err := createBeads(bin, proj, env, 1, "Fizeau seam provider tripwire")
+	if err != nil {
+		t.Fatalf("seed bead: %v", err)
+	}
+	if err := gitCommitAll(proj, "test: seed provider tripwire bead"); err != nil {
+		t.Fatalf("commit bead: %v", err)
+	}
+
+	tripwireDir := t.TempDir()
+	tripwireLog := filepath.Join(tripwireDir, "provider-launches.log")
+	const tripwireSentinel = "ddx-fizeau-tripwire-sentinel"
+	providerNames := []string{"claude", "claude-tui", "codex", "gemini", "opencode", "pi"}
+	shim := []byte("#!/bin/sh\nprintf '%s %s\\n' \"$0\" \"$*\" >> \"$DDX_PROVIDER_TRIPWIRE\"\nexit 0\n")
+	for _, name := range append(append([]string(nil), providerNames...), tripwireSentinel) {
+		if err := os.WriteFile(filepath.Join(tripwireDir, name), shim, 0o700); err != nil {
+			t.Fatalf("write provider tripwire %s: %v", name, err)
+		}
+	}
+	env = setSubprocessEnv(env, "DDX_PROVIDER_TRIPWIRE", tripwireLog)
+	env, seamLog := withFizeauTestPlan(t, env, concurrentTryFizeauPlan{
+		WritePath:        "fizeau-seam-tripwire.txt",
+		WriteContent:     "done\n",
+		CommitMessage:    "test: Fizeau seam tripwire",
+		TripwireBinDir:   tripwireDir,
+		TripwireNames:    providerNames,
+		TripwireSentinel: tripwireSentinel,
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for HTTP provider tripwire: %v", err)
+	}
+	var networkConnections atomic.Int32
+	var networkRequestsMu sync.Mutex
+	var networkRequests []string
+	acceptDone := make(chan struct{})
+	go func() {
+		defer close(acceptDone)
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			networkConnections.Add(1)
+			_ = conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
+			buf := make([]byte, 4096)
+			if n, _ := conn.Read(buf); n > 0 {
+				networkRequestsMu.Lock()
+				networkRequests = append(networkRequests, string(buf[:n]))
+				networkRequestsMu.Unlock()
+			}
+			_ = conn.Close()
+		}
+	}()
+	proxyURL := fmt.Sprintf("http://%s", listener.Addr())
+	env = setSubprocessEnv(env, "HTTP_PROXY", proxyURL)
+	env = setSubprocessEnv(env, "HTTPS_PROXY", proxyURL)
+	env = setSubprocessEnv(env, "NO_PROXY", "")
+
+	cmd, buf := spawnTry(bin, proj, beadIDs[0], env)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start tripwire try: %v", err)
+	}
+	waitErr := cmd.Wait()
+	if waitErr != nil {
+		t.Fatalf("tripwire try failed: %v\n%s", waitErr, buf.String())
+	}
+	_ = listener.Close()
+	select {
+	case <-acceptDone:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP provider tripwire listener did not stop")
+	}
+
+	requireFizeauTestSeamExecutions(t, seamLog, 1)
+	raw, readErr := os.ReadFile(tripwireLog)
+	if readErr != nil {
+		t.Fatalf("read provider launch tripwire: %v", readErr)
+	}
+	var sentinelObserved bool
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		launched := filepath.Base(fields[0])
+		if launched == tripwireSentinel {
+			sentinelObserved = true
+			continue
+		}
+		for _, providerName := range providerNames {
+			if launched == providerName {
+				t.Errorf("live provider CLI launched despite Fizeau FakeProvider seam: %s", line)
+			}
+		}
+	}
+	if !sentinelObserved {
+		t.Errorf("provider launch observer did not record positive-control sentinel; log:\n%s", raw)
+	}
+	restrictedPaths, err := filepath.Glob(filepath.Join(filepath.Dir(seamLog), ".fizeau-tools-*"))
+	if err != nil || len(restrictedPaths) != 1 {
+		t.Fatalf("locate restricted Fizeau test-seam PATH: paths=%v err=%v", restrictedPaths, err)
+	}
+	for _, name := range append(append([]string(nil), providerNames...), tripwireSentinel) {
+		if _, err := os.Lstat(filepath.Join(restrictedPaths[0], name)); err != nil {
+			t.Errorf("tripwire %s was not installed in restricted Fizeau PATH: %v", name, err)
+		}
+	}
+	if got := networkConnections.Load(); got != 0 {
+		networkRequestsMu.Lock()
+		requests := strings.Join(networkRequests, "\n---\n")
+		networkRequestsMu.Unlock()
+		t.Errorf("network provider connections=%d, want 0; requests:\n%s", got, requests)
 	}
 }

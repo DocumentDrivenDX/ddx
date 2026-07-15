@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"go/parser"
 	"go/token"
 	"os"
@@ -125,7 +126,12 @@ func TestTriageHook_UsesRunnerLibrary(t *testing.T) {
 	assert.NotContains(t, string(body), "legacy agent run", "triage_hook.go must not shell out to legacy agent run")
 }
 
-func TestTriageHook_PromptIncludesOutcomeAndLogExcerpt(t *testing.T) {
+func TestTriageHook_PromptUsesControlSafeProjection(t *testing.T) {
+	const returnedIdentityA = "returned-route-identity-a"
+	const returnedIdentityB = "returned-route-identity-b"
+	const returnedIdentityD = "returned-route-identity-d"
+	const returnedIdentityE = "returned-route-identity-e"
+	const historicalIdentity = "historical-route-identity-c"
 	root := newTriageHookTestRoot(t)
 	store, b := newTriageHookTestStore(t, root)
 	for i := 0; i < 10; i++ {
@@ -137,37 +143,100 @@ func TestTriageHook_PromptIncludesOutcomeAndLogExcerpt(t *testing.T) {
 			CreatedAt: time.Now().UTC().Add(time.Duration(i) * time.Minute),
 		}))
 	}
+	recentRoutingBody, err := json.Marshal(map[string]any{
+		"status":          "execution_failed",
+		"actual_harness":  returnedIdentityA,
+		"actual_provider": historicalIdentity,
+		"actual_model":    returnedIdentityA,
+		"actual_power":    9,
+		"detail":          "failure echoed " + historicalIdentity,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.AppendEvent(b.ID, bead.BeadEvent{
+		Kind:      "execution-routing-intent",
+		Summary:   "historical returned route " + historicalIdentity,
+		Body:      string(recentRoutingBody),
+		Source:    "test",
+		CreatedAt: time.Now().UTC().Add(11 * time.Minute),
+	}))
 
 	logDir := ResolveLogDir(root, "")
 	require.NoError(t, os.MkdirAll(logDir, 0o755))
 	logPath := filepath.Join(logDir, "agent-sess-123.jsonl")
-	longLine := strings.Repeat(`{"type":"progress","data":{"message":"tail"}}`, 120)
+	longLine := strings.Repeat(`{"type":"progress","data":{"message":"route-bearing session tail `+returnedIdentityA+` `+returnedIdentityB+` `+historicalIdentity+`"}}`, 120)
 	require.NoError(t, os.WriteFile(logPath, []byte(longLine+"\n{\"type\":\"final\",\"data\":{\"ok\":true}}\n"), 0o644))
 
 	runner := &triageHookRunnerStub{}
 	hook := NewPostAttemptTriageHook(root, store, triageHookTestConfig(), nil, runner, nil)
 
-	_, err := hook(context.Background(), b.ID, ExecuteBeadReport{
-		BeadID:    b.ID,
-		Status:    ExecuteBeadStatusExecutionFailed,
-		Detail:    "context canceled",
-		BaseRev:   "deadbeef",
-		ResultRev: "deadbeef",
-		SessionID: "sess-123",
-	})
+	report := ExecuteBeadReport{
+		BeadID:                  b.ID,
+		Harness:                 returnedIdentityA,
+		Provider:                returnedIdentityB,
+		Model:                   returnedIdentityA,
+		ActualPower:             9,
+		Status:                  ExecuteBeadStatusExecutionFailed,
+		Detail:                  "context canceled through " + returnedIdentityA,
+		Error:                   "transport from " + returnedIdentityB,
+		Stderr:                  returnedIdentityA + " stderr",
+		BaseRev:                 "deadbeef",
+		ResultRev:               "deadbeef",
+		SessionID:               "sess-123",
+		RoutingIntentSource:     "readiness",
+		EstimatedDifficulty:     "hard",
+		InferredMinPower:        9,
+		InferredMinPowerPresent: true,
+		RequestedMinPower:       9,
+		RequestedMaxPower:       10,
+		NoChangesRationale:      "identity echo " + returnedIdentityA,
+		ReviewRationale:         "identity echo " + returnedIdentityB,
+		DecompositionRationale:  "identity echo " + returnedIdentityA,
+	}
+	_, err = hook(context.Background(), b.ID, report)
 	require.NoError(t, err)
-
 	prompt := runner.lastOpts.Prompt
+
+	report.Harness = returnedIdentityD
+	report.Provider = returnedIdentityE
+	report.Model = returnedIdentityD
+	report.Detail = "context canceled through " + returnedIdentityD
+	report.Error = "transport from " + returnedIdentityE
+	report.Stderr = returnedIdentityD + " stderr"
+	report.NoChangesRationale = "identity echo " + returnedIdentityD
+	report.ReviewRationale = "identity echo " + returnedIdentityE
+	report.DecompositionRationale = "identity echo " + returnedIdentityD
+	_, err = hook(context.Background(), b.ID, report)
+	require.NoError(t, err)
+	assert.Equal(t, prompt, runner.lastOpts.Prompt,
+		"triage prompt must be byte-identical when only concrete route identity and identity echoes change")
+
 	assert.True(t, strings.HasPrefix(prompt, "MODE: triage"))
 	assert.Contains(t, prompt, postAttemptTriageSkillName)
 	assert.Contains(t, prompt, `"status": "execution_failed"`)
-	assert.Contains(t, prompt, `"detail": "context canceled"`)
+	assert.NotContains(t, prompt, `"detail":`)
+	assert.NotContains(t, prompt, `"error":`)
+	assert.NotContains(t, prompt, `"stderr":`)
+	assert.NotContains(t, prompt, `"no_changes_rationale":`)
+	assert.NotContains(t, prompt, `"review_rationale":`)
+	assert.NotContains(t, prompt, `"decomposition_rationale":`)
+	assert.Contains(t, prompt, `"actual_power": 9`)
+	assert.Contains(t, prompt, `"inferred_min_power": 9`)
 	assert.Contains(t, prompt, `"session_id": "sess-123"`)
 	assert.Contains(t, prompt, `"recent_bead_events"`)
-	assert.Contains(t, prompt, "event-9")
+	assert.Contains(t, prompt, `"category": "routing"`)
+	assert.NotContains(t, prompt, "event-9")
 	assert.NotContains(t, prompt, "event-0")
-	assert.Contains(t, prompt, "tail clipped to")
-	assert.Contains(t, prompt, `"session_log_excerpt"`)
+	assert.NotContains(t, prompt, `"actual_harness"`)
+	assert.NotContains(t, prompt, `"actual_provider"`)
+	assert.NotContains(t, prompt, `"actual_model"`)
+	assert.NotContains(t, prompt, returnedIdentityA)
+	assert.NotContains(t, prompt, returnedIdentityB)
+	assert.NotContains(t, prompt, returnedIdentityD)
+	assert.NotContains(t, prompt, returnedIdentityE)
+	assert.NotContains(t, prompt, historicalIdentity)
+	assert.NotContains(t, prompt, "route-bearing session tail")
+	assert.NotContains(t, prompt, `"session_log_excerpt"`)
+	assert.NotContains(t, prompt, `"session_log_path"`)
 }
 
 func TestTriageHook_DecodeToleratesLegacyNoneArraySentinels(t *testing.T) {
@@ -759,7 +828,7 @@ func TestPostAttemptTriageHook_LeavesPolicyToFizeau(t *testing.T) {
 		},
 	}
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default", MaxPower: 80})
 	require.Equal(t, "default", rcfg.Profile())
 
 	hook := NewPostAttemptTriageHook(root, store, rcfg, svc, nil, nil)
@@ -777,5 +846,5 @@ func TestPostAttemptTriageHook_LeavesPolicyToFizeau(t *testing.T) {
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
 	assert.Zero(t, svc.lastReq.MinPower, "triage dispatch must not inherit implementation min_power pins")
-	assert.Zero(t, svc.lastReq.MaxPower, "triage dispatch must not inherit implementation max_power pins")
+	assert.Equal(t, 80, svc.lastReq.MaxPower, "explicit operator max_power must remain sticky")
 }

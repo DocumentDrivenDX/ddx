@@ -273,6 +273,41 @@ func TestInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
 	}
 }
 
+// TestInstallPackageFromFSInstallsHumanWritingSupportOffline proves the
+// manifest-canonical skills/ source in the embedded default package installs
+// human-writing-support into both harness discovery locations without reading
+// project-local plugin state or using the network.
+func TestInstallPackageFromFSInstallsHumanWritingSupportOffline(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = &offlineTransport{t: t}
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
+
+	pkg := &Package{
+		Name:    "ddx",
+		Version: "0.0.0",
+		Type:    PackageTypePlugin,
+		Source:  "https://example.com/ddx",
+	}
+	entry, err := InstallPackageFromFS(pkg, defaultplugin.FS(), projectRoot)
+	require.NoError(t, err)
+
+	canonicalPath := filepath.Join("..", "..", "..", "library", "skills", "human-writing-support", "SKILL.md")
+	canonical, err := os.ReadFile(canonicalPath)
+	require.NoError(t, err)
+
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(".claude", "skills", "human-writing-support", "SKILL.md"),
+	} {
+		installed, readErr := os.ReadFile(filepath.Join(projectRoot, rel))
+		require.NoError(t, readErr, "expected embedded default package to install %s", rel)
+		assert.Equal(t, string(canonical), string(installed), "installed %s must match the canonical package source", rel)
+		assert.Contains(t, entry.Files, rel)
+	}
+}
+
 // TestInstallPackageFromRemoteUsesSharedCore proves the remote entrypoint
 // and embedded-FS entrypoint share the same skill mapping behavior for a
 // fixture package — same recorded files, same on-disk layout.
@@ -339,6 +374,22 @@ func TestDefaultPackageEmbedCopyIncludesDDxSkill(t *testing.T) {
 	require.NoError(t, err, "canonical library/skills/ddx/SKILL.md must exist on disk")
 	assert.Equal(t, string(canonical), string(data),
 		"embedded skills/ddx/SKILL.md must match the canonical library/skills/ddx/SKILL.md (run `make copy-skills` to sync)")
+}
+
+// TestDefaultPackageEmbedCopyIncludesHumanWritingSupport proves the exact
+// canonical skill bytes are present in the filesystem compiled into release
+// binaries after the copy-skills synchronization step.
+func TestDefaultPackageEmbedCopyIncludesHumanWritingSupport(t *testing.T) {
+	const embeddedPath = "skills/human-writing-support/SKILL.md"
+	data, err := iofs.ReadFile(defaultplugin.FS(), embeddedPath)
+	require.NoError(t, err, "embedded default package must include %s", embeddedPath)
+	require.NotEmpty(t, data, "embedded %s must not be empty", embeddedPath)
+
+	canonicalPath := filepath.Join("..", "..", "..", "library", "skills", "human-writing-support", "SKILL.md")
+	canonical, err := os.ReadFile(canonicalPath)
+	require.NoError(t, err, "canonical human-writing-support skill must exist on disk")
+	assert.Equal(t, string(canonical), string(data),
+		"embedded human-writing-support skill must match the canonical library source (run `make copy-skills` to sync)")
 }
 
 // offlineTransport fails any HTTP attempt so tests can prove an install path

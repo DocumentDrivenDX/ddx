@@ -43,8 +43,8 @@ func TestCmdTestsDoNotSpawnRealProviderCLIs(t *testing.T) {
 			fn:   TestWorkResourceExhaustionEndToEnd_StopsBeforeNextClaim,
 		},
 		{
-			name: "TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting",
-			fn:   TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting,
+			name: "TestWorkUnderSpecifiedRoutingDelegatesToFizeau",
+			fn:   TestWorkUnderSpecifiedRoutingDelegatesToFizeau,
 		},
 	}
 

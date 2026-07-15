@@ -27,14 +27,13 @@ type fakeLandingGitOps struct {
 	callIdx  int
 }
 
-func (f *fakeLandingGitOps) HasRemote(_, _ string) bool               { return false }
-func (f *fakeLandingGitOps) FetchBranch(_, _, _ string) error         { return nil }
-func (f *fakeLandingGitOps) SyncWorkTreeToHead(_, _ string) error     { return nil }
-func (f *fakeLandingGitOps) RemoveWorktree(_, _ string) error         { return nil }
-func (f *fakeLandingGitOps) PushFFOnly(_, _, _, _ string) error       { return nil }
-func (f *fakeLandingGitOps) CountCommits(_, _, _ string) int          { return 1 }
-func (f *fakeLandingGitOps) StageDir(_, _ string) error               { return nil }
-func (f *fakeLandingGitOps) CommitStaged(_, _ string) (string, error) { return "", nil }
+func (f *fakeLandingGitOps) HasRemote(_, _ string) bool                  { return false }
+func (f *fakeLandingGitOps) FetchBranch(_, _, _ string) error            { return nil }
+func (f *fakeLandingGitOps) SyncWorkTreeToHead(_, _ string) error        { return nil }
+func (f *fakeLandingGitOps) RemoveWorktree(_, _ string) error            { return nil }
+func (f *fakeLandingGitOps) PushFFOnly(_, _, _, _ string) error          { return nil }
+func (f *fakeLandingGitOps) CountCommits(_, _, _ string) int             { return 1 }
+func (f *fakeLandingGitOps) VerifyCandidateHistory(_, _, _ string) error { return nil }
 
 func (f *fakeLandingGitOps) CurrentBranch(_ string) (string, error) {
 	return "main", nil
@@ -82,23 +81,22 @@ type outcomeGitOps struct {
 	callIdx  int
 }
 
-func (o *outcomeGitOps) HasRemote(_, _ string) bool             { return false }
-func (o *outcomeGitOps) FetchBranch(_, _, _ string) error       { return nil }
-func (o *outcomeGitOps) SyncWorkTreeToHead(_, _ string) error   { return nil }
-func (o *outcomeGitOps) RemoveWorktree(_, _ string) error       { return nil }
-func (o *outcomeGitOps) CountCommits(_, _, _ string) int        { return 2 }
-func (o *outcomeGitOps) CurrentBranch(_ string) (string, error) { return "main", nil }
-func (o *outcomeGitOps) AddWorktree(_, _, _ string) error       { return nil }
-func (o *outcomeGitOps) AddBranchWorktree(_, _, _ string) error { return nil }
-func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)     { return "mergedTip", nil }
+func (o *outcomeGitOps) HasRemote(_, _ string) bool                  { return false }
+func (o *outcomeGitOps) FetchBranch(_, _, _ string) error            { return nil }
+func (o *outcomeGitOps) SyncWorkTreeToHead(_, _ string) error        { return nil }
+func (o *outcomeGitOps) RemoveWorktree(_, _ string) error            { return nil }
+func (o *outcomeGitOps) CountCommits(_, _, _ string) int             { return 2 }
+func (o *outcomeGitOps) VerifyCandidateHistory(_, _, _ string) error { return nil }
+func (o *outcomeGitOps) CurrentBranch(_ string) (string, error)      { return "main", nil }
+func (o *outcomeGitOps) AddWorktree(_, _, _ string) error            { return nil }
+func (o *outcomeGitOps) AddBranchWorktree(_, _, _ string) error      { return nil }
+func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)          { return "mergedTip", nil }
 func (o *outcomeGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return agent.PreClaimResult{Action: "no-origin"}, nil
 }
 func (o *outcomeGitOps) DiffNumstat(_, _, _ string) (string, error)    { return "", nil }
 func (o *outcomeGitOps) DiffNameOnly(_, _, _ string) ([]string, error) { return nil, nil }
 func (o *outcomeGitOps) PushFFOnly(_, _, _, _ string) error            { return nil }
-func (o *outcomeGitOps) StageDir(_, _ string) error                    { return nil }
-func (o *outcomeGitOps) CommitStaged(_, _ string) (string, error)      { return "", nil }
 
 func (o *outcomeGitOps) ResolveRef(_, ref string) (string, error) {
 	// For "preserved" and merge-path "landed" we return a tip that differs
@@ -125,12 +123,12 @@ func (o *outcomeGitOps) MergeInto(_, _, _ string) error {
 
 // submit sends one LandRequest to the coordinator using the given base so
 // the gitOps stub can decide the fast vs merge path.
-func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, outcome string, base string) {
+func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, worktreeDir, outcome, base string) {
 	t.Helper()
 	ops.callIdx = len(ops.outcomes)
 	ops.outcomes = append(ops.outcomes, outcome)
 	_, err := c.Submit(agent.LandRequest{
-		WorktreeDir: t.TempDir(),
+		WorktreeDir: worktreeDir,
 		BaseRev:     base,
 		ResultRev:   "result" + base,
 		BeadID:      "ddx-test",
@@ -145,23 +143,24 @@ func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, outcome str
 // (3 landed, 2 preserved, 1 landed, 4 landed) and asserts the counters
 // reflect the correct outcome counts.
 func TestLandCoordinatorMetrics(t *testing.T) {
+	repo := newLandIntegRepo(t)
 	ops := &outcomeGitOps{}
 
-	c := newLandCoordinator(t.TempDir(), ops)
+	c := newLandCoordinator(repo.dir, ops)
 	defer c.Stop()
 
 	// 3 landed (fast-forward path)
 	for i := 0; i < 3; i++ {
-		submitOne(t, c, ops, "landed", "base000")
+		submitOne(t, c, ops, repo.dir, "landed", "base000")
 	}
 	// 2 preserved (merge path with conflict)
-	submitOne(t, c, ops, "preserved", "base000")
-	submitOne(t, c, ops, "preserved", "base000")
+	submitOne(t, c, ops, repo.dir, "preserved", "base000")
+	submitOne(t, c, ops, repo.dir, "preserved", "base000")
 	// 1 landed
-	submitOne(t, c, ops, "landed", "base000")
+	submitOne(t, c, ops, repo.dir, "landed", "base000")
 	// 4 more landed
 	for i := 0; i < 4; i++ {
-		submitOne(t, c, ops, "landed", "base000")
+		submitOne(t, c, ops, repo.dir, "landed", "base000")
 	}
 
 	m := c.Metrics()
@@ -202,8 +201,8 @@ func TestLandCoordinatorMetricsRegistry(t *testing.T) {
 	ops := &outcomeGitOps{}
 	reg.gitOpsOverride = ops
 
-	root1 := t.TempDir()
-	root2 := t.TempDir()
+	root1 := newLandIntegRepo(t).dir
+	root2 := newLandIntegRepo(t).dir
 
 	c1 := reg.Get(root1)
 	defer reg.StopAll()

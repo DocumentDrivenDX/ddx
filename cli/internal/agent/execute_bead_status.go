@@ -445,6 +445,27 @@ func IsCandidateCycleNonMergeable(status string) bool {
 	}
 }
 
+// PrepareCandidateCycleLanding is the shared CLI/server landing predicate. It
+// preserves any changed but non-successful candidate for inspection and never
+// lets ResultRev+exit-code alone override worker integrity/review status.
+func PrepareCandidateCycleLanding(res *ExecuteBeadResult) bool {
+	if res == nil {
+		return false
+	}
+	changedCandidate := res.ResultRev != "" && res.ResultRev != res.BaseRev
+	mergeable := res.Outcome == ExecuteBeadOutcomeTaskSucceeded &&
+		res.ExitCode == 0 &&
+		res.FailureMode != FailureModeAttemptIntegrity &&
+		!IsCandidateCycleNonMergeable(res.Status)
+	if !mergeable {
+		if changedCandidate {
+			res.Outcome = "preserved"
+		}
+		return false
+	}
+	return changedCandidate
+}
+
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible
 // status contract. This is called by ApplyLandingToResult and by callers who
 // build an ExecuteBeadReport from a landing result.

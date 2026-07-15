@@ -1,6 +1,7 @@
 package executeloop
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -25,10 +26,7 @@ const (
 	TryLoopActionRetryPower TryLoopAction = "retry_power"
 )
 
-// FloorFinder returns the next viable MinPower floor above the supplied power.
-type FloorFinder interface {
-	Next(actualPower int) (int, error)
-}
+var errMinPowerExhausted = errors.New("minimum power cannot be raised")
 
 // AttemptTransitionInput is the complete input the try-loop state machine needs
 // to decide whether another implementation attempt is useful.
@@ -36,10 +34,11 @@ type AttemptTransitionInput struct {
 	Status          string
 	Detail          string
 	CurrentMinPower int
+	MaxPower        int
 	ActualPower     int
 	// OutcomeReason carries the worker's typed failure classification. When
 	// populated, only semantic acceptance/review reasons are allowed to
-	// advance the power ladder; structural and infrastructure reasons stop
+	// raise the abstract power floor; structural and infrastructure reasons stop
 	// without escalating MinPower.
 	OutcomeReason string
 
@@ -58,12 +57,12 @@ type AttemptTransition struct {
 
 // DecideAttemptTransition implements the ddx try retry state machine for one
 // attempt result. The default bias is forward progress: semantic failures move
-// up the model-power ladder, while retryable provider-connectivity failures can
-// be retried immediately with MinPower set just above the failed route's actual
-// power. Infrastructure failures without concrete route evidence still stop the
-// current attempt; a smarter model cannot fix an absent service with no
-// alternate power signal.
-func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) AttemptTransition {
+// raise the abstract MinPower floor, while retryable provider-connectivity failures can
+// be retried immediately with MinPower set above both the current request and
+// the failed route's actual power. Infrastructure failures without concrete
+// route evidence still stop the current attempt; a stronger agent cannot fix
+// an absent service with no alternate power signal.
+func DecideAttemptTransition(input AttemptTransitionInput) AttemptTransition {
 	retryableProvider := isRetryableProviderReason(input.OutcomeReason)
 	if input.Disrupted && !retryableProvider && !isProviderConnectivityDetail(input.Detail) {
 		return stopTransition("disrupted")
@@ -85,9 +84,12 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 		if !input.AllowInfrastructureRetry || input.ActualPower <= 0 || (!isProviderConnectivityDetail(input.Detail) && !retryableProvider) {
 			return stopTransition("infrastructure_no_retry_route")
 		}
-		next := input.ActualPower + 1
-		if next <= input.CurrentMinPower {
-			next = input.CurrentMinPower + 1
+		next, err := NextAbstractMinPower(input.CurrentMinPower, input.ActualPower)
+		if err != nil {
+			return stopTransition("min_power_exhausted")
+		}
+		if input.MaxPower > 0 && next >= input.MaxPower {
+			return stopTransition("max_power_exhausted")
 		}
 		return AttemptTransition{
 			State:        TryLoopStateRetryPower,
@@ -97,13 +99,12 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 		}
 	}
 
-	basis := input.CurrentMinPower
-	if input.ActualPower > 0 {
-		basis = input.ActualPower
-	}
-	next, err := nextLadderFloor(ladder, basis)
+	next, err := NextAbstractMinPower(input.CurrentMinPower, input.ActualPower)
 	if err != nil {
-		return stopTransition("power_ladder_exhausted")
+		return stopTransition("min_power_exhausted")
+	}
+	if input.MaxPower > 0 && next >= input.MaxPower {
+		return stopTransition("max_power_exhausted")
 	}
 	return AttemptTransition{
 		State:        TryLoopStateRetryPower,
@@ -111,6 +112,21 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 		NextMinPower: next,
 		Reason:       "semantic_retry_with_higher_min_power",
 	}
+}
+
+// NextAbstractMinPower returns the smallest integer floor strictly above both
+// the current request and the power Fizeau reported for the completed attempt.
+// DDx deliberately does not inspect model inventory or route viability here;
+// Fizeau owns deciding whether and how to satisfy the stronger abstract floor.
+func NextAbstractMinPower(currentMinPower, actualPower int) (int, error) {
+	basis := currentMinPower
+	if actualPower > basis {
+		basis = actualPower
+	}
+	if basis == int(^uint(0)>>1) {
+		return 0, errMinPowerExhausted
+	}
+	return basis + 1, nil
 }
 
 // isRetryableProviderReason reports whether reason is a typed provider-failure
@@ -155,17 +171,6 @@ func stopTransition(reason string) AttemptTransition {
 		Reason: reason,
 	}
 }
-
-func nextLadderFloor(ladder FloorFinder, basis int) (int, error) {
-	if ladder == nil {
-		return 0, errNoFloorFinder{}
-	}
-	return ladder.Next(basis)
-}
-
-type errNoFloorFinder struct{}
-
-func (errNoFloorFinder) Error() string { return "no floor finder configured" }
 
 func isProviderConnectivityDetail(detail string) bool {
 	lower := strings.ToLower(detail)

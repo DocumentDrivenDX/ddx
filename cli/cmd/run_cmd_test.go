@@ -169,6 +169,25 @@ func TestRunJSONFinalErrorExitsNonZero(t *testing.T) {
 	assert.Contains(t, err.Error(), "agent exited with code 1")
 }
 
+func TestRunTextUsesFizeauNormalizedFinalText(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 2)
+		ch <- agentlib.ServiceEvent{Type: "routing_decision", Data: []byte(`{"harness":"codex","provider":"opaque","model":"opaque"}`)}
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"type\":\"output\",\"item\":{\"type\":\"agent_message\",\"text\":\"must-not-be-reparsed\"}}"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	root := NewCommandFactory(minimalProjectDir(t)).NewRootCommand()
+	out, err := executeCommand(root, "run", "--text", "hello", "--output", "text", "--timeout", "5s")
+	require.NoError(t, err)
+	assert.Equal(t, `{"type":"output","item":{"type":"agent_message","text":"must-not-be-reparsed"}}`, out,
+		"ddx run must print Fizeau FinalText verbatim instead of applying a provider parser")
+}
+
 // TestRunPersonaInjectsBodyIntoPrompt verifies AC3: ddx run --persona loads
 // the named persona and prepends its body to the prompt dispatched to Execute.
 func TestRunPersonaInjectsBodyIntoPrompt(t *testing.T) {

@@ -330,7 +330,7 @@ func TestResolveDeepCopy(t *testing.T) {
 			ReasoningLevels: map[string][]string{
 				"smart": {"high", "medium"},
 			},
-			Routing: &RoutingConfig{ProfilePriority: []string{"default"}},
+			Routing: &RoutingConfig{},
 		},
 		Executions: &ExecutionsConfig{
 			Mirror: &ExecutionsMirrorConfig{
@@ -487,9 +487,8 @@ func TestResolvedConfigReasoningLevelsAccessor(t *testing.T) {
 	}
 }
 
-// TestOpaquePassthroughBlocksConfigModel is the regression guard for
-// ddx-c4231775: when OpaquePassthrough=true, Resolve must not fall back to
-// agent.model from .ddx/config.yaml when the CLI model flag is empty.
+// TestOpaquePassthroughBlocksConfigModel preserves the serialized compatibility
+// flag while proving project model configuration never affects resolution.
 func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
 	cfg := &NewConfig{
 		Agent: &AgentConfig{
@@ -497,13 +496,13 @@ func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
 		},
 	}
 
-	// Without OpaquePassthrough the config values are applied normally.
+	// Project model configuration is ignored regardless of the compatibility flag.
 	normalRcfg := cfg.Resolve(CLIOverrides{})
 	if got := normalRcfg.Harness(); got != "" {
 		t.Fatalf("baseline Harness = %q, want empty", got)
 	}
-	if got := normalRcfg.Model(); got != "openrouter/gpt-5.4-mini" {
-		t.Fatalf("baseline Model = %q, want openrouter/gpt-5.4-mini", got)
+	if got := normalRcfg.Model(); got != "" {
+		t.Fatalf("baseline Model = %q, want empty", got)
 	}
 
 	// With OpaquePassthrough the config values must be suppressed.
@@ -535,8 +534,8 @@ func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T
 	}
 
 	configOnly := cfg.Resolve(CLIOverrides{})
-	if got, ok := configOnly.ExplicitModel(); ok || got != "openrouter/gpt-5.4-mini" {
-		t.Fatalf("config-only ExplicitModel = (%q, %v), want (config model, false)", got, ok)
+	if got, ok := configOnly.ExplicitModel(); ok || got != "" {
+		t.Fatalf("config-only ExplicitModel = (%q, %v), want (empty, false)", got, ok)
 	}
 
 	explicit := cfg.Resolve(CLIOverrides{

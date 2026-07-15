@@ -90,6 +90,9 @@ func (cl *ConfigLoader) loadNewFormat(path string) (*NewConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
 	}
+	if err := checkRoutingMigration(path, data); err != nil {
+		return nil, err
+	}
 
 	// Validate using two-phase validation
 	if err := cl.validator.Validate(data); err != nil {

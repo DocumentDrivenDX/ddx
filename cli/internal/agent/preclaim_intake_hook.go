@@ -475,21 +475,20 @@ func newPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:        prompt,
-			PromptSource:  PreClaimIntakePromptSource,
-			Output:        log,
-			WorkLogPhase:  "readiness",
-			Correlation:   map[string]string{"bead_id": beadID},
-			ClearProfile:  true,
-			ClearMinPower: true,
+			Prompt:           prompt,
+			PromptSource:     PreClaimIntakePromptSource,
+			Output:           log,
+			WorkLogPhase:     "readiness",
+			Correlation:      map[string]string{"bead_id": beadID},
+			ClearProfile:     true,
+			MinPowerOverride: lifecycleStandardMinPower,
 			// Readiness is a text-only judgment of the bead's own definition; it
 			// must not spider the repository (ddx-d5d1ada7). Do not request repo
 			// tools for this dispatch.
 			RequiresTools: false,
 		}
-		runtime.ClearMaxPower = true
 		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime, promptVerbose)
-		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStandardProfile)
+		applyLifecycleHookRouting(rcfg, &runtime)
 		logPreClaimIntakeRoute(log, beadID, runtime, promptVerbose)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
@@ -539,6 +538,9 @@ func preClaimIntakeRouteSummary(runtime AgentRunRuntime) string {
 	if runtime.ModelOverride != "" {
 		fields = append(fields, "model="+runtime.ModelOverride)
 	}
+	if runtime.MinPowerOverride > 0 {
+		fields = append(fields, "min_power="+strconv.Itoa(runtime.MinPowerOverride))
+	}
 	return strings.Join(fields, " ")
 }
 
@@ -556,26 +558,21 @@ func truncatePreClaimIntakePromptForLog(prompt string) string {
 	return prompt[:head] + marker + prompt[len(prompt)-tail:]
 }
 
-func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime *AgentRunRuntime, selector func(ProfileSnapshot) string) {
+func applyLifecycleHookRouting(rcfg config.ResolvedConfig, runtime *AgentRunRuntime) {
 	runtime.ClearRoutingPins = true
 
-	pinned := false
 	if harness, ok := rcfg.ExplicitHarness(); ok {
-		runtime.HarnessOverride = strings.TrimSpace(harness)
-		pinned = true
+		runtime.HarnessOverride = harness
 	}
 	if provider, ok := rcfg.ExplicitProvider(); ok {
-		runtime.ProviderOverride = strings.TrimSpace(provider)
-		pinned = true
+		runtime.ProviderOverride = provider
 	}
 	if model, ok := rcfg.ExplicitModel(); ok {
-		runtime.ModelOverride = strings.TrimSpace(model)
-		pinned = true
+		runtime.ModelOverride = model
 	}
-	if pinned {
-		return
+	if rcfg.Profile() != "" {
+		runtime.ProfileOverride = rcfg.Profile()
 	}
-	runtime.ProfileOverride = selectProfileForDispatch(ctx, projectRoot, svc, runner, selector)
 }
 
 func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {

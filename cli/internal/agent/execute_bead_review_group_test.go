@@ -130,10 +130,10 @@ func TestReviewGroup_CorrelationFields(t *testing.T) {
 		assert.Equal(t, head, call.Correlation["result_rev"])
 		assert.Equal(t, "reviewer", call.Correlation["role"])
 		assert.Equal(t, fmt.Sprintf("%d", i), call.Correlation["reviewer_index"])
-		assert.Equal(t, "codex", call.Correlation["impl_harness"])
-		assert.Equal(t, "openai", call.Correlation["impl_provider"])
-		assert.Equal(t, "gpt-5", call.Correlation["impl_model"])
-		assert.Equal(t, "70", call.Correlation["impl_actual_power"])
+		assert.NotContains(t, call.Correlation, "impl_harness")
+		assert.NotContains(t, call.Correlation, "impl_provider")
+		assert.NotContains(t, call.Correlation, "impl_model")
+		assert.NotContains(t, call.Correlation, "impl_actual_power")
 	}
 }
 
@@ -311,61 +311,134 @@ func TestTwoSlotReview_UnanimousApproveRequired(t *testing.T) {
 	require.Len(t, runner.calls, 2)
 }
 
-func TestTwoSlotReview_PairingDegradedIsEvidenceOnly(t *testing.T) {
-	projectRoot, head, store := reviewPairingTestSetup(t)
-	events := &stubBeadEventAppender{}
-	runner := &reviewGroupRunnerStub{result: &Result{
-		Harness:     "claude",
-		Provider:    "anthropic",
-		Model:       "claude-opus-4-7",
-		ActualPower: 95,
-		Output:      reviewerOutputApprove,
-	}}
-	reviewer := &DefaultBeadReviewer{
-		ProjectRoot: projectRoot,
-		BeadStore:   store,
-		BeadEvents:  events,
-		Runner:      runner,
-		Harness:     "claude",
+func TestReviewerProviderIdentityIsEvidenceOnly(t *testing.T) {
+	type requestSnapshot struct {
+		harness          string
+		model            string
+		profile          string
+		minPower         int
+		role             string
+		clearRoutingPins bool
+		clearProfile     bool
 	}
-	landed := false
-	coord := &AttemptCycleCoordinator{
-		ProjectRoot: projectRoot,
-		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
-			return CandidateResult{
-				Report: ExecuteBeadReport{
-					BeadID:      beadID,
-					AttemptID:   "att-1",
-					SessionID:   "sess-1",
-					Status:      ExecuteBeadStatusSuccess,
-					BaseRev:     head,
-					ResultRev:   head,
-					Harness:     "claude",
-					Provider:    "anthropic",
-					Model:       "claude-sonnet-4-6",
-					ActualPower: 70,
-				},
-				WorktreePath: projectRoot,
-			}, nil
-		}),
-		Reviewer: reviewer,
-		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
-			landed = true
-			return candidate.Report, nil
-		}),
+	type controlSnapshot struct {
+		landed        bool
+		status        string
+		reviewVerdict string
+		nextRequests  []requestSnapshot
+		provider      string
+	}
+	var snapshots []controlSnapshot
+
+	for _, reviewerProvider := range []string{"anthropic", "openai"} {
+		reviewerProvider := reviewerProvider
+		t.Run(reviewerProvider, func(t *testing.T) {
+			projectRoot, head, store := reviewPairingTestSetup(t)
+			runner := &reviewGroupRunnerStub{result: &Result{
+				Harness:     "claude",
+				Provider:    reviewerProvider,
+				Model:       "claude-opus-4-7",
+				ActualPower: 95,
+				Output:      reviewerOutputApprove,
+			}}
+			reviewer := &DefaultBeadReviewer{
+				ProjectRoot: projectRoot,
+				BeadStore:   store,
+				BeadEvents:  store,
+				EventReader: store,
+				Runner:      runner,
+				Harness:     "claude",
+			}
+			impl := ImplementerRouting{
+				Harness:     "claude",
+				Provider:    "anthropic",
+				Model:       "claude-sonnet-4-6",
+				ActualPower: 70,
+			}
+
+			landed := false
+			coord := &AttemptCycleCoordinator{
+				ProjectRoot: projectRoot,
+				Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+					return CandidateResult{
+						Report: ExecuteBeadReport{
+							BeadID:      beadID,
+							AttemptID:   "att-1",
+							SessionID:   "sess-1",
+							Status:      ExecuteBeadStatusSuccess,
+							BaseRev:     head,
+							ResultRev:   head,
+							Harness:     impl.Harness,
+							Provider:    impl.Provider,
+							Model:       impl.Model,
+							ActualPower: impl.ActualPower,
+						},
+						WorktreePath: projectRoot,
+					}, nil
+				}),
+				Reviewer: reviewer,
+				Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+					landed = true
+					return candidate.Report, nil
+				}),
+			}
+
+			got, err := coord.Run(context.Background(), "ddx-pairing")
+			require.NoError(t, err)
+			assert.True(t, landed)
+			assert.True(t, got.Landed)
+
+			// Dispatch the same review again. A prior same-provider result must not
+			// raise the next MinPower or otherwise alter the request.
+			group, err := reviewer.ReviewGroup(context.Background(), "ddx-pairing", head, impl)
+			require.NoError(t, err)
+			require.Len(t, group.Slots, 2)
+			nextRequests := make([]requestSnapshot, 0, len(group.Slots))
+			for _, slot := range group.Slots {
+				require.NotNil(t, slot.Result)
+				assert.Equal(t, reviewerProvider, slot.Result.ReviewerProvider,
+					"concrete provider must remain visible as result evidence")
+				assert.Equal(t, 95, slot.Result.ActualPower,
+					"abstract actual power remains separately available as evidence")
+				assert.Equal(t, VerdictApprove, slot.Result.Verdict)
+				nextRequests = append(nextRequests, requestSnapshot{
+					harness:          slot.Runtime.HarnessOverride,
+					model:            slot.Runtime.ModelOverride,
+					profile:          slot.Runtime.ProfileOverride,
+					minPower:         slot.Runtime.MinPowerOverride,
+					role:             slot.Runtime.Role,
+					clearRoutingPins: slot.Runtime.ClearRoutingPins,
+					clearProfile:     slot.Runtime.ClearProfile,
+				})
+			}
+
+			beadEvents, err := store.Events("ddx-pairing")
+			require.NoError(t, err)
+			for _, event := range beadEvents {
+				assert.NotEqual(t, legacyReviewPairingDegradedEventKind, event.Kind,
+					"provider equality must not create DDx control state")
+			}
+
+			snapshots = append(snapshots, controlSnapshot{
+				landed:        got.Landed,
+				status:        got.Report.Status,
+				reviewVerdict: got.Report.ReviewVerdict,
+				nextRequests:  nextRequests,
+				provider:      reviewerProvider,
+			})
+		})
 	}
 
-	got, err := coord.Run(context.Background(), "ddx-pairing")
-
-	require.NoError(t, err)
-	assert.True(t, landed)
-	assert.True(t, got.Landed)
-	require.Len(t, runner.calls, 2)
-	degraded := 0
-	for _, ev := range events.events {
-		if ev.Event.Kind == ReviewPairingDegradedEventKind {
-			degraded++
-		}
-	}
-	assert.Equal(t, 2, degraded)
+	require.Len(t, snapshots, 2)
+	assert.NotEqual(t, snapshots[0].provider, snapshots[1].provider,
+		"fixture must vary only concrete reviewer provider identity")
+	assert.Equal(t, snapshots[0].landed, snapshots[1].landed)
+	assert.Equal(t, snapshots[0].status, snapshots[1].status)
+	assert.Equal(t, snapshots[0].reviewVerdict, snapshots[1].reviewVerdict)
+	assert.Equal(t, snapshots[0].nextRequests, snapshots[1].nextRequests,
+		"concrete reviewer provider identity must not steer the next request")
+	assert.Equal(t, []requestSnapshot{
+		{harness: "claude", minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
+		{harness: "claude", minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
+	}, snapshots[0].nextRequests)
 }

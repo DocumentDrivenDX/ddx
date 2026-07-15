@@ -21,67 +21,6 @@ import (
 	_ "github.com/easel/fizeau/configinit"
 )
 
-// DefaultProviderRequestTimeout is the per-request wall-clock cap for
-// providers. It guards against a provider that emits headers but then stalls
-// entirely — a scenario the idle-read timeout below catches for streaming
-// providers, but which also applies to non-streaming Chat calls where no body
-// bytes arrive at all.
-//
-// To override per-project, set agent.endpoints.<name>.request_timeout_seconds
-// in .ddx/config.yaml, or pass --request-timeout DURATION to execute-bead /
-// work for one-off debugging.
-const DefaultProviderRequestTimeout = 15 * time.Minute
-
-// DefaultProviderIdleReadTimeout bounds the maximum idle gap between stream
-// deltas. This is the primary stalled-TCP-socket defense: when no body bytes
-// arrive for 5 continuous minutes the provider is assumed hung and the call
-// fails.
-const DefaultProviderIdleReadTimeout = 5 * time.Minute
-
-// ResolveProviderRequestTimeout returns the effective wall-clock cap for a
-// single Chat/ChatStream call. Resolution order:
-//  1. override if > 0 (from --request-timeout CLI flag via ResolvedConfig)
-//  2. agent.endpoints[n].request_timeout_seconds in .ddx/config.yaml for
-//     the named provider endpoint
-//  3. DefaultProviderRequestTimeout (15 min)
-//
-// The idle-read timeout (DefaultProviderIdleReadTimeout, 5 min) is a
-// separate mechanism and is NOT affected by this function.
-func ResolveProviderRequestTimeout(workDir, providerName, _ string, override time.Duration) time.Duration {
-	if override > 0 {
-		return override
-	}
-	if workDir != "" && providerName != "" {
-		if cfg, err := ddxconfig.LoadWithWorkingDir(workDir); err == nil {
-			if t := endpointRequestTimeout(cfg, providerName); t > 0 {
-				return t
-			}
-		}
-	}
-	return DefaultProviderRequestTimeout
-}
-
-// endpointRequestTimeout looks up the request_timeout_seconds for the named
-// provider in cfg.Agent.Endpoints. Returns 0 if not configured or not found.
-func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Duration {
-	if cfg == nil || cfg.Agent == nil {
-		return 0
-	}
-	for i, ep := range cfg.Agent.Endpoints {
-		if ep.RequestTimeoutSeconds <= 0 {
-			continue
-		}
-		name, _, err := endpointProviderEntry(ep, i)
-		if err != nil {
-			continue
-		}
-		if name == providerName {
-			return time.Duration(ep.RequestTimeoutSeconds) * time.Second
-		}
-	}
-	return 0
-}
-
 // NewServiceFromWorkDir constructs the normal execution FizeauService for a DDx
 // project. Fizeau owns provider config, provider discovery, include-by-default
 // semantics, and policy routing; DDx project endpoint blocks are used by status
@@ -96,7 +35,9 @@ func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Dur
 // leak for the lifetime of the process and accumulate under repeated calls
 // (see bead ddx-server-fizeau-leak).
 func NewServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
-	return agentlib.New(agentlib.ServiceOptions{})
+	return agentlib.New(agentlib.ServiceOptions{
+		ConfigPath: filepath.Join(workDir, "config.yaml"),
+	})
 }
 
 // NewServiceFromWorkDirCtx is the context-scoped variant of
@@ -108,13 +49,16 @@ func NewServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.Fiz
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx})
+	return agentlib.New(agentlib.ServiceOptions{
+		ConfigPath:          filepath.Join(workDir, "config.yaml"),
+		QuotaRefreshContext: ctx,
+	})
 }
 
-// NewPreflightServiceFromWorkDir constructs a service for route/model inventory
-// preflight paths. It disables Fizeau's background quota/aliveness/probe loops at
-// construction time; callers still pass live request contexts to ListModels,
-// ResolveRoute, and other foreground service methods.
+// NewPreflightServiceFromWorkDir constructs the short-lived service used by
+// execution and capability queries. It disables Fizeau's background
+// quota/aliveness/probe loops at construction time; callers still pass live
+// request contexts to foreground service methods.
 func NewPreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

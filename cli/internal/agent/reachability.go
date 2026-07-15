@@ -54,12 +54,6 @@ func keepAgentSupportReachability() {
 	_, _ = store.ReadOutcomes()
 	_, _ = store.ReadBurnSummaries()
 
-	_ = RecordEntry(filepath.Join(root, "dictionary"), &VirtualEntry{
-		Prompt:   "keepalive prompt",
-		Response: "keepalive response",
-		Harness:  "virtual",
-	})
-
 	renderer := NewWorkLogRenderer(WorkLogRendererOptions{
 		Now: func() time.Time { return time.Unix(0, 0).UTC() },
 	}).WithWorkPhase("do")

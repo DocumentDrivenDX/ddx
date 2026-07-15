@@ -34,7 +34,7 @@ type doctorUnjamReport struct {
 }
 
 // doctorUnjamCheckpoint records a checkpoint commit made to absorb dirty
-// DDx-owned state (.ddx/executions/, .ddx/metrics/) found at the project root
+// durable DDx-owned metrics state found at the project root
 // before stale worktree pruning runs.
 type doctorUnjamCheckpoint struct {
 	CommitSHA      string   `json:"commit_sha"`
@@ -145,15 +145,13 @@ const ddxStateCheckpointCommitMessage = "chore: checkpoint ddx-owned state (doct
 // ddxStateCheckpointPathspecs are the DDx-owned project-root paths doctor
 // --unjam checkpoints before pruning stale execute-bead worktrees.
 var ddxStateCheckpointPathspecs = []string{
-	".ddx/executions",
 	".ddx/metrics",
 }
 
 // unjamCheckpointDDXOwnedState commits any dirty (staged or unstaged, including
-// otherwise-gitignored) files under .ddx/executions/ and .ddx/metrics/ at the
-// project root into a single checkpoint commit, so that dirt in those
-// DDx-owned paths cannot block the rest of the unjam pass. Returns nil when
-// there was nothing to checkpoint.
+// otherwise-gitignored) files under .ddx/metrics/ at the project root into a
+// single checkpoint commit. Local execution evidence is never included.
+// Returns nil when there was nothing to checkpoint.
 func unjamCheckpointDDXOwnedState(ctx context.Context, projectRoot string) (*doctorUnjamCheckpoint, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -349,10 +347,21 @@ func isDoctorUnjamDDXOwnedPath(path string) bool {
 	if path == "" {
 		return false
 	}
+	// Execution evidence is local attempt state, not durable DDx-owned state.
+	// Report it as untouched dirt so --unjam cannot claim a clean worktree while
+	// visible or ignored evidence remains on disk.
+	if isDoctorUnjamExecutionEvidencePath(path) {
+		return false
+	}
 	if path == ".ddx.yml" || path == ".ddx.yaml" {
 		return true
 	}
 	return path == ".ddx" || strings.HasPrefix(path, ".ddx/")
+}
+
+func isDoctorUnjamExecutionEvidencePath(path string) bool {
+	path = normalizeDoctorUnjamPath(path)
+	return path == ".ddx/executions" || strings.HasPrefix(path, ".ddx/executions/")
 }
 
 func listPreserveIterationRefs(ctx context.Context, projectRoot string) ([]string, error) {
@@ -387,7 +396,7 @@ func matchPreserveRefDirtyPaths(dirtyPaths, treePaths []string) []string {
 	seen := make(map[string]bool, len(dirtyPaths))
 	for _, dirtyPath := range dirtyPaths {
 		dirtyPath = normalizeDoctorUnjamPath(dirtyPath)
-		if dirtyPath == "" || seen[dirtyPath] {
+		if dirtyPath == "" || seen[dirtyPath] || isDoctorUnjamExecutionEvidencePath(dirtyPath) {
 			continue
 		}
 		for _, treePath := range treePaths {
@@ -442,19 +451,27 @@ func removeDirtyPaths(paths, remove []string) []string {
 }
 
 func stashPreserveRefDirtyPaths(ctx context.Context, projectRoot, preserveRef string, dirtyPaths []string) error {
-	if len(dirtyPaths) == 0 {
+	mutablePaths := make([]string, 0, len(dirtyPaths))
+	for _, path := range dirtyPaths {
+		path = normalizeDoctorUnjamPath(path)
+		if path == "" || isDoctorUnjamExecutionEvidencePath(path) {
+			continue
+		}
+		mutablePaths = append(mutablePaths, path)
+	}
+	if len(mutablePaths) == 0 {
 		return nil
 	}
 
 	message := doctorUnjamPreserveRefStashMessagePrefix + preserveRef
 	args := []string{"stash", "push", "--all", "--message", message, "--"}
-	args = append(args, dirtyPaths...)
+	args = append(args, mutablePaths...)
 	out, err := gitpkg.Command(ctx, projectRoot, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("stashing preserve-derived dirt for %s: %s: %w", preserveRef, strings.TrimSpace(string(out)), err)
 	}
 
-	remaining, err := unjamProjectDirtyPathsForPaths(ctx, projectRoot, dirtyPaths)
+	remaining, err := unjamProjectDirtyPathsForPaths(ctx, projectRoot, mutablePaths)
 	if err != nil {
 		return err
 	}

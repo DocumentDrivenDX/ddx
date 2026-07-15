@@ -68,7 +68,7 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 	if err != nil {
 		return nil, err
 	}
-	runtime := decomposerRuntime(tctx, projectRoot, runner, rcfg)
+	runtime := decomposerRuntime(rcfg)
 	runtime.Prompt = prompt
 	runtime.PromptSource = preClaimDecomposerPromptSource
 	result, err := dispatchLifecycleRun(tctx, projectRoot, nil, runner, rcfg, runtime)
@@ -160,7 +160,7 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		return DecomposeResult{Failed: true, Reason: "prompt_error"}
 	}
 
-	runtime := decomposerRuntime(tctx, projectRoot, runner, rcfg)
+	runtime := decomposerRuntime(rcfg)
 	runtime.Prompt = prompt
 	runtime.PromptSource = decomposerPromptSource
 
@@ -234,27 +234,13 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 	}
 }
 
-func decomposerRuntime(ctx context.Context, projectRoot string, runner AgentRunner, rcfg config.ResolvedConfig) AgentRunRuntime {
-	if !decomposerCanAutoselect(rcfg) {
-		return AgentRunRuntime{}
-	}
-	return AgentRunRuntime{
-		ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, nil, runner, SelectStrongestProfile),
-		ClearRoutingPins: true,
+func decomposerRuntime(rcfg config.ResolvedConfig) AgentRunRuntime {
+	runtime := AgentRunRuntime{
 		ClearProfile:     true,
-		ClearMinPower:    true,
-		ClearMaxPower:    true,
+		MinPowerOverride: lifecycleStrongMinPower,
 	}
-}
-
-func decomposerCanAutoselect(rcfg config.ResolvedConfig) bool {
-	pt := rcfg.Passthrough()
-	return strings.TrimSpace(pt.Harness) == "" &&
-		strings.TrimSpace(pt.Provider) == "" &&
-		strings.TrimSpace(pt.Model) == "" &&
-		strings.TrimSpace(rcfg.Profile()) == "" &&
-		rcfg.MinPower() == 0 &&
-		rcfg.MaxPower() == 0
+	applyLifecycleHookRouting(rcfg, &runtime)
+	return runtime
 }
 
 func appendPreClaimDecomposeEvent(store ExecuteBeadLoopStore, beadID string, result *Result, rcfg config.ResolvedConfig, fallbackReason string) {
@@ -274,13 +260,24 @@ func appendPreClaimDecomposeEvent(store ExecuteBeadLoopStore, beadID string, res
 }
 
 func decomposerEventBodyForResult(childIDs []string, result *Result, rcfg config.ResolvedConfig, fallbackReason string) decomposerEventBody {
-	pt := rcfg.Passthrough()
+	harness, harnessExplicit := rcfg.ExplicitHarness()
+	if !harnessExplicit {
+		harness = ""
+	}
+	provider, providerExplicit := rcfg.ExplicitProvider()
+	if !providerExplicit {
+		provider = ""
+	}
+	model, modelExplicit := rcfg.ExplicitModel()
+	if !modelExplicit {
+		model = ""
+	}
 	body := decomposerEventBody{
 		ChildIDs:          append([]string(nil), childIDs...),
-		RequestedHarness:  strings.TrimSpace(pt.Harness),
-		RequestedProvider: strings.TrimSpace(pt.Provider),
-		RequestedModel:    strings.TrimSpace(pt.Model),
-		RequestedProfile:  strings.TrimSpace(rcfg.Profile()),
+		RequestedHarness:  harness,
+		RequestedProvider: provider,
+		RequestedModel:    model,
+		RequestedProfile:  rcfg.Profile(),
 		RequestedMinPower: rcfg.MinPower(),
 		RequestedMaxPower: rcfg.MaxPower(),
 		FallbackReason:    strings.TrimSpace(fallbackReason),

@@ -5,9 +5,11 @@
 package testutils
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -86,6 +88,10 @@ var (
 	builtBinaryOnce sync.Once
 	builtBinaryPath string
 	builtBinaryErr  error
+
+	builtFizeauTestSeamBinaryOnce sync.Once
+	builtFizeauTestSeamBinaryPath string
+	builtFizeauTestSeamBinaryErr  error
 )
 
 // DDxBinary resolves a ddx binary for fixture seeding and subprocess tests. It
@@ -132,6 +138,33 @@ func BuildDDxBinary(t *testing.T) string {
 		t.Fatalf("build ddx binary from source: %v", builtBinaryErr)
 	}
 	return builtBinaryPath
+}
+
+// BuildDDxFizeauTestSeamBinary builds the ddx CLI with Fizeau's public
+// testseam build tag. The resulting binary is for subprocess integration
+// tests only: the tag exposes Fizeau's FakeProvider while an ordinary ddx
+// build cannot name or activate that provider.
+func BuildDDxFizeauTestSeamBinary(t *testing.T) string {
+	t.Helper()
+	builtFizeauTestSeamBinaryOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "ddx-fizeau-testseam-bin-*")
+		if err != nil {
+			builtFizeauTestSeamBinaryErr = err
+			return
+		}
+		out := filepath.Join(dir, "ddx")
+		build := exec.Command("go", "build", "-buildvcs=false", "-tags", "testseam", "-o", out, ".")
+		build.Dir = cliDir(t)
+		if combined, err := build.CombinedOutput(); err != nil {
+			builtFizeauTestSeamBinaryErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(string(combined)))
+			return
+		}
+		builtFizeauTestSeamBinaryPath = out
+	})
+	if builtFizeauTestSeamBinaryErr != nil {
+		t.Fatalf("build ddx Fizeau test-seam binary from source: %v", builtFizeauTestSeamBinaryErr)
+	}
+	return builtFizeauTestSeamBinaryPath
 }
 
 // cliDir walks up from the test's working directory to the directory that

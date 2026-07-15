@@ -17,56 +17,139 @@ permissions:
   attestations: write
   id-token: write
 
+env:
+  RELEASE_TAG: "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+
 jobs:
   # Validate and prepare release
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      commit: ${{ steps.identity.outputs.commit }}
       version: ${{ steps.version.outputs.version }}
       previous_tag: ${{ steps.previous.outputs.tag }}
+      previous_commit: ${{ steps.previous.outputs.commit }}
     steps:
     - uses: actions/checkout@v4
       with:
+        ref: ${{ env.RELEASE_TAG }}
         fetch-depth: 0
-    
-    - name: Validate tag format
+
+    - name: Resolve immutable release identity
+      id: identity
+      shell: bash
       run: |
-        TAG="${{ github.ref_name }}"
+        TAG="${RELEASE_TAG}"
         if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
           echo "❌ Invalid tag format: $TAG"
           echo "Expected format: vX.Y.Z or vX.Y.Z-suffix"
           exit 1
         fi
+        if ! git show-ref --verify --quiet "refs/tags/${TAG}"; then
+          echo "❌ Release tag does not exist: $TAG"
+          exit 1
+        fi
+        TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
+        CHECKOUT_COMMIT="$(git rev-parse HEAD)"
+        if [ "$CHECKOUT_COMMIT" != "$TAG_COMMIT" ]; then
+          echo "❌ Checked out commit ${CHECKOUT_COMMIT} does not match ${TAG} (${TAG_COMMIT})"
+          exit 1
+        fi
+        echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+        echo "commit=${TAG_COMMIT}" >> "${GITHUB_OUTPUT}"
         echo "✅ Valid tag format: $TAG"
-    
+
     - name: Extract version
       id: version
       run: |
-        VERSION="${{ github.ref_name }}"
+        VERSION="${{ steps.identity.outputs.tag }}"
         VERSION="${VERSION#v}"  # Remove 'v' prefix
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "📦 Version: $VERSION"
-    
-    - name: Get previous tag
-      id: previous
-      run: |
-        CURRENT_TAG="${{ github.ref_name }}"
-        PREVIOUS_TAG=$(git describe --tags --abbrev=0 "$CURRENT_TAG^" 2>/dev/null || echo "")
-        echo "tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-        if [ -n "$PREVIOUS_TAG" ]; then
-          echo "📊 Previous tag: $PREVIOUS_TAG"
-        else
-          echo "🆕 This is the first release"
-        fi
 
-  # Run full test suite before release
-  test:
-    name: Test Release
+    - name: Fetch published GitHub Release metadata
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASES_JSON: ${{ runner.temp }}/github-releases.json
+      run: |
+        gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "${RELEASES_JSON}"
+        test -s "${RELEASES_JSON}"
+
+    - name: Resolve previous published release
+      id: previous
+      env:
+        RELEASE_TAG: ${{ steps.identity.outputs.tag }}
+        RELEASE_COMMIT: ${{ steps.identity.outputs.commit }}
+        RELEASES_JSON: ${{ runner.temp }}/github-releases.json
+      run: |
+        BASELINE_JSON=$(python3 scripts/release-baseline.py \
+          --repo . \
+          --release-tag "${RELEASE_TAG}" \
+          --release-commit "${RELEASE_COMMIT}" \
+          --releases-json "${RELEASES_JSON}")
+        PREVIOUS_TAG=$(jq -er '.tag | select(type == "string" and length > 0)' <<< "${BASELINE_JSON}")
+        BASELINE_COMMIT=$(jq -er '.commit | select(type == "string" and test("^[0-9a-f]{40}$"))' <<< "${BASELINE_JSON}")
+        printf 'tag=%s\n' "${PREVIOUS_TAG}" >> "${GITHUB_OUTPUT}"
+        printf 'commit=%s\n' "${BASELINE_COMMIT}" >> "${GITHUB_OUTPUT}"
+        printf '📊 Previous published GitHub Release: %s (%s)\n' "${PREVIOUS_TAG}" "${BASELINE_COMMIT}"
+
+  # Build the frontend once, verify the complete static bundle, and share that
+  # exact output with every Go binary build below. A fresh checkout contains
+  # only frontend/build/.gitkeep, which is sufficient for go:embed to compile
+  # but is not a usable application.
+  frontend:
+    name: Build Verified Frontend
     needs: prepare
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Build frontend from locked dependencies
+      working-directory: cli/internal/server/frontend
+      run: |
+        bun install --frozen-lockfile
+        bun run build
+
+    - name: Verify frontend bundle
+      working-directory: cli
+      run: make frontend-verify
+
+    - name: Upload verified frontend bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: verified-frontend-bundle
+        path: cli/internal/server/frontend/build/
+        if-no-files-found: error
+        retention-days: 1
+
+  # Run full test suite before release
+  test:
+    name: Test Release
+    needs: [prepare, frontend]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+
+    - name: Download verified frontend bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: verified-frontend-bundle
+        path: cli/internal/server/frontend/build
+
+    - name: Verify downloaded frontend bundle
+      working-directory: cli
+      run: make frontend-verify
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -91,7 +174,7 @@ jobs:
   # Build binaries for all platforms
   build-matrix:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
-    needs: [prepare, test]
+    needs: [prepare, frontend, test]
     strategy:
       matrix:
         # Fizeau v0.14.32 does not currently cross-compile for Windows
@@ -112,7 +195,19 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v4
-    
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+
+    - name: Download verified frontend bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: verified-frontend-bundle
+        path: cli/internal/server/frontend/build
+
+    - name: Verify downloaded frontend bundle
+      working-directory: cli
+      run: make frontend-verify
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
@@ -128,7 +223,7 @@ jobs:
         VERSION: ${{ needs.prepare.outputs.version }}
       run: |
         # Build with version information
-        LDFLAGS="-X main.version=${VERSION} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        LDFLAGS="-X main.version=${VERSION} -X main.commit=${{ needs.prepare.outputs.commit }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         
         if [ "${{ matrix.goos }}" = "windows" ]; then
           go build -ldflags "$LDFLAGS" -o build/ddx.exe .
@@ -152,7 +247,7 @@ jobs:
         echo "DDx v${{ needs.prepare.outputs.version }}" > VERSION
         echo "Platform: ${{ matrix.goos }}-${{ matrix.goarch }}" >> VERSION
         echo "Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> VERSION
-        echo "Commit: ${{ github.sha }}" >> VERSION
+        echo "Commit: ${{ needs.prepare.outputs.commit }}" >> VERSION
         
         # Create appropriate archive
         if [ "${{ matrix.goos }}" = "windows" ]; then
@@ -195,6 +290,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
+        ref: ${{ needs.prepare.outputs.commit }}
         fetch-depth: 0
     
     - name: Download all artifacts
@@ -206,15 +302,21 @@ jobs:
     
     - name: Generate changelog
       id: changelog
+      env:
+        PREVIOUS_TAG: ${{ needs.prepare.outputs.previous_tag }}
+        BASELINE_COMMIT: ${{ needs.prepare.outputs.previous_commit }}
+        RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
       run: |
-        PREVIOUS_TAG="${{ needs.prepare.outputs.previous_tag }}"
-        
-        # Generate changelog
-        if [ -z "$PREVIOUS_TAG" ]; then
-          COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges)
-        else
-          COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges)
+        if [ -z "${PREVIOUS_TAG}" ] || ! [[ "${BASELINE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "❌ No previous published GitHub Release baseline was proven; refusing to generate a partial changelog" >&2
+          exit 1
         fi
+        if ! [[ "${RELEASE_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "${BASELINE_COMMIT}" "${RELEASE_COMMIT}"; then
+          echo "❌ Published-release baseline is not an ancestor of the immutable release commit" >&2
+          exit 1
+        fi
+        printf '📊 Generating changelog after %s (%s)\n' "${PREVIOUS_TAG}" "${BASELINE_COMMIT}"
+        COMMITS=$(git log "${BASELINE_COMMIT}..${RELEASE_COMMIT}" --pretty=format:"- %s (%an)" --no-merges)
         
         # Categorize commits
         echo "# Changelog" > CHANGELOG.md
@@ -267,17 +369,19 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        name: DDx ${{ github.ref_name }}
+        name: DDx ${{ needs.prepare.outputs.tag }}
+        tag_name: ${{ needs.prepare.outputs.tag }}
+        target_commitish: ${{ needs.prepare.outputs.commit }}
         body_path: CHANGELOG.md
         files: |
           artifacts/*
         draft: false
-        prerelease: ${{ contains(github.ref_name, '-') }}
+        prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Update installation script
       run: |
-        echo "✅ Release ${{ github.ref_name }} created successfully!"
-        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+        echo "✅ Release ${{ needs.prepare.outputs.tag }} created successfully!"
+        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }}"

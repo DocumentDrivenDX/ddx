@@ -30,6 +30,32 @@ func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 	return executeloop.Duration{Duration: duration}
 }
 
+func TestManagedWorkerCommandArgsPreserveMinPowerPresence(t *testing.T) {
+	omitted := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{}, "worker-omitted")
+	assert.NotContains(t, omitted, "--min-power", "unset MinPower must not become an explicit Cobra flag")
+
+	explicitZero := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{MinPowerSet: true}, "worker-zero")
+	require.Contains(t, explicitZero, "--min-power")
+	zeroIndex := indexOfString(explicitZero, "--min-power")
+	require.GreaterOrEqual(t, zeroIndex, 0)
+	require.Less(t, zeroIndex+1, len(explicitZero))
+	assert.Equal(t, "0", explicitZero[zeroIndex+1])
+
+	nonzero := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{MinPower: 7}, "worker-seven")
+	require.Contains(t, nonzero, "--min-power")
+	sevenIndex := indexOfString(nonzero, "--min-power")
+	assert.Equal(t, "7", nonzero[sevenIndex+1])
+}
+
+func indexOfString(values []string, want string) int {
+	for i, value := range values {
+		if value == want {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
@@ -1007,8 +1033,8 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	m.LandCoordinators.StopAll()
 }
 
-// TestWorkerLandsEvidenceViaCoordinator is the AC (3) test: the server-worker path
-// commits execution evidence and leaves the worktree clean after the worker exits.
+// TestWorkerLandsEvidenceViaCoordinator is the AC (3) test: the server-worker
+// path retains execution evidence locally without committing it to Git.
 func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires land coordinator + git plumbing; too slow for -short")
@@ -1016,6 +1042,7 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	root := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".ddx/executions/\n"), 0o644))
 	runCmd(t, root, "git", "init", "-b", "main")
 	runCmd(t, root, "git", "config", "user.name", "Test")
 	runCmd(t, root, "git", "config", "user.email", "test@test.local")
@@ -1101,20 +1128,29 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
 	assert.Equal(t, "exited", final.State)
 
-	// AC (3): evidence dir must be clean after worker exits. Other worktree
-	// noise (.ddx/workers/, beads.jsonl) is expected in a test environment
-	// where those paths are not yet tracked.
+	// The canonical local bundle survives worker and temporary finalization
+	// worktree cleanup.
+	manifestAbs := filepath.Join(root, evidenceRelDir, "manifest.json")
+	resultAbs := filepath.Join(root, evidenceRelDir, "result.json")
+	require.FileExists(t, manifestAbs)
+	require.FileExists(t, resultAbs)
+
+	// Production ignores execution evidence, so retaining it locally must not
+	// dirty the repository or put it in the index.
 	statusCmd := exec.Command("git", "-C", root, "status", "--porcelain", "--", filepath.ToSlash(evidenceRelDir))
 	statusOut, err := statusCmd.Output()
 	require.NoError(t, err)
 	assert.Empty(t, strings.TrimSpace(string(statusOut)), "evidence dir should be clean after worker exits")
+	trackedCmd := exec.Command("git", "-C", root, "ls-files", "--", filepath.ToSlash(evidenceRelDir))
+	trackedOut, err := trackedCmd.Output()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(trackedOut)), "local evidence must not be tracked")
 
-	// Evidence files must be in a commit reachable from main.
-	logCmd := exec.Command("git", "-C", root, "log", "--all", "--oneline", "--name-only")
+	// Evidence files must not appear in any reachable commit.
+	logCmd := exec.Command("git", "-C", root, "log", "--all", "--format=", "--name-only", "--", filepath.ToSlash(evidenceRelDir))
 	logOut, err := logCmd.Output()
 	require.NoError(t, err)
-	assert.Contains(t, string(logOut), filepath.ToSlash(filepath.Join(evidenceRelDir, "manifest.json")),
-		"evidence manifest.json should be in git log")
+	assert.Empty(t, strings.TrimSpace(string(logOut)), "local evidence must be absent from Git history")
 
 	m.LandCoordinators.StopAll()
 }

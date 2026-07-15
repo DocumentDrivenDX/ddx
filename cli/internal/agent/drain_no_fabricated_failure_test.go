@@ -84,7 +84,7 @@ func (r *lockedBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev 
 
 func scriptHarnessExecutorWithTempSessions(t *testing.T, projectRoot, directivePath string) ExecuteBeadExecutorFunc {
 	t.Helper()
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealGitOps{}
 	repoMu := landMutexFor(projectRoot)
@@ -96,7 +96,7 @@ func scriptHarnessExecutorWithTempSessions(t *testing.T, projectRoot, directiveP
 		Model: directivePath,
 	})
 	cfg.Agent.SessionLogDir = filepath.Join(t.TempDir(), "sessions")
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 	return ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 		repoMu.Lock()
@@ -373,10 +373,6 @@ func TestDrain_NoFabricatedFailureSignatures(t *testing.T) {
 				Mode:            executeloop.ModeDrain,
 				Log:             &logBuf,
 				PostMergeReview: true,
-				RoutePreflight: func(ctx context.Context, harness, model string) error {
-					time.Sleep(25 * time.Millisecond)
-					return nil
-				},
 			})
 		}()
 	}

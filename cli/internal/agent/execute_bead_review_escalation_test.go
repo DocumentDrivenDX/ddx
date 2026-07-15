@@ -12,13 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// escalationTestService builds a passthroughTestService with a two-profile
-// setup: "frontier" (MinPower=71, MaxPower=75) and no stronger policy.
-// This lets the tests observe:
-//   - baseline (0 errors, floor=71): selects "frontier" with MinPower=71
-//   - 1 prior error (floor=72): no qualifying profile → MinPower=72 (floor)
-//   - 2+ prior errors (top-of-ladder): "frontier" selected via SelectStrongestProfile
-//     with MinPower=max(71, escalatedFloor=73)=73
+// escalationTestService returns review output while exposing catalog methods as
+// tripwires: abstract reviewer escalation must never consult them.
 func escalationTestService(executeEvents []agentlib.ServiceEvent) *passthroughTestService {
 	return &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
@@ -43,7 +38,7 @@ func escalationApproveEvents() []agentlib.ServiceEvent {
 }
 
 // seedReviewErrorEventsWithRev seeds N review-error events whose body contains
-// the result_rev field (required for countPriorEscalationTriggers to count them).
+// the result_rev field used to scope retry escalation.
 func seedReviewErrorEventsWithRev(t *testing.T, store *bead.Store, beadID, resultRev, class string, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
@@ -110,11 +105,9 @@ func TestReviewerEscalation_OnSecondTransportError(t *testing.T) {
 		"reviewer-escalated body must be scoped to result_rev")
 }
 
-// TestReviewerEscalation_OnThirdError_TopOfLadder verifies that after two
-// prior review-error events for the same result_rev, the reviewer is routed
-// to the strongest available profile (top-of-ladder) regardless of floor
-// restriction, and a reviewer-escalated event is emitted with error_count=2.
-func TestReviewerEscalation_OnThirdError_TopOfLadder(t *testing.T) {
+// TestReviewerEscalation_OnThirdErrorRaisesAbstractFloor verifies that prior
+// review errors increase MinPower without selecting a Fizeau policy.
+func TestReviewerEscalation_OnThirdErrorRaisesAbstractFloor(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := escalationTestService(escalationApproveEvents())
 	events := &stubBeadEventAppender{}
@@ -138,14 +131,11 @@ func TestReviewerEscalation_OnThirdError_TopOfLadder(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Top-of-ladder: SelectStrongestProfile selects "frontier" (only policy).
-	// escalatedFloor = 71+2 = 73; max(71, 73) = 73 → MinPower=73.
-	// This is higher than the 1-error case (72) and the baseline (71).
 	assert.Equal(t, 73, svc.lastReq.MinPower,
-		"third error must dispatch reviewer at top-of-ladder min_power")
-	// Top-of-ladder uses SelectStrongestProfile which selects "frontier".
-	assert.Equal(t, "frontier", svc.lastReq.Policy,
-		"top-of-ladder must select the strongest available profile")
+		"third error must dispatch reviewer at a stronger min_power")
+	assert.Empty(t, svc.lastReq.Policy)
+	assert.False(t, svc.listPoliciesCalled)
+	assert.False(t, svc.listModelsCalled)
 
 	// A reviewer-escalated event must be emitted with error_count=2.
 	var escalated *bead.BeadEvent
@@ -163,29 +153,18 @@ func TestReviewerEscalation_OnThirdError_TopOfLadder(t *testing.T) {
 		"reviewer-escalated body must carry top-of-ladder min_power")
 }
 
-// TestReviewerEscalation_PairingDegraded_TriggersEscalation verifies that a
-// prior kind:review-pairing-degraded event for the same result_rev counts as
-// an escalation trigger: the next reviewer dispatch bumps MinPower by one
-// ladder step above baseline, and a reviewer-escalated event is emitted.
-func TestReviewerEscalation_PairingDegraded_TriggersEscalation(t *testing.T) {
+// TestReviewerEscalation_LegacyPairingEventDoesNotRaiseMinPower verifies that
+// historical concrete-route comparison telemetry is audit-only.
+func TestReviewerEscalation_LegacyPairingEventDoesNotRaiseMinPower(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := escalationTestService(escalationApproveEvents())
 	events := &stubBeadEventAppender{}
 
-	// Seed 1 review-pairing-degraded event with result_rev in the body
-	// (required for countPriorEscalationTriggers to count it).
+	// Seed a legacy review-pairing-degraded event scoped to this result_rev.
 	require.NoError(t, store.AppendEvent("ddx-pairing", bead.BeadEvent{
-		Kind:    ReviewPairingDegradedEventKind,
-		Summary: "reviewer pinned to same provider as implementer (openai)",
-		Body: reviewPairingDegradedBody(
-			ImplementerRouting{
-				Harness:     "codex",
-				Provider:    "openai",
-				Model:       "gpt-5",
-				ActualPower: 70,
-			},
-			"codex", "openai", "gpt-5", 70, head,
-		),
+		Kind:      legacyReviewPairingDegradedEventKind,
+		Summary:   "reviewer pinned to same provider as implementer (openai)",
+		Body:      "impl_provider=openai\nreviewer_provider=openai\nresult_rev=" + head + "\n",
 		Actor:     "worker",
 		Source:    "ddx work",
 		CreatedAt: time.Now().UTC(),
@@ -207,24 +186,11 @@ func TestReviewerEscalation_PairingDegraded_TriggersEscalation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// After 1 pairing-degraded trigger, MinPower bumps from 71 to 72
-	// (same as after 1 review-error: impl.ActualPower+2).
-	assert.Equal(t, 72, svc.lastReq.MinPower,
-		"pairing-degraded event must trigger escalation: MinPower bumped to impl.ActualPower+2")
+	assert.Equal(t, 71, svc.lastReq.MinPower,
+		"legacy pairing telemetry must not change the reviewer request")
 
-	// A reviewer-escalated event must have been emitted.
-	var escalated *bead.BeadEvent
-	for i := range events.events {
-		ev := &events.events[i]
-		if ev.Event.Kind == ReviewerEscalatedEventKind {
-			escalated = &ev.Event
-			break
-		}
+	for _, ev := range events.events {
+		assert.NotEqual(t, ReviewerEscalatedEventKind, ev.Event.Kind,
+			"legacy pairing telemetry must not emit reviewer escalation")
 	}
-	require.NotNil(t, escalated,
-		"reviewer-escalated event must be emitted when pairing-degraded triggers escalation")
-	assert.Contains(t, escalated.Body, "error_count=1",
-		"reviewer-escalated body must reflect one escalation trigger")
-	assert.Contains(t, escalated.Body, "result_rev="+head,
-		"reviewer-escalated must be scoped to the same result_rev as the pairing-degraded event")
 }

@@ -14,14 +14,11 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
-// TestWorkerDispatchAdapterEmptyArgsDefaultsProfile pins ddx-755f5881 AC #1:
+// TestWorkerDispatchAdapterEmptyArgsLeavesProfileUnpinned pins the route-neutral default:
 // workerDispatchAdapter.DispatchWorker with an empty rawArgs and no
-// workers.default_spec must produce a spec with Profile: "default", watch mode,
-// and the default idle interval, with no route pins set. This is the contract
-// that eliminates the historical
-// 19-burn drain-queue failure mode where an empty input fanned out into
-// per-powerClass ladder iteration with no upstream synthesis target.
-func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
+// workers.default_spec must produce an unpinned profile, watch mode, and the
+// default idle interval. Fizeau owns the concrete route and policy choice.
+func TestWorkerDispatchAdapterEmptyArgsLeavesProfileUnpinned(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
 
@@ -62,8 +59,8 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	if err := json.Unmarshal(specBytes, &spec); err != nil {
 		t.Fatalf("unmarshal spec.json: %v", err)
 	}
-	if spec.Profile != "default" {
-		t.Errorf("Profile: want %q, got %q", "default", spec.Profile)
+	if spec.Profile != "" {
+		t.Errorf("Profile must be empty on default path, got %q", spec.Profile)
 	}
 	if spec.Harness != "" {
 		t.Errorf("Harness must be empty on default path, got %q", spec.Harness)
@@ -96,7 +93,7 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 
 // TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis pins ddx-755f5881
 // AC #4: on the default dispatch path (no rawArgs, no workers.default_spec),
-// the dispatched spec has only default profile/watch/idle runtime intent —
+// the dispatched spec has only watch/idle runtime intent —
 // model and harness are empty so no synthesis fan-out occurs.
 func TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis(t *testing.T) {
 	root := t.TempDir()
@@ -140,8 +137,8 @@ library:
 	if err := json.Unmarshal(specBytes, &spec); err != nil {
 		t.Fatalf("unmarshal spec.json: %v", err)
 	}
-	if spec.Profile != "default" {
-		t.Errorf("Profile: want %q, got %q", "default", spec.Profile)
+	if spec.Profile != "" {
+		t.Errorf("Profile must be empty on default path, got %q", spec.Profile)
 	}
 	if spec.Model != "" {
 		t.Errorf("Model must be empty on default path, got %q", spec.Model)

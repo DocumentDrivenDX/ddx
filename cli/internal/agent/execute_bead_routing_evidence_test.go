@@ -26,13 +26,13 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	})
 
 	beadStore := bead.NewStore(ddxDir)
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	gitOps := &RealGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,
@@ -77,13 +77,13 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 		"run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt",
 	})
 
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	gitOps := &RealGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  nil,
 		AgentRunner: runner,
@@ -106,14 +106,14 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	})
 
 	beadStore := bead.NewStore(ddxDir)
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,
@@ -144,22 +144,26 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	assert.True(t, found, "routing evidence must be recorded even on task_succeeded path")
 }
 
-func TestExecutionRoutingIntentRecordsEstimatedDifficulty(t *testing.T) {
+func TestAppendExecutionRoutingIntentRecordsInferredMinPower(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	target := bead.Bead{
 		ID: "ddx-0001",
 		Extra: map[string]any{
-			escalation.BeadEstimatedDifficultyKey: string(escalation.DifficultyHard),
+			escalation.BeadEstimatedDifficultyKey: string(escalation.DifficultyEasy),
 		},
 	}
 	appendExecutionRoutingIntentEvidence(app, target, ExecuteBeadReport{
-		AttemptID:          "20260515T185832-test",
-		Harness:            "claude",
-		Provider:           "anthropic",
-		Model:              "claude-sonnet-4-6",
-		RequestedProfile:   "default",
-		InferredPowerClass: "smart",
-		RoutingIntentNote:  "actual route facts unavailable",
+		AttemptID:               "20260515T185832-test",
+		Harness:                 "claude",
+		Provider:                "anthropic",
+		Model:                   "claude-sonnet-4-6",
+		RoutingIntentSource:     string(escalation.ExecutionIntentSourceBeadHint),
+		EstimatedDifficulty:     string(escalation.DifficultyEasy),
+		InferredMinPower:        0,
+		InferredMinPowerPresent: true,
+		RequestedPolicy:         "opaque-policy",
+		RequestedMinPower:       0,
+		RequestedMaxPower:       10,
 	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
 
 	require.Len(t, app.events, 1)
@@ -169,12 +173,15 @@ func TestExecutionRoutingIntentRecordsEstimatedDifficulty(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
 	assert.Equal(t, "bead_hint", body["routing_intent_source"])
-	assert.Equal(t, "hard", body["estimated_difficulty"])
-	assert.Equal(t, "smart", body["requested_power_class"])
-	assert.Equal(t, "default", body["requested_profile"])
-	assert.NotContains(t, body, "smart_justification")
-	assert.Contains(t, app.events[0].Event.Summary, "difficulty=hard")
-	assert.Contains(t, app.events[0].Event.Summary, "powerClass=smart")
+	assert.Equal(t, "easy", body["estimated_difficulty"])
+	assert.Equal(t, float64(0), body["inferred_min_power"], "easy's zero floor must remain present")
+	assert.Equal(t, "opaque-policy", body["requested_policy"])
+	assert.Equal(t, float64(0), body["requested_min_power"])
+	assert.Equal(t, float64(10), body["requested_max_power"])
+	assert.NotContains(t, body, "requested_power_class")
+	assert.NotContains(t, body, "requested_profile")
+	assert.Contains(t, app.events[0].Event.Summary, "difficulty=easy")
+	assert.Contains(t, app.events[0].Event.Summary, "minPower=0")
 }
 
 func TestExecutionRoutingIntentCLISourceSuppressesBeadDifficulty(t *testing.T) {
@@ -197,12 +204,12 @@ func TestExecutionRoutingIntentCLISourceSuppressesBeadDifficulty(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
 	assert.Equal(t, "cli", body["routing_intent_source"])
 	assert.Empty(t, body["estimated_difficulty"])
-	assert.Empty(t, body["requested_power_class"])
+	assert.NotContains(t, body, "inferred_min_power")
 	assert.NotContains(t, app.events[0].Event.Summary, "difficulty=")
-	assert.NotContains(t, app.events[0].Event.Summary, "powerClass=")
+	assert.NotContains(t, app.events[0].Event.Summary, "minPower=")
 }
 
-func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
+func TestAppendLoopRoutingEvidenceRecordsNumericIntent(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	target := bead.Bead{
 		ID: "ddx-0001",
@@ -211,14 +218,16 @@ func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 		},
 	}
 	appendLoopRoutingEvidence(app, target, ExecuteBeadReport{
-		Provider:           "openai",
-		Model:              "gpt-5.4",
-		RequestedProfile:   "default",
-		InferredPowerClass: "cheap",
-		ResolvedPowerClass: "standard",
-		EscalationCount:    1,
-		FinalPowerClass:    "standard",
-	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC), nil)
+		Provider:                "openai",
+		Model:                   "gpt-5.4",
+		InferredMinPower:        0,
+		InferredMinPowerPresent: true,
+		RequestedMinPower:       0,
+		RequestedMaxPower:       10,
+		ResolvedPowerClass:      "standard",
+		EscalationCount:         1,
+		FinalPowerClass:         "standard",
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
 
 	require.Len(t, app.events, 1)
 	assert.Equal(t, "ddx-0001", app.events[0].BeadID)
@@ -227,37 +236,40 @@ func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
 	assert.Equal(t, "easy", body["estimated_difficulty"])
-	assert.Equal(t, "default", body["requested_profile"])
-	assert.Equal(t, "cheap", body["requested_power_class"])
+	assert.Equal(t, float64(0), body["inferred_min_power"])
+	assert.Equal(t, float64(0), body["requested_min_power"])
+	assert.Equal(t, float64(10), body["requested_max_power"])
+	assert.NotContains(t, body, "requested_profile")
+	assert.NotContains(t, body, "requested_power_class")
 	assert.Equal(t, "standard", body["resolved_power_class"])
 	assert.Equal(t, float64(1), body["escalation_count"])
 	assert.Equal(t, "standard", body["final_power_class"])
 }
 
-// TestAppendLoopRoutingEvidence_RouteFailureFallbackChain proves that prior
-// route-failure entries on a bead get serialised into the routing event's
-// fallback_chain field so post-hoc routing analytics can see which
-// provider/model tuples were excluded before the resolved route was selected.
-func TestAppendLoopRoutingEvidence_RouteFailureFallbackChain(t *testing.T) {
+// TestAppendLoopRoutingEvidence_DoesNotSynthesizeFallbackChain proves DDx does
+// not convert historical concrete routes into routing policy.
+func TestRoutingEvidenceReturnedRouteIdentityIsEvidenceOnly(t *testing.T) {
 	app := &stubBeadEventAppender{}
-	failed := []FailedRouteEntry{
-		{Provider: "bragi", Model: "qwen3.5-27b", ActualPower: 50, Reason: FailureModeProviderConnectivity},
-	}
 	appendLoopRoutingEvidence(app, bead.Bead{ID: "ddx-0001"}, ExecuteBeadReport{
-		Provider: "openai",
-		Model:    "gpt-5.4",
-	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC), failed)
+		Harness:           "codex",
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		ActualPower:       9,
+		RequestedPolicy:   "opaque-policy",
+		RequestedMinPower: 7,
+		RequestedMaxPower: 10,
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
 
 	require.Len(t, app.events, 1)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
 	chain, ok := body["fallback_chain"].([]any)
 	require.True(t, ok, "fallback_chain must be a JSON array")
-	require.Len(t, chain, 1)
-	first := chain[0].(map[string]any)
-	assert.Equal(t, "bragi", first["provider"])
-	assert.Equal(t, "qwen3.5-27b", first["model"])
-	assert.Equal(t, float64(50), first["actual_power"])
-	assert.Equal(t, FailureModeProviderConnectivity, first["reason"])
+	require.Empty(t, chain)
 	assert.Equal(t, "openai", body["resolved_provider"])
+	assert.Equal(t, "opaque-policy", body["requested_policy"])
+	assert.Equal(t, float64(7), body["requested_min_power"])
+	assert.Equal(t, float64(10), body["requested_max_power"])
+	assert.NotContains(t, body, "requested_profile")
+	assert.NotContains(t, body, "requested_power_class")
 }

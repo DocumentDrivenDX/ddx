@@ -12,7 +12,7 @@ func TestAgentConfigClone(t *testing.T) {
 		Models:          map[string]string{"smart": "claude-opus"},
 		ReasoningLevels: map[string][]string{"smart": {"high"}},
 		Endpoints:       []AgentEndpoint{{Type: "openai", Host: "h"}},
-		Routing:         &RoutingConfig{ProfilePriority: []string{"default"}},
+		Routing:         &RoutingConfig{},
 		Virtual: &VirtualConfig{
 			Normalize: []NormalizePattern{{Pattern: "p", Replace: "r"}},
 		},
@@ -24,7 +24,6 @@ func TestAgentConfigClone(t *testing.T) {
 	dst.ReasoningLevels["smart"][0] = "X"
 	dst.ReasoningLevels["new"] = []string{"Y"}
 	dst.Endpoints[0].Host = "X"
-	dst.Routing.ProfilePriority[0] = "X"
 	dst.Virtual.Normalize[0].Pattern = "X"
 
 	if src.Models["smart"] != "claude-opus" {
@@ -42,8 +41,8 @@ func TestAgentConfigClone(t *testing.T) {
 	if src.Endpoints[0].Host != "h" {
 		t.Fatalf("source Endpoints mutated: %v", src.Endpoints)
 	}
-	if src.Routing.ProfilePriority[0] != "default" {
-		t.Fatalf("source Routing mutated: %v", src.Routing.ProfilePriority)
+	if dst.Routing == nil {
+		t.Fatal("Routing was not cloned")
 	}
 	if src.Virtual.Normalize[0].Pattern != "p" {
 		t.Fatalf("source Virtual mutated: %v", src.Virtual.Normalize)
@@ -55,15 +54,11 @@ func TestRoutingConfigClone(t *testing.T) {
 		t.Fatal("nil RoutingConfig.Clone should be nil")
 	}
 
-	src := &RoutingConfig{
-		ProfilePriority: []string{"a", "b"},
-	}
+	src := &RoutingConfig{}
 
 	dst := src.Clone()
-	dst.ProfilePriority[0] = "X"
-
-	if src.ProfilePriority[0] != "a" {
-		t.Fatalf("source ProfilePriority mutated: %v", src.ProfilePriority)
+	if dst == nil {
+		t.Fatal("RoutingConfig.Clone returned nil")
 	}
 }
 

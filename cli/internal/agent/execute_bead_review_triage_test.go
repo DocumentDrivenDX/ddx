@@ -14,8 +14,7 @@ import (
 )
 
 // seedBlocks appends `n` review-BLOCK events spaced 1 minute apart, starting
-// at base. Returns the timestamp of the last BLOCK so test code can layer
-// pairing-degraded events around it.
+// at base. It returns the timestamp of the last BLOCK.
 func seedBlocks(t *testing.T, store *bead.Store, beadID string, base time.Time, n int) time.Time {
 	t.Helper()
 	last := base
@@ -91,7 +90,7 @@ func TestApplyTriageActionDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, applyTriageAction(store, b.ID, "ddx", now, triage.ActionEscalatePower, string(escalation.PowerStandard), false))
+	require.NoError(t, applyTriageAction(store, b.ID, "ddx", now, triage.ActionEscalatePower, string(escalation.PowerStandard)))
 
 	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
@@ -157,11 +156,9 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	assert.Contains(t, ev.Summary, "operator_required")
 }
 
-// TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt verifies that
-// when the latest BLOCK was paired with a kind:review-pairing-degraded event
-// from the same attempt window, the policy's escalate_power rung is overridden
-// to re_attempt_with_context so a freshly-paired reviewer gets another chance.
-func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T) {
+// TestApplyReviewTriageDecision_LegacyPairingEventIsAuditOnly verifies that a
+// historical review-pairing-degraded event cannot change BLOCK triage control.
+func TestApplyReviewTriageDecision_LegacyPairingEventIsAuditOnly(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 
@@ -169,7 +166,7 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 	seedBlocks(t, store, b.ID, now, 1)
 	// Pairing-degraded event between BLOCK 1 and BLOCK 2.
 	require.NoError(t, store.AppendEvent(b.ID, bead.BeadEvent{
-		Kind:      ReviewPairingDegradedEventKind,
+		Kind:      legacyReviewPairingDegradedEventKind,
 		Summary:   "reviewer pinned to same provider",
 		Body:      "{}",
 		Source:    "test",
@@ -191,11 +188,14 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 	require.NoError(t, err)
 	if got.Extra != nil {
 		_, hasHint := got.Extra[legacyRetryFloorKey]
-		assert.False(t, hasHint, "pairing-degraded must override escalate_power; no legacy retry-floor metadata expected")
+		assert.False(t, hasHint, "review triage must not persist legacy retry-floor metadata")
 	}
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
-	assert.Contains(t, ev.Summary, "re_attempt_with_context")
-	assert.Contains(t, ev.Body, "pairing_degraded")
+	assert.Contains(t, ev.Summary, "escalate_power")
+	body := triageDecisionBody(t, ev)
+	assert.Equal(t, string(triage.ActionEscalatePower), body["action"])
+	assert.Equal(t, string(escalation.PowerSmart), body["next_power_class"])
+	assert.NotContains(t, body, "pairing_degraded")
 }

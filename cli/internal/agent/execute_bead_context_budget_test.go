@@ -37,7 +37,7 @@ func TestExecuteBead_ContextBudgetMinimal(t *testing.T) {
 	const baseRev = "1234abcd"
 
 	// Generate prompt without minimal budget (full)
-	promptFull, srcFull, err := buildPrompt(root, b, refs, arts, baseRev, "", "claude", "")
+	promptFull, srcFull, err := buildPrompt(root, b, refs, arts, baseRev, "", "")
 	if err != nil {
 		t.Fatalf("buildPrompt (full): %v", err)
 	}
@@ -46,7 +46,7 @@ func TestExecuteBead_ContextBudgetMinimal(t *testing.T) {
 	}
 
 	// Generate prompt with minimal budget
-	promptMinimal, srcMinimal, err := buildPrompt(root, b, refs, arts, baseRev, "", "claude", "minimal")
+	promptMinimal, srcMinimal, err := buildPrompt(root, b, refs, arts, baseRev, "", "minimal")
 	if err != nil {
 		t.Fatalf("buildPrompt (minimal): %v", err)
 	}
@@ -121,7 +121,7 @@ func TestExecuteBead_ContextBudgetDefaultBehavior(t *testing.T) {
 	const baseRev = "1234abcd"
 
 	// Generate prompt with empty context budget (default)
-	prompt, src, err := buildPrompt(root, b, refs, arts, baseRev, "", "claude", "")
+	prompt, src, err := buildPrompt(root, b, refs, arts, baseRev, "", "")
 	if err != nil {
 		t.Fatalf("buildPrompt (default): %v", err)
 	}
@@ -152,7 +152,7 @@ func TestExecuteBead_ContextBudgetDefaultBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createArtifactBundle: %v", err)
 	}
-	prompt2, _, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts2, baseRev, "", "claude", "")
+	prompt2, _, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts2, baseRev, "", "")
 	if err != nil {
 		t.Fatalf("buildPrompt (no refs): %v", err)
 	}
@@ -183,7 +183,7 @@ func TestExecuteBead_ContextBudgetEmptyRefsWithMinimal(t *testing.T) {
 	const baseRev = "1234abcd"
 
 	// Generate prompt with empty refs and minimal budget
-	prompt, src, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts, baseRev, "", "claude", "minimal")
+	prompt, src, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts, baseRev, "", "minimal")
 	if err != nil {
 		t.Fatalf("buildPrompt (empty refs minimal): %v", err)
 	}
@@ -247,13 +247,13 @@ for cheap-powerClass attempts with minimal context budget.
 	const baseRev = "1234abcd"
 
 	// Full prompt (should resolve spec)
-	promptFull, _, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts, baseRev, "", "claude", "")
+	promptFull, _, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts, baseRev, "", "")
 	if err != nil {
 		t.Fatalf("buildPrompt (full): %v", err)
 	}
 
 	// Minimal prompt (should NOT include spec content)
-	promptMinimal, _, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts, baseRev, "", "claude", "minimal")
+	promptMinimal, _, err := buildPrompt(root, b, []executeBeadGoverningRef{}, arts, baseRev, "", "minimal")
 	if err != nil {
 		t.Fatalf("buildPrompt (minimal): %v", err)
 	}
@@ -295,7 +295,7 @@ func TestExecuteBead_LargeDescriptionGetsStep0Hint(t *testing.T) {
 		t.Fatalf("createArtifactBundle: %v", err)
 	}
 
-	prompt, _, err := buildPrompt(root, b, nil, arts, "1234abcd", "", "claude", "")
+	prompt, _, err := buildPrompt(root, b, nil, arts, "1234abcd", "", "")
 	if err != nil {
 		t.Fatalf("buildPrompt: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testi
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			prompt, _, err := buildPrompt(root, tc.bead, nil, arts, "1234abcd", "", "claude", "")
+			prompt, _, err := buildPrompt(root, tc.bead, nil, arts, "1234abcd", "", "")
 			if err != nil {
 				t.Fatalf("buildPrompt: %v", err)
 			}

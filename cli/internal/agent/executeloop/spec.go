@@ -99,12 +99,16 @@ type ExecuteLoopSpec struct {
 	PreClaimTimeout    Duration `json:"preclaim_timeout,omitempty"`
 	RequestTimeout     Duration `json:"request_timeout,omitempty"`
 	RateLimitMaxWait   Duration `json:"rate_limit_max_wait,omitempty"`
-	// RouteResolutionTimeout bounds routing preflight and the resolveRoute
-	// viability check so a hung resolver cannot wedge the worker. Zero uses the
-	// binary default (agent.DefaultRouteResolutionTimeout, 60s).
+	// RouteResolutionTimeout bounds the Fizeau route stage from Execute dispatch
+	// through routing_decision so a hung route stage cannot wedge the worker.
+	// Zero uses the binary default (agent.DefaultRouteResolutionTimeout, 60s).
 	RouteResolutionTimeout Duration `json:"route_resolution_timeout,omitempty"`
 	MinPower               int      `json:"min_power,omitempty"`
-	MaxPower               int      `json:"max_power,omitempty"`
+	// MinPowerSet distinguishes an explicitly supplied zero from an omitted
+	// floor. It is persisted because managed workers are serialized before a
+	// subprocess is launched.
+	MinPowerSet bool `json:"min_power_set,omitempty"`
+	MaxPower    int  `json:"max_power,omitempty"`
 
 	// FromRev, if set, narrows execution to beads introduced after this git revision.
 	FromRev string `json:"from_rev,omitempty"`
@@ -112,6 +116,26 @@ type ExecuteLoopSpec struct {
 	// SpecVersion must equal SpecCurrentVersion. See SpecCurrentVersion for the
 	// client/server forward-compat stance.
 	SpecVersion int `json:"spec_version,omitempty"`
+}
+
+// UnmarshalJSON retains whether min_power was present, including an explicit
+// zero. The server needs that distinction when reconstructing Cobra flags for
+// a managed worker subprocess.
+func (s *ExecuteLoopSpec) UnmarshalJSON(data []byte) error {
+	type executeLoopSpecAlias ExecuteLoopSpec
+	var decoded executeLoopSpecAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*s = ExecuteLoopSpec(decoded)
+	if _, present := fields["min_power"]; present {
+		s.MinPowerSet = true
+	}
+	return nil
 }
 
 // DispatchOptions carries control-plane fields used at dispatch time. It is not

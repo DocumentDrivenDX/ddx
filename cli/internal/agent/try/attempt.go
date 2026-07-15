@@ -61,6 +61,11 @@ type Report struct {
 	RoutingIntentSource         string
 	EstimatedDifficulty         string
 	InferredPowerClass          string
+	RequestedPolicy             string
+	InferredMinPower            int
+	InferredMinPowerPresent     bool
+	RequestedMinPower           int
+	RequestedMaxPower           int
 	ResolvedPowerClass          string
 	EscalationCount             int
 	FinalPowerClass             string
@@ -87,14 +92,19 @@ type ExecutionCycleRouteFacts struct {
 }
 
 type ExecutionCycleRequestedRouteFacts struct {
-	Harness             string
-	Provider            string
-	Model               string
-	Profile             string
-	RoutingIntentSource string
-	EstimatedDifficulty string
-	InferredPowerClass  string
-	RequestedPowerClass string
+	Harness                 string
+	Provider                string
+	Model                   string
+	Profile                 string
+	RoutingIntentSource     string
+	EstimatedDifficulty     string
+	InferredPowerClass      string
+	RequestedPowerClass     string
+	RequestedPolicy         string
+	InferredMinPower        int
+	InferredMinPowerPresent bool
+	RequestedMinPower       int
+	RequestedMaxPower       int
 }
 
 type ExecutionCycleReviewResult struct {

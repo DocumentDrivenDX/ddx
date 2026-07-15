@@ -1022,7 +1022,7 @@ type Execution struct {
 	ImplementationRev *string `json:"implementationRev,omitempty"`
 	// LandedRev is the target branch tip after coordinator landing.
 	LandedRev *string `json:"landedRev,omitempty"`
-	// EvidenceRev is the trailing evidence commit SHA when distinct from ImplementationRev.
+	// EvidenceRev is a legacy compatibility field; current attempts leave it empty.
 	EvidenceRev *string `json:"evidenceRev,omitempty"`
 	// Bundle directory (relative to project root).
 	BundlePath string `json:"bundlePath"`
@@ -2338,9 +2338,9 @@ type StartWorkerInput struct {
 	ProjectID string `json:"projectId"`
 	// Optional harness override
 	Harness *string `json:"harness,omitempty"`
-	// Routing profile, defaulting to smart when omitted
+	// Optional opaque routing profile constraint
 	Profile *string `json:"profile,omitempty"`
-	// Reasoning effort, defaulting to medium when omitted
+	// Optional opaque reasoning effort; omitted remains unconstrained
 	Effort *string `json:"effort,omitempty"`
 	// Optional label filter for ready beads
 	LabelFilter *string `json:"labelFilter,omitempty"`

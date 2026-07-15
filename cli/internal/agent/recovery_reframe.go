@@ -62,7 +62,7 @@ func NewReframePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner Agent
 	}
 }
 
-// runReframer dispatches a smart+ powerClass agent to rewrite the bead's description
+// runReframer dispatches with the strong lifecycle MinPower floor to rewrite the bead's description
 // and acceptance criteria after the escalation ladder has been exhausted.
 // On success, the bead description/AC are updated, the
 // consecutive_ladder_exhaustions counter is cleared, and a "reframe-applied"
@@ -81,7 +81,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		return ReframeResult{Failed: true, Reason: "prompt_error"}
 	}
 
-	runtime := decomposerRuntime(tctx, projectRoot, runner, rcfg)
+	runtime := decomposerRuntime(rcfg)
 	runtime.Prompt = prompt
 	runtime.WorkDir = projectRoot
 	runtime.PromptSource = reframerPromptSource

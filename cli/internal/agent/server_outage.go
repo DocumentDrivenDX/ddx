@@ -137,9 +137,6 @@ func (t *serverOutageTracker) MarkProbeAttempt(now time.Time) {
 }
 
 func isServerTransportFailureReport(report ExecuteBeadReport) bool {
-	if strings.TrimSpace(report.Provider) != "" {
-		return false
-	}
 	combined := strings.ToLower(strings.Join([]string{
 		report.Detail,
 		report.Error,
