@@ -19,7 +19,6 @@ import (
 // allowed to stash, stage, and commit. Nothing outside this list is ever touched.
 var ddxManagedPaths = []string{
 	".ddx/beads.jsonl",
-	".ddx/executions",
 	".ddx/plugins",
 }
 
@@ -73,12 +72,12 @@ func (f *CommandFactory) newSyncCommand() *cobra.Command {
 
 The canonical sync flow:
   1. git fetch origin
-  2. stash DDx-managed dirty files (.ddx/beads.jsonl, executions/, plugins/)
+  2. stash DDx-managed durable files (.ddx/beads.jsonl, plugins/)
   3. git merge origin/main  (no rebase — preserves execute-bead history)
   4. git stash pop
   5. commit DDx-managed files with structured messages:
        .ddx/beads.jsonl  → "chore: tracker"
-       .ddx/executions/  → "chore: add execution evidence"
+       .ddx/plugins/     → "chore: update ddx plugins"
   6. git push origin main  (retries once on non-fast-forward)
 
 Sync never touches files outside the DDx-managed allowlist. Non-DDx dirty
@@ -230,8 +229,8 @@ func (s *syncer) runOnce(ctx context.Context, isRetry bool) error {
 
 // stashDDxPaths stashes tracked dirty files in the DDx-managed allowlist.
 // Returns true if a stash was created, false if there was nothing to stash.
-// Untracked files (new execution artifacts) are not stashed; git merge
-// does not affect them.
+// Local execution evidence is deliberately outside this set and is never
+// stashed, staged, or committed by sync.
 func (s *syncer) stashDDxPaths(ctx context.Context) (bool, error) {
 	// Check for tracked dirty DDx paths (ignore untracked lines starting with "??").
 	checkArgs := append([]string{"status", "--porcelain", "--"}, ddxManagedPaths...)
@@ -264,7 +263,7 @@ func (s *syncer) commitDDxPaths(ctx context.Context) error {
 	if err := s.commitIfDirty(ctx, []string{".ddx/beads.jsonl"}, "chore: tracker"); err != nil {
 		return err
 	}
-	if err := s.commitIfDirty(ctx, []string{".ddx/executions", ".ddx/plugins"}, "chore: add execution evidence"); err != nil {
+	if err := s.commitIfDirty(ctx, []string{".ddx/plugins"}, "chore: update ddx plugins"); err != nil {
 		return err
 	}
 	return nil
@@ -287,7 +286,11 @@ func (s *syncer) commitIfDirty(ctx context.Context, paths []string, message stri
 		return fmt.Errorf("git add failed: %v", err)
 	}
 
-	if _, err := s.git(ctx, "commit", "-m", message); err != nil {
+	// Scope the commit itself, not just git add. A pre-existing staged path
+	// outside this allowlist (including force-added local execution evidence)
+	// must remain in the index and must never be swept into a sync commit.
+	commitArgs := append([]string{"commit", "-m", message, "--only", "--"}, paths...)
+	if _, err := s.git(ctx, commitArgs...); err != nil {
 		return fmt.Errorf("commit failed: %v", err)
 	}
 	return nil

@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// TestExecuteBeadInstructions_ReportsGoUnderBundlePath covers ddx-d532992f:
+// TestExecuteBeadInstructionsReportsStayLocalAndUncommitted covers ddx-d532992f:
 // both the claude-variant and agent-variant execute-bead prompts must steer
 // investigation/report outputs into the per-attempt evidence directory
 // via the bead metadata bundle path under .ddx/executions/
 // and explicitly forbid writing them to /tmp. A previous attempt (B15a)
 // wrote its report to /tmp/feat-011-status.md, which the post-merge reviewer
 // could not see and so flagged BLOCK.
-func TestExecuteBeadInstructions_ReportsGoUnderBundlePath(t *testing.T) {
+func TestExecuteBeadInstructionsReportsStayLocalAndUncommitted(t *testing.T) {
 	cases := []struct {
 		name string
 		text string
@@ -30,6 +30,12 @@ func TestExecuteBeadInstructions_ReportsGoUnderBundlePath(t *testing.T) {
 			}
 			if !strings.Contains(c.text, "/tmp") {
 				t.Fatalf("%s prompt must explicitly forbid writing reports to /tmp", c.name)
+			}
+			if !strings.Contains(c.text, "Bundle files are local-only: never stage or commit them") {
+				t.Fatalf("%s prompt must forbid staging or committing bundle reports", c.name)
+			}
+			if !strings.Contains(c.text, "Commit only requested deliverables outside the bundle") {
+				t.Fatalf("%s prompt must limit commits to named deliverables outside the evidence tree", c.name)
 			}
 			lower := strings.ToLower(c.text)
 			if !strings.Contains(lower, "report") {

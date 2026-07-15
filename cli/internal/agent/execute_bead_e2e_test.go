@@ -11,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+	"github.com/stretchr/testify/require"
 )
 
 // gateTestGitOps is a minimal GitOps mock for execute-bead gate enforcement tests.
@@ -408,35 +409,33 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 	}
 }
 
-// TestExecuteBead_NoChangesRationaleOnlyEvidenceCommitIsNoChanges verifies that
-// a commit containing only the DDx-owned no_changes rationale file is still
-// classified as task_no_changes.
-func TestExecuteBead_NoChangesRationaleOnlyEvidenceCommitIsNoChanges(t *testing.T) {
+// TestExecuteBead_ForceAddedRationaleEvidenceCommitFailsIntegrity verifies
+// that even a rationale-only commit under the local evidence tree is rejected.
+func TestExecuteBead_ForceAddedRationaleEvidenceCommitFailsIntegrity(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	mainBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	const beadID = "ddx-int-0001"
 	const rationale = "verification_command: true"
 
 	runner := &commitRationaleTestRunner{t: t, rationale: rationale}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, &RealGitOps{})
-	if err != nil {
-		t.Fatalf("ExecuteBead returned error: %v", err)
-	}
-	if res.Outcome != ExecuteBeadOutcomeTaskNoChanges {
-		t.Fatalf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskNoChanges, res.Outcome)
-	}
-	if res.Status != ExecuteBeadStatusNoChanges {
-		t.Fatalf("expected status=%s, got %q", ExecuteBeadStatusNoChanges, res.Status)
-	}
+	require.ErrorContains(t, err, "candidate history commit")
+	require.Equal(t, ExecuteBeadOutcomeTaskFailed, res.Outcome)
+	require.Equal(t, FailureModeAttemptIntegrity, res.FailureMode)
 	if res.NoChangesRationale != rationale {
 		t.Fatalf("expected rationale preserved, got %q", res.NoChangesRationale)
 	}
 	if res.ResultRev == res.BaseRev {
 		t.Fatalf("expected result rev to differ from base rev")
 	}
-	if res.Detail != "" && strings.Contains(res.Detail, mixedCommitAndNoChangesRationaleReason) {
-		t.Fatalf("evidence-only rationale commit should not be mixed, got detail %q", res.Detail)
-	}
+	require.Empty(t, res.CandidateRef)
+	require.Equal(t, mainBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+	require.Equal(t, "", runGitInteg(t, projectRoot, "log", "main", "--format=%H", "--", ".ddx/executions"))
+	rationalePath := filepath.Join(projectRoot, filepath.FromSlash(res.ExecutionDir), "no_changes_rationale.txt")
+	rationaleBytes, readErr := os.ReadFile(rationalePath)
+	require.NoError(t, readErr)
+	require.Equal(t, rationale, string(rationaleBytes))
 }
 
 // TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence
@@ -510,11 +509,12 @@ func TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence(t 
 	}
 }
 
-// TestExecuteBead_MixedImplementationAndNoChangesRationaleStillFails verifies
-// that a substantive project change plus a rationale file still fails with the
-// mixed_commit_and_no_changes_rationale classification.
-func TestExecuteBead_MixedImplementationAndNoChangesRationaleStillFails(t *testing.T) {
+// TestExecuteBead_MixedImplementationAndForceAddedRationaleFailsIntegrity
+// verifies that a substantive change cannot legitimize a force-added local
+// evidence file.
+func TestExecuteBead_MixedImplementationAndForceAddedRationaleFailsIntegrity(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	mainBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	const beadID = "ddx-int-0001"
 	const rationale = "verification_command: true"
 
@@ -526,24 +526,18 @@ func TestExecuteBead_MixedImplementationAndNoChangesRationaleStillFails(t *testi
 	}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, &RealGitOps{})
-	if err != nil {
-		t.Fatalf("ExecuteBead returned error: %v", err)
-	}
-	if res.Outcome != ExecuteBeadOutcomeTaskFailed {
-		t.Fatalf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskFailed, res.Outcome)
-	}
-	if res.Status != ExecuteBeadStatusExecutionFailed {
-		t.Fatalf("expected status=%s, got %q", ExecuteBeadStatusExecutionFailed, res.Status)
-	}
-	if !strings.Contains(res.Detail, mixedCommitAndNoChangesRationaleReason) {
-		t.Fatalf("expected mixed classification detail, got %q", res.Detail)
-	}
+	require.ErrorContains(t, err, "candidate history commit")
+	require.Equal(t, ExecuteBeadOutcomeTaskFailed, res.Outcome)
+	require.Equal(t, FailureModeAttemptIntegrity, res.FailureMode)
 	if res.NoChangesRationale != rationale {
 		t.Fatalf("expected rationale preserved, got %q", res.NoChangesRationale)
 	}
 	if res.ResultRev == res.BaseRev {
 		t.Fatalf("expected result rev to differ from base rev")
 	}
+	require.Empty(t, res.CandidateRef)
+	require.Equal(t, mainBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+	require.Equal(t, "", runGitInteg(t, projectRoot, "log", "main", "--format=%H", "--", ".ddx/executions"))
 }
 
 // TestExecuteBead_NoEvidenceProducedWhenRationaleAbsent verifies that a clean

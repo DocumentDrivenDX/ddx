@@ -1022,7 +1022,7 @@ type Execution struct {
 	ImplementationRev *string `json:"implementationRev,omitempty"`
 	// LandedRev is the target branch tip after coordinator landing.
 	LandedRev *string `json:"landedRev,omitempty"`
-	// EvidenceRev is the trailing evidence commit SHA when distinct from ImplementationRev.
+	// EvidenceRev is a legacy compatibility field; current attempts leave it empty.
 	EvidenceRev *string `json:"evidenceRev,omitempty"`
 	// Bundle directory (relative to project root).
 	BundlePath string `json:"bundlePath"`

@@ -58,3 +58,31 @@ func TestSynthesizeCommit_GitignoredDirsDoNotFail(t *testing.T) {
 	require.NotContains(t, trackedOut, ".ddx/workers", "gitignored path must not be committed")
 	require.NotContains(t, trackedOut, ".ddx/executions", "gitignored path must not be committed")
 }
+
+func TestSynthesizeCommitExcludesEntireExecutionEvidenceTree(t *testing.T) {
+	root, _ := newScriptHarnessRepo(t, 0)
+	// Simulate a stale project whose versioned ignore file does not protect
+	// execution evidence. Also pre-stage the report to exercise the reset
+	// defence, not just the add pathspec.
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), nil, 0o644))
+	runGitInteg(t, root, "add", ".gitignore")
+	runGitInteg(t, root, "commit", "-m", "remove execution ignore coverage")
+
+	const evidenceRel = ".ddx/executions/attempt/custom-report.md"
+	evidenceAbs := filepath.Join(root, filepath.FromSlash(evidenceRel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(evidenceAbs), 0o755))
+	wantEvidence := []byte("local report\n")
+	require.NoError(t, os.WriteFile(evidenceAbs, wantEvidence, 0o644))
+	runGitInteg(t, root, "add", "-f", "--", evidenceRel)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "feature.txt"), []byte("feature\n"), 0o644))
+
+	committed, err := (&RealGitOps{}).SynthesizeCommit(root, "feat: synthesize without evidence")
+	require.NoError(t, err)
+	require.True(t, committed)
+	require.Contains(t, runGitInteg(t, root, "ls-tree", "-r", "--name-only", "HEAD"), "feature.txt")
+	require.NotContains(t, runGitInteg(t, root, "ls-tree", "-r", "--name-only", "HEAD"), ".ddx/executions/")
+	require.Empty(t, runGitInteg(t, root, "diff", "--cached", "--name-only", "--", ".ddx/executions"))
+	gotEvidence, readErr := os.ReadFile(evidenceAbs)
+	require.NoError(t, readErr)
+	require.Equal(t, wantEvidence, gotEvidence)
+}

@@ -284,6 +284,12 @@ func (failingPrepareAttemptBackend) Run(context.Context, AttemptBackendRunReques
 func (failingPrepareAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
 	return nil
 }
+func (failingPrepareAttemptBackend) ImportCandidate(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+func (failingPrepareAttemptBackend) ReleaseCandidateImport(context.Context, *AttemptWorkspace) error {
+	return nil
+}
 
 func (failingPrepareAttemptBackend) Cleanup(context.Context, *AttemptWorkspace) error { return nil }
 

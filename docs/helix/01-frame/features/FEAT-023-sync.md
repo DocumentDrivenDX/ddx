@@ -16,9 +16,10 @@ ddx:
 
 ## Overview
 
-`ddx sync` is a first-class CLI command that synchronizes DDx-managed files
-(`.ddx/beads.jsonl`, `.ddx/executions/`, `.ddx/plugins/`) with `origin/main`
-in a single canonical flow. It exists in both one-shot and watch (daemon)
+`ddx sync` is a first-class CLI command that synchronizes durable DDx-managed
+files (`.ddx/beads.jsonl`, `.ddx/plugins/`) with `origin/main` in a single
+canonical flow. Local `.ddx/executions/` evidence is never synchronized. The
+command exists in both one-shot and watch (daemon)
 modes and is constrained to never touch any path outside the DDx-managed
 allowlist.
 
@@ -71,15 +72,16 @@ to remember to look.
   4. `git stash pop` if a stash was created.
   5. Commit DDx-managed dirty paths with structured messages:
      `.ddx/beads.jsonl` → `chore: tracker`;
-     `.ddx/executions/` and `.ddx/plugins/` → `chore: add execution evidence`.
+     `.ddx/plugins/` → `chore: update ddx plugins`.
   6. `git push origin main`; on non-fast-forward, retry from step 1 once.
 - `ddx sync --watch [--interval=15m]` running the same flow on an
   interval until interrupted. Local-only, foreground process; the operator
   is responsible for backgrounding.
-- Strict allowlist enforcement: only `.ddx/beads.jsonl`,
-  `.ddx/executions/`, and `.ddx/plugins/` are ever stashed, staged, or
-  committed. Unrelated dirty changes survive untouched across the entire
-  flow.
+- Strict allowlist enforcement: only `.ddx/beads.jsonl` and `.ddx/plugins/`
+  are ever stashed, staged, or committed. `.ddx/executions/` is local attempt
+  evidence outside the sync allowlist: visible or ignored evidence remains
+  byte-identical on disk and absent from the index and history. Other unrelated
+  dirty changes likewise survive untouched across the entire flow.
 - No destructive flags: sync never invokes git with `--force`,
   `--no-verify`, `--hard`, or any other destructive option.
 - Structured abort: when any step cannot be auto-resolved (stash-pop
@@ -109,10 +111,10 @@ to remember to look.
 1. `ddx sync` exists and runs the canonical flow described above.
 2. `ddx sync --watch [--interval=15m]` runs the flow on the configured
    interval until killed.
-3. Both modes refuse to touch paths outside the DDx-managed allowlist
-   (`.ddx/beads.jsonl`, `.ddx/executions/`, `.ddx/plugins/`). Verified by
-   tests that inject unrelated dirty changes and assert they survive
-   untouched.
+3. Both modes refuse to touch paths outside the durable DDx-managed allowlist
+   (`.ddx/beads.jsonl`, `.ddx/plugins/`). Tests inject visible and ignored
+   `.ddx/executions/` evidence plus unrelated dirty changes and prove all of
+   them survive byte-identical, unstaged, and uncommitted.
 4. Both modes never invoke git with `--force`, `--no-verify`, or any
    destructive flag. Verified by tests asserting on the captured shell
    args.
