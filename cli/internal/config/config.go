@@ -43,7 +43,7 @@ func checkRoutingMigration(path string, data []byte) error {
 		return nil
 	}
 	// routinglint:legacy-rejection reason="hard-error rejection of retired routing keys per ddx-3bd7396a"
-	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides"} {
+	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides", "profile_priority"} {
 		if _, ok := routing[field]; ok {
 			return &RoutingMigrationError{
 				Field: "agent.routing." + field,
@@ -107,17 +107,6 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 		return nil, fmt.Errorf("failed to create config loader: %w", err)
 	}
 
-	// Pre-validation migration check: surface a friendly hard error for
-	// removed agent.routing fields before the schema validator sees the file.
-	// This happens before LoadConfig so the migration message is what the
-	// operator sees.
-	configPath := projectStatePath(workingDir, "config.yaml")
-	if data, readErr := os.ReadFile(configPath); readErr == nil {
-		if migErr := checkRoutingMigration(configPath, data); migErr != nil {
-			return nil, migErr
-		}
-	}
-
 	config, err := loader.LoadConfig()
 	if err != nil {
 		// If no config file exists, return default config
@@ -130,10 +119,6 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 
 	// Apply defaults to ensure complete configuration
 	config.ApplyDefaults()
-	if config.Agent != nil && config.Agent.Routing != nil &&
-		len(config.Agent.Routing.ProfilePriority) > 0 {
-		fmt.Fprintln(os.Stderr, "warning: agent.routing.profile_priority is deprecated and will be removed in a future version")
-	}
 	if err := mergeGlobalExecutionConfig(config, workingDir); err != nil {
 		return nil, err
 	}

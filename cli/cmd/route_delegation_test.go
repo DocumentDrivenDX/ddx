@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,9 +79,65 @@ func TestLifecycleDispatchNeverQueriesFizeauCatalog(t *testing.T) {
 	assert.Empty(t, capturedRouteRequests(stub), "work must never call ResolveRoute before Execute")
 	assert.Equal(t, "codex", requests[0].Harness, "explicit operator harness is opaque passthrough")
 	assert.Equal(t, "smart", requests[0].Policy, "explicit operator profile is opaque passthrough")
+	assert.Zero(t, requests[0].MinPower, "non-empty public policy must suppress difficulty inference")
 	assert.Empty(t, requests[0].Model, "DDx must not fill in a model")
 	assert.Empty(t, requests[0].Provider, "DDx must not fill in a provider")
 	assert.Zero(t, modelQueriesBeforeExecute(stub), "initial work dispatch must not query the model catalog")
+}
+
+func TestWorkOperatorRouteConstraintsDoNotSuppressDifficultyInference(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = routeDelegationExecute
+	dir := newRouteDelegationProject(t, "ddx-work-sticky-route-constraints")
+
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"work", "--once", "--project", dir,
+		"--harness", " opaque-harness ",
+		"--provider", " opaque-provider ",
+		"--model", " opaque-model ",
+		"--max-power", "10",
+		"--no-review", "--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "output=%q", out)
+
+	requests := capturedImplementationRequests(stub)
+	require.NotEmpty(t, requests, "work must reach Fizeau Execute; output=%q", out)
+	req := requests[0]
+	assert.Equal(t, 7, req.MinPower, "sticky route constraints must not suppress default difficulty inference")
+	assert.Equal(t, 10, req.MaxPower)
+	assert.Equal(t, " opaque-harness ", req.Harness)
+	assert.Equal(t, " opaque-provider ", req.Provider)
+	assert.Equal(t, " opaque-model ", req.Model)
+	assert.Empty(t, req.Policy)
+	assert.Empty(t, capturedRouteRequests(stub))
+	assert.Zero(t, modelQueriesBeforeExecute(stub))
+}
+
+func TestInferredMinPowerConflictWithMaxPowerErrors(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = routeDelegationExecute
+	beadID := "ddx-work-inferred-power-conflict"
+	dir := newRouteDelegationProject(t, beadID)
+	store := bead.NewStore(ddxroot.JoinProject(dir))
+	require.NoError(t, store.Update(context.Background(), beadID, func(target *bead.Bead) {
+		if target.Extra == nil {
+			target.Extra = map[string]any{}
+		}
+		target.Extra[escalation.BeadEstimatedDifficultyKey] = string(escalation.DifficultyHard)
+	}))
+
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"work", "--once", "--project", dir,
+		"--max-power", "8",
+		"--no-review", "--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "work reports per-bead failures in its structured output; output=%q", out)
+	assert.Contains(t, out, "inferred MinPower 9 conflicts with requested MaxPower 8")
+	assert.Empty(t, capturedImplementationRequests(stub), "conflicting bounds must fail before Fizeau dispatch")
 }
 
 func TestUnpinnedEntryPointsIgnoreConfiguredProjectModel(t *testing.T) {

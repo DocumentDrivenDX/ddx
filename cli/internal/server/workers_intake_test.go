@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,8 +13,10 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,6 +149,12 @@ bead-quality:
 	skillDir := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(strings.Join([]string{
+		".ddx/agent-logs/",
+		".ddx/exec-worktrees/",
+		".ddx/executions/",
+		".ddx/workers/",
+	}, "\n")+"\n"), 0o644))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
@@ -183,6 +192,61 @@ func TestServerWorker_WiresPreClaimIntakeHook(t *testing.T) {
 	require.GreaterOrEqual(t, len(got), 2, "server worker must invoke intake and lint hooks")
 	assert.Equal(t, "intake", got[0], "server-managed workers must run intake before claim")
 	assert.Equal(t, "lint", got[1], "server-managed workers must wire lint after intake")
+}
+
+func TestServerWorkerEstimatedDifficultySeedsFirstMinPower(t *testing.T) {
+	root := setupWorkerIntakeFixture(t)
+	store := bead.NewStore(ddxroot.JoinProject(root))
+	require.NoError(t, store.Update(context.Background(), "ddx-worker-intake", func(target *bead.Bead) {
+		if target.Extra == nil {
+			target.Extra = map[string]any{}
+		}
+		target.Extra[escalation.BeadEstimatedDifficultyKey] = string(escalation.DifficultyHard)
+	}))
+	stub := &workerIntakeServiceStub{}
+	installWorkerIntakeStub(t, stub)
+
+	m := NewWorkerManager(root)
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		ProjectRoot: root,
+		Harness:     "claude",
+		Mode:        executeloop.ModeOnce,
+		NoReview:    true,
+	})
+	require.NoError(t, err)
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	logContent, _, logErr := m.Logs(record.ID)
+	require.NoError(t, logErr)
+
+	stub.mu.Lock()
+	modes := append([]string(nil), stub.modes...)
+	requests := append([]agentlib.ServiceExecuteRequest(nil), stub.requests...)
+	stub.mu.Unlock()
+	var implementation *agentlib.ServiceExecuteRequest
+	for i := range requests {
+		if modes[i] == "execute" {
+			implementation = &requests[i]
+			break
+		}
+	}
+	require.NotNil(t, implementation, "server worker did not reach implementation dispatch; modes=%v final=%+v log=%s", modes, final, logContent)
+	assert.Equal(t, 9, implementation.MinPower)
+	assert.Equal(t, "claude", implementation.Harness)
+	assert.Empty(t, implementation.Policy)
+
+	events, err := store.Events("ddx-worker-intake")
+	require.NoError(t, err)
+	var body map[string]any
+	for _, event := range events {
+		if event.Kind == "execution-routing-intent" {
+			require.NoError(t, json.Unmarshal([]byte(event.Body), &body))
+			break
+		}
+	}
+	require.NotNil(t, body, "server worker did not record numeric routing intent")
+	assert.Equal(t, "hard", body["estimated_difficulty"])
+	assert.Equal(t, float64(9), body["inferred_min_power"])
+	assert.Equal(t, float64(9), body["requested_min_power"])
 }
 
 // TestServerWorker_ReadinessUnavailableEvidence (AC2, AC6 / ddx-30bc30ed):

@@ -83,7 +83,7 @@ func applyProviderFallbackEvidence(report *agent.ExecuteBeadReport, pf agent.Pro
 		Harness:  pin.Harness,
 		Provider: pin.Provider,
 		Model:    pin.Model,
-		Profile:  report.RequestedProfile,
+		Profile:  firstNonEmpty(report.RequestedPolicy, report.RequestedProfile),
 	}, resolved, pf, decision)
 	report.ProviderFailureEvidence = &evidence
 	if pin.Any() {

@@ -264,13 +264,15 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 				require.NotContains(t, got.Extra, legacyPowerKey)
 			}
 			return ExecuteBeadReport{
-				BeadID:              beadID,
-				Status:              ExecuteBeadStatusSuccess,
-				SessionID:           "sess-readiness-power",
-				ResultRev:           "readiness-power",
-				RoutingIntentSource: "readiness",
-				EstimatedDifficulty: difficulty,
-				InferredPowerClass:  "smart",
+				BeadID:                  beadID,
+				Status:                  ExecuteBeadStatusSuccess,
+				SessionID:               "sess-readiness-power",
+				ResultRev:               "readiness-power",
+				RoutingIntentSource:     "readiness",
+				EstimatedDifficulty:     difficulty,
+				InferredMinPower:        9,
+				InferredMinPowerPresent: true,
+				RequestedMinPower:       9,
 			}, nil
 		}),
 	}
@@ -312,7 +314,9 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 	require.NotNil(t, intentBody, "readiness routing intent evidence must be recorded")
 	assert.Equal(t, "readiness", intentBody["routing_intent_source"])
 	assert.Equal(t, "hard", intentBody["estimated_difficulty"])
-	assert.Equal(t, "smart", intentBody["requested_power_class"])
+	assert.Equal(t, float64(9), intentBody["inferred_min_power"])
+	assert.Equal(t, float64(9), intentBody["requested_min_power"])
+	assert.NotContains(t, intentBody, "requested_power_class")
 }
 
 func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {

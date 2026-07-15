@@ -721,17 +721,18 @@ func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
-				BeadID:             beadID,
-				AttemptID:          "20260515T185832-loop",
-				Status:             ExecuteBeadStatusSuccess,
-				Detail:             "merged cleanly",
-				SessionID:          "sess-1",
-				ResultRev:          "deadbeef",
-				RequestedProfile:   "default",
-				InferredPowerClass: "smart",
-				Harness:            "claude",
-				Provider:           "anthropic",
-				Model:              "claude-sonnet-4-6",
+				BeadID:                  beadID,
+				AttemptID:               "20260515T185832-loop",
+				Status:                  ExecuteBeadStatusSuccess,
+				Detail:                  "merged cleanly",
+				SessionID:               "sess-1",
+				ResultRev:               "deadbeef",
+				InferredMinPower:        9,
+				InferredMinPowerPresent: true,
+				RequestedMinPower:       9,
+				Harness:                 "claude",
+				Provider:                "anthropic",
+				Model:                   "claude-sonnet-4-6",
 			}, nil
 		}),
 	}
@@ -757,11 +758,12 @@ func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(intent.Body), &body))
 	assert.Equal(t, "hard", body["estimated_difficulty"])
-	assert.Equal(t, "smart", body["requested_power_class"])
-	assert.Equal(t, "default", body["requested_profile"])
-	assert.NotContains(t, body, "smart_justification")
+	assert.Equal(t, float64(9), body["inferred_min_power"])
+	assert.Equal(t, float64(9), body["requested_min_power"])
+	assert.NotContains(t, body, "requested_power_class")
+	assert.NotContains(t, body, "requested_profile")
 	assert.Contains(t, intent.Summary, "difficulty=hard")
-	assert.Contains(t, intent.Summary, "powerClass=smart")
+	assert.Contains(t, intent.Summary, "minPower=9")
 }
 
 func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {

@@ -1,13 +1,9 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,29 +18,13 @@ const (
 	maxTriageEventBodyBytes       = 4096
 	maxTriageEventCount           = 8
 	maxTriageWarningExcerptBytes  = 512
-	defaultSessionLogExcerptBytes = 4096
 )
 
-// SessionLogExcerptReader reads a bounded excerpt from a session log path.
-// The default implementation searches the project agent log dir for a
-// matching agent-*.jsonl or svc-*.jsonl file.
+// SessionLogExcerptReader is retained in the hook constructor interface for
+// compatibility. Control triage deliberately does not read raw session logs:
+// they can contain concrete Fizeau route identity that must remain audit-only.
 type SessionLogExcerptReader interface {
 	ReadSessionLogExcerpt(ctx context.Context, projectRoot, sessionID string, maxBytes int) (string, error)
-}
-
-type fileSessionLogExcerptReader struct{}
-
-func (fileSessionLogExcerptReader) ReadSessionLogExcerpt(ctx context.Context, projectRoot, sessionID string, maxBytes int) (string, error) {
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-	}
-	path, ok := resolveSessionLogPath(projectRoot, sessionID)
-	if !ok {
-		return "", os.ErrNotExist
-	}
-	return readBoundedFileTail(path, maxBytes)
 }
 
 type triagePromptBead struct {
@@ -59,26 +39,63 @@ type triagePromptBead struct {
 	Acceptance   string            `json:"acceptance,omitempty"`
 	Notes        string            `json:"notes,omitempty"`
 	Dependencies []bead.Dependency `json:"dependencies,omitempty"`
-	Extra        map[string]any    `json:"extra,omitempty"`
 }
 
 type triagePromptEnvelope struct {
-	Bead           triagePromptBead  `json:"bead"`
-	ExecuteBead    ExecuteBeadReport `json:"execute_bead_report"`
-	RecentEvents   []bead.BeadEvent  `json:"recent_bead_events,omitempty"`
-	SessionExcerpt string            `json:"session_log_excerpt,omitempty"`
-	ProjectRoot    string            `json:"project_root,omitempty"`
-	SessionLogPath string            `json:"session_log_path,omitempty"`
+	Bead         triagePromptBead    `json:"bead"`
+	ExecuteBead  triagePromptReport  `json:"execute_bead_report"`
+	RecentEvents []triagePromptEvent `json:"recent_bead_events,omitempty"`
+	ProjectRoot  string              `json:"project_root,omitempty"`
+}
+
+// triagePromptReport is the control-safe projection of an execution report.
+// Post-attempt triage can affect retry and lifecycle decisions, so concrete
+// Fizeau route identity must never enter this model prompt. Keep only
+// route-neutral outcome facts and public abstract power intent.
+type triagePromptReport struct {
+	BeadID                        string        `json:"bead_id,omitempty"`
+	AttemptID                     string        `json:"attempt_id,omitempty"`
+	Status                        string        `json:"status"`
+	RateLimitBudget               time.Duration `json:"rate_limit_budget,omitempty"`
+	SessionID                     string        `json:"session_id,omitempty"`
+	BaseRev                       string        `json:"base_rev,omitempty"`
+	ResultRev                     string        `json:"result_rev,omitempty"`
+	ReviewVerdict                 string        `json:"review_verdict,omitempty"`
+	ActualPower                   int           `json:"actual_power,omitempty"`
+	CostUSD                       float64       `json:"cost_usd,omitempty"`
+	DurationMS                    int64         `json:"duration_ms,omitempty"`
+	RoutingIntentSource           string        `json:"routing_intent_source,omitempty"`
+	EstimatedDifficulty           string        `json:"estimated_difficulty,omitempty"`
+	InferredMinPower              *int          `json:"inferred_min_power,omitempty"`
+	RequestedMinPower             int           `json:"requested_min_power,omitempty"`
+	RequestedMaxPower             int           `json:"requested_max_power,omitempty"`
+	EscalationCount               int           `json:"escalation_count,omitempty"`
+	ExecutionDecision             string        `json:"execution_decision,omitempty"`
+	Disrupted                     bool          `json:"disrupted,omitempty"`
+	DisruptionReason              string        `json:"disruption_reason,omitempty"`
+	OutcomeReason                 string        `json:"outcome_reason,omitempty"`
+	ResourceExhaustionDiagnosis   string        `json:"resource_exhaustion_diagnosis,omitempty"`
+	ResourceExhaustionRestartable bool          `json:"resource_exhaustion_restartable,omitempty"`
+}
+
+type triagePromptEvent struct {
+	Category            string    `json:"category"`
+	Status              string    `json:"status,omitempty"`
+	Classification      string    `json:"classification,omitempty"`
+	RecommendedAction   string    `json:"recommended_action,omitempty"`
+	EstimatedDifficulty string    `json:"estimated_difficulty,omitempty"`
+	ActualPower         *int      `json:"actual_power,omitempty"`
+	InferredMinPower    *int      `json:"inferred_min_power,omitempty"`
+	RequestedMinPower   *int      `json:"requested_min_power,omitempty"`
+	RequestedMaxPower   *int      `json:"requested_max_power,omitempty"`
+	Disrupted           *bool     `json:"disrupted,omitempty"`
+	CreatedAt           time.Time `json:"created_at,omitempty"`
 }
 
 // NewPostAttemptTriageHook constructs the bead-lifecycle post-attempt triage
 // hook. The hook is runner-backed, uses the resolved config / runner dispatch
 // seam, and never shells out through os/exec.
 func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, sessionLogReader SessionLogExcerptReader) func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
-	reader := sessionLogReader
-	if reader == nil {
-		reader = fileSessionLogExcerptReader{}
-	}
 	return func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -106,7 +123,7 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 			eventLister = l
 		}
 
-		prompt, err := buildPostAttemptTriagePrompt(ctx, projectRoot, b, report, reader, eventLister)
+		prompt, err := buildPostAttemptTriagePrompt(ctx, projectRoot, b, report, sessionLogReader, eventLister)
 		if err != nil {
 			return TriageResult{}, err
 		}
@@ -146,31 +163,15 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 func buildPostAttemptTriagePrompt(ctx context.Context, projectRoot string, b *bead.Bead, report ExecuteBeadReport, reader SessionLogExcerptReader, eventLister interface {
 	Events(id string) ([]bead.BeadEvent, error)
 }) (string, error) {
+	// Raw session logs can contain Fizeau routing decisions. Triage is a
+	// control path, so retain the reader parameter for API compatibility but
+	// never put a route-bearing session excerpt into its prompt.
+	_ = ctx
+	_ = reader
 	env := triagePromptEnvelope{
-		Bead: triagePromptBead{
-			ID:           b.ID,
-			Title:        strings.TrimSpace(b.Title),
-			Status:       strings.TrimSpace(b.Status),
-			Priority:     b.Priority,
-			IssueType:    strings.TrimSpace(b.IssueType),
-			Labels:       append([]string(nil), b.Labels...),
-			Parent:       strings.TrimSpace(b.Parent),
-			Description:  strings.TrimSpace(b.Description),
-			Acceptance:   strings.TrimSpace(b.Acceptance),
-			Notes:        strings.TrimSpace(b.Notes),
-			Dependencies: append([]bead.Dependency(nil), b.Dependencies...),
-		},
-		ExecuteBead: report,
+		Bead:        projectTriagePromptBead(b),
+		ExecuteBead: projectTriagePromptReport(report),
 		ProjectRoot: projectRoot,
-	}
-	if len(b.Extra) > 0 {
-		env.Bead.Extra = make(map[string]any, len(b.Extra))
-		for k, v := range b.Extra {
-			if k == "events" || k == "events_attachment" {
-				continue
-			}
-			env.Bead.Extra[k] = v
-		}
 	}
 
 	if eventLister != nil {
@@ -180,19 +181,9 @@ func buildPostAttemptTriagePrompt(ctx context.Context, projectRoot string, b *be
 			if start < 0 {
 				start = 0
 			}
-			env.RecentEvents = make([]bead.BeadEvent, 0, len(events)-start)
+			env.RecentEvents = make([]triagePromptEvent, 0, len(events)-start)
 			for _, ev := range events[start:] {
-				env.RecentEvents = append(env.RecentEvents, clampTriageEvent(ev))
-			}
-		}
-	}
-
-	if report.SessionID != "" && reader != nil {
-		excerpt, err := reader.ReadSessionLogExcerpt(ctx, projectRoot, report.SessionID, defaultSessionLogExcerptBytes)
-		if err == nil && strings.TrimSpace(excerpt) != "" {
-			env.SessionExcerpt = excerpt
-			if path, ok := resolveSessionLogPath(projectRoot, report.SessionID); ok {
-				env.SessionLogPath = path
+				env.RecentEvents = append(env.RecentEvents, projectTriagePromptEvent(clampTriageEvent(ev)))
 			}
 		}
 	}
@@ -214,6 +205,229 @@ func buildPostAttemptTriagePrompt(ctx context.Context, projectRoot string, b *be
 	sb.Write(body)
 	sb.WriteString("\n```\n")
 	return sb.String(), nil
+}
+
+func projectTriagePromptBead(b *bead.Bead) triagePromptBead {
+	return triagePromptBead{
+		ID:           b.ID,
+		Title:        strings.TrimSpace(b.Title),
+		Status:       strings.TrimSpace(b.Status),
+		Priority:     b.Priority,
+		IssueType:    strings.TrimSpace(b.IssueType),
+		Labels:       append([]string(nil), b.Labels...),
+		Parent:       strings.TrimSpace(b.Parent),
+		Description:  strings.TrimSpace(b.Description),
+		Acceptance:   strings.TrimSpace(b.Acceptance),
+		Notes:        strings.TrimSpace(b.Notes),
+		Dependencies: append([]bead.Dependency(nil), b.Dependencies...),
+	}
+}
+
+func projectTriagePromptReport(report ExecuteBeadReport) triagePromptReport {
+	out := triagePromptReport{
+		BeadID:                        report.BeadID,
+		AttemptID:                     report.AttemptID,
+		Status:                        controlSafeTriageStatus(report.Status),
+		RateLimitBudget:               report.RateLimitBudget,
+		SessionID:                     report.SessionID,
+		BaseRev:                       report.BaseRev,
+		ResultRev:                     report.ResultRev,
+		ReviewVerdict:                 controlSafeReviewVerdict(report.ReviewVerdict),
+		ActualPower:                   report.ActualPower,
+		CostUSD:                       report.CostUSD,
+		DurationMS:                    report.DurationMS,
+		RoutingIntentSource:           controlSafeRoutingIntentSource(report.RoutingIntentSource),
+		EstimatedDifficulty:           controlSafeEstimatedDifficulty(report.EstimatedDifficulty),
+		RequestedMinPower:             report.RequestedMinPower,
+		RequestedMaxPower:             report.RequestedMaxPower,
+		EscalationCount:               report.EscalationCount,
+		ExecutionDecision:             controlSafeExecutionDecision(report.ExecutionDecision),
+		Disrupted:                     report.Disrupted,
+		DisruptionReason:              controlSafeOutcomeReason(report.DisruptionReason),
+		OutcomeReason:                 controlSafeOutcomeReason(report.OutcomeReason),
+		ResourceExhaustionDiagnosis:   controlSafeResourceDiagnosis(report.ResourceExhaustionDiagnosis),
+		ResourceExhaustionRestartable: report.ResourceExhaustionRestartable,
+	}
+	if report.InferredMinPowerPresent {
+		value := report.InferredMinPower
+		out.InferredMinPower = &value
+	}
+	return out
+}
+
+func projectTriagePromptEvent(event bead.BeadEvent) triagePromptEvent {
+	out := triagePromptEvent{
+		Category:  triageEventCategory(event.Kind),
+		CreatedAt: event.CreatedAt,
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(event.Body), &body); err != nil {
+		return out
+	}
+	if status, ok := body["status"].(string); ok && isControlSafeTriageStatus(status) {
+		out.Status = status
+	}
+	if classification, ok := body["classification"].(string); ok && isRecognizedTriageClassification(classification) {
+		out.Classification = classification
+	}
+	if action, ok := body["recommended_action"].(string); ok && isRecognizedTriageRecommendedAction(action) {
+		out.RecommendedAction = action
+	}
+	if difficulty, ok := body["estimated_difficulty"].(string); ok && isControlSafeEstimatedDifficulty(difficulty) {
+		out.EstimatedDifficulty = difficulty
+	}
+	out.ActualPower = triageEventInt(body, "actual_power")
+	out.InferredMinPower = triageEventInt(body, "inferred_min_power")
+	out.RequestedMinPower = triageEventInt(body, "requested_min_power")
+	out.RequestedMaxPower = triageEventInt(body, "requested_max_power")
+	if disrupted, ok := body["disrupted"].(bool); ok {
+		out.Disrupted = &disrupted
+	}
+	return out
+}
+
+func triageEventCategory(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "execution-routing-intent", "routing", "route-failure":
+		return "routing"
+	case "execute-bead", "bead.result", "attempt.terminated":
+		return "attempt"
+	case "bead-quality.triage", "bead-quality.triage-warning":
+		return "triage"
+	case "bead-quality.lint", "intake.warn", "triage-overflow":
+		return "quality"
+	case "resource-exhausted", "disruption_detected", "operator_attention":
+		return "system"
+	default:
+		return "other"
+	}
+}
+
+func triageEventInt(body map[string]any, key string) *int {
+	value, ok := body[key].(float64)
+	if !ok || value < 0 || value != float64(int(value)) {
+		return nil
+	}
+	out := int(value)
+	return &out
+}
+
+func isControlSafeEstimatedDifficulty(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "easy", "medium", "hard":
+		return true
+	default:
+		return false
+	}
+}
+
+func isControlSafeTriageStatus(value string) bool {
+	switch strings.TrimSpace(value) {
+	case ExecuteBeadStatusStructuralValidationFailed,
+		ExecuteBeadStatusExecutionFailed,
+		ExecuteBeadStatusPostRunCheckFailed,
+		ExecuteBeadStatusRatchetFailed,
+		ExecuteBeadStatusLandConflict,
+		ExecuteBeadStatusLandRetry,
+		ExecuteBeadStatusLandOperatorAttention,
+		ExecuteBeadStatusPushFailed,
+		ExecuteBeadStatusPushConflict,
+		ExecuteBeadStatusPreservedNeedsReview,
+		ExecuteBeadStatusNoEvidenceProduced,
+		ExecuteBeadStatusNoChanges,
+		ExecuteBeadStatusAlreadySatisfied,
+		ExecuteBeadStatusSuccess,
+		ExecuteBeadStatusResourceExhausted,
+		ExecuteBeadStatusDeclinedNeedsDecomposition,
+		ExecuteBeadStatusReviewRequestChanges,
+		ExecuteBeadStatusReviewBlock,
+		ExecuteBeadStatusReviewMalfunction,
+		ExecuteBeadStatusReviewRequestClarification,
+		ExecuteBeadStatusLandConflictUnresolvable,
+		ExecuteBeadStatusLandConflictOperatorRequired,
+		ExecuteBeadStatusReviewTerminalBlock,
+		ExecuteBeadStatusReviewFixableGap,
+		ExecuteBeadStatusRepairCycleExhausted:
+		return true
+	default:
+		return false
+	}
+}
+
+func controlSafeTriageStatus(value string) string {
+	value = strings.TrimSpace(value)
+	if isControlSafeTriageStatus(value) {
+		return value
+	}
+	return ""
+}
+
+func controlSafeEstimatedDifficulty(value string) string {
+	value = strings.TrimSpace(value)
+	if isControlSafeEstimatedDifficulty(value) {
+		return value
+	}
+	return ""
+}
+
+func controlSafeReviewVerdict(value string) string {
+	value = strings.TrimSpace(value)
+	switch Verdict(value) {
+	case VerdictApprove, VerdictRequestChanges, VerdictBlock, VerdictRequestClarification:
+		return value
+	default:
+		return ""
+	}
+}
+
+func controlSafeRoutingIntentSource(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case "default", "bead_hint", "readiness", "project_config", "cli", "profile":
+		return value
+	default:
+		return ""
+	}
+}
+
+func controlSafeExecutionDecision(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case "proposed", "execution_ineligible":
+		return value
+	default:
+		return ""
+	}
+}
+
+func controlSafeOutcomeReason(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case "routing", "quota", "transport", "timeout", "recoverable",
+		"context_canceled", "transport_error", "resource_exhausted", "repo_concurrency",
+		"unavailable", "environment_repairable", "preflight_failed", "intake_block",
+		"claim_race", "actionable_but_rewritten", "too_large_decomposed", "decomposed",
+		"intake_error", "ambiguous_needs_human", "operator_required",
+		FailureModeContextOverflow, FailureModeMergeConflict, FailureModeTestFailure,
+		FailureModeBuildFailure, FailureModeAuthError, FailureModeNoChanges,
+		FailureModeNoEvidenceProduced, FailureModeRatchetMiss, FailureModeNoViableProvider,
+		FailureModeProviderConnectivity, FailureModeServerUnavailable, FailureModeHarnessNotInstalled,
+		FailureModeBlockedByPassthroughConstraint, FailureModeAgentPowerUnsatisfied,
+		FailureModeLockContention, FailureModeWorktreeLost, FailureModeRouteResolutionTimeout,
+		FailureModeProgressWatchdog, FailureModeConsecutiveWedge, FailureModeAttemptIntegrity,
+		FailureModeLandRetry, FailureModeLandOperatorAttention, FailureModeUnknown:
+		return value
+	default:
+		return ""
+	}
+}
+
+func controlSafeResourceDiagnosis(value string) string {
+	value = strings.TrimSpace(value)
+	if value == ResourceExhaustionDiagnosisFD {
+		return value
+	}
+	return ""
 }
 
 func triageResultOutput(result *Result) (string, error) {
@@ -538,69 +752,4 @@ func truncateBytes(s string, limit int) string {
 	head := (limit - len(marker)) / 2
 	tail := limit - len(marker) - head
 	return s[:head] + marker + s[len(s)-tail:]
-}
-
-func resolveSessionLogPath(projectRoot, sessionID string) (string, bool) {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return "", false
-	}
-	candidates := []string{sessionID}
-	base := filepath.Base(sessionID)
-	logDir := ResolveLogDir(projectRoot, "")
-	if base != "" {
-		candidates = append(candidates,
-			filepath.Join(logDir, base),
-			filepath.Join(logDir, "agent-"+base),
-			filepath.Join(logDir, "svc-"+base),
-		)
-		if filepath.Ext(base) == "" {
-			candidates = append(candidates,
-				filepath.Join(logDir, "agent-"+base+".jsonl"),
-				filepath.Join(logDir, "svc-"+base+".jsonl"),
-				filepath.Join(logDir, base+".jsonl"),
-			)
-		}
-	}
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate, true
-		}
-	}
-	return "", false
-}
-
-func readBoundedFileTail(path string, limitBytes int) (string, error) {
-	if limitBytes <= 0 {
-		return "", nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return "", err
-	}
-	size := info.Size()
-	if size <= 0 {
-		return "", nil
-	}
-	seek := int64(0)
-	if size > int64(limitBytes) {
-		seek = size - int64(limitBytes)
-	}
-	if _, err := f.Seek(seek, io.SeekStart); err != nil {
-		return "", err
-	}
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return "", err
-	}
-	if seek > 0 {
-		return fmt.Sprintf("…[tail clipped to %d bytes]\n%s", limitBytes, string(data)), nil
-	}
-	return string(bytes.TrimSpace(data)), nil
 }

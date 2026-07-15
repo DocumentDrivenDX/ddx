@@ -142,6 +142,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
+	preClaimTimeout, _ := cmd.Flags().GetDuration("preclaim-timeout")
 	routeResolutionTimeout, _ := cmd.Flags().GetDuration("route-resolution-timeout")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	minPower, _ := cmd.Flags().GetInt("min-power")
@@ -250,10 +251,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		reviewer = postMergeReviewer.(agent.CandidateReviewer)
 	}
 
-	// Determine whether zero-config auto-route applies (same logic as runWork).
-	noRoutingFlags := harness == "" && model == "" && provider == "" &&
-		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
-		!cmd.Flags().Changed("max-power")
+	explicitMinPower := cmd.Flags().Changed("min-power")
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}
@@ -268,22 +266,23 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		executor = f.tryExecutorOverride
 	} else {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, execBeadID string) (agent.ExecuteBeadReport, error) {
+			routingIntent, err := resolveTryExecutionHint(ctx, execBeadID, store, target, explicitMinPower, profile)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			initialMinPower := minPower
+			if routingIntent.HasInferredMinPower {
+				initialMinPower = routingIntent.InferredMinPower
+			}
+			if maxPower > 0 && initialMinPower > maxPower {
+				return agent.ExecuteBeadReport{}, fmt.Errorf("inferred MinPower %d conflicts with requested MaxPower %d", initialMinPower, maxPower)
+			}
 			singleAttempt := func(ctx context.Context, execBeadID string, requestMinPower int) (agent.ExecuteBeadReport, error) {
 				requestProfile := profile
 				var routingNote string
-				targetBead, err := resolveAttemptBead(ctx, execBeadID, store, func() attemptBeadReader {
-					if store == nil {
-						return nil
-					}
-					return bead.NewStoreWithCollection(store.Dir, store.Collection)
-				}, target)
-				if err != nil {
-					return agent.ExecuteBeadReport{}, err
-				}
-				routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags)
 				reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-					report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-					applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
+					report := agent.ReportFromExecuteBeadResult(res, "")
+					applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, requestMinPower, maxPower, routingNote)
 					return report
 				}
 				loopOverrides := config.CLIOverrides{
@@ -367,8 +366,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 								res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 							}
 							_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-							report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-							applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
+							report := agent.ReportFromExecuteBeadResult(res, "")
+							applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, requestMinPower, maxPower, routingNote)
 							return report, nil
 						}
 					}
@@ -407,11 +406,11 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					res.Outcome = "no-changes"
 					res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 				}
-				report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-				applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
+				report := agent.ReportFromExecuteBeadResult(res, "")
+				applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, requestMinPower, maxPower, routingNote)
 				return report, nil
 			}
-			return runEscalatingPowerAttempts(ctx, minPower, maxPower, func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			return runEscalatingPowerAttempts(ctx, initialMinPower, maxPower, func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return singleAttempt(ctx, execBeadID, requestedMinPower)
 			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "",
 				agent.ProviderPin{Harness: harness, Provider: provider, Model: model})
@@ -452,8 +451,18 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if f.AgentRunnerOverride != nil {
 		qualityRunner = f.AgentRunnerOverride
 	}
-	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
-	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	var lintHook func(context.Context, string) (agent.LintResult, error)
+	var intakeHook agent.PreClaimIntakeHook
+	var triageHook func(context.Context, string, agent.ExecuteBeadReport) (agent.TriageResult, error)
+	// tryExecutorOverride is a hermetic test seam: replacing the implementation
+	// executor must not silently dispatch real lifecycle agents. Tests that
+	// exercise lifecycle hooks provide AgentRunnerOverride explicitly.
+	if f.tryExecutorOverride == nil || qualityRunner != nil {
+		lintHook = agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
+		innerIntakeHook := agent.NewPreClaimIntakeHookWithLogVerbose(projectRoot, store, rcfg, nil, qualityRunner, cmd.OutOrStdout(), f.viperInstance.GetBool("verbose"))
+		intakeHook = agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), innerIntakeHook)
+		triageHook = agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	}
 	proseHook := f.proseEvidenceHookOverride
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
@@ -476,6 +485,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		SessionID:               loopSessionID,
 		RouteResolutionTimeout:  routeResolutionTimeout,
 		PreClaimHook:            buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:      intakeHook,
+		PreClaimTimeout:         preClaimTimeout,
 		PreDispatchLintHook:     lintHook,
 		PostAttemptTriageHook:   triageHook,
 		ProseEvidenceHook:       proseHook,
@@ -503,15 +514,28 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	report := result.Results[0]
 	writeTryResult(cmd.OutOrStdout(), report)
-	if report.EstimatedDifficulty != "" && report.InferredPowerClass != "" {
+	if report.EstimatedDifficulty != "" && report.InferredMinPowerPresent {
 		source := report.RoutingIntentSource
 		if source == "" {
 			source = string(escalation.ExecutionIntentSourceDefault)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: difficulty=%s powerClass=%s source=%s\n", report.EstimatedDifficulty, report.InferredPowerClass, source)
+		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: difficulty=%s minPower=%d source=%s\n", report.EstimatedDifficulty, report.InferredMinPower, source)
 	}
 
 	return tryExitCodeForStatus(report.Status)
+}
+
+func resolveTryExecutionHint(ctx context.Context, beadID string, store *bead.Store, fallback *bead.Bead, explicitMinPower bool, publicPolicy string) (escalation.ExecutionHint, error) {
+	currentTarget, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
+		if store == nil {
+			return nil
+		}
+		return bead.NewStoreWithCollection(store.Dir, store.Collection)
+	}, fallback)
+	if err != nil {
+		return escalation.ExecutionHint{}, err
+	}
+	return resolveCommandExecutionHint(ctx, currentTarget, explicitMinPower, publicPolicy), nil
 }
 
 func writeTryResult(w io.Writer, report agent.ExecuteBeadReport) {

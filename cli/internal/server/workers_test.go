@@ -30,6 +30,32 @@ func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 	return executeloop.Duration{Duration: duration}
 }
 
+func TestManagedWorkerCommandArgsPreserveMinPowerPresence(t *testing.T) {
+	omitted := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{}, "worker-omitted")
+	assert.NotContains(t, omitted, "--min-power", "unset MinPower must not become an explicit Cobra flag")
+
+	explicitZero := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{MinPowerSet: true}, "worker-zero")
+	require.Contains(t, explicitZero, "--min-power")
+	zeroIndex := indexOfString(explicitZero, "--min-power")
+	require.GreaterOrEqual(t, zeroIndex, 0)
+	require.Less(t, zeroIndex+1, len(explicitZero))
+	assert.Equal(t, "0", explicitZero[zeroIndex+1])
+
+	nonzero := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{MinPower: 7}, "worker-seven")
+	require.Contains(t, nonzero, "--min-power")
+	sevenIndex := indexOfString(nonzero, "--min-power")
+	assert.Equal(t, "7", nonzero[sevenIndex+1])
+}
+
+func indexOfString(values []string, want string) int {
+	for i, value := range values {
+		if value == want {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
