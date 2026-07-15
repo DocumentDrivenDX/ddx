@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,6 +35,34 @@ func (s *routeReleaseFlakyStore) Release(id, assignee, status string) error {
 		return s.err
 	}
 	return s.releaser.Release(id, assignee, status)
+}
+
+type routeReleaseBlockingStore struct {
+	ExecuteBeadLoopStore
+	releaser       leaseReleaser
+	releaseStarted chan struct{}
+	releaseBlock   chan struct{}
+	startOnce      sync.Once
+	unblockOnce    sync.Once
+}
+
+func newRouteReleaseBlockingStore(store ExecuteBeadLoopStore) *routeReleaseBlockingStore {
+	return &routeReleaseBlockingStore{
+		ExecuteBeadLoopStore: store,
+		releaser:             store.(leaseReleaser),
+		releaseStarted:       make(chan struct{}),
+		releaseBlock:         make(chan struct{}),
+	}
+}
+
+func (s *routeReleaseBlockingStore) Release(id, assignee, status string) error {
+	s.startOnce.Do(func() { close(s.releaseStarted) })
+	<-s.releaseBlock
+	return s.releaser.Release(id, assignee, status)
+}
+
+func (s *routeReleaseBlockingStore) unblock() {
+	s.unblockOnce.Do(func() { close(s.releaseBlock) })
 }
 
 func TestIsProviderConnectivityFailureReport_Discriminates(t *testing.T) {
@@ -397,13 +426,98 @@ func TestRouteStageTimeoutDoesNotArmDuringLocalPreDispatchWork(t *testing.T) {
 	}
 }
 
-func TestRouteStageTimeoutUsesExecuteDeadlineWhenGuardStartIsDelayed(t *testing.T) {
+func TestRouteStageTimeoutCancelsBeforeBookkeeping(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
-	guardStart := make(chan struct{})
+	blockingStore := newRouteReleaseBlockingStore(store)
+	t.Cleanup(blockingStore.unblock)
 	executeStarted := make(chan struct{}, 1)
 	attemptCancelled := make(chan struct{}, 1)
 	worker := &ExecuteBeadWorker{
-		Store: store,
+		Store: blockingStore,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			onExecuteStart := onExecuteStartFromContext(ctx)
+			if onExecuteStart == nil {
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusExecutionFailed}, assert.AnError
+			}
+			onExecuteStart()
+			executeStarted <- struct{}{}
+			<-ctx.Done()
+			attemptCancelled <- struct{}{}
+			return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusExecutionFailed}, ctx.Err()
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker-a"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:                   true,
+			RouteResolutionTimeout: 25 * time.Millisecond,
+		})
+		done <- err
+	}()
+
+	select {
+	case <-executeStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("executor did not reach the Fizeau Execute boundary")
+	}
+	select {
+	case <-blockingStore.releaseStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("route-timeout bookkeeping did not reach the blocked lease release")
+	}
+	select {
+	case <-attemptCancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("executor context remained live while route-timeout bookkeeping was blocked")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("worker returned before blocked timeout bookkeeping completed: %v", err)
+	default:
+	}
+
+	beforeRelease, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, beforeRelease.Status)
+	assert.Equal(t, "worker-a", beforeRelease.Owner)
+
+	blockingStore.unblock()
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			require.NoError(t, err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not finish after timeout bookkeeping was unblocked")
+	}
+
+	afterRelease, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, afterRelease.Status)
+	assert.Empty(t, afterRelease.Owner)
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	for _, event := range events {
+		if event.Kind == "operator_attention" && event.Summary == FailureModeRouteResolutionTimeout {
+			return
+		}
+	}
+	t.Fatal("unblocked route timeout did not emit operator attention")
+}
+
+func TestRouteStageTimeoutUsesExecuteDeadlineWhenGuardStartIsDelayed(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	blockingStore := newRouteReleaseBlockingStore(store)
+	t.Cleanup(blockingStore.unblock)
+	guardStart := make(chan struct{})
+	remainingObserved := make(chan time.Duration, 1)
+	executeStarted := make(chan struct{}, 1)
+	attemptCancelled := make(chan struct{}, 1)
+	worker := &ExecuteBeadWorker{
+		Store: blockingStore,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			onExecuteStart := onExecuteStartFromContext(ctx)
 			if onExecuteStart == nil {
@@ -425,6 +539,9 @@ func TestRouteStageTimeoutUsesExecuteDeadlineWhenGuardStartIsDelayed(t *testing.
 			Once:                   true,
 			RouteResolutionTimeout: 300 * time.Millisecond,
 			routeGuardStartGate:    guardStart,
+			routeGuardRemainingObserver: func(remaining time.Duration) {
+				remainingObserved <- remaining
+			},
 		})
 		done <- err
 	}()
@@ -435,16 +552,31 @@ func TestRouteStageTimeoutUsesExecuteDeadlineWhenGuardStartIsDelayed(t *testing.
 		t.Fatal("executor did not reach the Fizeau Execute boundary")
 	}
 	// Hold the guard longer than the route budget. A guard-relative timer would
-	// incorrectly grant a fresh 300ms after this gate opens.
+	// report a fresh 300ms after this gate opens instead of the clamped zero.
 	time.Sleep(450 * time.Millisecond)
-	releasedAt := time.Now()
 	close(guardStart)
 	select {
-	case <-attemptCancelled:
-	case <-time.After(150 * time.Millisecond):
-		t.Fatal("expired Execute-relative deadline was restarted when the delayed guard woke")
+	case remaining := <-remainingObserved:
+		require.Zero(t, remaining, "delayed guard restarted the Execute-relative route budget")
+	case <-time.After(2 * time.Second):
+		t.Fatal("delayed guard did not report its remaining Execute-relative route budget")
 	}
-	assert.Less(t, time.Since(releasedAt), 150*time.Millisecond)
+	select {
+	case <-blockingStore.releaseStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("delayed guard did not enter route-timeout bookkeeping")
+	}
+	select {
+	case <-attemptCancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("executor context remained live while delayed-guard bookkeeping was blocked")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("worker returned before delayed-guard bookkeeping completed: %v", err)
+	default:
+	}
+	blockingStore.unblock()
 	select {
 	case err := <-done:
 		if err != nil && !errors.Is(err, context.Canceled) {

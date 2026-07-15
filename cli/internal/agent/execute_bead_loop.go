@@ -91,6 +91,10 @@ type ExecuteBeadLoopRuntime struct {
 	// route guard waits for the gate before observing the Execute-relative deadline.
 	// Production callers leave it nil.
 	routeGuardStartGate <-chan struct{}
+	// routeGuardRemainingObserver is a test-only observation seam. When non-nil,
+	// the route guard reports the Execute-relative duration immediately after the
+	// non-negative clamp. Production callers leave it nil.
+	routeGuardRemainingObserver func(time.Duration)
 	// ConsecutiveWedgeThreshold is the number of consecutive wedges
 	// (route_resolution_timeout / progress_watchdog) on the same bead that
 	// trips the consecutive-wedge guard: the worker stops re-claiming the bead
@@ -3509,6 +3513,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			if remaining < 0 {
 				remaining = 0
 			}
+			if runtime.routeGuardRemainingObserver != nil {
+				runtime.routeGuardRemainingObserver(remaining)
+			}
 			routeStageTimer := time.NewTimer(remaining)
 			defer routeStageTimer.Stop()
 			select {
@@ -3525,6 +3532,12 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				default:
 				}
 				if term.set(FailureModeRouteResolutionTimeout) {
+					// Stop the active Fizeau attempt as soon as the Execute-relative
+					// deadline wins. Durable lease release and operator-attention
+					// bookkeeping can block on tracker I/O, but must not extend the
+					// expired execution budget. guardWG still keeps the worker alive
+					// until that bookkeeping completes.
+					attemptCancel()
 					_, releaseErr := routeResolutionTimeoutReport(
 						w.Store,
 						candidateID,
@@ -3540,7 +3553,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 						// gets a chance to release the claim.
 						term.releaseFailed(FailureModeRouteResolutionTimeout, releaseErr)
 					}
-					attemptCancel()
 				}
 			}
 		}()
