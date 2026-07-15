@@ -19,6 +19,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -83,12 +84,17 @@ func TestPromptIngressOversize(t *testing.T) {
 	})
 
 	t.Run("service_run_executeOnService", func(t *testing.T) {
-		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
 		svc := &promptIngressStubAgent{}
-		rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "agent"})
+		cap := promptIngressTestCap
+		rcfg := (&config.NewConfig{EvidenceCaps: &config.EvidenceCapsConfig{
+			PerRole: map[string]*config.EvidenceCapsOverride{
+				config.EvidenceRoleImplementer: {MaxPromptBytes: &cap},
+			},
+		}}).Resolve(config.CLIOverrides{Harness: "agent"})
 		_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
 			PromptFile: fixture,
+			Role:       config.EvidenceRoleImplementer,
 		})
 		if svc.calls != 0 {
 			t.Errorf("svc.Execute invoked %d times; oversize prompt file must short-circuit before dispatch", svc.calls)
@@ -97,9 +103,10 @@ func TestPromptIngressOversize(t *testing.T) {
 	})
 
 	t.Run("execute_bead_buildPrompt", func(t *testing.T) {
-		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
-		_, _, err := buildPrompt(t.TempDir(), &bead.Bead{ID: "ddx-test"}, nil, nil, "", fixture, "")
+		caps := evidence.DefaultCaps()
+		caps.MaxPromptBytes = promptIngressTestCap
+		_, _, err := buildPromptWithCaps(t.TempDir(), &bead.Bead{ID: "ddx-test"}, nil, nil, "", fixture, "", caps)
 		assertOversizeErrorMessage(t, err, fixture)
 	})
 }

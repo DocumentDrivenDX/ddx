@@ -370,7 +370,8 @@ Rules:
 // FEAT-022 §5/§7: caps drive per-section trimming and the pre-dispatch
 // short-circuit on residual oversize.
 type BuildReviewPromptOptions struct {
-	Caps evidence.Caps
+	Caps           evidence.Caps
+	CapsConfigured bool
 	// ACCheckJSON, when non-empty, is the raw JSON content of the
 	// .ddx/executions/<attempt-id>/ac-check.json file produced by
 	// `ddx bead ac-check`. Injected as a structured <ac-check> section so
@@ -426,7 +427,7 @@ func BuildReviewPromptBoundedWithProse(b *bead.Bead, iter int, rev, diff, projec
 
 func buildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef, opts BuildReviewPromptOptions, includeProse bool) BuildReviewPromptResult {
 	caps := opts.Caps
-	if caps.MaxPromptBytes == 0 {
+	if !opts.CapsConfigured && caps == (evidence.Caps{}) {
 		caps = evidence.DefaultCaps()
 	}
 
@@ -786,10 +787,11 @@ type DefaultBeadReviewer struct {
 	// is the routine one-slot gate; "elevated" requests two reviewer slots.
 	// Fizeau alone selects the concrete route for every slot.
 	ReviewTier string
-	// Caps configures the per-section evidence caps used when assembling
-	// the review prompt (FEAT-022). When zero-valued, evidence.DefaultCaps
-	// applies.
-	Caps evidence.Caps
+	// Caps configures the reviewer-role evidence budget. CapsConfigured
+	// distinguishes an explicit all-zero project budget from an unset test or
+	// standalone reviewer, which receives evidence.DefaultCaps().
+	Caps           evidence.Caps
+	CapsConfigured bool
 	// BeadEvents, when non-nil, receives DDx-owned review lifecycle and
 	// escalation telemetry. Concrete route identity remains in ReviewResult and
 	// execution artifacts instead of producing route-comparison events.
@@ -835,7 +837,7 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, meta ReviewGroupDis
 	return AgentRunRuntime{
 		MinPowerOverride:    minPower,
 		Correlation:         correlation,
-		Role:                "reviewer",
+		Role:                ddxconfig.EvidenceRoleReviewer,
 		CorrelationID:       correlationID,
 		PermissionsOverride: PermissionsReadOnlyReviewer,
 	}
@@ -1048,11 +1050,8 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	priorErrors := countPriorReviewErrors(r.EventReader, beadID, resultRev)
 
 	// Build the review prompt under evidence caps.
-	caps := r.Caps
-	if caps.MaxPromptBytes == 0 {
-		caps = evidence.DefaultCaps()
-	}
-	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps})
+	caps, configured := r.effectiveEvidenceCaps()
+	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps, CapsConfigured: configured})
 	prompt := built.Prompt
 	attemptID := GenerateAttemptID()
 	artifacts, err := createArtifactBundle(r.ProjectRoot, r.ProjectRoot, attemptID)
@@ -1279,6 +1278,13 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 		return reviewRes, fmt.Errorf("reviewer: %s: %w (raw output %d bytes; see %s)", class, parseErr, len(output), artifacts.DirRel)
 	}
 	return reviewRes, nil
+}
+
+func (r *DefaultBeadReviewer) effectiveEvidenceCaps() (evidence.Caps, bool) {
+	if r.CapsConfigured || r.Caps != (evidence.Caps{}) {
+		return r.Caps, true
+	}
+	return evidence.DefaultCaps(), false
 }
 
 // dispatchReviewRun is a thin SD-024 wrapper around dispatchViaResolvedConfig

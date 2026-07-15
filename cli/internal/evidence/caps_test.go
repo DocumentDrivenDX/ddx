@@ -34,31 +34,20 @@ func TestApplyOverride(t *testing.T) {
 
 func TestResolveCapsPrecedence(t *testing.T) {
 	project := CapsOverride{MaxPromptBytes: intp(100), MaxDiffBytes: intp(200)}
-	perHarness := map[string]CapsOverride{
-		"reviewer": {MaxPromptBytes: intp(50)},
-	}
+	role := CapsOverride{MaxPromptBytes: intp(50)}
 
-	// No harness: project applied only.
-	c := ResolveCaps(project, perHarness, "")
-	if c.MaxPromptBytes != 100 {
-		t.Errorf("project MaxPromptBytes not applied: %d", c.MaxPromptBytes)
-	}
-	if c.MaxDiffBytes != 200 {
-		t.Errorf("project MaxDiffBytes not applied: %d", c.MaxDiffBytes)
-	}
-
-	// Per-harness wins where set; project still applies elsewhere.
-	c = ResolveCaps(project, perHarness, "reviewer")
+	// Role wins where set; project still applies elsewhere.
+	c := ResolveCaps(project, role)
 	if c.MaxPromptBytes != 50 {
-		t.Errorf("per-harness override not applied: %d", c.MaxPromptBytes)
+		t.Errorf("role override not applied: %d", c.MaxPromptBytes)
 	}
 	if c.MaxDiffBytes != 200 {
-		t.Errorf("project layer lost when per-harness applied: %d", c.MaxDiffBytes)
+		t.Errorf("project layer lost when role applied: %d", c.MaxDiffBytes)
 	}
 
-	// Unknown harness: falls back to project.
-	c = ResolveCaps(project, perHarness, "absent")
+	// An empty role override leaves project values intact.
+	c = ResolveCaps(project, CapsOverride{})
 	if c.MaxPromptBytes != 100 {
-		t.Errorf("unknown harness should not change project MaxPromptBytes: %d", c.MaxPromptBytes)
+		t.Errorf("empty role should not change project MaxPromptBytes: %d", c.MaxPromptBytes)
 	}
 }

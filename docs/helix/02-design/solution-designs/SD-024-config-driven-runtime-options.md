@@ -208,7 +208,8 @@ callers.** Cheaper to implement (no new type) but defeated by Go's
 shallow-copy semantics on structs containing maps and pointers.
 `*Config` carries `PersonaBindings map`, `*AgentConfig` (with
 `Models map`), `*RoutingConfig` (multiple maps), and
-`*EvidenceCapsConfig` (`PerHarness map`). A shallow copy aliases all
+`*EvidenceCapsConfig` (`PerRole map`, keyed only by DDx semantic roles:
+`implementer`, `reviewer`, and `lifecycle`). A shallow copy aliases all
 these maps. A caller that runs `cfg2 := *cfg; cfg2.AgentConfig.Models[k] = v`
 silently mutates the original. Documentation is not enforcement.
 The type system has to make the failure mode unreachable.

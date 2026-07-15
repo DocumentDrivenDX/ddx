@@ -61,18 +61,10 @@ func (c Caps) Apply(o CapsOverride) Caps {
 	return c
 }
 
-// ResolveCaps resolves the effective caps for an invocation given a
-// project-wide override and an optional per-harness override. Precedence
-// (low → high): defaults < project-wide < per-harness.
-//
-// harness == "" or absence in perHarness means no per-harness layer.
-// A missing project override is expressed as a zero-value CapsOverride.
-func ResolveCaps(project CapsOverride, perHarness map[string]CapsOverride, harness string) Caps {
-	caps := DefaultCaps().Apply(project)
-	if harness != "" && perHarness != nil {
-		if h, ok := perHarness[harness]; ok {
-			caps = caps.Apply(h)
-		}
-	}
-	return caps
+// ResolveCaps resolves the effective caps for an invocation. Precedence
+// (low → high): defaults < project-wide < semantic role. Choosing the role is
+// a DDx concern; route, harness, provider, and model identity never enter cap
+// resolution.
+func ResolveCaps(project, role CapsOverride) Caps {
+	return DefaultCaps().Apply(project).Apply(role)
 }

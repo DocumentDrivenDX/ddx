@@ -162,13 +162,18 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
 }
 
 func newCommandReviewer(projectRoot, beadStoreRoot, reviewTier string, primaryConfig *config.ResolvedConfig) *agent.DefaultBeadReviewer {
-	return &agent.DefaultBeadReviewer{
+	reviewer := &agent.DefaultBeadReviewer{
 		ProjectRoot:           projectRoot,
 		BeadStore:             bead.NewStore(beadStoreRoot),
 		BeadEvents:            bead.NewStore(beadStoreRoot),
 		ReviewTier:            reviewTier,
 		PrimaryConfigSnapshot: primaryConfig,
 	}
+	if primaryConfig != nil {
+		reviewer.Caps = primaryConfig.EvidenceCapsForRole(config.EvidenceRoleReviewer)
+		reviewer.CapsConfigured = true
+	}
+	return reviewer
 }
 
 func optionalIntFlag(cmd *cobra.Command, name string, defaultValue int) int {

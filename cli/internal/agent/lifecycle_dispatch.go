@@ -45,6 +45,7 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 
 	runtime.WorkDir = scratchDir
 	runtime.PermissionsOverride = PermissionsReadOnlyLifecycle
+	runtime.Role = config.EvidenceRoleLifecycle
 
 	before, err := captureLifecycleProjectStatus(projectRoot)
 	if err != nil {

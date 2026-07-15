@@ -31,9 +31,16 @@ func (d *ReviewDispatcher) DispatchReviewTurn(ctx context.Context, session Revie
 	// the full turn history including the latest message.
 	sessionWithTurn := session
 	sessionWithTurn.Turns = append(append([]ReviewTurn(nil), session.Turns...), userTurn)
+	rcfg, configErr := ddxconfig.LoadAndResolve(d.ProjectRoot, ddxconfig.CLIOverrides{})
+	if configErr != nil {
+		return ReviewTurn{}, fmt.Errorf("review dispatcher: load evidence caps: %w", configErr)
+	}
+	reviewerCaps := rcfg.EvidenceCapsForRole(ddxconfig.EvidenceRoleReviewer)
 
 	rendered, err := RenderReviewPrompt(ReviewPromptRenderInput{
-		Session: sessionWithTurn,
+		Session:             sessionWithTurn,
+		MaxPromptBytes:      reviewerCaps.MaxPromptBytes,
+		MaxPromptConfigured: true,
 	})
 	if err != nil {
 		return ReviewTurn{}, fmt.Errorf("review dispatcher: assemble prompt: %w", err)
@@ -48,17 +55,16 @@ func (d *ReviewDispatcher) DispatchReviewTurn(ctx context.Context, session Revie
 			Prompt:      rendered.Prompt,
 			WorkDir:     d.ProjectRoot,
 			Permissions: agent.PermissionsReadOnlyReviewer,
-			Role:        "reviewer",
+			Role:        ddxconfig.EvidenceRoleReviewer,
 		})
 	} else {
-		rcfg, _ := ddxconfig.LoadAndResolve(d.ProjectRoot, ddxconfig.CLIOverrides{})
 		runtime := agent.AgentRunRuntime{
 			Prompt:              rendered.Prompt,
 			WorkDir:             d.ProjectRoot,
 			PermissionsOverride: agent.PermissionsReadOnlyReviewer,
 			ClearRoutingPins:    true,
 			ClearProfile:        true,
-			Role:                "reviewer",
+			Role:                ddxconfig.EvidenceRoleReviewer,
 		}
 		result, err = agent.RunWithConfigViaService(ctx, d.ProjectRoot, rcfg, runtime)
 	}

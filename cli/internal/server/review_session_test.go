@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -15,7 +16,21 @@ import (
 func newReviewSessionTestRoot(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	return t.TempDir()
+	root := t.TempDir()
+	configDir := filepath.Join(root, ddxroot.DirName)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: ./library
+  repository:
+    url: https://example.invalid/library
+    branch: main
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 func TestReviewSession_CreatePersistsManifest(t *testing.T) {

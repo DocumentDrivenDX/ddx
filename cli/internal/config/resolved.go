@@ -105,7 +105,10 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 		r.providerRequestTimeout = *overrides.ProviderRequestTimeout
 	}
 
-	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
+	r.evidenceCaps = c.ResolveEvidenceCaps()
+	r.implementerEvidenceCaps = c.ResolveEvidenceCapsForRole(EvidenceRoleImplementer)
+	r.reviewerEvidenceCaps = c.ResolveEvidenceCapsForRole(EvidenceRoleReviewer)
+	r.lifecycleEvidenceCaps = c.ResolveEvidenceCapsForRole(EvidenceRoleLifecycle)
 	r.beadQualityLintBlockThresholdScore = c.ResolveBeadQualityLintBlockThresholdScore()
 	r.beadQualityMode = c.ResolveBeadQualityMode()
 
@@ -191,6 +194,9 @@ type ResolvedConfig struct {
 	wallClock                          time.Duration
 	contextBudget                      string
 	evidenceCaps                       evidence.Caps
+	implementerEvidenceCaps            evidence.Caps
+	reviewerEvidenceCaps               evidence.Caps
+	lifecycleEvidenceCaps              evidence.Caps
 	sessionLogDir                      string
 	mirrorConfig                       *ExecutionsMirrorConfig
 	attemptBackend                     string
@@ -330,6 +336,22 @@ func (r ResolvedConfig) ContextBudget() string {
 func (r ResolvedConfig) EvidenceCaps() evidence.Caps {
 	r.requireSealed()
 	return r.evidenceCaps
+}
+
+// EvidenceCapsForRole returns the immutable evidence cap snapshot for a DDx
+// semantic prompt role. Unknown roles receive project-wide caps only.
+func (r ResolvedConfig) EvidenceCapsForRole(role string) evidence.Caps {
+	r.requireSealed()
+	switch role {
+	case EvidenceRoleImplementer:
+		return r.implementerEvidenceCaps
+	case EvidenceRoleReviewer:
+		return r.reviewerEvidenceCaps
+	case EvidenceRoleLifecycle:
+		return r.lifecycleEvidenceCaps
+	default:
+		return r.evidenceCaps
+	}
 }
 
 func (r ResolvedConfig) SessionLogDir() string {

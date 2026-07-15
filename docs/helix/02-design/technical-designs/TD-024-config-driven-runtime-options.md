@@ -196,7 +196,7 @@ shared-state bugs:
 ```go
 func (a *AgentConfig) Clone() *AgentConfig                 // copies Models, ReasoningLevels, Endpoints, Routing
 func (r *RoutingConfig) Clone() *RoutingConfig             // copies ProfileLadders, ModelOverrides, plus other maps
-func (e *EvidenceCapsConfig) Clone() *EvidenceCapsConfig   // copies PerHarness map AND its *EvidenceCapsOverride values
+func (e *EvidenceCapsConfig) Clone() *EvidenceCapsConfig   // copies semantic-role PerRole map AND its *EvidenceCapsOverride values
 func (m *ExecutionsMirrorConfig) Clone() *ExecutionsMirrorConfig
 func (w *WorkersConfig) Clone() *WorkersConfig
 ```
@@ -557,7 +557,8 @@ The analyzer flags:
    `MaxNoChangesBeforeClose`, `HeartbeatInterval`,
    `SessionLogDir` (durable variant), `MirrorCfg`, `Models`,
    `ReasoningLevels`, `Endpoints`, `ProfileLadders`,
-   `ModelOverrides`, `PerHarness`.
+   `ModelOverrides`, `PerRole`, `PerHarness` (retained as a legacy
+   anti-reintroduction guard).
    Closed list is maintained as a Go constant; adding a new durable
    knob to `*Config` requires adding its name to this list.
 

@@ -22,6 +22,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	agentlib "github.com/easel/fizeau"
@@ -284,27 +285,29 @@ var RunStateRefreshInterval = 10 * time.Second
 //
 // See SD-024 / TD-024 §Runtime structs and §Stage 3.
 type ExecuteBeadRuntime struct {
-	FromRev                string // base git revision (default: HEAD)
-	PromptFile             string // override prompt file (auto-generated if empty)
-	Output                 io.Writer
-	WorkerID               string // from DDX_WORKER_ID env or caller
-	BeadStoreRoot          string // canonical bead store for linked/external tracker roots
-	BeadEvents             BeadEventAppender
-	BeadCancel             BeadCancelStore // optional: enables operator-cancel mid-attempt poll
-	ResourceChecker        ExecutionResourceChecker
-	Service                agentlib.FizeauService
-	AgentRunner            AgentRunner
-	Checks                 CandidateCheckRunner
-	Reviewer               CandidateReviewer
-	Repair                 RepairPass
-	RepairMaxCycles        int
-	CandidateRefStore      CandidateRefStore
-	NoReview               bool
-	AttemptBackend         AttemptBackend
-	candidateImport        func(candidate CandidateResult) error
-	candidateImportRelease func(candidate CandidateResult) error
-	candidateOriginalTask  string
-	candidateDiff          func(candidate CandidateResult) (string, error)
+	FromRev                 string // base git revision (default: HEAD)
+	PromptFile              string // override prompt file (auto-generated if empty)
+	Output                  io.Writer
+	WorkerID                string // from DDX_WORKER_ID env or caller
+	BeadStoreRoot           string // canonical bead store for linked/external tracker roots
+	BeadEvents              BeadEventAppender
+	BeadCancel              BeadCancelStore // optional: enables operator-cancel mid-attempt poll
+	ResourceChecker         ExecutionResourceChecker
+	Service                 agentlib.FizeauService
+	AgentRunner             AgentRunner
+	Checks                  CandidateCheckRunner
+	Reviewer                CandidateReviewer
+	Repair                  RepairPass
+	RepairMaxCycles         int
+	CandidateRefStore       CandidateRefStore
+	NoReview                bool
+	AttemptBackend          AttemptBackend
+	candidateImport         func(candidate CandidateResult) error
+	candidateImportRelease  func(candidate CandidateResult) error
+	candidateOriginalTask   string
+	candidateDiff           func(candidate CandidateResult) (string, error)
+	candidateRepairCaps     evidence.Caps
+	candidateCapsConfigured bool
 	// EvidenceFileCopier is an internal test seam for controlled local-evidence
 	// publication. Production leaves it nil and uses the filesystem copier.
 	EvidenceFileCopier func(source, target string, mode os.FileMode) error
@@ -419,16 +422,18 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 				CycleIndex:   res.CycleIndex,
 			},
 		},
-		RefStore:        refStore,
-		ProjectRoot:     projectRoot,
-		BeadEvents:      runtime.BeadEvents,
-		Checks:          runtime.Checks,
-		Reviewer:        runtime.Reviewer,
-		Repair:          runtime.Repair,
-		RepairMaxCycles: runtime.RepairMaxCycles,
-		NoReview:        runtime.NoReview,
-		OriginalTask:    runtime.candidateOriginalTask,
-		CandidateDiff:   runtime.candidateDiff,
+		RefStore:             refStore,
+		ProjectRoot:          projectRoot,
+		BeadEvents:           runtime.BeadEvents,
+		Checks:               runtime.Checks,
+		Reviewer:             runtime.Reviewer,
+		Repair:               runtime.Repair,
+		RepairMaxCycles:      runtime.RepairMaxCycles,
+		NoReview:             runtime.NoReview,
+		OriginalTask:         runtime.candidateOriginalTask,
+		CandidateDiff:        runtime.candidateDiff,
+		RepairCaps:           runtime.candidateRepairCaps,
+		RepairCapsConfigured: runtime.candidateCapsConfigured,
 		ValidateCandidate: func(candidate CandidateResult) error {
 			return VerifyCandidateHasNoExecutionEvidence(candidate.WorktreePath, candidate.Report.BaseRev, candidate.Report.ResultRev)
 		},
@@ -1199,7 +1204,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			"prompt_sha":  artifacts.PromptSHA,
 		},
 		SessionLogDirOverride: embeddedStateDir,
-		Role:                  "implementer",
+		Role:                  config.EvidenceRoleImplementer,
 		CorrelationID:         beadID + ":" + attemptID,
 		Env:                   gitIsolationEnv,
 		OnRouteResolved: func(harness, provider, model string) {
@@ -1690,8 +1695,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			artifacts:   artifacts,
 		}
 	}
+	implementerCaps := rcfg.EvidenceCapsForRole(config.EvidenceRoleImplementer)
 	cycleRuntime.candidateOriginalTask = repairOriginalTask(beadCtx)
-	cycleRuntime.candidateDiff = boundedCandidateRepairDiff
+	configureImplementerRepairEvidence(&cycleRuntime, implementerCaps)
 	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, cycleRuntime, res); err != nil {
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 		res.ExitCode = 1
@@ -1749,6 +1755,19 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		workspace.KeepOnError = false
 	}
 	return res, nil
+}
+
+func configureImplementerRepairEvidence(runtime *ExecuteBeadRuntime, caps evidence.Caps) {
+	if runtime == nil {
+		return
+	}
+	if runtime.candidateDiff == nil {
+		runtime.candidateDiff = func(candidate CandidateResult) (string, error) {
+			return boundedCandidateRepairDiffWithCaps(candidate, caps)
+		}
+	}
+	runtime.candidateRepairCaps = caps
+	runtime.candidateCapsConfigured = true
 }
 
 func isEvidenceOnlyNoChangesCommit(wtPath, baseRev, resultRev, artifactsDirRel string) (bool, error) {
@@ -1928,7 +1947,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		return artifacts, nil, err
 	}
 
-	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.ContextBudget())
+	promptContent, promptSource, err := buildPromptWithCaps(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.ContextBudget(), rcfg.EvidenceCapsForRole(config.EvidenceRoleImplementer))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2321,12 +2340,16 @@ func xmlAttrEscape(s string) string {
 }
 
 func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, contextBudget string) ([]byte, string, error) {
+	return buildPromptWithCaps(workDir, b, refs, artifacts, baseRev, promptOverride, contextBudget, evidence.DefaultCaps())
+}
+
+func buildPromptWithCaps(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, contextBudget string, caps evidence.Caps) ([]byte, string, error) {
 	if strings.TrimSpace(promptOverride) != "" {
 		path := promptOverride
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(workDir, path)
 		}
-		data, err := readPromptFileBounded(path)
+		data, err := readPromptFileBoundedWithCap(path, caps.MaxPromptBytes)
 		if err != nil {
 			return nil, "", fmt.Errorf("reading prompt override %q: %w", promptOverride, err)
 		}
@@ -2410,7 +2433,11 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 
 	sb.WriteString("</execute-bead>\n")
 
-	return []byte(sb.String()), "synthesized", nil
+	prompt := sb.String()
+	if err := validateInlinePromptCap("synthesized implementer prompt", prompt, caps.MaxPromptBytes); err != nil {
+		return nil, "", err
+	}
+	return []byte(prompt), "synthesized", nil
 }
 
 const executeBeadLargeDescriptionHintThreshold = 8000
