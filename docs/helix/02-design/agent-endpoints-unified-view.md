@@ -1,119 +1,71 @@
-# Agent endpoints unified view
+# Agent inventory unified view
 
-> **STALE AND SUPERSEDED — DO NOT IMPLEMENT.** This note predates the corrected
-> Fizeau/DDx boundary. Provider/harness discovery, probing, quota, catalogs, and
-> route diagnostics belong to Fizeau. DDx has no provider-dashboard proxy and
-> does not parse native headers or session logs into provider status. Current
-> authority is FEAT-006, FEAT-014, ADR-024, and TP-020.
+This note defines the Fizeau/DDx boundary for the provider and harness views at
+`/nodes/.../providers`.
 
-Design note for `ddx-23978824`: unify the providers page to include both endpoint providers and subprocess harnesses, surface token utilization + quota trend.
+## Decision
 
-## Decision summary
+Fizeau owns inventory. Every displayed provider, model, and harness row—and
+each row's identity, default marker, availability, and automatic-routing
+eligibility—must originate in Fizeau's public `ListProviders`, `ListModels`, or
+`ListHarnesses` result for the request's project.
 
-| Topic | Decision |
-| --- | --- |
-| Page name | "Agent endpoints" (replaces "Providers" as page title; URL stays `/nodes/.../providers` for link stability) |
-| Row model | One table, `kind` column distinguishes `endpoint` vs `harness` |
-| Liveness | Paint cached status first; async probes patch rows as they complete |
-| Usage source | `SessionIndexEntry` aggregated server-side into hourly buckets |
-| Quota source | Harness rate-limit headers (claude, codex) parsed from captured header blobs; null otherwise |
-| Trend view | Dedicated route `/providers/[name]` with 7d/30d series |
-| Projection | Linear slope over last-24h window; callout only when ceiling known + positive slope |
+DDx must not:
 
-## Row model
+- translate `.ddx/config.yaml` endpoint blocks into provider rows;
+- merge configured snapshots with Fizeau listings;
+- promote the first provider or a named-but-absent filter into a synthetic row;
+- invent a `default` profile or infer profile membership from `IsDefault`;
+- call `ResolveRoute` to predict what a future request might use; or
+- substitute a cached DDx registry for the current Fizeau listing.
 
-Common fields — `ProviderStatus` (existing type) gains:
+An explicit provider or harness name that is absent from the applicable
+Fizeau listing has empty/not-found semantics. Arbitrary future Fizeau harness
+names remain valid identities; DDx may format a display label but may not use a
+hard-coded lookup to decide membership or eligibility.
 
-- `kind: ENDPOINT | HARNESS` — discriminant
-- `reachable: Boolean!` — last-known ability to accept work; false when the row is only a configured snapshot or explicitly unavailable
-- `detail: String!` — human-readable status detail (error text, binary path, or "not checked yet")
-- `lastCheckedAt: String` — RFC3339 timestamp of the in-process probe result
-- `usage: ProviderUsage` (nullable) — token/request counts over rolling windows
-- `quota: ProviderQuota` (nullable) — ceiling/remaining/resetAt
-- `defaultForProfile: [String!]!` — profile names where this endpoint is the default candidate
+## Request-scoped service
 
-New query `harnessStatuses: [ProviderStatus!]!` returns subprocess harnesses in the same shape so the frontend can concatenate and render one table.
+REST, MCP, and GraphQL inventory operations construct a Fizeau service with
+the request context and project path. A single REST/MCP inventory request
+reuses that service for its listing calls and any factual health enrichment.
+The narrow inventory interfaces intentionally omit `ResolveRoute`.
 
-## ProviderUsage
+## Factual enrichment
 
-```graphql
-type ProviderUsage {
-  tokensUsedLastHour: Int
-  tokensUsedLast24h: Int
-  requestsLastHour: Int
-  requestsLast24h: Int
-}
-```
+DDx may enrich an existing Fizeau row with evidence that describes completed
+or current facts without changing the listing:
 
-Computed by aggregating `SessionIndexEntry` rows:
-- Filter by `Provider == row.name` (endpoint) or `Harness == row.name` (harness)
-- Filter by `StartedAt` within last hour / last 24h
-- Sum `Tokens` (fall back to `InputTokens + OutputTokens`), count entries
+- public Fizeau `RouteStatus` health/performance observations;
+- completed-session usage, latency, success, and cost evidence;
+- public quota, account, and usage-window fields returned on Fizeau DTOs; and
+- presentation-only labels such as `harnessDisplayName`.
 
-## ProviderQuota
+Enrichment must never add, remove, rename, default, or reclassify a row.
+Failure to obtain `RouteStatus` leaves health/performance unknown; it does not
+remove the corresponding `ListHarnesses` row. Completed-session identity may
+support historical trend views when a current listing no longer contains that
+identity, but it is not current inventory.
 
-```graphql
-type ProviderQuota {
-  ceilingTokens: Int
-  ceilingWindowSeconds: Int
-  remaining: Int
-  resetAt: String
-}
-```
+## GraphQL and frontend contract
 
-- **Endpoint providers** — null until the provider service captures headers (out of scope for this bead).
-- **Subprocess harnesses (claude, codex)** — populated from captured rate-limit headers stored in `SessionIndexEntry.Detail` metadata or a harness-specific log tail. Parser lives in `cli/internal/agent/ratelimit_headers.go` with fixture-backed tests.
+`providerStatuses` and `harnessStatuses` expose the two Fizeau listings in the
+shared `ProviderStatus` presentation shape. Its `autoRoutingEligible` field is
+copied from `ProviderInfo.IncludeByDefault` or
+`HarnessInfo.AutoRoutingEligible`; it is never inferred by DDx.
+`providerModels` first validates the requested provider or harness against its
+current Fizeau listing, then returns `ListModels` facts—including each model's
+`AutoRoutable` value—for the canonical listed identity.
 
-Harness-specific header mapping:
+The API and page deliberately have no `defaultRouteStatus`,
+`defaultForProfile`, legacy `Provider` query, or “Current route for default
+profile” widget. Actual provider/model/harness facts returned by completed
+executions remain available on execution and session surfaces.
 
-- **Claude Code** — `anthropic-ratelimit-requests-limit`, `-remaining`, `-reset`, and `anthropic-ratelimit-tokens-limit`, `-remaining`, `-reset`. Tokens family maps to `ceilingTokens` / `remaining` / `resetAt`; window is 1 minute (fixed by the Anthropic API contract).
-- **Codex** — `x-ratelimit-limit-tokens`, `x-ratelimit-remaining-tokens`, `x-ratelimit-reset-tokens`. Window is 1 minute for the headline quota.
-- **Other harnesses (gemini, agent)** — no standard headers; leave null.
+## Non-goals
 
-## Async liveness
-
-Initial page load strategy:
-1. Frontend fires `providerStatuses` + `harnessStatuses` concurrently in one GraphQL request. The endpoint resolver returns the in-process cache when present; otherwise it returns a configured endpoint snapshot without probing `/models`. Harness inventory is read directly from the harness catalog.
-2. Returning endpoint rows schedules a background provider probe. Later `providerStatuses` reads patch rows from the cache once the probe finishes.
-3. If only legacy/global provider config is present and no DDx endpoint snapshots exist, the synchronous fallback is bounded so the page can still first-paint harness rows instead of waiting on a full probe wall.
-
-The status cache is deliberately process-local. It is a rendering cache, not the source of truth; DDx can replace it with a persisted probe snapshot store later without changing the GraphQL row model.
-
-## Trend view
-
-`providerTrend(name: String!, windowDays: Int! = 7): ProviderTrend` returns:
-
-```graphql
-type ProviderTrend {
-  name: String!
-  kind: ProviderKind!
-  windowDays: Int!
-  series: [ProviderTrendPoint!]!
-  ceilingTokens: Int
-  projectedRunOutHours: Float
-}
-
-type ProviderTrendPoint {
-  bucketStart: String!      # RFC3339 truncated to hour
-  tokens: Int!
-  requests: Int!
-}
-```
-
-Server bucketing: `StartedAt` truncated to the hour, summed per bucket. Maximum of `windowDays * 24` points; for a 30-day window that's 720 points — under the 200-point client budget only after downsampling to 1-point-per-4-hours when `windowDays > 8`. The resolver returns pre-downsampled buckets: hourly for ≤7d, 4-hourly beyond.
-
-Projection: last-24h slope in tokens/hour derived by least-squares fit over the 24 hourly buckets. `projectedRunOutHours = remainingTokens / slope` when slope > 0 and ceiling is known. Null otherwise — the UI treats null as "no projection."
-
-## Perf posture
-
-Per `ddx-9ce6842a`: unified list target p95 ≤ 200ms HTTP, trend detail p95 ≤ 400ms HTTP over a ≥1,000-row seeded fixture. If detail aggregation cannot hit p95 on a 10k-row stretch fixture, raise the DB-substrate decision with the user per the standing directive — do not silently swap backends.
-
-## Billing mode
-
-`ddx-6904a90b` splits session costs into paid/subscription/local via `billingMode`. The unified view defers that semantic to a follow-up; this bead's `usage.tokensUsed*` fields are raw totals regardless of billing mode, and the existing `Harness.IsSubscription` / `IsLocal` flags on the REST `ProviderSummary` retain their current meaning. When billing-mode plumbing lands across the sessions index, the trend view can layer a cost axis; the schema shape is extensible.
-
-## Out of scope
-
-- Server-side push of probe completion (delivered via polling / manual refresh).
-- Quota ceilings for endpoint providers beyond the ones already in `HarnessInfo.Quota`.
-- Per-model quota breakdown in the unified list row (handled by existing REST `/api/providers/{harness}` detail response).
+- Changing Fizeau routing or inventory production.
+- Reinterpreting billing, pricing, quotas, or completed-session cost evidence.
+- Removing legacy configuration fields before the migration bead owns them.
+- Removing provider-process supervision or Docker credential provisioning
+  before their Fizeau dependencies land.

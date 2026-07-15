@@ -17,9 +17,9 @@ const PROVIDERS = [
 		detail: 'api key configured',
 		modelCount: 0,
 		isDefault: true,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
-		defaultForProfile: ['default'],
 		recentWorkerCount: 1,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
@@ -35,9 +35,9 @@ const PROVIDERS = [
 		detail: 'connected',
 		modelCount: 5,
 		isDefault: false,
+		autoRoutingEligible: false,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 8,
 		usage: {
 			tokensUsedLastHour: 5000,
@@ -58,21 +58,14 @@ const PROVIDERS = [
 		detail: 'dial tcp: connection refused',
 		modelCount: 0,
 		isDefault: false,
+		autoRoutingEligible: false,
 		cooldownUntil: '2026-04-15T12:00:00Z',
 		lastCheckedAt: '2026-04-23T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
 	}
 ];
-
-const DEFAULT_ROUTE = {
-	modelRef: 'code-medium',
-	resolvedProvider: 'local-qwen',
-	resolvedModel: 'qwen2.5-coder-32b-instruct',
-	strategy: 'first-available'
-};
 
 async function mockGraphQL(page: import('@playwright/test').Page) {
 	await page.route('/graphql', async (route) => {
@@ -97,18 +90,8 @@ async function mockGraphQL(page: import('@playwright/test').Page) {
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: {
-						providerStatuses: PROVIDERS,
-						harnessStatuses: [],
-						defaultRouteStatus: DEFAULT_ROUTE
-					}
+					data: { providerStatuses: PROVIDERS, harnessStatuses: [] }
 				})
-			});
-		} else if (body.query.includes('DefaultRouteStatus')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { defaultRouteStatus: DEFAULT_ROUTE } })
 			});
 		} else {
 			await route.continue();
@@ -167,6 +150,7 @@ test('TC-063: default provider shows default badge', async ({ page }) => {
 
 	// The 'default' badge should be visible for the default provider
 	await expect(page.getByText('default').first()).toBeVisible();
+	await expect(page.getByTestId('endpoint-auto-routing-claude')).toHaveText('auto-routing');
 });
 
 // TC-064: Cooldown badge is shown for providers on cooldown
@@ -177,25 +161,24 @@ test('TC-064: cooldown badge appears for providers with active cooldown', async 
 	await expect(page.getByText('cooldown')).toBeVisible();
 });
 
-// TC-065: Default route widget shows model-ref and resolved provider
-test('TC-065: default route widget shows model-ref and resolved provider', async ({ page }) => {
+// TC-065: Inventory does not predict a route for a future request.
+test('TC-065: providers page has no hypothetical default-route widget', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
-	await expect(page.getByText(/code-medium/)).toBeVisible();
-	await expect(page.getByText(/local-qwen/).first()).toBeVisible();
-	await expect(page.getByText(/first-available/)).toBeVisible();
+	await expect(page.getByText(/Current route for default profile/)).toHaveCount(0);
+	await expect(page.getByText(/first-available/)).toHaveCount(0);
 });
 
 // TC-066: Providers count is shown
-test('TC-066: providers page shows configured count', async ({ page }) => {
+test('TC-066: providers page shows listed count', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
 	await expect(page.getByText(/3 total \(3 endpoints · 0 harnesses\)/)).toBeVisible();
 });
 
-// TC-067: Empty state when no providers configured
+// TC-067: Empty state when Fizeau reports no inventory
 test('TC-067: empty state shown when no providers returned', async ({ page }) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
@@ -219,31 +202,7 @@ test('TC-067: empty state shown when no providers returned', async ({ page }) =>
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: {
-						providerStatuses: [],
-						harnessStatuses: [],
-						defaultRouteStatus: {
-							modelRef: '',
-							resolvedProvider: null,
-							resolvedModel: null,
-							strategy: null
-						}
-					}
-				})
-			});
-		} else if (body.query.includes('DefaultRouteStatus')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					data: {
-						defaultRouteStatus: {
-							modelRef: '',
-							resolvedProvider: null,
-							resolvedModel: null,
-							strategy: null
-						}
-					}
+					data: { providerStatuses: [], harnessStatuses: [] }
 				})
 			});
 		} else {
@@ -253,6 +212,6 @@ test('TC-067: empty state shown when no providers returned', async ({ page }) =>
 
 	await page.goto(BASE_URL);
 
-	await expect(page.getByText(/No agent endpoints configured/)).toBeVisible();
+	await expect(page.getByText(/No agent inventory reported by Fizeau/)).toBeVisible();
 	await expect(page.getByText(/0 total/)).toBeVisible();
 });

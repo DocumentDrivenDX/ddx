@@ -9,13 +9,11 @@ import (
 )
 
 func TestHandleAgentModelsNoProviders(t *testing.T) {
-	if testing.Short() {
-		t.Skip("provider-probe test; runs only in non-short mode")
-	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
+	ctx := inventoryTestContext(t, dir, &inventoryServiceStub{})
 
-	req := httptest.NewRequest("GET", "/api/agent/models?all=true", nil)
+	req := httptest.NewRequest("GET", "/api/agent/models?all=true", nil).WithContext(ctx)
 	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -61,13 +59,11 @@ func TestHandleAgentCapabilitiesNoHarness(t *testing.T) {
 }
 
 func TestMCPAgentModels(t *testing.T) {
-	if testing.Short() {
-		t.Skip("provider-probe test; runs only in non-short mode")
-	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
+	ctx := inventoryTestContext(t, dir, &inventoryServiceStub{})
 
-	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_agent_models","arguments":{"all":true}}`)
+	w := mcpRequestWithContext(t, srv, ctx, "tools/call", `{"name":"ddx_agent_models","arguments":{"all":true}}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
@@ -122,14 +118,12 @@ func TestMCPAgentCapabilitiesNoHarness(t *testing.T) {
 	// Both are acceptable for this minimal-config test.
 }
 
-func TestMCPAgentModelsSingleProvider(t *testing.T) {
-	if testing.Short() {
-		t.Skip("provider-probe test; runs only in non-short mode")
-	}
+func TestMCPAgentModelsMissingProviderDoesNotSynthesizeRow(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
+	ctx := inventoryTestContext(t, dir, &inventoryServiceStub{})
 
-	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_agent_models","arguments":{"provider":"codex"}}`)
+	w := mcpRequestWithContext(t, srv, ctx, "tools/call", `{"name":"ddx_agent_models","arguments":{"provider":"codex"}}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
@@ -148,7 +142,7 @@ func TestMCPAgentModelsSingleProvider(t *testing.T) {
 	}
 	textMap := content[0].(map[string]any)
 	text := textMap["text"].(string)
-	if !strings.Contains(text, `"provider"`) {
-		t.Fatalf("expected provider field in models response, got: %s", text)
+	if !strings.Contains(text, "provider not found") {
+		t.Fatalf("expected absent Fizeau provider to return not-found semantics, got: %s", text)
 	}
 }

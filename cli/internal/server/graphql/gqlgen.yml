@@ -12,6 +12,7 @@ resolver:
   filename: resolver.go
   package: graphql
   type: Resolver
+  preserve_resolver: true
 
 # Location of the models
 model:

@@ -42,8 +42,7 @@ async function mockGraphQL(page: import('@playwright/test').Page) {
 				body: JSON.stringify({
 					data: {
 						providerStatuses: [],
-						harnessStatuses: [],
-						defaultRouteStatus: null
+						harnessStatuses: []
 					}
 				})
 			});

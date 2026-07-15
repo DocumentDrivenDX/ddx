@@ -1740,13 +1740,17 @@ func TestAgentSessionDetailNotFound(t *testing.T) {
 // --- MCP endpoint tests ---
 
 func mcpRequest(t *testing.T, srv *Server, method string, params string) *httptest.ResponseRecorder {
+	return mcpRequestWithContext(t, srv, context.Background(), method, params)
+}
+
+func mcpRequestWithContext(t *testing.T, srv *Server, ctx context.Context, method string, params string) *httptest.ResponseRecorder {
 	t.Helper()
 	body := `{"jsonrpc":"2.0","id":1,"method":"` + method + `"`
 	if params != "" {
 		body += `,"params":` + params
 	}
 	body += "}"
-	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body)).WithContext(ctx)
 	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

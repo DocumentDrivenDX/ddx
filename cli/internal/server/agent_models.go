@@ -12,11 +12,12 @@ import (
 
 // AgentModelsProvider is one provider entry returned by GET /api/agent/models.
 type AgentModelsProvider struct {
-	Provider     string               `json:"provider"`
-	Type         string               `json:"type"`
-	IsDefault    bool                 `json:"is_default"`
-	DefaultModel string               `json:"default_model,omitempty"`
-	Models       []agentlib.ModelInfo `json:"models"`
+	Provider            string               `json:"provider"`
+	Type                string               `json:"type"`
+	IsDefault           bool                 `json:"is_default"`
+	AutoRoutingEligible bool                 `json:"auto_routing_eligible"`
+	DefaultModel        string               `json:"default_model,omitempty"`
+	Models              []agentlib.ModelInfo `json:"models"`
 }
 
 // handleAgentModels serves GET /api/agent/models.
@@ -28,14 +29,10 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 	showAll := r.URL.Query().Get("all") == "true"
 	providerFilter := r.URL.Query().Get("provider")
 
-	if handled := s.handleConfiguredAgentModels(w, workDir, providerFilter, showAll); handled {
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
+	svc, err := inventoryServiceForRequest(ctx, workDir)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -50,23 +47,29 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 	if showAll {
 		result := make([]AgentModelsProvider, 0, len(providers))
 		for _, p := range providers {
-			models, _ := svc.ListModels(ctx, agentlib.ModelFilter{Provider: p.Name})
+			models, err := svc.ListModels(ctx, agentlib.ModelFilter{Provider: p.Name})
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
 			if models == nil {
 				models = []agentlib.ModelInfo{}
 			}
 			result = append(result, AgentModelsProvider{
-				Provider:     p.Name,
-				Type:         p.Type,
-				IsDefault:    p.IsDefault,
-				DefaultModel: p.DefaultModel,
-				Models:       models,
+				Provider:            p.Name,
+				Type:                p.Type,
+				IsDefault:           p.IsDefault,
+				AutoRoutingEligible: p.IncludeByDefault,
+				DefaultModel:        p.DefaultModel,
+				Models:              models,
 			})
 		}
 		writeJSON(w, http.StatusOK, result)
 		return
 	}
 
-	// Single provider: use filter or default.
+	// Single provider: use the explicit filter or the default reported by
+	// Fizeau. Never promote the first row to a synthetic default.
 	name := providerFilter
 	if name == "" {
 		for _, p := range providers {
@@ -76,10 +79,6 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if name == "" && len(providers) > 0 {
-		name = providers[0].Name
-	}
-
 	var prov agentlib.ProviderInfo
 	for _, p := range providers {
 		if p.Name == name {
@@ -87,21 +86,30 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if prov.Name == "" && name != "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found: " + name})
+	if prov.Name == "" {
+		label := name
+		if label == "" {
+			label = "default"
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found: " + label})
 		return
 	}
 
-	models, _ := svc.ListModels(ctx, agentlib.ModelFilter{Provider: prov.Name})
+	models, err := svc.ListModels(ctx, agentlib.ModelFilter{Provider: prov.Name})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	if models == nil {
 		models = []agentlib.ModelInfo{}
 	}
 	writeJSON(w, http.StatusOK, AgentModelsProvider{
-		Provider:     prov.Name,
-		Type:         prov.Type,
-		IsDefault:    prov.IsDefault,
-		DefaultModel: prov.DefaultModel,
-		Models:       models,
+		Provider:            prov.Name,
+		Type:                prov.Type,
+		IsDefault:           prov.IsDefault,
+		AutoRoutingEligible: prov.IncludeByDefault,
+		DefaultModel:        prov.DefaultModel,
+		Models:              models,
 	})
 }
 
@@ -127,15 +135,14 @@ func (s *Server) handleAgentCapabilities(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, caps)
 }
 
-func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) mcpToolResult {
-	if result, handled := mcpConfiguredAgentModels(workingDir, providerName, showAll); handled {
-		return result
+func (s *Server) mcpAgentModels(requestCtx context.Context, workingDir, providerName string, showAll bool) mcpToolResult {
+	if requestCtx == nil {
+		requestCtx = context.Background()
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(requestCtx, 10*time.Second)
 	defer cancel()
 
-	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workingDir)
+	svc, err := inventoryServiceForRequest(ctx, workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
@@ -148,16 +155,20 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 	if showAll {
 		result := make([]AgentModelsProvider, 0, len(providers))
 		for _, p := range providers {
-			models, _ := svc.ListModels(ctx, agentlib.ModelFilter{Provider: p.Name})
+			models, err := svc.ListModels(ctx, agentlib.ModelFilter{Provider: p.Name})
+			if err != nil {
+				return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+			}
 			if models == nil {
 				models = []agentlib.ModelInfo{}
 			}
 			result = append(result, AgentModelsProvider{
-				Provider:     p.Name,
-				Type:         p.Type,
-				IsDefault:    p.IsDefault,
-				DefaultModel: p.DefaultModel,
-				Models:       models,
+				Provider:            p.Name,
+				Type:                p.Type,
+				IsDefault:           p.IsDefault,
+				AutoRoutingEligible: p.IncludeByDefault,
+				DefaultModel:        p.DefaultModel,
+				Models:              models,
 			})
 		}
 		data, err := json.Marshal(result)
@@ -176,10 +187,6 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 			}
 		}
 	}
-	if name == "" && len(providers) > 0 {
-		name = providers[0].Name
-	}
-
 	var prov agentlib.ProviderInfo
 	for _, p := range providers {
 		if p.Name == name {
@@ -187,109 +194,33 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 			break
 		}
 	}
-	if prov.Name == "" && name != "" {
-		prov.Name = name
+	if prov.Name == "" {
+		label := name
+		if label == "" {
+			label = "default"
+		}
+		return mcpToolResult{Content: []mcpContent{mcpText("provider not found: " + label)}, IsError: true}
 	}
 
-	models, _ := svc.ListModels(ctx, agentlib.ModelFilter{Provider: prov.Name})
+	models, err := svc.ListModels(ctx, agentlib.ModelFilter{Provider: prov.Name})
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
 	if models == nil {
 		models = []agentlib.ModelInfo{}
 	}
 	data, err := json.Marshal(AgentModelsProvider{
-		Provider:     prov.Name,
-		Type:         prov.Type,
-		IsDefault:    prov.IsDefault,
-		DefaultModel: prov.DefaultModel,
-		Models:       models,
+		Provider:            prov.Name,
+		Type:                prov.Type,
+		IsDefault:           prov.IsDefault,
+		AutoRoutingEligible: prov.IncludeByDefault,
+		DefaultModel:        prov.DefaultModel,
+		Models:              models,
 	})
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(`{"error":"marshal failed"}`)}, IsError: true}
 	}
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
-}
-
-func (s *Server) handleConfiguredAgentModels(w http.ResponseWriter, workDir, providerName string, showAll bool) bool {
-	rows, handled, err := configuredAgentModelRows(workDir, providerName, showAll)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return true
-	}
-	if !handled {
-		return false
-	}
-	if showAll {
-		writeJSON(w, http.StatusOK, rows)
-		return true
-	}
-	if len(rows) == 0 {
-		writeJSON(w, http.StatusOK, AgentModelsProvider{Models: []agentlib.ModelInfo{}})
-		return true
-	}
-	writeJSON(w, http.StatusOK, rows[0])
-	return true
-}
-
-func mcpConfiguredAgentModels(workDir, providerName string, showAll bool) (mcpToolResult, bool) {
-	rows, handled, err := configuredAgentModelRows(workDir, providerName, showAll)
-	if err != nil {
-		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}, true
-	}
-	if !handled {
-		return mcpToolResult{}, false
-	}
-	var payload any = rows
-	if !showAll {
-		if len(rows) == 0 {
-			payload = AgentModelsProvider{Provider: providerName, Models: []agentlib.ModelInfo{}}
-		} else {
-			payload = rows[0]
-		}
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return mcpToolResult{Content: []mcpContent{mcpText("marshal failed")}, IsError: true}, true
-	}
-	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}, true
-}
-
-func configuredAgentModelRows(workDir, providerName string, showAll bool) ([]AgentModelsProvider, bool, error) {
-	snapshots, ok, err := agent.ConfiguredProviderSnapshots(workDir)
-	if err != nil {
-		return nil, true, err
-	}
-	if !ok {
-		if showAll {
-			return []AgentModelsProvider{}, true, nil
-		}
-		if providerName != "" {
-			return []AgentModelsProvider{{Provider: providerName, Models: []agentlib.ModelInfo{}}}, true, nil
-		}
-		return nil, false, nil
-	}
-	rows := make([]AgentModelsProvider, 0, len(snapshots))
-	for _, p := range snapshots {
-		if providerName != "" && p.Name != providerName {
-			continue
-		}
-		rows = append(rows, AgentModelsProvider{
-			Provider:     p.Name,
-			Type:         p.Type,
-			IsDefault:    p.IsDefault,
-			DefaultModel: p.DefaultModel,
-			Models:       []agentlib.ModelInfo{},
-		})
-	}
-	if !showAll && providerName == "" {
-		for _, row := range rows {
-			if row.IsDefault {
-				return []AgentModelsProvider{row}, true, nil
-			}
-		}
-		if len(rows) > 0 {
-			return rows[:1], true, nil
-		}
-	}
-	return rows, true, nil
 }
 
 func (s *Server) mcpAgentCapabilities(workingDir, harness string) mcpToolResult {

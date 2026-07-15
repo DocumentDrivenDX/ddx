@@ -287,20 +287,7 @@ func (r *queryResolver) MetricsRework(ctx context.Context, since *string) (*Rewo
 	panic("not implemented")
 }
 
-// Providers is the resolver for the providers field.
-func (r *queryResolver) Providers(ctx context.Context) ([]*Provider, error) {
-	panic("not implemented")
-}
-
-// Provider is the resolver for the provider field.
-func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, error) {
-	panic("not implemented")
-}
-
 // ProviderStatuses is the resolver for the providerStatuses field.
-// Implemented in resolver_providers.go.
-
-// DefaultRouteStatus is the resolver for the defaultRouteStatus field.
 // Implemented in resolver_providers.go.
 
 // BeadLifecycle is the resolver for the beadLifecycle subscription.

@@ -782,16 +782,6 @@ type CycleTimeSummary struct {
 	MaxMs *int `json:"maxMs,omitempty"`
 }
 
-// DefaultRouteStatus shows which provider/model the default route resolves to.
-type DefaultRouteStatus struct {
-	// Selected provider name, or null if no healthy candidate found
-	ResolvedProvider *string `json:"resolvedProvider,omitempty"`
-	// Selected model identifier, or null if no healthy candidate found
-	ResolvedModel *string `json:"resolvedModel,omitempty"`
-	// Routing strategy (e.g. "first-available")
-	Strategy *string `json:"strategy,omitempty"`
-}
-
 // Dependency is a directed edge between two beads
 type Dependency struct {
 	// The bead that has the dependency
@@ -1022,7 +1012,7 @@ type Execution struct {
 	ImplementationRev *string `json:"implementationRev,omitempty"`
 	// LandedRev is the target branch tip after coordinator landing.
 	LandedRev *string `json:"landedRev,omitempty"`
-	// EvidenceRev is a legacy compatibility field; current attempts leave it empty.
+	// EvidenceRev is the trailing evidence commit SHA when distinct from ImplementationRev.
 	EvidenceRev *string `json:"evidenceRev,omitempty"`
 	// Bundle directory (relative to project root).
 	BundlePath string `json:"bundlePath"`
@@ -1720,41 +1710,16 @@ type Provenance struct {
 	DdxVersion *string `json:"ddxVersion,omitempty"`
 }
 
-// Provider represents an agent provider/harness configuration
-type Provider struct {
-	// Unique provider identifier
-	ID string `json:"id"`
-	// Display name
-	Name string `json:"name"`
-	// Provider kind (e.g. "cli", "api")
-	Kind string `json:"kind"`
-	// Default model for this provider
-	DefaultModel *string `json:"defaultModel,omitempty"`
-	// Available model identifiers
-	Models []string `json:"models,omitempty"`
-	// Default effort level
-	DefaultEffort *string `json:"defaultEffort,omitempty"`
-	// Available effort levels
-	EffortLevels []string `json:"effortLevels,omitempty"`
-	// Default execution timeout in milliseconds
-	TimeoutMs *int `json:"timeoutMs,omitempty"`
-	// Granted permission scopes
-	Permissions []string `json:"permissions,omitempty"`
-}
-
-func (Provider) IsNode() {}
-
-// Globally unique identifier
-func (this Provider) GetID() string { return this.ID }
-
 // ProviderModelEntry is one model identifier published by a provider's discovery endpoint.
 type ProviderModelEntry struct {
 	// Model identifier (e.g. "gpt-4o", "claude-opus-4-7").
 	ID string `json:"id"`
 	// Optional context-window length, when known.
 	ContextLength *int `json:"contextLength,omitempty"`
-	// Whether the model is currently routable (configured and reachable).
+	// Whether Fizeau reports the model as currently available.
 	Available bool `json:"available"`
+	// Whether Fizeau reports the model as eligible for automatic routing.
+	AutoRoutable bool `json:"autoRoutable"`
 }
 
 // ProviderModelsResult bundles a cached discovery snapshot for one provider or harness.
@@ -1786,11 +1751,9 @@ type ProviderQuota struct {
 	ResetAt *string `json:"resetAt,omitempty"`
 }
 
-// ProviderStatus is the live connectivity status of a configured endpoint provider
-// or subprocess harness, mirroring the output of `legacy agent providers` and
-// `legacy agent list` / `legacy agent doctor`.
+// ProviderStatus presents one provider or harness returned by Fizeau inventory.
 type ProviderStatus struct {
-	// Provider/harness name from agent config
+	// Canonical provider/harness name returned by Fizeau.
 	Name string `json:"name"`
 	// Kind: endpoint provider or subprocess harness.
 	Kind ProviderKind `json:"kind"`
@@ -1798,7 +1761,7 @@ type ProviderStatus struct {
 	ProviderType string `json:"providerType"`
 	// API base URL for endpoints; "(subprocess)" for harnesses.
 	BaseURL string `json:"baseURL"`
-	// Configured model identifier
+	// Default model identifier reported by Fizeau.
 	Model string `json:"model"`
 	// Live connectivity status message
 	Status string `json:"status"`
@@ -1808,8 +1771,10 @@ type ProviderStatus struct {
 	Detail string `json:"detail"`
 	// Number of models discovered via /v1/models (endpoints) or harness model count (harnesses).
 	ModelCount int `json:"modelCount"`
-	// True when this is the default provider/harness.
+	// True when Fizeau marks this provider as the default.
 	IsDefault bool `json:"isDefault"`
+	// Whether Fizeau reports this provider/harness as eligible for automatic routing.
+	AutoRoutingEligible bool `json:"autoRoutingEligible"`
 	// RFC3339 timestamp when health cooldown expires, if on cooldown
 	CooldownUntil *string `json:"cooldownUntil,omitempty"`
 	// RFC3339 timestamp of the last probe result (cached or live).
@@ -1818,8 +1783,6 @@ type ProviderStatus struct {
 	Usage *ProviderUsage `json:"usage,omitempty"`
 	// Quota ceiling + reset from the harness/provider. Null when unreported.
 	Quota *ProviderQuota `json:"quota,omitempty"`
-	// Profile names where this row is the default candidate (may be empty).
-	DefaultForProfile []string `json:"defaultForProfile"`
 	// Hourly token totals for the last 24 hours, oldest-first. Empty when fewer
 	//   than 6 non-zero hourly buckets are available; the UI uses that floor to
 	//   decide whether to render the inline sparkline (FEAT-014 AC 2).

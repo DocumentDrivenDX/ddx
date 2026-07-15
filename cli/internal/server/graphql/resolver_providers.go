@@ -11,15 +11,6 @@ import (
 	agentlib "github.com/easel/fizeau"
 )
 
-var providerStatusCache = struct {
-	sync.Mutex
-	rows     map[string][]*ProviderStatus
-	inFlight map[string]bool
-}{
-	rows:     make(map[string][]*ProviderStatus),
-	inFlight: make(map[string]bool),
-}
-
 // harnessRateLimitCache holds the most recently observed rate-limit signal per
 // harness name. The server invocation path (or tests) populates it via
 // RecordHarnessRateLimit; quotaFromHarnessInfo reads it when the upstream
@@ -46,33 +37,15 @@ func LookupHarnessRateLimit(name string) (agent.RateLimitSignal, bool) {
 func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error) {
 	now := time.Now().UTC()
 	entries := r.sessionIndexEntries(ctx)
-
-	if rows := cachedProviderRows(r.workingDir(ctx)); len(rows) > 0 {
-		refreshProviderStatuses(r.workingDir(ctx))
-		return providerRowsWithUsage(rows, entries, now), nil
-	}
-
-	if snapshots, ok, err := agent.ConfiguredProviderSnapshots(r.workingDir(ctx)); err == nil && ok {
-		rows := providerStatusesFromInfos(snapshots, entries, now)
-		storeProviderRows(r.workingDir(ctx), rows)
-		refreshProviderStatuses(r.workingDir(ctx))
-		return rows, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("loading provider snapshots: %w", err)
-	}
-
-	// Legacy/global provider config fallback. Bound the synchronous path so the
-	// UI can still first-paint harness rows even if provider probing is slow.
-	probeCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-	defer cancel()
-	providers, err := liveProviderInfos(probeCtx, r.workingDir(ctx))
+	svc, err := inventoryServiceForRequest(ctx, r.workingDir(ctx))
 	if err != nil {
-		refreshProviderStatuses(r.workingDir(ctx))
-		return []*ProviderStatus{}, nil
+		return nil, fmt.Errorf("creating Fizeau inventory service: %w", err)
 	}
-	rows := providerStatusesFromInfos(providers, entries, now)
-	storeProviderRows(r.workingDir(ctx), rows)
-	return rows, nil
+	providers, err := svc.ListProviders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing providers: %w", err)
+	}
+	return providerStatusesFromInfos(providers, entries, now), nil
 }
 
 // HarnessStatuses is the resolver for the harnessStatuses field.
@@ -80,12 +53,11 @@ func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus
 // taken from HarnessInfo.Available, rolling usage from the sessions index,
 // and quota/auth/model data directly from the upstream HarnessInfo DTO.
 func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus, error) {
-	// Pipe ctx into QuotaRefreshContext so the fizeau background probe /
-	// quota-refresh goroutines spawned by agentlib.New are cancelled when
-	// the GraphQL request completes. Without this they leak per-request.
-	svc, err := agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx})
+	// The production inventory factory scopes Fizeau background probes and
+	// quota refresh to the GraphQL request context.
+	svc, err := inventoryServiceForRequest(ctx, r.workingDir(ctx))
 	if err != nil {
-		return []*ProviderStatus{}, nil //nolint:nilerr
+		return nil, fmt.Errorf("creating Fizeau inventory service: %w", err)
 	}
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
@@ -95,28 +67,6 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 	now := time.Now().UTC()
 	entries := r.sessionIndexEntries(ctx)
 	return harnessStatusesFromInfos(infos, entries, now), nil
-}
-
-// DefaultRouteStatus is the resolver for the defaultRouteStatus field.
-func (r *queryResolver) DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error) {
-	svc, err := agent.NewServiceFromWorkDirCtx(ctx, r.workingDir(ctx))
-	if err != nil {
-		return nil, nil //nolint:nilerr
-	}
-	dec, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{})
-	if err != nil {
-		return &DefaultRouteStatus{}, nil //nolint:nilerr
-	}
-	result := &DefaultRouteStatus{}
-	if dec.Provider != "" {
-		p := dec.Provider
-		result.ResolvedProvider = &p
-	}
-	if dec.Model != "" {
-		m := dec.Model
-		result.ResolvedModel = &m
-	}
-	return result, nil
 }
 
 // ProviderTrend is the resolver for the providerTrend field.
@@ -187,13 +137,7 @@ type detectedRow struct {
 // detectProviderOrHarness looks up a name against providers first, then
 // harnesses, returning the resolved kind and quota signal (if any).
 func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string, entries []agent.SessionIndexEntry) (ProviderKind, *detectedRow) {
-	if kind, detected, ok := detectProviderOrHarnessFromEntries(name, entries); ok {
-		return kind, detected
-	}
-	if sig, ok := LookupHarnessRateLimit(name); ok {
-		return ProviderKindHarness, detectedFromQuota(QuotaFromRateLimitSignal(sig))
-	}
-	if svc, err := agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx}); err == nil {
+	if svc, err := inventoryServiceForRequest(ctx, r.workingDir(ctx)); err == nil {
 		harnesses, _ := svc.ListHarnesses(ctx)
 		for _, h := range harnesses {
 			if strings.EqualFold(h.Name, name) {
@@ -201,22 +145,18 @@ func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string,
 				return ProviderKindHarness, detectedFromQuota(q)
 			}
 		}
-	}
-	if snapshots, ok, _ := agent.ConfiguredProviderSnapshots(r.workingDir(ctx)); ok {
-		for _, p := range snapshots {
-			if strings.EqualFold(p.Name, name) {
-				q := quotaFromProviderInfo(p)
-				return ProviderKindEndpoint, detectedFromQuota(q)
-			}
-		}
-	}
-	if providers, err := liveProviderInfos(ctx, r.workingDir(ctx)); err == nil {
+		providers, _ := svc.ListProviders(ctx)
 		for _, p := range providers {
 			if strings.EqualFold(p.Name, name) {
 				q := quotaFromProviderInfo(p)
 				return ProviderKindEndpoint, detectedFromQuota(q)
 			}
 		}
+	}
+	// Completed-session evidence is a factual fallback when the current Fizeau
+	// inventory is unavailable or no longer contains the historical identity.
+	if kind, detected, ok := detectProviderOrHarnessFromEntries(name, entries); ok {
+		return kind, detected
 	}
 	return ProviderKindEndpoint, nil
 }
@@ -308,52 +248,6 @@ func sumTailTokens(buckets []agent.UsageBucket, maxBuckets int) int {
 	return total
 }
 
-func liveProviderInfos(ctx context.Context, workDir string) ([]agentlib.ProviderInfo, error) {
-	svc, err := agent.NewStatusProbeServiceFromWorkDirCtx(ctx, workDir)
-	if err != nil {
-		return nil, err
-	}
-	return svc.ListProviders(ctx)
-}
-
-func refreshProviderStatuses(workDir string) {
-	providerStatusCache.Lock()
-	if providerStatusCache.inFlight[workDir] {
-		providerStatusCache.Unlock()
-		return
-	}
-	providerStatusCache.inFlight[workDir] = true
-	providerStatusCache.Unlock()
-
-	go func() {
-		defer func() {
-			providerStatusCache.Lock()
-			delete(providerStatusCache.inFlight, workDir)
-			providerStatusCache.Unlock()
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
-		providers, err := liveProviderInfos(ctx, workDir)
-		if err != nil {
-			return
-		}
-		rows := providerStatusesFromInfos(providers, nil, time.Now().UTC())
-		storeProviderRows(workDir, rows)
-	}()
-}
-
-func cachedProviderRows(workDir string) []*ProviderStatus {
-	providerStatusCache.Lock()
-	defer providerStatusCache.Unlock()
-	return cloneProviderRows(providerStatusCache.rows[workDir])
-}
-
-func storeProviderRows(workDir string, rows []*ProviderStatus) {
-	providerStatusCache.Lock()
-	defer providerStatusCache.Unlock()
-	providerStatusCache.rows[workDir] = cloneProviderRows(rows)
-}
-
 func providerStatusesFromInfos(providers []agentlib.ProviderInfo, entries []agent.SessionIndexEntry, now time.Time) []*ProviderStatus {
 	lastChecked := now.UTC().Format(time.RFC3339)
 	results := make([]*ProviderStatus, 0, len(providers))
@@ -363,18 +257,18 @@ func providerStatusesFromInfos(providers []agentlib.ProviderInfo, entries []agen
 			url = "(api)"
 		}
 		ps := &ProviderStatus{
-			Name:              p.Name,
-			Kind:              ProviderKindEndpoint,
-			ProviderType:      p.Type,
-			BaseURL:           url,
-			Model:             p.DefaultModel,
-			Status:            p.Status,
-			Reachable:         providerReachable(p),
-			Detail:            providerDetail(p),
-			ModelCount:        p.ModelCount,
-			IsDefault:         p.IsDefault,
-			LastCheckedAt:     strPtr(lastChecked),
-			DefaultForProfile: defaultProfilesForEndpoint(p),
+			Name:                p.Name,
+			Kind:                ProviderKindEndpoint,
+			ProviderType:        p.Type,
+			BaseURL:             url,
+			Model:               p.DefaultModel,
+			Status:              p.Status,
+			Reachable:           providerReachable(p),
+			Detail:              providerDetail(p),
+			ModelCount:          p.ModelCount,
+			IsDefault:           p.IsDefault,
+			AutoRoutingEligible: p.IncludeByDefault,
+			LastCheckedAt:       strPtr(lastChecked),
 		}
 		if ps.ProviderType == "" {
 			ps.ProviderType = "endpoint"
@@ -397,18 +291,18 @@ func harnessStatusesFromInfos(infos []agentlib.HarnessInfo, entries []agent.Sess
 	results := make([]*ProviderStatus, 0, len(infos))
 	for _, info := range infos {
 		ps := &ProviderStatus{
-			Name:              info.Name,
-			Kind:              ProviderKindHarness,
-			ProviderType:      harnessTypeLabel(info),
-			BaseURL:           "(subprocess)",
-			Model:             info.DefaultModel,
-			Status:            harnessStatusLine(info),
-			Reachable:         info.Available,
-			Detail:            harnessDetail(info),
-			ModelCount:        harnessModelCount(info),
-			IsDefault:         false,
-			LastCheckedAt:     strPtr(lastChecked),
-			DefaultForProfile: []string{},
+			Name:                info.Name,
+			Kind:                ProviderKindHarness,
+			ProviderType:        harnessTypeLabel(info),
+			BaseURL:             "(subprocess)",
+			Model:               info.DefaultModel,
+			Status:              harnessStatusLine(info),
+			Reachable:           info.Available,
+			Detail:              harnessDetail(info),
+			ModelCount:          harnessModelCount(info),
+			IsDefault:           false,
+			AutoRoutingEligible: info.AutoRoutingEligible,
+			LastCheckedAt:       strPtr(lastChecked),
 		}
 		ps.Usage = buildUsage(entries, info.Name, agent.MatchHarness, now)
 		ps.RecentWorkerCount = recentWorkerCount(entries, info.Name, agent.MatchHarness, now)
@@ -417,16 +311,6 @@ func harnessStatusesFromInfos(infos []agentlib.HarnessInfo, entries []agent.Sess
 		results = append(results, ps)
 	}
 	return results
-}
-
-func providerRowsWithUsage(rows []*ProviderStatus, entries []agent.SessionIndexEntry, now time.Time) []*ProviderStatus {
-	out := cloneProviderRows(rows)
-	for _, row := range out {
-		row.Usage = buildUsage(entries, row.Name, agent.MatchProvider, now)
-		row.RecentWorkerCount = recentWorkerCount(entries, row.Name, agent.MatchProvider, now)
-		row.Sparkline = buildSparkline(entries, row.Name, agent.MatchProvider, now)
-	}
-	return out
 }
 
 // buildSparkline returns a 24-element slice of hourly token totals for the
@@ -451,27 +335,6 @@ func buildSparkline(entries []agent.SessionIndexEntry, name string, kind agent.U
 		return nil
 	}
 	return totals
-}
-
-func cloneProviderRows(rows []*ProviderStatus) []*ProviderStatus {
-	if len(rows) == 0 {
-		return nil
-	}
-	out := make([]*ProviderStatus, 0, len(rows))
-	for _, row := range rows {
-		if row == nil {
-			continue
-		}
-		clone := *row
-		if row.DefaultForProfile != nil {
-			clone.DefaultForProfile = append([]string(nil), row.DefaultForProfile...)
-		}
-		if row.Sparkline != nil {
-			clone.Sparkline = append([]int(nil), row.Sparkline...)
-		}
-		out = append(out, &clone)
-	}
-	return out
 }
 
 // sessionIndexEntries reads the project's session index for all available
@@ -610,17 +473,6 @@ func QuotaFromRateLimitSignal(sig agent.RateLimitSignal) *ProviderQuota {
 		q.ResetAt = &v
 	}
 	return q
-}
-
-// defaultProfilesForEndpoint returns the profile names where this endpoint is
-// a default candidate. Current service surface exposes only a single
-// IsDefault flag, so we return ["default"] when set, [] otherwise. The return
-// shape supports multi-profile expansion without breaking callers.
-func defaultProfilesForEndpoint(p agentlib.ProviderInfo) []string {
-	if p.IsDefault {
-		return []string{"default"}
-	}
-	return []string{}
 }
 
 func providerReachable(p agentlib.ProviderInfo) bool {
