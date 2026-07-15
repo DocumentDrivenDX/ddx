@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,4 +77,34 @@ func TestProductionAgentHasNoConcreteHarnessRunner(t *testing.T) {
 		}
 		return true
 	})
+
+	// The subprocess fixture hook must be absent from the ordinary main-package
+	// file set. This is stronger than an environment guard: without the
+	// testseam build tag, the production binary cannot compile the FakeProvider
+	// type or the DDX_FIZEAU_TEST_PLAN activation path at all.
+	var listed struct {
+		GoFiles []string
+	}
+	listCmd := exec.Command("go", "list", "-json", "../..")
+	listCmd.Env = append(os.Environ(), "GOFLAGS=")
+	listOut, err := listCmd.Output()
+	if err != nil {
+		t.Fatalf("list ordinary ddx main package: %v", err)
+	}
+	if err := json.Unmarshal(listOut, &listed); err != nil {
+		t.Fatalf("decode ordinary ddx main package: %v", err)
+	}
+	for _, name := range listed.GoFiles {
+		if name == "fizeau_testseam.go" {
+			t.Errorf("ordinary ddx build includes test-only Fizeau seam %s", name)
+		}
+	}
+	testSeamPath := filepath.Join("..", "..", "fizeau_testseam.go")
+	testSeamSource, err := os.ReadFile(testSeamPath)
+	if err != nil {
+		t.Fatalf("read tagged Fizeau seam: %v", err)
+	}
+	if !strings.HasPrefix(string(testSeamSource), "//go:build testseam\n") {
+		t.Errorf("%s must remain guarded by the Fizeau testseam build tag", testSeamPath)
+	}
 }
