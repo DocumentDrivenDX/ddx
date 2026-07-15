@@ -418,7 +418,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					agent.MarkResultExecutionError(res, execErr)
 					return reportFromResult(res), nil
 				}
-				if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+				if prepareCandidateCycleLanding(res) {
 					if wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps); ctxErr != nil {
 						fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate-context setup failed: %v (skipping required-gate eval)\n", ctxErr)
 					} else if wt != "" {
