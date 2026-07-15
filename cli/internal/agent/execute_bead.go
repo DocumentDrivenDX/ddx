@@ -294,6 +294,7 @@ type ExecuteBeadRuntime struct {
 	ResourceChecker        ExecutionResourceChecker
 	Service                agentlib.FizeauService
 	AgentRunner            AgentRunner
+	Checks                 CandidateCheckRunner
 	Reviewer               CandidateReviewer
 	Repair                 RepairPass
 	RepairMaxCycles        int
@@ -302,6 +303,8 @@ type ExecuteBeadRuntime struct {
 	AttemptBackend         AttemptBackend
 	candidateImport        func(candidate CandidateResult) error
 	candidateImportRelease func(candidate CandidateResult) error
+	candidateOriginalTask  string
+	candidateDiff          func(candidate CandidateResult) (string, error)
 	// EvidenceFileCopier is an internal test seam for controlled local-evidence
 	// publication. Production leaves it nil and uses the filesystem copier.
 	EvidenceFileCopier func(source, target string, mode os.FileMode) error
@@ -419,10 +422,13 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 		RefStore:        refStore,
 		ProjectRoot:     projectRoot,
 		BeadEvents:      runtime.BeadEvents,
+		Checks:          runtime.Checks,
 		Reviewer:        runtime.Reviewer,
 		Repair:          runtime.Repair,
 		RepairMaxCycles: runtime.RepairMaxCycles,
 		NoReview:        runtime.NoReview,
+		OriginalTask:    runtime.candidateOriginalTask,
+		CandidateDiff:   runtime.candidateDiff,
 		ValidateCandidate: func(candidate CandidateResult) error {
 			return VerifyCandidateHasNoExecutionEvidence(candidate.WorktreePath, candidate.Report.BaseRev, candidate.Report.ResultRev)
 		},
@@ -462,6 +468,8 @@ func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadRepor
 	res.CandidateRef = report.CandidateRef
 	res.CycleIndex = report.CycleIndex
 	res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
+	res.CostUSD = report.CostUSD
+	res.DurationMS = int(report.DurationMS)
 }
 
 // Artifact paths for an execute-bead attempt.
@@ -1191,7 +1199,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			"prompt_sha":  artifacts.PromptSHA,
 		},
 		SessionLogDirOverride: embeddedStateDir,
-		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
 		Role:                  "implementer",
 		CorrelationID:         beadID + ":" + attemptID,
 		Env:                   gitIsolationEnv,
@@ -1664,6 +1671,27 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	cycleRuntime.candidateImportRelease = func(CandidateResult) error {
 		return attemptBackend.ReleaseCandidateImport(ctx, workspace)
 	}
+	if cycleRuntime.Checks == nil && runtime.AgentRunner == nil {
+		cycleRuntime.Checks = &repositoryCandidateCheckRunner{
+			bead:      beadCtx,
+			result:    res,
+			artifacts: artifacts,
+		}
+	}
+	if cycleRuntime.Repair == nil && runtime.AgentRunner == nil {
+		cycleRuntime.Repair = &fizeauCandidateRepairPass{
+			projectRoot: projectRoot,
+			workspace:   workspace,
+			backend:     attemptBackend,
+			service:     runtime.Service,
+			config:      rcfg,
+			runtime:     runRuntime,
+			gitOps:      gitOps,
+			artifacts:   artifacts,
+		}
+	}
+	cycleRuntime.candidateOriginalTask = repairOriginalTask(beadCtx)
+	cycleRuntime.candidateDiff = boundedCandidateRepairDiff
 	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, cycleRuntime, res); err != nil {
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 		res.ExitCode = 1

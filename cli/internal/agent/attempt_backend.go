@@ -314,38 +314,7 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 
 	containerName := dockerContainerName(req.Workspace)
 	args := dockerRunArgs(cfg, req.Workspace, exe, image, dockerToolMounts())
-	runArgs := []string{
-		"ddx", "run",
-		"--project", "/work",
-		"--prompt", promptPath,
-		"--output", "json-result",
-		"--permissions", firstNonEmpty(req.Runtime.PermissionsOverride, req.Config.Permissions()),
-	}
-	if h := strings.TrimSpace(req.Config.Harness()); h != "" {
-		runArgs = append(runArgs, "--harness", h)
-	}
-	if p := strings.TrimSpace(req.Config.Provider()); p != "" {
-		runArgs = append(runArgs, "--provider", p)
-	}
-	if m := strings.TrimSpace(req.Config.Model()); m != "" {
-		runArgs = append(runArgs, "--model", m)
-	}
-	if p := strings.TrimSpace(req.Config.Profile()); p != "" {
-		runArgs = append(runArgs, "--profile", p)
-	}
-	if e := strings.TrimSpace(req.Config.Effort()); e != "" {
-		runArgs = append(runArgs, "--effort", e)
-	}
-	if min := req.Config.MinPower(); min > 0 {
-		runArgs = append(runArgs, "--min-power", strconv.Itoa(min))
-	}
-	if max := req.Config.MaxPower(); max > 0 {
-		runArgs = append(runArgs, "--max-power", strconv.Itoa(max))
-	}
-	if timeout := req.Config.Timeout(); timeout > 0 {
-		runArgs = append(runArgs, "--timeout", timeout.String())
-	}
-	args = append(args, runArgs...)
+	args = append(args, dockerNestedDDXRunArgs(req, promptPath)...)
 
 	cmd := dockerAttemptCommand(ctx, args...)
 	cmd.Dir = req.Workspace.ProjectRoot
@@ -368,6 +337,75 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 		return nil, fmt.Errorf("docker-clone attempt failed: %s: %w", strings.TrimSpace(stderr.String()), err)
 	}
 	return nil, parseErr
+}
+
+// dockerNestedDDXRunArgs builds the argv executed inside a docker-clone
+// attempt. Exact-empty values are omitted; every nonempty opaque operator value
+// is passed to nested ddx byte-for-byte, including whitespace-only values.
+func dockerNestedDDXRunArgs(req AttemptBackendRunRequest, promptPath string) []string {
+	args := []string{
+		"ddx", "run",
+		"--project", "/work",
+		"--prompt", promptPath,
+		"--output", "json-result",
+	}
+	permissions := req.Runtime.PermissionsOverride
+	if permissions == "" {
+		permissions = req.Config.Permissions()
+	}
+	if permissions != "" {
+		args = append(args, "--permissions", permissions)
+	}
+
+	harness := req.Runtime.HarnessOverride
+	provider := req.Runtime.ProviderOverride
+	model := req.Runtime.ModelOverride
+	if !req.Runtime.ClearRoutingPins {
+		if harness == "" {
+			harness = req.Config.Harness()
+		}
+		if provider == "" {
+			provider = req.Config.Provider()
+		}
+		if model == "" {
+			model = req.Config.Model()
+		}
+	}
+	profile := req.Runtime.ProfileOverride
+	if profile == "" && !req.Runtime.ClearProfile {
+		profile = req.Config.Profile()
+	}
+	for _, item := range []struct {
+		flag  string
+		value string
+	}{
+		{flag: "--harness", value: harness},
+		{flag: "--provider", value: provider},
+		{flag: "--model", value: model},
+		{flag: "--profile", value: profile},
+		{flag: "--effort", value: req.Config.Effort()},
+	} {
+		if item.value != "" {
+			args = append(args, item.flag, item.value)
+		}
+	}
+	minPower := req.Config.MinPower()
+	if req.Runtime.MinPowerOverride > 0 {
+		minPower = req.Runtime.MinPowerOverride
+	}
+	if req.Runtime.ClearMinPower {
+		minPower = 0
+	}
+	if min := minPower; min > 0 {
+		args = append(args, "--min-power", strconv.Itoa(min))
+	}
+	if max := req.Config.MaxPower(); max > 0 {
+		args = append(args, "--max-power", strconv.Itoa(max))
+	}
+	if timeout := req.Config.Timeout(); timeout > 0 {
+		args = append(args, "--timeout", timeout.String())
+	}
+	return args
 }
 
 func (DockerCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {

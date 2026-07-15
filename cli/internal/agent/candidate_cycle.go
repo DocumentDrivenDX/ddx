@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -216,6 +218,12 @@ type AttemptCycleCoordinator struct {
 	ValidateCandidate      func(candidate CandidateResult) error // nil → no candidate validation
 	ImportCandidate        func(candidate CandidateResult) error // nil → candidate is already project-reachable
 	ReleaseCandidateImport func(candidate CandidateResult) error // nil → no transient import ref
+	// OriginalTask is the immutable bead task supplied to every repair operation.
+	// CandidateDiff supplies the bounded base..candidate git diff. Production
+	// wires boundedCandidateRepairDiff; nil is retained for seam-only tests that
+	// do not have a real repository.
+	OriginalTask  string
+	CandidateDiff func(candidate CandidateResult) (string, error)
 	// RepairMaxCycles caps append-only repair attempts after review_fixable_gap.
 	// Values <=0 default to one repair cycle.
 	RepairMaxCycles int
@@ -343,8 +351,53 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 					report.Error = checksErr.Error()
 				}
 				c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
-				recordCycle(&report, nil, report.Status)
-				return AttemptCycleResult{Report: report}, nil
+				// A check-runner error is infrastructure/setup failure, not a
+				// candidate defect an implementer can safely repair.
+				if checksErr != nil || c.Repair == nil {
+					recordCycle(&report, nil, report.Status)
+					return AttemptCycleResult{Report: report}, nil
+				}
+				if repairCycles >= c.maxRepairCycles() {
+					report.Status = ExecuteBeadStatusRepairCycleExhausted
+					report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
+					report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+					recordCycle(&report, nil, report.Status)
+					return AttemptCycleResult{Report: report}, nil
+				}
+				recordCycle(&candidate.Report, nil, ExecuteBeadStatusPostRunCheckFailed)
+				prompt, promptErr := c.buildRepairPrompt(beadID, candidate, CandidateReviewResult{}, repairCycles+1, checksResult.Detail)
+				if promptErr != nil {
+					report.Status = ExecuteBeadStatusExecutionFailed
+					report.Detail = "pre-land repair prompt: " + promptErr.Error()
+					report.Error = promptErr.Error()
+					recordCycle(&report, nil, report.Status)
+					return AttemptCycleResult{Report: report}, nil
+				}
+				c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, candidateChecksFailedEventKind)
+				c.recordCandidateCycleState(candidate, CandidateCycleState{
+					Active:       true,
+					Phase:        "repair",
+					CandidateRef: candidate.Report.CandidateRef,
+					CandidateRev: candidate.Report.ResultRev,
+					CycleIndex:   candidate.CycleIndex,
+					RepairActive: true,
+				})
+				repaired, repairErr := c.Repair.Repair(ctx, candidate, prompt)
+				if repairErr != nil {
+					report.Status = ExecuteBeadStatusExecutionFailed
+					report.Detail = "pre-land repair: " + repairErr.Error()
+					report.Error = repairErr.Error()
+					recordCycle(&report, nil, report.Status)
+					return AttemptCycleResult{Report: report}, nil
+				}
+				repairCycles++
+				candidate = normalizeRepairedCandidate(candidate, repaired)
+				if candidate.Report.Status != ExecuteBeadStatusSuccess {
+					recordCycle(&candidate.Report, nil, candidate.Report.Status)
+					return AttemptCycleResult{Report: candidate.Report}, nil
+				}
+				cycleReview = nil
+				continue
 			}
 		}
 
@@ -410,7 +463,14 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				return AttemptCycleResult{Report: report}, nil
 			}
 			recordCycle(&candidate.Report, cycleReview, ExecuteBeadStatusReviewFixableGap)
-			prompt := BuildRepairPrompt(repairPromptInput(beadID, candidate, reviewResult, repairCycles+1))
+			prompt, promptErr := c.buildRepairPrompt(beadID, candidate, reviewResult, repairCycles+1, reviewResult.Rationale)
+			if promptErr != nil {
+				report.Status = ExecuteBeadStatusExecutionFailed
+				report.Detail = "pre-land repair prompt: " + promptErr.Error()
+				report.Error = promptErr.Error()
+				recordCycle(&report, cycleReview, report.Status)
+				return AttemptCycleResult{Report: report}, nil
+			}
 			c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, classification.Class)
 			c.recordCandidateCycleState(candidate, CandidateCycleState{
 				Active:       true,
@@ -583,12 +643,42 @@ func (c *AttemptCycleCoordinator) classifyCandidateReview(review CandidateReview
 	})
 }
 
-func repairPromptInput(beadID string, candidate CandidateResult, review CandidateReviewResult, repairCycleIndex int) RepairPromptInput {
+func (c *AttemptCycleCoordinator) buildRepairPrompt(beadID string, candidate CandidateResult, review CandidateReviewResult, repairCycleIndex int, failureOutput string) (string, error) {
+	var diff string
+	if c.CandidateDiff != nil {
+		var err error
+		diff, err = c.CandidateDiff(candidate)
+		if err != nil {
+			return "", err
+		}
+	}
+	return BuildRepairPrompt(repairPromptInput(beadID, candidate, review, repairCycleIndex, c.OriginalTask, diff, failureOutput)), nil
+}
+
+func boundedCandidateRepairDiff(candidate CandidateResult) (string, error) {
+	if strings.TrimSpace(candidate.WorktreePath) == "" || strings.TrimSpace(candidate.Report.BaseRev) == "" || strings.TrimSpace(candidate.Report.ResultRev) == "" {
+		return "", fmt.Errorf("repair diff requires worktree_path, base_rev, and result_rev")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	args := append([]string{"diff", "--no-color", candidate.Report.BaseRev, candidate.Report.ResultRev, "--", "."}, EvidenceReviewExcludePathspecs()...)
+	out, err := internalgit.Command(ctx, candidate.WorktreePath, args...).Output()
+	if err != nil {
+		return "", fmt.Errorf("repair diff %s..%s: %w", candidate.Report.BaseRev, candidate.Report.ResultRev, err)
+	}
+	clamped, _ := evidence.ClampDiff(string(out), evidence.DefaultCaps().MaxDiffBytes)
+	return clamped, nil
+}
+
+func repairPromptInput(beadID string, candidate CandidateResult, review CandidateReviewResult, repairCycleIndex int, originalTask, currentDiff, failureOutput string) RepairPromptInput {
 	return RepairPromptInput{
 		BeadID:               beadID,
 		BaseRev:              candidate.Report.BaseRev,
 		FailedCandidateRev:   candidate.Report.ResultRev,
 		CycleIndex:           repairCycleIndex,
+		OriginalTask:         originalTask,
+		CurrentDiff:          currentDiff,
+		FailureOutput:        failureOutput,
 		ReviewRationale:      strings.TrimSpace(review.Rationale),
 		PerAC:                append([]ReviewAC(nil), review.PerAC...),
 		Findings:             append([]Finding(nil), review.Findings...),

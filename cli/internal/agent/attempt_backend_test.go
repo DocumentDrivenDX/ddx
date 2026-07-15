@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -115,6 +116,72 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-tmp,dst=/work/.tmp")
 	require.Contains(t, args, "type=bind,src=/usr/bin/codex,dst=/usr/local/bin/codex,readonly")
 	require.Equal(t, "runner:latest", args[len(args)-1])
+}
+
+func TestDockerNestedDDXRunArgsPreserveOpaqueEnvelope(t *testing.T) {
+	t.Run("surrounding whitespace is preserved and power override wins", func(t *testing.T) {
+		cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+			Harness:     " harness-with-spaces ",
+			Provider:    " provider-with-spaces ",
+			Model:       " model-with-spaces ",
+			Profile:     " policy-with-spaces ",
+			Effort:      " effort-with-spaces ",
+			Permissions: " config-permission ",
+			MinPower:    2,
+			MaxPower:    7,
+		})
+		args := dockerNestedDDXRunArgs(AttemptBackendRunRequest{
+			Config: cfg,
+			Runtime: AgentRunRuntime{
+				PermissionsOverride: " runtime-permission ",
+				MinPowerOverride:    4,
+			},
+		}, "/work/.ddx/executions/attempt/repair.md")
+
+		require.Equal(t, " harness-with-spaces ", nestedDDXArgValue(t, args, "--harness"))
+		require.Equal(t, " provider-with-spaces ", nestedDDXArgValue(t, args, "--provider"))
+		require.Equal(t, " model-with-spaces ", nestedDDXArgValue(t, args, "--model"))
+		require.Equal(t, " policy-with-spaces ", nestedDDXArgValue(t, args, "--profile"))
+		require.Equal(t, " effort-with-spaces ", nestedDDXArgValue(t, args, "--effort"))
+		require.Equal(t, " runtime-permission ", nestedDDXArgValue(t, args, "--permissions"))
+		require.Equal(t, "4", nestedDDXArgValue(t, args, "--min-power"))
+		require.Equal(t, "7", nestedDDXArgValue(t, args, "--max-power"))
+
+		configPermissionArgs := dockerNestedDDXRunArgs(AttemptBackendRunRequest{Config: cfg}, "/work/prompt.md")
+		require.Equal(t, " config-permission ", nestedDDXArgValue(t, configPermissionArgs, "--permissions"))
+	})
+
+	t.Run("whitespace-only opaque values survive and exact empty permission is omitted", func(t *testing.T) {
+		cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+			Harness:  " \t ",
+			Provider: "\n",
+			Model:    "  ",
+			Profile:  "\t",
+			Effort:   " \r ",
+		})
+		args := dockerNestedDDXRunArgs(AttemptBackendRunRequest{Config: cfg}, "/work/prompt.md")
+
+		require.Equal(t, " \t ", nestedDDXArgValue(t, args, "--harness"))
+		require.Equal(t, "\n", nestedDDXArgValue(t, args, "--provider"))
+		require.Equal(t, "  ", nestedDDXArgValue(t, args, "--model"))
+		require.Equal(t, "\t", nestedDDXArgValue(t, args, "--profile"))
+		require.Equal(t, " \r ", nestedDDXArgValue(t, args, "--effort"))
+		for _, flag := range []string{"--permissions", "--min-power", "--max-power"} {
+			require.NotContains(t, args, flag)
+		}
+	})
+}
+
+func nestedDDXArgValue(t *testing.T, args []string, flag string) string {
+	t.Helper()
+	for index, arg := range args {
+		if arg == flag {
+			require.Less(t, index+1, len(args), "flag %s missing value in %v", flag, args)
+			return args[index+1]
+		}
+	}
+	t.Fatalf("flag %s not found in %s", flag, strings.Join(args, " "))
+	return ""
 }
 
 func TestLocalCloneAttemptBackendExcludesTransientMountDirs(t *testing.T) {

@@ -12,6 +12,9 @@ type RepairPromptInput struct {
 	BaseRev              string
 	FailedCandidateRev   string
 	CycleIndex           int
+	OriginalTask         string
+	CurrentDiff          string
+	FailureOutput        string
 	ReviewRationale      string
 	PerAC                []ReviewAC
 	Findings             []Finding
@@ -27,6 +30,18 @@ func BuildRepairPrompt(input RepairPromptInput) string {
 	fmt.Fprintf(&b, "base_rev: %s\n", input.BaseRev)
 	fmt.Fprintf(&b, "failed_candidate_rev: %s\n", input.FailedCandidateRev)
 	fmt.Fprintf(&b, "repair_cycle_index: %d\n\n", input.CycleIndex)
+
+	b.WriteString("Original bead task:\n<task>\n")
+	b.WriteString(strings.TrimSpace(input.OriginalTask))
+	b.WriteString("\n</task>\n\n")
+
+	b.WriteString("Current candidate diff:\n<diff>\n")
+	b.WriteString(strings.TrimSpace(input.CurrentDiff))
+	b.WriteString("\n</diff>\n\n")
+
+	b.WriteString("Failure evidence:\n<failure-output>\n")
+	b.WriteString(strings.TrimSpace(input.FailureOutput))
+	b.WriteString("\n</failure-output>\n\n")
 
 	b.WriteString("Review findings:\n")
 	if strings.TrimSpace(input.ReviewRationale) != "" {
