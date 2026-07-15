@@ -60,13 +60,57 @@ jobs:
           echo "🆕 This is the first release"
         fi
 
-  # Run full test suite before release
-  test:
-    name: Test Release
+  # Build the frontend once, verify the complete static bundle, and share that
+  # exact output with every Go binary build below. A fresh checkout contains
+  # only frontend/build/.gitkeep, which is sufficient for go:embed to compile
+  # but is not a usable application.
+  frontend:
+    name: Build Verified Frontend
     needs: prepare
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Build frontend from locked dependencies
+      working-directory: cli/internal/server/frontend
+      run: |
+        bun install --frozen-lockfile
+        bun run build
+
+    - name: Verify frontend bundle
+      working-directory: cli
+      run: make frontend-verify
+
+    - name: Upload verified frontend bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: verified-frontend-bundle
+        path: cli/internal/server/frontend/build/
+        if-no-files-found: error
+        retention-days: 1
+
+  # Run full test suite before release
+  test:
+    name: Test Release
+    needs: [prepare, frontend]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download verified frontend bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: verified-frontend-bundle
+        path: cli/internal/server/frontend/build
+
+    - name: Verify downloaded frontend bundle
+      working-directory: cli
+      run: make frontend-verify
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -91,7 +135,7 @@ jobs:
   # Build binaries for all platforms
   build-matrix:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
-    needs: [prepare, test]
+    needs: [prepare, frontend, test]
     strategy:
       matrix:
         # Fizeau v0.14.32 does not currently cross-compile for Windows
@@ -112,7 +156,17 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Download verified frontend bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: verified-frontend-bundle
+        path: cli/internal/server/frontend/build
+
+    - name: Verify downloaded frontend bundle
+      working-directory: cli
+      run: make frontend-verify
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:

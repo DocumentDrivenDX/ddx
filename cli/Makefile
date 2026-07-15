@@ -26,6 +26,7 @@ all: clean deps test build
 # Skip rebuild when no source file is newer than the last build output.
 FRONTEND_SRC := $(shell find internal/server/frontend/src internal/server/frontend/static -type f 2>/dev/null)
 FRONTEND_STAMP := internal/server/frontend/build/.frontend-build-stamp
+FRONTEND_VERIFY_DIR ?= internal/server/frontend/build
 
 frontend-build: $(FRONTEND_STAMP)
 
@@ -47,9 +48,18 @@ frontend-rebuild:
 # broken bundle that 404s every JS chunk to the SPA shell.
 frontend-verify:
 	@echo "Verifying embedded frontend bundle integrity..."
-	@cd internal/server/frontend/build && \
+	@cd "$(FRONTEND_VERIFY_DIR)" && \
+	if [ ! -s index.html ]; then \
+		echo "frontend-verify: index.html is missing or empty — run 'make frontend-rebuild'"; \
+		exit 1; \
+	fi; \
+	refs=$$(grep -hoE '"/_app/[^"]+"' index.html | tr -d '"' | sort -u); \
+	if [ -z "$$refs" ]; then \
+		echo "frontend-verify: index.html references no /_app assets — run 'make frontend-rebuild'"; \
+		exit 1; \
+	fi; \
 	missing=0; \
-	for ref in $$(grep -hoE '"/_app/[^"]+"' index.html | tr -d '"' | sort -u); do \
+	for ref in $$refs; do \
 		path=".$$ref"; \
 		if [ ! -f "$$path" ]; then \
 			echo "  MISSING: $$ref"; \
