@@ -1,40 +1,114 @@
 package agent
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+	"time"
 
-func TestBillingModeForClassifiesHarnessesAndEndpoints(t *testing.T) {
+	agentlib "github.com/easel/fizeau"
+)
+
+func TestBillingPresentationModeUsesPublicFizeauValues(t *testing.T) {
 	cases := []struct {
-		name    string
-		harness string
-		surface string
-		baseURL string
+		billing string
 		want    string
 	}{
-		{name: "claude code subscription", harness: "claude", want: BillingModeSubscription},
-		{name: "codex subscription", harness: "codex", want: BillingModeSubscription},
-		{name: "gemini cli subscription", harness: "gemini-cli", want: BillingModeSubscription},
-		{name: "openrouter paid", harness: "openrouter", want: BillingModePaid},
-		{name: "openai api paid", harness: "openai", want: BillingModePaid},
-		{name: "anthropic api paid", harness: "anthropic", want: BillingModePaid},
-		{name: "embedded agent local", harness: "agent", want: BillingModeLocal},
-		{name: "openai compat localhost local", surface: "openai-compat", baseURL: "http://localhost:1234/v1", want: BillingModeLocal},
-		{name: "openai compat 127 local", surface: "openai-compat", baseURL: "http://127.0.0.1:1234/v1", want: BillingModeLocal},
-		{name: "openai compat 192 private local", surface: "openai-compat", baseURL: "http://192.168.1.10:1234/v1", want: BillingModeLocal},
-		{name: "openai compat 10 private local", surface: "openai-compat", baseURL: "http://10.0.0.5:1234/v1", want: BillingModeLocal},
-		{name: "openai compat public paid", surface: "openai-compat", baseURL: "https://api.example.com/v1", want: BillingModePaid},
+		{billing: string(agentlib.BillingModelPerToken), want: BillingModePaid},
+		{billing: string(agentlib.BillingModelSubscription), want: BillingModeSubscription},
+		{billing: string(agentlib.BillingModelFixed), want: BillingModeLocal},
+		{billing: "", want: BillingModeUnknown},
+		{billing: "future-billing-model", want: BillingModeUnknown},
 	}
-
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := billingModeFor(tc.harness, tc.surface, tc.baseURL); got != tc.want {
-				t.Fatalf("billingModeFor(%q, %q, %q) = %q, want %q", tc.harness, tc.surface, tc.baseURL, got, tc.want)
-			}
+		if got := BillingPresentationMode(tc.billing); got != tc.want {
+			t.Fatalf("BillingPresentationMode(%q) = %q, want %q", tc.billing, got, tc.want)
+		}
+	}
+}
+
+func TestProviderIdentityDoesNotAffectBilling(t *testing.T) {
+	logDir := t.TempDir()
+	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+	wantModes := map[string]string{}
+	wantRaw := map[string]string{}
+	identities := []struct {
+		harness  string
+		provider string
+		model    string
+		endpoint string
+		baseURL  string
+		surface  string
+	}{
+		{harness: "codex", provider: "openai", model: "gpt-5", endpoint: "openai-primary", baseURL: "https://api.openai.com/v1", surface: "codex"},
+		{harness: "agent", provider: "local", model: "qwen-local", endpoint: "local-primary", baseURL: "http://127.0.0.1:1234/v1", surface: "openai-compat"},
+		{harness: "unrecognized", provider: "unrecognized", model: "unknown-model", endpoint: "unknown-endpoint", baseURL: "https://example.invalid", surface: "unknown-surface"},
+	}
+	for i, identity := range identities {
+		routing := &agentlib.ServiceRoutingDecisionData{
+			Harness: identity.harness, Provider: identity.provider, Model: identity.model, Endpoint: identity.endpoint,
+			Candidates: []agentlib.ServiceRoutingDecisionCandidate{{
+				Harness: identity.harness, Provider: identity.provider, Model: identity.model, Endpoint: identity.endpoint,
+				Eligible: true, Billing: agentlib.BillingModelSubscription,
+			}},
+		}
+		candidate, ok := selectedRoutingCandidate(routing, &agentlib.ServiceRoutingActual{
+			Harness: identity.harness, Provider: identity.provider, Model: identity.model,
 		})
+		if !ok {
+			t.Fatalf("identity %+v did not resolve its exact public Fizeau candidate", identity)
+		}
+		entry := SessionIndexEntry{
+			Harness: identity.harness, Provider: identity.provider, BaseURL: identity.baseURL,
+			Model: identity.model, Surface: identity.surface, Billing: string(candidate.Billing),
+		}
+		if got := BillingPresentationMode(entry.Billing); got != BillingModeSubscription {
+			t.Fatalf("identity %+v changed Fizeau billing to %q", identity, got)
+		}
+		subscriptionID := fmt.Sprintf("identity-%d-subscription", i)
+		entry.ID = subscriptionID
+		entry.StartedAt = now.Add(time.Duration(i*2) * time.Minute)
+		if err := AppendSessionIndex(logDir, entry, entry.StartedAt); err != nil {
+			t.Fatalf("persist subscription identity %+v: %v", identity, err)
+		}
+		wantModes[subscriptionID] = BillingModeSubscription
+		wantRaw[subscriptionID] = string(agentlib.BillingModelSubscription)
+
+		routing.Candidates[0].Billing = ""
+		candidate, ok = selectedRoutingCandidate(routing, &agentlib.ServiceRoutingActual{
+			Harness: identity.harness, Provider: identity.provider, Model: identity.model,
+		})
+		if !ok {
+			t.Fatalf("identity %+v did not resolve its candidate with unknown billing", identity)
+		}
+		entry.Billing = string(candidate.Billing)
+		if got := BillingPresentationMode(entry.Billing); got != BillingModeUnknown {
+			t.Fatalf("identity %+v inferred billing %q without Fizeau evidence", identity, got)
+		}
+		unknownID := fmt.Sprintf("identity-%d-unknown", i)
+		entry.ID = unknownID
+		entry.StartedAt = now.Add(time.Duration(i*2+1) * time.Minute)
+		if err := AppendSessionIndex(logDir, entry, entry.StartedAt); err != nil {
+			t.Fatalf("persist unknown identity %+v: %v", identity, err)
+		}
+		wantModes[unknownID] = BillingModeUnknown
+		wantRaw[unknownID] = ""
+	}
+	rows, err := ReadSessionIndex(logDir, SessionIndexQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != len(wantModes) {
+		t.Fatalf("persisted identity rows=%d, want %d", len(rows), len(wantModes))
+	}
+	for _, row := range rows {
+		if row.Billing != wantRaw[row.ID] || row.BillingMode != wantModes[row.ID] {
+			t.Fatalf("stored row %q billing=%q mode=%q, want raw=%q mode=%q", row.ID, row.Billing, row.BillingMode, wantRaw[row.ID], wantModes[row.ID])
+		}
 	}
 }
 
 func TestValidateBillingMode(t *testing.T) {
-	for _, mode := range []string{BillingModePaid, BillingModeSubscription, BillingModeLocal} {
+	for _, mode := range []string{BillingModeUnknown, BillingModePaid, BillingModeSubscription, BillingModeLocal} {
 		if !ValidateBillingMode(mode) {
 			t.Fatalf("ValidateBillingMode(%q) = false, want true", mode)
 		}

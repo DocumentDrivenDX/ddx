@@ -379,10 +379,8 @@ func sessionEntryToRun(e agent.SessionIndexEntry) *ddxgraphql.Run {
 	}
 	// Lossless join with AgentSession: project session-only fields onto Run so
 	// run-layer queries don't lose data that lives only on AgentSession.
-	if e.BillingMode != "" {
-		bm := e.BillingMode
-		run.BillingMode = &bm
-	}
+	bm := agent.BillingPresentationMode(e.Billing)
+	run.BillingMode = &bm
 	if e.Outcome != "" {
 		oc := e.Outcome
 		run.Outcome = &oc

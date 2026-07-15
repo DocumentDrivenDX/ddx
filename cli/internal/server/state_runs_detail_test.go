@@ -182,6 +182,7 @@ func TestRunToolCalls_PersistedAtDrain(t *testing.T) {
 	entry := agent.SessionIndexEntry{
 		ID:          "sess-tools-001",
 		Harness:     "claude",
+		Billing:     "per_token",
 		BillingMode: "paid",
 		StartedAt:   now,
 		ToolCalls: []agent.ToolCallEntry{
@@ -267,6 +268,7 @@ func TestStory16RunDetailP95FixtureShape(t *testing.T) {
 	entry := agent.SessionIndexEntry{
 		ID:          "sess-p95-001",
 		Harness:     "claude",
+		Billing:     "per_token",
 		BillingMode: "paid",
 		StartedAt:   now,
 		BundlePath:  filepath.ToSlash(filepath.Join(agent.ExecuteBeadArtifactDir, bundleID)),

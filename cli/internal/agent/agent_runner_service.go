@@ -276,14 +276,44 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 	}
 }
 
-func selectedRoutingCandidateMetrics(routing *agentlib.ServiceRoutingDecisionData) (int, float64, float64, string) {
-	if routing == nil {
-		return 0, 0, 0, ""
+// selectedRoutingCandidate resolves Fizeau's public candidate evidence against
+// every route axis available in the routing decision and final event. Fizeau's
+// public final route omits endpoint and does not expose a selected-candidate ID,
+// so ambiguous or conflicting evidence must fail closed.
+func selectedRoutingCandidate(routing *agentlib.ServiceRoutingDecisionData, actual *agentlib.ServiceRoutingActual) (*agentlib.ServiceRoutingDecisionCandidate, bool) {
+	if routing == nil || actual == nil {
+		return nil, false
 	}
-	for _, candidate := range routing.Candidates {
-		if candidate.Eligible && candidate.Model == routing.Model {
-			return candidate.Components.Power, candidate.Components.SpeedTPS, candidate.CostUSDPer1kTokens, candidate.CostSource
+	// A model is not a route identity. Require at least one non-model axis from
+	// the completed route before associating candidate economics or billing.
+	if actual.Harness == "" && actual.Provider == "" && actual.ServerInstance == "" {
+		return nil, false
+	}
+	var selected *agentlib.ServiceRoutingDecisionCandidate
+	for i := range routing.Candidates {
+		candidate := &routing.Candidates[i]
+		if !candidate.Eligible ||
+			!routingCandidateAxisMatches(candidate.Harness, routing.Harness) ||
+			!routingCandidateAxisMatches(candidate.Provider, routing.Provider) ||
+			!routingCandidateAxisMatches(candidate.Endpoint, routing.Endpoint) ||
+			!routingCandidateAxisMatches(candidate.ServerInstance, routing.ServerInstance) ||
+			!routingCandidateAxisMatches(candidate.Model, routing.Model) {
+			continue
 		}
+		if !routingCandidateAxisMatches(candidate.Harness, actual.Harness) ||
+			!routingCandidateAxisMatches(candidate.Provider, actual.Provider) ||
+			!routingCandidateAxisMatches(candidate.ServerInstance, actual.ServerInstance) ||
+			!routingCandidateAxisMatches(candidate.Model, actual.Model) {
+			continue
+		}
+		if selected != nil {
+			return nil, false
+		}
+		selected = candidate
 	}
-	return 0, 0, 0, ""
+	return selected, selected != nil
+}
+
+func routingCandidateAxisMatches(candidate, route string) bool {
+	return route == "" || candidate == route
 }

@@ -314,14 +314,10 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if routing.Reason != "" {
 			result.RouteReason = routing.Reason
 		}
-		if power, speed, cost, source := selectedRoutingCandidateMetrics(routing); power > 0 || speed > 0 || cost > 0 || source != "" {
-			result.PredictedPower = power
-			result.PredictedSpeedTPS = speed
-			result.PredictedCostUSDPer1kTokens = cost
-			result.PredictedCostSource = source
-		}
 	}
+	var routingActual *agentlib.ServiceRoutingActual
 	if final != nil {
+		routingActual = final.RoutingActual
 		// Normalized final text from the upstream harness (agent-32e8ff5e);
 		// reviewer verdict extraction now parses this instead of raw stream
 		// frames (ddx-7bc0c8d5).
@@ -347,7 +343,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		result.ExitCode = final.ExitCode
 		result.Error = final.Error
 		if final.RoutingActual != nil {
-			if result.Provider == "" {
+			if final.RoutingActual.Provider != "" {
 				result.Provider = final.RoutingActual.Provider
 			}
 			if final.RoutingActual.Model != "" {
@@ -363,6 +359,13 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if final.SessionLogPath != "" {
 			result.AgentSessionID = final.SessionLogPath
 		}
+	}
+	if candidate, ok := selectedRoutingCandidate(routing, routingActual); ok {
+		result.Billing = string(candidate.Billing)
+		result.PredictedPower = candidate.Components.Power
+		result.PredictedSpeedTPS = candidate.Components.SpeedTPS
+		result.PredictedCostUSDPer1kTokens = candidate.CostUSDPer1kTokens
+		result.PredictedCostSource = candidate.CostSource
 	}
 	normalizeServiceFinalExitCode(result)
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{

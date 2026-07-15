@@ -34,56 +34,50 @@ func TestSessionIndexWritesMonthlyShards(t *testing.T) {
 	}
 }
 
-func TestAppendSessionIndexDerivesAndValidatesBillingMode(t *testing.T) {
+func TestSessionIndexUsesOnlyFizeauReportedBilling(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), ddxroot.DirName, "agent-logs")
 	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 
-	for _, mode := range []string{BillingModePaid, BillingModeSubscription, BillingModeLocal} {
+	cases := []struct {
+		id      string
+		billing string
+		mode    string
+	}{
+		{id: "per-token", billing: "per_token", mode: BillingModePaid},
+		{id: "subscription", billing: "subscription", mode: BillingModeSubscription},
+		{id: "fixed", billing: "fixed", mode: BillingModeLocal},
+		{id: "missing", mode: BillingModeUnknown},
+		{id: "unfamiliar", billing: "future-model", mode: BillingModeUnknown},
+	}
+	for i, tc := range cases {
 		if err := AppendSessionIndex(logDir, SessionIndexEntry{
-			ID:          "explicit-" + mode,
-			Harness:     "codex",
-			StartedAt:   now,
-			BillingMode: mode,
+			ID: tc.id, Harness: "codex", Provider: "openai", BaseURL: "http://127.0.0.1:1234/v1",
+			StartedAt: now.Add(time.Duration(i) * time.Minute), Billing: tc.billing,
+			BillingMode: BillingModePaid, // must be replaced by the raw evidence mapping.
 		}, now); err != nil {
-			t.Fatalf("AppendSessionIndex explicit %s: %v", mode, err)
+			t.Fatalf("AppendSessionIndex %s: %v", tc.id, err)
 		}
-	}
-
-	if err := AppendSessionIndex(logDir, SessionIndexEntry{
-		ID:          "invalid",
-		Harness:     "codex",
-		StartedAt:   now,
-		BillingMode: "free",
-	}, now); err == nil {
-		t.Fatal("AppendSessionIndex accepted invalid billingMode")
-	}
-
-	derivedAt := now.Add(time.Minute)
-	if err := AppendSessionIndex(logDir, SessionIndexEntry{
-		ID:        "derived",
-		Harness:   "codex",
-		StartedAt: derivedAt,
-	}, derivedAt); err != nil {
-		t.Fatalf("AppendSessionIndex derived: %v", err)
 	}
 	indexed, err := ReadSessionIndex(logDir, SessionIndexQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
+	want := make(map[string]string, len(cases))
+	wantRaw := make(map[string]string, len(cases))
+	for _, tc := range cases {
+		want[tc.id] = tc.mode
+		wantRaw[tc.id] = tc.billing
+	}
 	for _, row := range indexed {
-		if row.BillingMode == "" {
-			t.Fatalf("indexed row %q has empty billingMode", row.ID)
+		if row.Billing != wantRaw[row.ID] {
+			t.Fatalf("row %q raw billing=%q, want preserved %q", row.ID, row.Billing, wantRaw[row.ID])
 		}
-		if row.ID == "derived" {
-			found = true
-			if row.BillingMode != BillingModeSubscription {
-				t.Fatalf("derived billingMode=%q, want %q", row.BillingMode, BillingModeSubscription)
-			}
+		if row.BillingMode != want[row.ID] {
+			t.Fatalf("row %q billingMode=%q, want %q", row.ID, row.BillingMode, want[row.ID])
 		}
 	}
-	if !found {
-		t.Fatal("derived row not found")
+	if len(indexed) != len(cases) {
+		t.Fatalf("indexed rows=%d, want %d", len(indexed), len(cases))
 	}
 }
 
@@ -142,7 +136,7 @@ func TestReindexLegacySessionsSplitsShardsAndDedupes(t *testing.T) {
 	}
 }
 
-func TestReindexLegacySessionsBackfillsBillingMode(t *testing.T) {
+func TestLegacySessionReindexPreservesUnknownBilling(t *testing.T) {
 	projectRoot := t.TempDir()
 	logDir := filepath.Join(projectRoot, DefaultLogDir)
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
@@ -150,9 +144,10 @@ func TestReindexLegacySessionsBackfillsBillingMode(t *testing.T) {
 	}
 	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	entries := []SessionEntry{
-		{ID: "cash", Timestamp: now, Harness: "openrouter", Model: "openai/gpt-5.4", CostUSD: 0.03},
-		{ID: "sub", Timestamp: now.Add(time.Minute), Harness: "claude", Model: "claude-sonnet-4-6", CostUSD: 0.04},
-		{ID: "local", Timestamp: now.Add(2 * time.Minute), Harness: "agent", Surface: "openai-compat", BaseURL: "http://127.0.0.1:1234/v1"},
+		{ID: "cash-looking", Timestamp: now, Harness: "openrouter", Provider: "openai", BillingMode: BillingModePaid},
+		{ID: "sub-looking", Timestamp: now.Add(time.Minute), Harness: "claude", Provider: "anthropic", BillingMode: BillingModeSubscription},
+		{ID: "local-looking", Timestamp: now.Add(2 * time.Minute), Harness: "agent", Surface: "openai-compat", BaseURL: "http://127.0.0.1:1234/v1", BillingMode: BillingModeLocal},
+		{ID: "raw-evidence", Timestamp: now.Add(3 * time.Minute), Harness: "anything", Billing: "per_token"},
 	}
 	f, err := os.Create(filepath.Join(logDir, LegacySessionsFileName))
 	if err != nil {
@@ -170,8 +165,8 @@ func TestReindexLegacySessionsBackfillsBillingMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 3 {
-		t.Fatalf("reindex count=%d, want 3", count)
+	if count != 4 {
+		t.Fatalf("reindex count=%d, want 4", count)
 	}
 	indexed, err := ReadSessionIndex(logDir, SessionIndexQuery{})
 	if err != nil {
@@ -184,7 +179,10 @@ func TestReindexLegacySessionsBackfillsBillingMode(t *testing.T) {
 		}
 		got[row.ID] = row.BillingMode
 	}
-	want := map[string]string{"cash": BillingModePaid, "sub": BillingModeSubscription, "local": BillingModeLocal}
+	want := map[string]string{
+		"cash-looking": BillingModeUnknown, "sub-looking": BillingModeUnknown,
+		"local-looking": BillingModeUnknown, "raw-evidence": BillingModePaid,
+	}
 	for id, mode := range want {
 		if got[id] != mode {
 			t.Fatalf("billingMode[%s]=%q, want %q (all=%v)", id, got[id], mode, got)

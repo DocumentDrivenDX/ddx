@@ -341,7 +341,7 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 	entry := SessionEntry{
 		ID: genSessionID(), Timestamp: time.Now().UTC(), Harness: result.Harness,
 		Provider: result.Provider, Surface: surface, CanonicalTarget: canonicalTarget,
-		BaseURL: result.ResolvedBaseURL, BillingMode: billingModeFor(result.Harness, surface, result.ResolvedBaseURL),
+		BaseURL: result.ResolvedBaseURL, Billing: result.Billing, BillingMode: BillingPresentationMode(result.Billing),
 		Model: result.Model, PromptLen: promptLen, Prompt: prompt, PromptSource: promptSource,
 		Response: result.Output, Correlation: correlation, NativeSessionID: result.AgentSessionID,
 		Stderr: result.Stderr, Tokens: result.Tokens, InputTokens: result.InputTokens,

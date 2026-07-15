@@ -107,6 +107,7 @@ const (
 type Result struct {
 	Harness                     string  `json:"harness"`
 	Provider                    string  `json:"provider,omitempty"`
+	Billing                     string  `json:"billing,omitempty"`
 	Model                       string  `json:"model,omitempty"`
 	ActualPower                 int     `json:"actual_power,omitempty"`
 	PredictedPower              int     `json:"predicted_power,omitempty"`
@@ -141,6 +142,7 @@ type SessionEntry struct {
 	Surface         string            `json:"surface,omitempty"`
 	CanonicalTarget string            `json:"canonical_target,omitempty"`
 	BaseURL         string            `json:"base_url,omitempty"`
+	Billing         string            `json:"billing,omitempty"`
 	BillingMode     string            `json:"billingMode,omitempty"`
 	Model           string            `json:"model,omitempty"`
 	PromptLen       int               `json:"prompt_len"`

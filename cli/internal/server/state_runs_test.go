@@ -44,6 +44,7 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 		Harness:      "claude",
 		Provider:     "anthropic",
 		Model:        "claude-sonnet-4-6",
+		Billing:      "subscription",
 		BillingMode:  "subscription",
 		StartedAt:    now,
 		DurationMS:   5000,
@@ -58,6 +59,7 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 	appendSummarySession(t, workDir, agent.SessionIndexEntry{
 		ID:          "sess-orphan-002",
 		Harness:     "codex",
+		Billing:     "per_token",
 		BillingMode: "paid",
 		StartedAt:   now.Add(time.Minute),
 		DurationMS:  2000,
@@ -186,5 +188,32 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 		if r.Layer != ddxgraphql.RunLayerRun {
 			t.Fatalf("layer=run filter returned %q", r.Layer)
 		}
+	}
+}
+
+func TestSessionEntryToRunBillingUsesOnlyRawFizeauEvidence(t *testing.T) {
+	cases := []struct {
+		name  string
+		entry agent.SessionIndexEntry
+		want  string
+	}{
+		{
+			name:  "raw evidence overrides conflicting derived mode",
+			entry: agent.SessionIndexEntry{Billing: "per_token", BillingMode: agent.BillingModeSubscription},
+			want:  agent.BillingModePaid,
+		},
+		{
+			name:  "empty raw evidence ignores stale identity-era mode",
+			entry: agent.SessionIndexEntry{Harness: "codex", Provider: "openai", BillingMode: agent.BillingModeSubscription},
+			want:  agent.BillingModeUnknown,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			run := sessionEntryToRun(tc.entry)
+			if run.BillingMode == nil || *run.BillingMode != tc.want {
+				t.Fatalf("BillingMode=%v, want %q from raw billing=%q", run.BillingMode, tc.want, tc.entry.Billing)
+			}
+		})
 	}
 }

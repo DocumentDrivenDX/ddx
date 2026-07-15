@@ -31,6 +31,8 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 				"components": map[string]any{"power": 20},
 			},
 			{
+				"harness":                "fiz",
+				"provider":               "anthropic",
 				"model":                  "claude-3-5-sonnet",
 				"eligible":               true,
 				"cost_usd_per_1k_tokens": 0.0125,
@@ -64,12 +66,62 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 
 	_, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, nil)
 	require.NotNil(t, routing)
-	power, speed, cost, source := selectedRoutingCandidateMetrics(routing)
-	assert.Equal(t, 65, power,
+	candidate, ok := selectedRoutingCandidate(routing, &agentlib.ServiceRoutingActual{
+		Harness: "fiz", Provider: "anthropic", Model: "claude-3-5-sonnet",
+	})
+	require.True(t, ok)
+	assert.Equal(t, 65, candidate.Components.Power,
 		"power must come from the eligible winning candidate in routing_decision.candidates")
-	assert.Equal(t, 42.5, speed)
-	assert.Equal(t, 0.0125, cost)
-	assert.Equal(t, "catalog", source)
+	assert.Equal(t, 42.5, candidate.Components.SpeedTPS)
+	assert.Equal(t, 0.0125, candidate.CostUSDPer1kTokens)
+	assert.Equal(t, "catalog", candidate.CostSource)
+}
+
+func TestSelectedRoutingCandidateMatchesAllRouteAxes(t *testing.T) {
+	routing := &agentlib.ServiceRoutingDecisionData{
+		Harness:        "claude",
+		Provider:       "anthropic",
+		Endpoint:       "https://api.anthropic.com",
+		ServerInstance: "anthropic-primary",
+		Model:          "claude-sonnet-4-6",
+	}
+	actual := &agentlib.ServiceRoutingActual{
+		Harness:        routing.Harness,
+		Provider:       routing.Provider,
+		ServerInstance: routing.ServerInstance,
+		Model:          routing.Model,
+	}
+	exact := agentlib.ServiceRoutingDecisionCandidate{
+		Harness: routing.Harness, Provider: routing.Provider, Endpoint: routing.Endpoint,
+		ServerInstance: routing.ServerInstance, Model: routing.Model, Eligible: true,
+		Billing: agentlib.BillingModelSubscription,
+	}
+	routing.Candidates = []agentlib.ServiceRoutingDecisionCandidate{
+		{Harness: "codex", Provider: routing.Provider, Endpoint: routing.Endpoint, ServerInstance: routing.ServerInstance, Model: routing.Model, Eligible: true, Billing: agentlib.BillingModelPerToken},
+		{Harness: routing.Harness, Provider: "bedrock", Endpoint: routing.Endpoint, ServerInstance: routing.ServerInstance, Model: routing.Model, Eligible: true, Billing: agentlib.BillingModelPerToken},
+		{Harness: routing.Harness, Provider: routing.Provider, Endpoint: "https://other.invalid", ServerInstance: routing.ServerInstance, Model: routing.Model, Eligible: true, Billing: agentlib.BillingModelPerToken},
+		{Harness: routing.Harness, Provider: routing.Provider, Endpoint: routing.Endpoint, ServerInstance: "other-instance", Model: routing.Model, Eligible: true, Billing: agentlib.BillingModelPerToken},
+		{Harness: routing.Harness, Provider: routing.Provider, Endpoint: routing.Endpoint, ServerInstance: routing.ServerInstance, Model: "same-family-other-model", Eligible: true, Billing: agentlib.BillingModelPerToken},
+		exact,
+	}
+
+	selected, ok := selectedRoutingCandidate(routing, actual)
+	require.True(t, ok)
+	assert.Equal(t, agentlib.BillingModelSubscription, selected.Billing)
+
+	_, ok = selectedRoutingCandidate(routing, nil)
+	assert.False(t, ok, "a routing decision is not proof of the completed route")
+	_, ok = selectedRoutingCandidate(routing, &agentlib.ServiceRoutingActual{Model: routing.Model})
+	assert.False(t, ok, "a model alone is not a route identity")
+
+	conflictingActual := *actual
+	conflictingActual.Provider = "fallback-provider"
+	_, ok = selectedRoutingCandidate(routing, &conflictingActual)
+	assert.False(t, ok, "conflicting final-route evidence must fail closed")
+
+	routing.Candidates = append(routing.Candidates, exact)
+	_, ok = selectedRoutingCandidate(routing, actual)
+	assert.False(t, ok, "public Fizeau evidence has no candidate ID, so duplicate matches are ambiguous")
 }
 
 // TestDrainServiceEvents_ForwardsCanonicalProgressPayload proves canonical

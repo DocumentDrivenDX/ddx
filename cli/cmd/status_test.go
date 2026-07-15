@@ -255,6 +255,7 @@ func TestStatusIncludesAgentUsage(t *testing.T) {
 			ID:           "sess-1",
 			Timestamp:    time.Now().UTC(),
 			Harness:      "codex",
+			Billing:      "subscription",
 			Model:        "gpt-test",
 			InputTokens:  1234,
 			OutputTokens: 567,
