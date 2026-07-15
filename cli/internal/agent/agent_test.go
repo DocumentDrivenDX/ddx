@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMain scrubs all GIT_* environment variables before running tests so
-// test subprocesses (and the production code under test) don't inherit
-// lefthook's GIT_DIR/GIT_WORK_TREE and leak into the parent repo's config.
+// TestMain isolates global config and scrubs all GIT_* environment variables
+// so tests cannot inherit operator DDx/Fizeau state or lefthook's parent-repo
+// Git context.
 func TestMain(m *testing.M) {
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "GIT_") {
@@ -60,11 +60,26 @@ func TestMain(m *testing.M) {
 		}
 	}
 	originalPATH := os.Getenv("PATH")
+	originalHome, hadHome := os.LookupEnv("HOME")
+	originalXDGConfigHome, hadXDGConfigHome := os.LookupEnv("XDG_CONFIG_HOME")
 	if err := os.Setenv("PATH", providerShimRoot+string(os.PathListSeparator)+originalPATH); err != nil {
 		_ = os.RemoveAll(providerShimRoot)
 		fmt.Fprintln(os.Stderr, "TestMain: install fake provider PATH:", err)
 		os.Exit(1)
 	}
+	testHome := filepath.Join(providerShimRoot, "home")
+	if err := os.MkdirAll(testHome, 0o755); err != nil {
+		_ = os.RemoveAll(providerShimRoot)
+		fmt.Fprintln(os.Stderr, "TestMain: create isolated HOME:", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(filepath.Join(testHome, ".gitconfig"), []byte("[user]\n\tname = DDx Test\n\temail = ddx-test@example.invalid\n"), 0o600); err != nil {
+		_ = os.RemoveAll(providerShimRoot)
+		fmt.Fprintln(os.Stderr, "TestMain: write isolated Git identity:", err)
+		os.Exit(1)
+	}
+	_ = os.Setenv("HOME", testHome)
+	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(providerShimRoot, "config"))
 	originalLookup := providerShimExecutableLookup
 	originalOrphanScannerFactory := defaultOrphanHarnessProcessScanner
 	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
@@ -79,6 +94,16 @@ func TestMain(m *testing.M) {
 	providerShimExecutableLookup = originalLookup
 	defaultOrphanHarnessProcessScanner = originalOrphanScannerFactory
 	_ = os.Setenv("PATH", originalPATH)
+	if hadHome {
+		_ = os.Setenv("HOME", originalHome)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	if hadXDGConfigHome {
+		_ = os.Setenv("XDG_CONFIG_HOME", originalXDGConfigHome)
+	} else {
+		_ = os.Unsetenv("XDG_CONFIG_HOME")
+	}
 	_ = os.RemoveAll(providerShimRoot)
 	os.Exit(code)
 }

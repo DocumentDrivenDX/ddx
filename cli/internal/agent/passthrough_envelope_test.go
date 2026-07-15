@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -153,16 +152,8 @@ func resolvedWithPassthrough(harness, provider, model string, minPower, maxPower
 
 func TestProviderTimeoutIsExplicitOnly(t *testing.T) {
 	workDir := t.TempDir()
-	ddxDir := testutils.MakeInitializedDDxRoot(t, workDir)
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
-agent:
-  endpoints:
-    - type: openai
-      base_url: http://127.0.0.1:1/v1
-      request_timeout_seconds: 17
-`), 0o600))
 
-	provider := "openai-127-0-0-1-1"
+	provider := "opaque-provider"
 	base := config.NewTestConfigForRun(config.TestRunConfigOpts{})
 	omitted := base.Resolve(config.CLIOverrides{Provider: provider})
 	omittedSvc := &passthroughTestService{}
@@ -189,7 +180,7 @@ agent:
 	assert.False(t, explicitSvc.listPoliciesCalled)
 }
 
-func TestExplicitPublicExecutionConstraintsSurviveProviderDetachment(t *testing.T) {
+func TestExplicitPublicExecutionConstraintsSurviveProviderConfigDeletion(t *testing.T) {
 	idleTimeout := 43*time.Second + 17*time.Millisecond
 	providerTimeout := 47*time.Second + 29*time.Millisecond
 	wallTimeout := 53*time.Second + 31*time.Millisecond

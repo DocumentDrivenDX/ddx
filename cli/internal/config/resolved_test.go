@@ -36,7 +36,6 @@ func sealedFixture() ResolvedConfig {
 		evidenceCaps:                 evidence.DefaultCaps(),
 		sessionLogDir:                "/tmp/sessions",
 		mirrorConfig:                 &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
-		reasoningLevels:              map[string][]string{"smart": {"high"}},
 		beadQualityMode:              BeadQualityModeBlock,
 	}
 }
@@ -89,7 +88,6 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"EvidenceCaps":                       func(r ResolvedConfig) { _ = r.EvidenceCaps() },
 		"SessionLogDir":                      func(r ResolvedConfig) { _ = r.SessionLogDir() },
 		"MirrorConfig":                       func(r ResolvedConfig) { _ = r.MirrorConfig() },
-		"ReasoningLevels":                    func(r ResolvedConfig) { _ = r.ReasoningLevels() },
 		"BeadQualityLintBlockThresholdScore": func(r ResolvedConfig) { _ = r.BeadQualityLintBlockThresholdScore() },
 		"BeadQualityMode":                    func(r ResolvedConfig) { _ = r.BeadQualityMode() },
 	}
@@ -324,12 +322,6 @@ func TestResolveDeepCopy(t *testing.T) {
 	mirrorAsync := true
 	cfg := &NewConfig{
 		Agent: &AgentConfig{
-			Models: map[string]string{
-				"smart": "claude-opus",
-			},
-			ReasoningLevels: map[string][]string{
-				"smart": {"high", "medium"},
-			},
 			Routing: &RoutingConfig{},
 		},
 		Executions: &ExecutionsConfig{
@@ -344,26 +336,9 @@ func TestResolveDeepCopy(t *testing.T) {
 
 	rcfg := cfg.Resolve(CLIOverrides{Profile: "default"})
 
-	// Mutate exposed maps from the resolved value.
-	levels := rcfg.ReasoningLevels()
-	levels["smart"][0] = "MUTATED"
-	levels["new-key"] = []string{"x"}
-
-	// Source cfg must be untouched.
-	if got := cfg.Agent.ReasoningLevels["smart"][0]; got != "high" {
-		t.Fatalf("source ReasoningLevels mutated: %q", got)
-	}
-	if _, ok := cfg.Agent.ReasoningLevels["new-key"]; ok {
-		t.Fatalf("source ReasoningLevels gained new-key")
-	}
 	// Mutating the source after Resolve must not leak into resolved view.
-	cfg.Agent.ReasoningLevels["smart"][0] = "SOURCE-MUTATED"
 	cfg.Executions.Mirror.Kind = "SOURCE-MUTATED"
 
-	freshLevels := rcfg.ReasoningLevels()
-	if freshLevels["smart"][0] != "high" {
-		t.Fatalf("post-source-mutation levels = %v", freshLevels)
-	}
 	if rcfg.MirrorConfig().Kind != "fs" {
 		t.Fatalf("post-source-mutation mirror kind = %q", rcfg.MirrorConfig().Kind)
 	}
@@ -471,32 +446,11 @@ func TestLoadAndResolveLoadError(t *testing.T) {
 	}
 }
 
-func TestResolvedConfigReasoningLevelsAccessor(t *testing.T) {
-	got := sealedFixture().ReasoningLevels()
-	if len(got["smart"]) != 1 || got["smart"][0] != "high" {
-		t.Fatalf("ReasoningLevels = %v", got)
-	}
-	got["smart"][0] = "MUTATED"
-	got["new-key"] = []string{"x"}
-	fresh := sealedFixture().ReasoningLevels()
-	if fresh["smart"][0] != "high" {
-		t.Fatalf("ReasoningLevels not defensively copied: %v", fresh)
-	}
-	if (ResolvedConfig{sealed: true}).ReasoningLevels() != nil {
-		t.Fatalf("zero-after-seal ReasoningLevels should be nil")
-	}
-}
+// TestOpaquePassthroughPreservesOnlyExplicitModel preserves the serialized compatibility
+// flag while proving only explicit request constraints affect resolution.
+func TestOpaquePassthroughPreservesOnlyExplicitModel(t *testing.T) {
+	cfg := &NewConfig{Agent: &AgentConfig{}}
 
-// TestOpaquePassthroughBlocksConfigModel preserves the serialized compatibility
-// flag while proving project model configuration never affects resolution.
-func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
-	cfg := &NewConfig{
-		Agent: &AgentConfig{
-			Model: "openrouter/gpt-5.4-mini",
-		},
-	}
-
-	// Project model configuration is ignored regardless of the compatibility flag.
 	normalRcfg := cfg.Resolve(CLIOverrides{})
 	if got := normalRcfg.Harness(); got != "" {
 		t.Fatalf("baseline Harness = %q, want empty", got)
@@ -525,12 +479,10 @@ func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
 	}
 }
 
-func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T) {
+func TestResolveTracksExplicitRoutePins(t *testing.T) {
 	cfg := &NewConfig{
 		Version: "1.0",
-		Agent: &AgentConfig{
-			Model: "openrouter/gpt-5.4-mini",
-		},
+		Agent:   &AgentConfig{},
 	}
 
 	configOnly := cfg.Resolve(CLIOverrides{})
@@ -551,44 +503,5 @@ func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T
 	}
 	if got, ok := explicit.ExplicitModel(); !ok || got != "gpt-5.4-mini" {
 		t.Fatalf("ExplicitModel = (%q, %v), want (gpt-5.4-mini, true)", got, ok)
-	}
-}
-
-func TestFizeauAutoRoutingLocalProvidersNotDefaultBeforeValidation(t *testing.T) {
-	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	yaml := `version: "1.0"
-library:
-  path: ./library
-  repository:
-    url: https://github.com/example/repo
-    branch: main
-agent:
-  endpoints:
-    - type: openrouter
-      base_url: https://openrouter.ai/api/v1
-`
-	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	rcfg, err := LoadAndResolve(tempDir, CLIOverrides{})
-	if err != nil {
-		t.Fatalf("LoadAndResolve: %v", err)
-	}
-	if got := rcfg.Harness(); got != "" {
-		t.Fatalf("Harness = %q, want empty", got)
-	}
-	if got := rcfg.Provider(); got != "" {
-		t.Fatalf("Provider = %q, want empty", got)
-	}
-	if got := rcfg.Model(); got != "" {
-		t.Fatalf("Model = %q, want empty", got)
-	}
-	if got := rcfg.Profile(); got != "" {
-		t.Fatalf("Profile = %q, want empty", got)
 	}
 }

@@ -171,8 +171,6 @@ library:
     url: https://github.com/example/repo
     branch: main
 review_max_retries: 5
-agent:
-  model: configured-project-model-must-not-leak
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfgYAML), 0o644))
 
@@ -200,7 +198,7 @@ agent:
 	assert.Equal(t, harnessCfg, got.args["harness"],
 		"input harness override (%s) must reach dispatcher args byte-for-byte",
 		harnessCfg)
-	assert.Empty(t, got.args["model"], "project agent.model must not enter GraphQL worker routing args")
+	assert.Empty(t, got.args["model"], "an unspecified model must not enter GraphQL worker routing args")
 	assert.Empty(t, got.args["profile"],
 		"with no explicit profile, GraphQL must leave policy selection to Fizeau")
 	assert.Equal(t, "watch", got.args["mode"],

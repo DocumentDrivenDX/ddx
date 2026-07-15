@@ -301,38 +301,6 @@ repository:
 	assert.Nil(t, config)
 }
 
-func TestLoadConfig_AgentCapabilitiesFields(t *testing.T) {
-	tempDir := t.TempDir()
-
-	content := `version: "1.0"
-library:
-  path: "./library"
-  repository:
-    url: "https://github.com/test/repo"
-    branch: "main"
-agent:
-  model: o3-mini
-  models:
-    claude: claude-sonnet-4-20250514
-  reasoning_levels:
-    codex:
-      - low
-      - medium
-      - high
-`
-
-	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0644))
-
-	cfg, err := LoadWithWorkingDir(tempDir)
-	require.NoError(t, err)
-	require.NotNil(t, cfg.Agent)
-	assert.Equal(t, "o3-mini", cfg.Agent.Model)
-	assert.Equal(t, "claude-sonnet-4-20250514", cfg.Agent.Models["claude"])
-	assert.Equal(t, []string{"low", "medium", "high"}, cfg.Agent.ReasoningLevels["codex"])
-}
-
 func TestSchemaValidation_AgentVirtualNormalize(t *testing.T) {
 	t.Parallel()
 	validator, err := NewValidator()

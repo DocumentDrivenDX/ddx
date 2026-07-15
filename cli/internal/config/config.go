@@ -19,6 +19,46 @@ type RoutingMigrationError struct {
 	Path  string
 }
 
+// AgentConfigMigrationError signals that the loaded config carries durable
+// provider configuration that now belongs to Fizeau. The field is gone for
+// good; configs must be migrated before DDx will load them.
+type AgentConfigMigrationError struct {
+	Field string
+	Path  string
+}
+
+func (e *AgentConfigMigrationError) Error() string {
+	return fmt.Sprintf(
+		"%s: %s has been removed from DDx configuration. "+
+			"Migration: move durable provider, model, and credential configuration "+
+			"to Fizeau's .fizeau/config.yaml or ~/.config/fizeau/config.yaml, then delete this field. "+
+			"See docs/migrations/routing-config.md.",
+		e.Path, e.Field)
+}
+
+// checkAgentConfigMigration parses the raw config bytes and hard-errors on
+// any removed durable provider field. Presence is checked independently of
+// value so empty maps, empty lists, empty strings, and null are all rejected.
+func checkAgentConfigMigration(path string, data []byte) error {
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil // YAML errors surface from the validator below
+	}
+	agent, _ := raw["agent"].(map[string]any)
+	if agent == nil {
+		return nil
+	}
+	for _, field := range []string{"model", "models", "reasoning_levels", "endpoints"} {
+		if _, ok := agent[field]; ok {
+			return &AgentConfigMigrationError{
+				Field: "agent." + field,
+				Path:  path,
+			}
+		}
+	}
+	return nil
+}
+
 func (e *RoutingMigrationError) Error() string {
 	return fmt.Sprintf(
 		"%s: %s has been removed. "+
@@ -443,10 +483,14 @@ func ResolveLibraryResource(resourcePath, configPath, workingDir string) (string
 
 // LoadFromFile loads configuration from a specific file path
 func LoadFromFile(configPath string) (*Config, error) {
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve config file path %s: %w", configPath, err)
+	}
 	// Use ConfigLoader to load the file
-	loader, err := NewConfigLoaderWithWorkingDir(filepath.Dir(configPath))
+	loader, err := NewConfigLoaderWithWorkingDir(filepath.Dir(absPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config loader: %w", err)
 	}
-	return loader.LoadConfigFromPath(configPath)
+	return loader.LoadConfigFromPath(absPath)
 }

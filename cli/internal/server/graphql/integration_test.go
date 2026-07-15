@@ -39,8 +39,8 @@ func skipIntegrationInShort(t *testing.T) {
 	}
 }
 
-// TestMain scrubs GIT_* environment variables so subprocess git calls in tests
-// write to temp directories rather than the parent repository.
+// TestMain isolates global config and scrubs GIT_* environment variables so
+// tests cannot read operator state or write through the parent repository.
 func TestMain(m *testing.M) {
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "GIT_") {
@@ -61,12 +61,26 @@ func isolateGraphQLTestTempRoot() func() {
 		return func() {}
 	}
 	oldTmp, hadTmp := os.LookupEnv("TMPDIR")
+	oldHome, hadHome := os.LookupEnv("HOME")
+	oldXDGConfigHome, hadXDGConfigHome := os.LookupEnv("XDG_CONFIG_HOME")
 	_ = os.Setenv("TMPDIR", tempRoot)
+	_ = os.Setenv("HOME", filepath.Join(tempRoot, "home"))
+	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(tempRoot, "config"))
 	return func() {
 		if hadTmp {
 			_ = os.Setenv("TMPDIR", oldTmp)
 		} else {
 			_ = os.Unsetenv("TMPDIR")
+		}
+		if hadHome {
+			_ = os.Setenv("HOME", oldHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+		if hadXDGConfigHome {
+			_ = os.Setenv("XDG_CONFIG_HOME", oldXDGConfigHome)
+		} else {
+			_ = os.Unsetenv("XDG_CONFIG_HOME")
 		}
 		_ = os.RemoveAll(tempRoot)
 	}

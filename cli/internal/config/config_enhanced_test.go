@@ -121,11 +121,10 @@ func TestValidateResolve(t *testing.T) {
 		assert.Equal(t, BeadQualityModeWarnOnly, rcfg.BeadQualityMode(), "default bead-quality mode")
 	})
 
-	t.Run("agent config model never becomes an execution constraint", func(t *testing.T) {
+	t.Run("generic agent config resolves execution controls", func(t *testing.T) {
 		cfg := &NewConfig{
 			Version: "1.0",
 			Agent: &AgentConfig{
-				Model:       "claude-opus",
 				Permissions: "ask",
 				TimeoutMS:   5000,
 			},
@@ -142,7 +141,6 @@ func TestValidateResolve(t *testing.T) {
 		cfg := &NewConfig{
 			Version: "1.0",
 			Agent: &AgentConfig{
-				Model:       "claude-opus",
 				Permissions: "ask",
 			},
 			EvidenceCaps: &EvidenceCapsConfig{

@@ -303,6 +303,101 @@ persona_bindings: {}`
 	}
 }
 
+func TestPromptsShowUsesFactoryWorkingDir(t *testing.T) {
+	projectDir := t.TempDir()
+	ddxDir := ddxroot.JoinProject(projectDir)
+	promptDir := filepath.Join(projectDir, "library", "prompts", "common")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.MkdirAll(promptDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: ./library
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptDir, "review.md"), []byte("review from injected working directory\n"), 0o644))
+
+	rootCmd := getPromptsTestRootCommand(t, projectDir)
+	output, err := executeCommand(rootCmd, "prompts", "show", "common/review")
+	require.NoError(t, err)
+	assert.Equal(t, "review from injected working directory\n", output)
+}
+
+func TestPromptsShowPreservesAbsoluteLibraryPath(t *testing.T) {
+	projectDir := t.TempDir()
+	libraryDir := t.TempDir()
+	promptDir := filepath.Join(libraryDir, "prompts", "common")
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectDir), 0o755))
+	require.NoError(t, os.MkdirAll(promptDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(ddxroot.JoinProject(projectDir), "config.yaml"),
+		[]byte("version: \"1.0\"\nlibrary:\n  path: "+libraryDir+"\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(promptDir, "review.md"), []byte("review from absolute library\n"), 0o644))
+
+	rootCmd := getPromptsTestRootCommand(t, projectDir)
+	output, err := executeCommand(rootCmd, "prompts", "show", "common/review")
+	require.NoError(t, err)
+	assert.Equal(t, "review from absolute library\n", output)
+}
+
+func TestPromptsShowPreservesAbsoluteLibraryEnvironmentOverride(t *testing.T) {
+	projectDir := t.TempDir()
+	libraryDir := t.TempDir()
+	promptDir := filepath.Join(libraryDir, "prompts", "common")
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectDir), 0o755))
+	require.NoError(t, os.MkdirAll(promptDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(ddxroot.JoinProject(projectDir), "config.yaml"),
+		[]byte("version: \"1.0\"\nlibrary:\n  path: ./missing-library\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(promptDir, "review.md"), []byte("review from environment override\n"), 0o644))
+	t.Setenv("DDX_LIBRARY_BASE_PATH", libraryDir)
+
+	rootCmd := getPromptsTestRootCommand(t, projectDir)
+	output, err := executeCommand(rootCmd, "prompts", "show", "common/review")
+	require.NoError(t, err)
+	assert.Equal(t, "review from environment override\n", output)
+}
+
+func TestPromptsListResolvesRelativeAbsoluteAndEnvironmentLibraryPaths(t *testing.T) {
+	for _, source := range []string{"relative", "absolute", "environment"} {
+		t.Run(source, func(t *testing.T) {
+			projectDir := t.TempDir()
+			libraryDir := filepath.Join(projectDir, "relative-library")
+			configuredPath := "./relative-library"
+			t.Setenv("DDX_LIBRARY_BASE_PATH", "")
+
+			switch source {
+			case "absolute":
+				libraryDir = t.TempDir()
+				configuredPath = libraryDir
+			case "environment":
+				libraryDir = t.TempDir()
+				configuredPath = "./missing-library"
+				t.Setenv("DDX_LIBRARY_BASE_PATH", libraryDir)
+			}
+
+			promptDir := filepath.Join(libraryDir, "prompts", "common")
+			require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectDir), 0o755))
+			require.NoError(t, os.MkdirAll(promptDir, 0o755))
+			require.NoError(t, os.WriteFile(
+				filepath.Join(ddxroot.JoinProject(projectDir), "config.yaml"),
+				[]byte("version: \"1.0\"\nlibrary:\n  path: "+configuredPath+"\n"),
+				0o644,
+			))
+			require.NoError(t, os.WriteFile(filepath.Join(promptDir, "review.md"), []byte("review\n"), 0o644))
+
+			rootCmd := getPromptsTestRootCommand(t, projectDir)
+			output, err := executeCommand(rootCmd, "prompts", "list")
+			require.NoError(t, err)
+			assert.Contains(t, output, "Available prompts:")
+			assert.Contains(t, output, "common/review")
+			assert.NotContains(t, output, "No prompts directory found")
+		})
+	}
+}
+
 func TestPromptsCommand_Help(t *testing.T) {
 	// This test specifies that prompts command should have help text
 	// with list and show subcommands

@@ -116,12 +116,6 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 
 	if agent != nil {
 		r.sessionLogDir = agent.SessionLogDir
-		if agent.ReasoningLevels != nil {
-			r.reasoningLevels = make(map[string][]string, len(agent.ReasoningLevels))
-			for k, v := range agent.ReasoningLevels {
-				r.reasoningLevels[k] = append([]string(nil), v...)
-			}
-		}
 	}
 	if c != nil && c.Executions != nil && c.Executions.Mirror != nil {
 		r.mirrorConfig = c.Executions.Mirror.Clone()
@@ -201,7 +195,6 @@ type ResolvedConfig struct {
 	mirrorConfig                       *ExecutionsMirrorConfig
 	attemptBackend                     string
 	executionsDocker                   *ExecutionsDockerConfig
-	reasoningLevels                    map[string][]string
 	providerRequestTimeout             time.Duration
 	beadQualityLintBlockThresholdScore int
 	beadQualityMode                    string
@@ -362,13 +355,6 @@ func (r ResolvedConfig) ExecutionsDockerConfig() *ExecutionsDockerConfig {
 	return r.executionsDocker.Clone()
 }
 
-// ReasoningLevels returns a defensive copy of the reasoning-level map.
-// Mutating the returned map does not affect the receiver.
-func (r ResolvedConfig) ReasoningLevels() map[string][]string {
-	r.requireSealed()
-	return cloneStringSliceMap(r.reasoningLevels)
-}
-
 // TriagePolicy returns the post-attempt triage decision policy resolved
 // from the project config (top-level `triage:` block) layered onto the
 // binary default policy.
@@ -404,15 +390,4 @@ func (r ResolvedConfig) BeadQualityMode() string {
 func (r ResolvedConfig) ACQualityMinScore() float64 {
 	r.requireSealed()
 	return r.acQualityMinScore
-}
-
-func cloneStringSliceMap(m map[string][]string) map[string][]string {
-	if m == nil {
-		return nil
-	}
-	out := make(map[string][]string, len(m))
-	for k, v := range m {
-		out[k] = append([]string(nil), v...)
-	}
-	return out
 }

@@ -8,39 +8,15 @@ func TestAgentConfigClone(t *testing.T) {
 	}
 
 	src := &AgentConfig{
-		Model:           "claude-opus",
-		Models:          map[string]string{"smart": "claude-opus"},
-		ReasoningLevels: map[string][]string{"smart": {"high"}},
-		Endpoints:       []AgentEndpoint{{Type: "openai", Host: "h"}},
-		Routing:         &RoutingConfig{},
+		Routing: &RoutingConfig{},
 		Virtual: &VirtualConfig{
 			Normalize: []NormalizePattern{{Pattern: "p", Replace: "r"}},
 		},
 	}
 
 	dst := src.Clone()
-	dst.Models["smart"] = "X"
-	dst.Models["new"] = "Y"
-	dst.ReasoningLevels["smart"][0] = "X"
-	dst.ReasoningLevels["new"] = []string{"Y"}
-	dst.Endpoints[0].Host = "X"
 	dst.Virtual.Normalize[0].Pattern = "X"
 
-	if src.Models["smart"] != "claude-opus" {
-		t.Fatalf("source Models mutated: %v", src.Models)
-	}
-	if _, ok := src.Models["new"]; ok {
-		t.Fatal("source Models gained new key")
-	}
-	if src.ReasoningLevels["smart"][0] != "high" {
-		t.Fatalf("source ReasoningLevels mutated: %v", src.ReasoningLevels)
-	}
-	if _, ok := src.ReasoningLevels["new"]; ok {
-		t.Fatal("source ReasoningLevels gained new key")
-	}
-	if src.Endpoints[0].Host != "h" {
-		t.Fatalf("source Endpoints mutated: %v", src.Endpoints)
-	}
 	if dst.Routing == nil {
 		t.Fatal("Routing was not cloned")
 	}

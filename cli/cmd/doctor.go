@@ -110,7 +110,7 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 3: Configuration File
 	fmt.Print("✓ Checking Configuration... ")
-	if checkConfiguration() {
+	if checkConfiguration(f.WorkingDir) {
 		fmt.Println("✅ Configuration Valid")
 	} else {
 		fmt.Println("⚠️  Configuration Issues (non-critical)")
@@ -506,7 +506,7 @@ func legacySkillSymlinkDirs(workingDir string) []string {
 func (f *CommandFactory) runDoctorScoped(paths []string) error {
 	cats := categorizeStagedPaths(paths)
 	if cats["config"] {
-		if !checkConfiguration() {
+		if !checkConfiguration(f.WorkingDir) {
 			return fmt.Errorf("DDx configuration invalid; run 'ddx doctor' for details")
 		}
 	}
@@ -634,9 +634,12 @@ func isInPath() bool {
 	return err == nil
 }
 
-// checkConfiguration validates the DDX configuration
-func checkConfiguration() bool {
-	_, err := config.Load()
+// checkConfiguration validates the DDx configuration rooted at workingDir.
+func checkConfiguration(workingDir string) bool {
+	if workingDir == "" {
+		workingDir = "."
+	}
+	_, err := config.LoadWithWorkingDir(workingDir)
 	return err == nil
 }
 

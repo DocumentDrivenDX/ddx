@@ -40,6 +40,9 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test: spawns ddx work subprocess")
 	}
+	testHome := t.TempDir()
+	t.Setenv("HOME", testHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(testHome, ".config"))
 
 	// Use a 'standard' fixture (5 sample beads) so the loop has at least
 	// one bead to claim → at least one bead-scoped event flows. We don't

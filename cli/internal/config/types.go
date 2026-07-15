@@ -440,19 +440,17 @@ type GitConfig struct {
 	LargeDeletionLineThreshold int `yaml:"large_deletion_line_threshold,omitempty" json:"large_deletion_line_threshold,omitempty"`
 }
 
-// AgentConfig represents agent service configuration in .ddx/config.yaml
+// AgentConfig represents generic execution controls in .ddx/config.yaml.
+// Durable harness, provider, model, endpoint, and credential configuration
+// belongs to Fizeau.
 type AgentConfig struct {
-	Model           string              `yaml:"model,omitempty" json:"model,omitempty"`
-	Models          map[string]string   `yaml:"models,omitempty" json:"models,omitempty"`
-	ReasoningLevels map[string][]string `yaml:"reasoning_levels,omitempty" json:"reasoning_levels,omitempty"`
-	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
-	WallClockMS     int                 `yaml:"wall_clock_ms,omitempty" json:"wall_clock_ms,omitempty"`
-	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
-	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
-	Endpoints       []AgentEndpoint     `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
-	Routing         *RoutingConfig      `yaml:"routing,omitempty" json:"routing,omitempty"`
-	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
-	Triage          *TriageConfig       `yaml:"triage,omitempty" json:"triage,omitempty"`
+	TimeoutMS     int            `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+	WallClockMS   int            `yaml:"wall_clock_ms,omitempty" json:"wall_clock_ms,omitempty"`
+	SessionLogDir string         `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
+	Permissions   string         `yaml:"permissions,omitempty" json:"permissions,omitempty"`
+	Routing       *RoutingConfig `yaml:"routing,omitempty" json:"routing,omitempty"`
+	Virtual       *VirtualConfig `yaml:"virtual,omitempty" json:"virtual,omitempty"`
+	Triage        *TriageConfig  `yaml:"triage,omitempty" json:"triage,omitempty"`
 }
 
 // TriageConfig controls the bead readiness gate decomposition depth.
@@ -477,24 +475,6 @@ func (c *NewConfig) ResolveMaxDecompositionDepth() int {
 	return *c.Agent.Triage.MaxDecompositionDepth
 }
 
-// AgentEndpoint describes one endpoint-first native agent provider target.
-// Name and model are intentionally absent: routing discovers the live model IDs
-// from the endpoint's /v1/models response at dispatch time.
-type AgentEndpoint struct {
-	Type    string `yaml:"type,omitempty" json:"type,omitempty"`
-	Host    string `yaml:"host,omitempty" json:"host,omitempty"`
-	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
-	APIKey  string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
-	// RequestTimeoutSeconds is the wall-clock cap for a single Chat/ChatStream
-	// call to this endpoint. Zero means "use the model-class default" (15 min
-	// for standard models, 60 min for known thinking/reasoning models).
-	// Increase this for local thinking models that need >15 min to produce
-	// their first body delta (e.g. qwen3.6-35b on lmstudio).
-	// Example: request_timeout_seconds: 3600  # 1 hour
-	RequestTimeoutSeconds int `yaml:"request_timeout_seconds,omitempty" json:"request_timeout_seconds,omitempty"`
-}
-
 // RoutingConfig is the agent routing policy block.
 //
 // Note: agent.routing.default_harness was REMOVED in the routing-config
@@ -503,29 +483,6 @@ type AgentEndpoint struct {
 // final flat-list compatibility field is retired as well. Configs that still
 // carry any of these fields fail to load with a migration message.
 type RoutingConfig struct{}
-
-// AgentRunnerConfig was the embedded DDx Agent harness config block.
-// Deprecated: Use native .agent/config.yaml instead. This type is retained for
-// schema compatibility so existing configs with agent_runner blocks parse without error,
-// but DDx no longer reads or applies these values.
-type AgentRunnerConfig struct {
-	Provider      string `yaml:"provider,omitempty" json:"provider,omitempty"`
-	BaseURL       string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
-	APIKey        string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
-	Model         string `yaml:"model,omitempty" json:"model,omitempty"`
-	Preset        string `yaml:"preset,omitempty" json:"preset,omitempty"`
-	MaxIterations int    `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"`
-}
-
-// LLMPresetConfig defines a named LLM configuration with optional multi-endpoint support.
-// Deprecated: kept for schema compatibility; no longer read by DDx code.
-type LLMPresetConfig struct {
-	Model     string   `yaml:"model" json:"model"`
-	Provider  string   `yaml:"provider,omitempty" json:"provider,omitempty"`
-	Endpoints []string `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
-	APIKey    string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`
-	Strategy  string   `yaml:"strategy,omitempty" json:"strategy,omitempty"`
-}
 
 // VirtualConfig configures the virtual agent harness.
 type VirtualConfig struct {

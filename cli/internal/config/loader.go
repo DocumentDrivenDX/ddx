@@ -85,10 +85,19 @@ func (cl *ConfigLoader) LoadConfigFromPath(path string) (*NewConfig, error) {
 
 // loadNewFormat loads and validates the new configuration format
 func (cl *ConfigLoader) loadNewFormat(path string) (*NewConfig, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve config file path %s: %w", path, err)
+	}
+	path = absPath
+
 	// Read file
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
+	}
+	if err := checkAgentConfigMigration(path, data); err != nil {
+		return nil, err
 	}
 	if err := checkRoutingMigration(path, data); err != nil {
 		return nil, err

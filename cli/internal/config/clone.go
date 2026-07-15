@@ -8,21 +8,6 @@ func (a *AgentConfig) Clone() *AgentConfig {
 		return nil
 	}
 	out := *a
-	if a.Models != nil {
-		out.Models = make(map[string]string, len(a.Models))
-		for k, v := range a.Models {
-			out.Models[k] = v
-		}
-	}
-	if a.ReasoningLevels != nil {
-		out.ReasoningLevels = make(map[string][]string, len(a.ReasoningLevels))
-		for k, v := range a.ReasoningLevels {
-			out.ReasoningLevels[k] = append([]string(nil), v...)
-		}
-	}
-	if a.Endpoints != nil {
-		out.Endpoints = append([]AgentEndpoint(nil), a.Endpoints...)
-	}
 	out.Routing = a.Routing.Clone()
 	if a.Virtual != nil {
 		v := *a.Virtual
