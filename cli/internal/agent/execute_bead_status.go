@@ -427,6 +427,24 @@ const (
 	ExecuteBeadStatusRepairCycleExhausted = "repair-cycle-exhausted"
 )
 
+// IsCandidateCycleNonMergeable reports whether status is a terminal
+// non-success result from the pre-land candidate review/repair cycle. CLI
+// landing call sites must preserve these candidates for inspection instead of
+// advancing the target branch, even when the implementer produced a new
+// ResultRev and exited successfully.
+func IsCandidateCycleNonMergeable(status string) bool {
+	switch status {
+	case ExecuteBeadStatusReviewMalfunction,
+		ExecuteBeadStatusReviewRequestChanges,
+		ExecuteBeadStatusReviewBlock,
+		ExecuteBeadStatusRepairCycleExhausted,
+		ExecuteBeadStatusReviewFixableGap:
+		return true
+	default:
+		return false
+	}
+}
+
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible
 // status contract. This is called by ApplyLandingToResult and by callers who
 // build an ExecuteBeadReport from a landing result.
