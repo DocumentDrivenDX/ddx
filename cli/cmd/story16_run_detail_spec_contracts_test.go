@@ -45,9 +45,10 @@ func TestStory16RunDetailSpecContracts(t *testing.T) {
 		"`response`",
 		"`stderr`",
 		"`bundleFiles[]`",
-		"toolCalls(first, after)",
-		"runToolCalls(id:, first:, after:)",
-		"ToolCallEntry",
+		"Tool/session detail is a Fizeau-owned opaque attachment",
+		"does not construct a canonical `ToolCallEntry`, parse native logs",
+		"typed paginated tool API",
+		"added to CONTRACT-003",
 		"runBundleFile(id:, path:)",
 		"run's bundle root",
 		"path traversal",
@@ -61,8 +62,9 @@ func TestStory16RunDetailSpecContracts(t *testing.T) {
 
 	feat019 := readSpec("docs/helix/01-frame/features/FEAT-019-agent-evaluation.md")
 	for _, want := range []string{
-		"shared project-scoped run-detail surface at `/runs/[runId]`",
-		"own a parallel detail page",
+		"project-scoped run-detail surface at `/runs/[runId]` remains canonical",
+		"FEAT-019 adds evaluation context and links; it does not duplicate run",
+		"lifecycle, transcript, or access-control behavior",
 	} {
 		if !strings.Contains(feat019, want) {
 			t.Fatalf("FEAT-019 missing %q", want)
