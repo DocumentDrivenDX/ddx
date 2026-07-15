@@ -537,6 +537,35 @@ func TestServiceRun_ForwardsOpaqueFizeauEvents(t *testing.T) {
 	}
 }
 
+func TestServiceRunNoFinalDoesNotResolveBilling(t *testing.T) {
+	routingPayload, err := json.Marshal(map[string]any{
+		"harness": "codex", "provider": "openai", "model": "gpt-5",
+		"candidates": []map[string]any{{
+			"harness": "codex", "provider": "openai", "model": "gpt-5",
+			"eligible": true, "billing": "subscription",
+		}},
+	})
+	require.NoError(t, err)
+	svc := &passthroughTestService{executeEvents: []agentlib.ServiceEvent{{Type: "routing_decision", Data: routingPayload}}}
+	rcfg := resolvedWithPassthrough("codex", "openai", "gpt-5", 0, 0)
+	workDir := t.TempDir()
+
+	result, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{Prompt: "hello"})
+	require.Error(t, err)
+	assert.Nil(t, result)
+	_, matched := selectedRoutingCandidate(&agentlib.ServiceRoutingDecisionData{
+		Harness: "codex", Provider: "openai", Model: "gpt-5",
+		Candidates: []agentlib.ServiceRoutingDecisionCandidate{{
+			Harness: "codex", Provider: "openai", Model: "gpt-5", Eligible: true,
+			Billing: agentlib.BillingModelSubscription,
+		}},
+	}, nil)
+	assert.False(t, matched, "without a completed route, billing evidence must remain unknown")
+	entries, readErr := ReadSessionIndex(SessionLogDirForWorkDir(workDir), SessionIndexQuery{})
+	require.NoError(t, readErr)
+	assert.Empty(t, entries, "a failed pre-final execution must not persist inferred billing")
+}
+
 // TestServiceRun_FinalResultProjectionOnly verifies the service adapter reads
 // only the final projection fields needed for DDx Result and run indexing.
 func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
@@ -546,7 +575,10 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 		"model":    "claude-3-5-sonnet",
 		"candidates": []map[string]any{
 			{
+				"harness":                "fiz",
+				"provider":               "anthropic",
 				"model":                  "claude-3-5-sonnet",
+				"billing":                "subscription",
 				"eligible":               true,
 				"cost_usd_per_1k_tokens": 0.0125,
 				"cost_source":            "catalog",
@@ -584,7 +616,8 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 	}
 	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
 
-	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+	workDir := t.TempDir()
+	result, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{
 		Prompt: "hello",
 	})
 	require.NoError(t, err)
@@ -607,6 +640,9 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 	if result.Provider != "anthropic" || result.Model != "claude-3-5-sonnet" || result.Harness != "fiz" {
 		t.Fatalf("route projection mismatch: %+v", result)
 	}
+	if result.Billing != "subscription" {
+		t.Fatalf("Result.Billing = %q, want raw Fizeau billing", result.Billing)
+	}
 	if result.ActualPower != 65 || result.PredictedPower != 65 {
 		t.Fatalf("power projection mismatch: %+v", result)
 	}
@@ -616,6 +652,11 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 	if len(result.ToolCalls) != 0 {
 		t.Fatalf("expected no reconstructed tool transcript, got %+v", result.ToolCalls)
 	}
+	entries, err := ReadSessionIndex(SessionLogDirForWorkDir(workDir), SessionIndexQuery{})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "subscription", entries[0].Billing)
+	assert.Equal(t, BillingModeSubscription, entries[0].BillingMode)
 }
 
 // TestClassifyFailureMode_BlockedByPassthroughConstraint (AC7): error strings

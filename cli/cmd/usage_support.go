@@ -58,7 +58,7 @@ func (a *usageAgg) addSession(entry agent.SessionIndexEntry) {
 	a.totalDurMS += entry.DurationMS
 	if entry.CostUSD > 0 {
 		a.costUSD += entry.CostUSD
-		a.mergeCostBasis(usageCostBasisReported)
+		a.mergeCostBasis(usageCostBasisForSession(entry.Billing, usageCostBasisReported))
 		return
 	}
 	if entry.Model == "" {
@@ -67,7 +67,7 @@ func (a *usageAgg) addSession(entry agent.SessionIndexEntry) {
 	if est := agent.EstimateCost(entry.Model, entry.InputTokens, entry.OutputTokens); est >= 0 {
 		a.costUSD += est
 		if est > 0 {
-			a.mergeCostBasis(usageCostBasisEstimated)
+			a.mergeCostBasis(usageCostBasisForSession(entry.Billing, usageCostBasisEstimated))
 		}
 	}
 }
@@ -83,10 +83,9 @@ func (a *usageAgg) toRow(harness string) usageRow {
 		InputTokens:   a.inputTokens,
 		OutputTokens:  a.outputTokens,
 		CostUSD:       a.costUSD,
-		CostBasis:     inferredUsageCostBasis(harness, a.costUSD, a.costBasis),
+		CostBasis:     inferredUsageCostBasis(a.costUSD, a.costBasis),
 		AvgDurationMS: avgDur,
 	}
-	applyUsageCostBasis(&row, isSubscriptionHarnessName(harness))
 	return row
 }
 
@@ -103,12 +102,9 @@ func (a *usageAgg) mergeCostBasis(basis string) {
 	}
 }
 
-func inferredUsageCostBasis(harness string, costUSD float64, basis string) string {
+func inferredUsageCostBasis(costUSD float64, basis string) string {
 	if costUSD <= 0 {
 		return ""
-	}
-	if isSubscriptionHarnessName(harness) {
-		return usageCostBasisEstimatedValue
 	}
 	if basis != "" {
 		return basis
@@ -116,26 +112,11 @@ func inferredUsageCostBasis(harness string, costUSD float64, basis string) strin
 	return usageCostBasisEstimated
 }
 
-func isSubscriptionHarnessName(harness string) bool {
-	switch strings.ToLower(harness) {
-	case "claude", "codex":
-		return true
-	default:
-		return false
+func usageCostBasisForSession(billing, basis string) string {
+	if agent.BillingPresentationMode(billing) == agent.BillingModeSubscription {
+		return usageCostBasisEstimatedValue
 	}
-}
-
-func applyUsageCostBasis(row *usageRow, isSubscription bool) {
-	if row == nil || row.CostUSD <= 0 {
-		return
-	}
-	if isSubscription {
-		row.CostBasis = usageCostBasisEstimatedValue
-		return
-	}
-	if row.CostBasis == "" {
-		row.CostBasis = usageCostBasisEstimated
-	}
+	return basis
 }
 
 func parseSince(s string) (time.Time, error) {

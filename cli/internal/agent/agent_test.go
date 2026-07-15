@@ -604,6 +604,7 @@ func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
 		Surface:         "claude",
 		CanonicalTarget: "claude-sonnet-4-6",
 		BaseURL:         "https://api.anthropic.com",
+		Billing:         "subscription",
 		BillingMode:     BillingModeSubscription,
 		Tokens:          900,
 		InputTokens:     300,
@@ -623,6 +624,7 @@ func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, original.Surface, decoded.Surface)
 	assert.Equal(t, original.CanonicalTarget, decoded.CanonicalTarget)
 	assert.Equal(t, original.BaseURL, decoded.BaseURL)
+	assert.Equal(t, original.Billing, decoded.Billing)
 	assert.Equal(t, original.BillingMode, decoded.BillingMode)
 	assert.Equal(t, original.Tokens, decoded.Tokens)
 	assert.Equal(t, original.InputTokens, decoded.InputTokens)

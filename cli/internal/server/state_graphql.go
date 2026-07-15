@@ -721,10 +721,7 @@ func (s *ServerState) GetSessionsCostSummaryGraphQL(projectID string, since, unt
 	summary := &ddxgraphql.SessionsCostSummary{}
 	var localTokens int
 	for _, e := range entries {
-		mode := e.BillingMode
-		if mode == "" {
-			mode = agent.BillingModeFor(e.Harness, e.Surface, e.BaseURL)
-		}
+		mode := agent.BillingPresentationMode(e.Billing)
 		switch mode {
 		case agent.BillingModePaid:
 			summary.CashUsd += e.CostUSD
@@ -776,10 +773,6 @@ func localCostPer1KTokens(projectRoot string) *float64 {
 }
 
 func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgraphql.AgentSession {
-	billingMode := e.BillingMode
-	if billingMode == "" {
-		billingMode = agent.BillingModeFor(e.Harness, e.Surface, e.BaseURL)
-	}
 	sess := &ddxgraphql.AgentSession{
 		ID:          e.ID,
 		ProjectID:   projectID,
@@ -789,7 +782,7 @@ func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgrap
 		Effort:      e.Effort,
 		DurationMs:  e.DurationMS,
 		StartedAt:   e.StartedAt.UTC().Format(time.RFC3339),
-		BillingMode: billingMode,
+		BillingMode: agent.BillingPresentationMode(e.Billing),
 	}
 
 	// Derive status and outcome from exit code / error.

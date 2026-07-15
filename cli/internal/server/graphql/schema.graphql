@@ -725,7 +725,7 @@ type AgentSession implements Node {
   durationMs: Int!
   """Estimated cost in USD (null if unknown)"""
   cost: Float
-  """Cost-basis bucket for this session: paid, subscription, or local"""
+  """Cost-basis bucket derived from Fizeau billing evidence: paid, subscription, local, or unknown"""
   billingMode: String!
   """Token consumption breakdown"""
   tokens: TokenUsage

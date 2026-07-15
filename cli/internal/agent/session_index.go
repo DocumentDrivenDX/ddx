@@ -30,6 +30,7 @@ type SessionIndexEntry struct {
 	Provider        string    `json:"provider,omitempty"`
 	Surface         string    `json:"surface,omitempty"`
 	BaseURL         string    `json:"baseURL,omitempty"`
+	Billing         string    `json:"billing,omitempty"`
 	BillingMode     string    `json:"billingMode"`
 	Model           string    `json:"model,omitempty"`
 	PromptSHA       string    `json:"promptSHA,omitempty"`
@@ -120,9 +121,7 @@ func AppendSessionIndex(logDir string, entry SessionIndexEntry, now time.Time) e
 			entry.Outcome = "failure"
 		}
 	}
-	if entry.BillingMode == "" {
-		entry.BillingMode = billingModeFor(entry.Harness, entry.Surface, entry.BaseURL)
-	}
+	entry.BillingMode = BillingPresentationMode(entry.Billing)
 	if !ValidateBillingMode(entry.BillingMode) {
 		return fmt.Errorf("invalid billingMode %q", entry.BillingMode)
 	}
@@ -211,7 +210,8 @@ func SessionIndexEntryFromResult(projectRoot string, inputs SessionIndexInputs, 
 		Harness:         harness,
 		Provider:        firstNonEmpty(result.Provider, inputs.Provider),
 		BaseURL:         result.ResolvedBaseURL,
-		BillingMode:     billingModeFor(harness, "", result.ResolvedBaseURL),
+		Billing:         result.Billing,
+		BillingMode:     BillingPresentationMode(result.Billing),
 		Model:           model,
 		PromptSHA:       corr["prompt_sha"],
 		StartedAt:       startedAt.UTC(),
@@ -270,10 +270,6 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 	if totalTokens == 0 {
 		totalTokens = e.Tokens
 	}
-	billingMode := e.BillingMode
-	if billingMode == "" {
-		billingMode = billingModeFor(e.Harness, e.Surface, baseURL)
-	}
 	return SessionIndexEntry{
 		ID:              e.ID,
 		ProjectID:       ProjectIDForPath(projectRoot),
@@ -283,7 +279,8 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		Provider:        provider,
 		Surface:         e.Surface,
 		BaseURL:         baseURL,
-		BillingMode:     billingMode,
+		Billing:         e.Billing,
+		BillingMode:     BillingPresentationMode(e.Billing),
 		Model:           e.Model,
 		PromptSHA:       e.Correlation["prompt_sha"],
 		StartedAt:       e.Timestamp.UTC(),
@@ -542,7 +539,8 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 		Provider:        e.Provider,
 		Surface:         e.Surface,
 		BaseURL:         e.BaseURL,
-		BillingMode:     e.BillingMode,
+		Billing:         e.Billing,
+		BillingMode:     BillingPresentationMode(e.Billing),
 		Model:           e.Model,
 		Correlation:     corr,
 		NativeSessionID: e.NativeSessionID,

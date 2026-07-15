@@ -88,7 +88,7 @@ type AgentSession struct {
 	DurationMs int `json:"durationMs"`
 	// Estimated cost in USD (null if unknown)
 	Cost *float64 `json:"cost,omitempty"`
-	// Cost-basis bucket for this session: paid, subscription, or local
+	// Cost-basis bucket derived from Fizeau billing evidence: paid, subscription, local, or unknown
 	BillingMode string `json:"billingMode"`
 	// Token consumption breakdown
 	Tokens *TokenUsage `json:"tokens,omitempty"`
