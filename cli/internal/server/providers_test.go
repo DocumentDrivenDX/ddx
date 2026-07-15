@@ -421,30 +421,6 @@ func TestProviderDetailSuppressesStaleQuotaAndUsageSources(t *testing.T) {
 	require.Equal(t, "account-source", detail.SignalSources[0])
 }
 
-// TestProviderSummaryDisplayName verifies display names are set for all known harnesses.
-func TestProviderSummaryDisplayName(t *testing.T) {
-	cases := []struct {
-		harness string
-		want    string
-	}{
-		{"codex", "Codex (OpenAI)"},
-		{"claude", "Claude (Anthropic)"},
-		{"gemini", "Gemini (Google)"},
-		{"opencode", "OpenCode"},
-		{"agent", "DDx Embedded Agent"},
-		{"pi", "Pi"},
-		{"virtual", "Virtual (Test)"},
-		{"openrouter", "OpenRouter"},
-		{"lmstudio", "LM Studio"},
-	}
-	for _, tc := range cases {
-		got := harnessDisplayName(tc.harness)
-		if got != tc.want {
-			t.Errorf("harnessDisplayName(%q) = %q, want %q", tc.harness, got, tc.want)
-		}
-	}
-}
-
 // TestMCPProviderList verifies the ddx_provider_list MCP tool.
 func TestMCPProviderList(t *testing.T) {
 	dir := setupTestDir(t)

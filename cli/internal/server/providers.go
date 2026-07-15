@@ -259,7 +259,7 @@ func buildProviderSummary(
 
 	return ProviderSummary{
 		Harness:             info.Name,
-		DisplayName:         harnessDisplayName(info.Name),
+		DisplayName:         info.Name,
 		Status:              providerStatusStrInfo(info),
 		AuthState:           harnessAuthStateStr(info),
 		QuotaHeadroom:       harnessQuotaHeadroomStr(info),
@@ -293,7 +293,7 @@ func buildProviderDetail(
 	statusStr := providerStatusStrInfo(info)
 	return ProviderDetail{
 		Harness:             info.Name,
-		DisplayName:         harnessDisplayName(info.Name),
+		DisplayName:         info.Name,
 		Status:              statusStr,
 		AuthState:           harnessAuthStateStr(info),
 		AutoRoutingEligible: info.AutoRoutingEligible,
@@ -703,31 +703,5 @@ func harnessQuotaHeadroomStr(info agentlib.HarnessInfo) string {
 		return "blocked"
 	default:
 		return "unknown"
-	}
-}
-
-// harnessDisplayName returns a human-readable display name for a harness.
-func harnessDisplayName(name string) string {
-	switch name {
-	case "codex":
-		return "Codex (OpenAI)"
-	case "claude":
-		return "Claude (Anthropic)"
-	case "gemini":
-		return "Gemini (Google)"
-	case "opencode":
-		return "OpenCode"
-	case "agent":
-		return "DDx Embedded Agent"
-	case "pi":
-		return "Pi"
-	case "virtual":
-		return "Virtual (Test)"
-	case "openrouter":
-		return "OpenRouter"
-	case "lmstudio":
-		return "LM Studio"
-	default:
-		return name
 	}
 }

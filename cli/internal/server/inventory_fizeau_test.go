@@ -138,25 +138,67 @@ func TestRESTAndMCPInventoryUseOnlyFizeauListings(t *testing.T) {
 	assert.Equal(t, 1, svc.routeStatusCalls, "factual RouteStatus may enrich the listed row once")
 }
 
-func TestArbitraryFizeauHarnessNamesRemainPresentationOnly(t *testing.T) {
-	workDir := t.TempDir()
-	svc := &inventoryServiceStub{
-		harnesses: []agentlib.HarnessInfo{{
-			Name: "opaque-harness-from-the-future", Type: "quantum-shell", Available: true,
-			AutoRoutingEligible: false, DefaultModel: "opaque-default",
-		}},
+func TestProviderDisplayNameUsesFizeauInventoryVerbatim(t *testing.T) {
+	tests := []struct {
+		name       string
+		fizeauName string
+	}{
+		{name: "known", fizeauName: "claude"},
+		{name: "unknown", fizeauName: "future-harness-v99"},
+		{name: "mixed_case", fizeauName: "MiXeD-Harness"},
+		{name: "whitespace", fizeauName: "  harness with spaces\t"},
 	}
-	ctx := inventoryTestContext(t, workDir, svc)
-	srv := &Server{WorkingDir: workDir}
 
-	result := srv.mcpProviderList(ctx)
-	require.False(t, result.IsError)
-	var rows []ProviderSummary
-	require.NoError(t, json.Unmarshal([]byte(result.Content[0].Text), &rows))
-	require.Len(t, rows, 1)
-	assert.Equal(t, "opaque-harness-from-the-future", rows[0].Harness)
-	assert.False(t, rows[0].AutoRoutingEligible)
-	assert.NotEmpty(t, rows[0].DisplayName, "existing presentation mapping may format the label")
-	assert.Equal(t, 1, svc.listHarnesses)
-	assert.Equal(t, 1, svc.routeStatusCalls)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			svc := &inventoryServiceStub{
+				harnesses: []agentlib.HarnessInfo{{
+					Name: tt.fizeauName, Type: "subprocess", Available: true,
+				}},
+			}
+			ctx := inventoryTestContext(t, workDir, svc)
+			srv := &Server{WorkingDir: workDir}
+
+			// The dashboard frontend consumes these REST DTOs. MCP invokes the
+			// same production summary/detail builders through its own transport.
+			listReq := httptest.NewRequest(http.MethodGet, "/api/providers", nil).WithContext(ctx)
+			listW := httptest.NewRecorder()
+			srv.handleListProviders(listW, listReq)
+			require.Equal(t, http.StatusOK, listW.Code, listW.Body.String())
+			var restSummaries []ProviderSummary
+			require.NoError(t, json.Unmarshal(listW.Body.Bytes(), &restSummaries))
+			require.Len(t, restSummaries, 1)
+
+			showReq := httptest.NewRequest(http.MethodGet, "/api/providers/harness", nil).WithContext(ctx)
+			showReq.SetPathValue("harness", tt.fizeauName)
+			showW := httptest.NewRecorder()
+			srv.handleShowProvider(showW, showReq)
+			require.Equal(t, http.StatusOK, showW.Code, showW.Body.String())
+			var restDetail ProviderDetail
+			require.NoError(t, json.Unmarshal(showW.Body.Bytes(), &restDetail))
+
+			mcpList := srv.mcpProviderList(ctx)
+			require.False(t, mcpList.IsError)
+			var mcpSummaries []ProviderSummary
+			require.NoError(t, json.Unmarshal([]byte(mcpList.Content[0].Text), &mcpSummaries))
+			require.Len(t, mcpSummaries, 1)
+
+			mcpShow := srv.mcpProviderShow(ctx, tt.fizeauName)
+			require.False(t, mcpShow.IsError)
+			var mcpDetail ProviderDetail
+			require.NoError(t, json.Unmarshal([]byte(mcpShow.Content[0].Text), &mcpDetail))
+
+			assert.Equal(t, tt.fizeauName, restSummaries[0].DisplayName)
+			assert.Equal(t, tt.fizeauName, restDetail.DisplayName)
+			assert.Equal(t, tt.fizeauName, mcpSummaries[0].DisplayName)
+			assert.Equal(t, tt.fizeauName, mcpDetail.DisplayName)
+			assert.Equal(t, tt.fizeauName, restSummaries[0].Harness)
+			assert.Equal(t, tt.fizeauName, restDetail.Harness)
+			assert.Equal(t, tt.fizeauName, mcpSummaries[0].Harness)
+			assert.Equal(t, tt.fizeauName, mcpDetail.Harness)
+			assert.Equal(t, 4, svc.listHarnesses)
+			assert.Equal(t, 4, svc.routeStatusCalls)
+		})
+	}
 }
