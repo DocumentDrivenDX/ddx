@@ -56,8 +56,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	local, _ := cmd.Flags().GetBool("local")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
-	reviewHarness, _ := cmd.Flags().GetString("review-harness")
-	reviewModel, _ := cmd.Flags().GetString("review-model")
+	reviewTier, _ := cmd.Flags().GetString("review-tier")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	maxBeadCostUSD, _ := cmd.Flags().GetFloat64("max-bead-cost")
 	maxRecoveryCostUSD, _ := cmd.Flags().GetFloat64("max-recovery-cost")
@@ -103,8 +102,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		Mode:                   mode,
 		IdleInterval:           idleInterval,
 		NoReview:               noReview,
-		ReviewHarness:          reviewHarness,
-		ReviewModel:            reviewModel,
+		ReviewTier:             reviewTier,
 		IgnoreCooldown:         ignoreCooldown,
 		CooldownOverrideReason: cooldownReason,
 		OpaquePassthrough:      treatPassthroughAsOpaque,
@@ -148,13 +146,7 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
 func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string) agent.ExecuteBeadRuntime {
 	var reviewer agent.CandidateReviewer
 	if !spec.NoReview {
-		reviewer = &agent.DefaultBeadReviewer{
-			ProjectRoot: spec.ProjectRoot,
-			BeadStore:   bead.NewStore(beadStoreRoot),
-			BeadEvents:  bead.NewStore(beadStoreRoot),
-			Harness:     spec.ReviewHarness,
-			Model:       spec.ReviewModel,
-		}
+		reviewer = newCommandReviewer(spec.ProjectRoot, beadStoreRoot, spec.ReviewTier)
 	}
 	return agent.ExecuteBeadRuntime{
 		FromRev:          spec.FromRev,
@@ -166,6 +158,15 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
 		Reviewer:         reviewer,
 		NoReview:         spec.NoReview,
 		RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
+	}
+}
+
+func newCommandReviewer(projectRoot, beadStoreRoot, reviewTier string) *agent.DefaultBeadReviewer {
+	return &agent.DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   bead.NewStore(beadStoreRoot),
+		BeadEvents:  bead.NewStore(beadStoreRoot),
+		ReviewTier:  reviewTier,
 	}
 }
 
@@ -269,13 +270,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	var reviewer agent.BeadReviewer
 	if !spec.NoReview {
-		reviewer = &agent.DefaultBeadReviewer{
-			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(beadStoreRoot),
-			BeadEvents:  bead.NewStore(beadStoreRoot),
-			Harness:     spec.ReviewHarness,
-			Model:       spec.ReviewModel,
-		}
+		reviewer = newCommandReviewer(projectRoot, beadStoreRoot, spec.ReviewTier)
 	}
 
 	overrides := config.CLIOverrides{

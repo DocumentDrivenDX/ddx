@@ -145,8 +145,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("local", "true")
 	setFlag("no-review", "true")
 	setFlag("no-review-i-know-what-im-doing", "true")
-	setFlag("review-harness", "codex")
-	setFlag("review-model", "gpt-5.4")
+	setFlag("review-tier", "elevated")
 	setFlag("max-cost", "12.5")
 	setFlag("max-recovery-cost", "2.5")
 	setFlag("preclaim-warn-threshold", "7")
@@ -172,8 +171,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, executeloop.ModeWatch, spec.Mode)
 	assert.Equal(t, 45*time.Second, spec.IdleInterval.Duration)
 	assert.True(t, spec.NoReview)
-	assert.Equal(t, "codex", spec.ReviewHarness)
-	assert.Equal(t, "gpt-5.4", spec.ReviewModel)
+	assert.Equal(t, executeloop.ReviewTierElevated, spec.ReviewTier)
 	assert.True(t, spec.OpaquePassthrough)
 	assert.Equal(t, 12.5, spec.MaxCostUSD)
 	assert.Equal(t, 2.5, spec.MaxRecoveryCostUSD)
@@ -185,6 +183,40 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, executeloop.SpecCurrentVersion, spec.SpecVersion)
 	assert.Equal(t, "true", dispatch.JSON)
 	assert.True(t, dispatch.Local)
+}
+
+func TestExecuteLoopReviewTierRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+	assert.NotNil(t, workCmd.Flags().Lookup("review-tier"))
+	assert.Nil(t, workCmd.Flags().Lookup("review-harness"))
+	assert.Nil(t, workCmd.Flags().Lookup("review-model"))
+	require.NoError(t, workCmd.Flags().Set("review-tier", executeloop.ReviewTierElevated))
+
+	spec, _, err := parseExecuteLoopSpec(workCmd, true)
+	require.NoError(t, err)
+	assert.Equal(t, executeloop.ReviewTierElevated, spec.ReviewTier)
+
+	runtime := executeLoopAttemptRuntime(spec, nil, nil, nil, nil, ddxroot.JoinProject(dir))
+	reviewer, ok := runtime.Reviewer.(*agent.DefaultBeadReviewer)
+	require.True(t, ok)
+	assert.Equal(t, executeloop.ReviewTierElevated, reviewer.ReviewTier)
+
+	tryCmd, _, err := root.Find([]string{"try"})
+	require.NoError(t, err)
+	assert.NotNil(t, tryCmd.Flags().Lookup("review-tier"))
+	assert.Nil(t, tryCmd.Flags().Lookup("review-harness"))
+	assert.Nil(t, tryCmd.Flags().Lookup("review-model"))
+	tryReviewer := newCommandReviewer(dir, ddxroot.JoinProject(dir), executeloop.ReviewTierElevated)
+	assert.Equal(t, executeloop.ReviewTierElevated, tryReviewer.ReviewTier)
+
+	encoded, err := json.Marshal(spec)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"review_tier":"elevated"`)
+	assert.NotContains(t, string(encoded), "review_harness")
+	assert.NotContains(t, string(encoded), "review_model")
 }
 
 func TestWork_IgnoreCooldownDrainsCooledQueue(t *testing.T) {

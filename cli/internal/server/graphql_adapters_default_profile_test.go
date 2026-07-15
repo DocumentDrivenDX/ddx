@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,12 +84,40 @@ func TestWorkerDispatchAdapterEmptyArgsLeavesProfileUnpinned(t *testing.T) {
 	if spec.LabelFilter != "" {
 		t.Errorf("LabelFilter must be empty on default path, got %q", spec.LabelFilter)
 	}
-	if spec.ReviewHarness != "" {
-		t.Errorf("ReviewHarness must be empty on default path, got %q", spec.ReviewHarness)
+	if spec.ReviewTier != "" {
+		t.Errorf("ReviewTier must be empty on default path, got %q", spec.ReviewTier)
 	}
-	if spec.ReviewModel != "" {
-		t.Errorf("ReviewModel must be empty on default path, got %q", spec.ReviewModel)
+}
+
+func TestGraphQLWorkerDispatchRejectsRemovedReviewRoutingFields(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	installFastSuccessWorker(m)
+	adapter := &workerDispatchAdapter{manager: m}
+
+	for _, field := range []string{"review_harness", "review_model"} {
+		t.Run(field, func(t *testing.T) {
+			raw := fmt.Sprintf(`{"%s":"removed-route-pin"}`, field)
+			_, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
+			if err == nil {
+				t.Fatalf("expected %s rejection", field)
+			}
+			if !strings.Contains(err.Error(), field+" is no longer supported") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
+
+	t.Run("unrelated future field remains forward compatible", func(t *testing.T) {
+		raw := `{"mode":"once","future_graphql_hint":"preserved-by-newer-client"}`
+		result, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
+		if err != nil {
+			t.Fatalf("dispatch with future field: %v", err)
+		}
+		defer func() { _ = m.Stop(result.ID) }()
+	})
 }
 
 // TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis pins ddx-755f5881
@@ -177,8 +206,7 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 		"mode":                "watch",
 		"idle_interval":       "19s",
 		"no_review":           true,
-		"review_harness":      "review-harness",
-		"review_model":        "review-model",
+		"review_tier":         "elevated",
 		"opaque_passthrough":  true,
 		"max_cost_usd":        0.95,
 		"request_timeout":     "53s",
@@ -239,11 +267,8 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 	if !spec.NoReview {
 		t.Errorf("NoReview: got false")
 	}
-	if spec.ReviewHarness != "review-harness" {
-		t.Errorf("ReviewHarness: got %q", spec.ReviewHarness)
-	}
-	if spec.ReviewModel != "review-model" {
-		t.Errorf("ReviewModel: got %q", spec.ReviewModel)
+	if spec.ReviewTier != executeloop.ReviewTierElevated {
+		t.Errorf("ReviewTier: got %q", spec.ReviewTier)
 	}
 	if !spec.OpaquePassthrough {
 		t.Errorf("OpaquePassthrough: got false")

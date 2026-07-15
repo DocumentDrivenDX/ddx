@@ -20,8 +20,7 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 		Mode:                   executeloop.ModeWatch,
 		IdleInterval:           executeloop.Duration{Duration: 45 * time.Second},
 		NoReview:               true,
-		ReviewHarness:          "reviewer-harness",
-		ReviewModel:            "claude-sonnet-4-6",
+		ReviewTier:             executeloop.ReviewTierElevated,
 		OpaquePassthrough:      true,
 		MaxCostUSD:             12.50,
 		MaxRecoveryCostUSD:     2.75,
@@ -76,11 +75,8 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	if got.NoReview != original.NoReview {
 		t.Errorf("NoReview: got %v, want %v", got.NoReview, original.NoReview)
 	}
-	if got.ReviewHarness != original.ReviewHarness {
-		t.Errorf("ReviewHarness: got %q, want %q", got.ReviewHarness, original.ReviewHarness)
-	}
-	if got.ReviewModel != original.ReviewModel {
-		t.Errorf("ReviewModel: got %q, want %q", got.ReviewModel, original.ReviewModel)
+	if got.ReviewTier != original.ReviewTier {
+		t.Errorf("ReviewTier: got %q, want %q", got.ReviewTier, original.ReviewTier)
 	}
 	if got.OpaquePassthrough != original.OpaquePassthrough {
 		t.Errorf("OpaquePassthrough: got %v, want %v", got.OpaquePassthrough, original.OpaquePassthrough)
@@ -242,6 +238,13 @@ func TestExecuteLoopSpec_Validate(t *testing.T) {
 		s := executeloop.ExecuteLoopSpec{Mode: executeloop.ModeDrain, SpecVersion: 99}
 		if err := s.Validate(); err == nil {
 			t.Error("expected error for unknown spec_version")
+		}
+	})
+
+	t.Run("unknown review tier rejected", func(t *testing.T) {
+		s := executeloop.ExecuteLoopSpec{Mode: executeloop.ModeDrain, ReviewTier: "maximum"}
+		if err := s.Validate(); err == nil {
+			t.Error("expected error for unknown review_tier")
 		}
 	})
 }

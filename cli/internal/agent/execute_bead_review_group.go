@@ -11,9 +11,9 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
-// ReviewGroup reviews the same bead/result_rev with two reviewer slots.
-// The helper shares one evidence bundle and prompt file across both slots and
-// returns the structured reviewer results alongside the shared bundle
+// ReviewGroup reviews the same bead/result_rev with a risk-proportional number
+// of reviewer slots. The helper shares one evidence bundle and prompt file
+// across all slots, returning structured results alongside the shared bundle
 // metadata. It does not change work close/block behavior.
 func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
 	diff, err := r.gitShow(resultRev)
@@ -49,7 +49,6 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 		return nil, fmt.Errorf("review-group: write prompt artifact: %w", err)
 	}
 
-	reviewHarness := r.Harness
 	priorErrors := countPriorReviewErrors(r.EventReader, beadID, resultRev)
 	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
 	// Emit reviewer-escalated event when MinPower is bumped above baseline.
@@ -63,6 +62,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 		})
 	}
 
+	slotCount := reviewSlotCount(b, r.ReviewTier)
 	out := &ReviewGroupResult{
 		BeadID:    beadID,
 		ResultRev: resultRev,
@@ -73,12 +73,12 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 			PromptAbs: artifacts.PromptAbs,
 			PromptRel: artifacts.PromptRel,
 		},
-		Slots: make([]ReviewGroupSlotResult, 0, 2),
+		Slots: make([]ReviewGroupSlotResult, 0, slotCount),
 	}
 
 	var firstErr error
-	for reviewerIndex := 0; reviewerIndex < 2; reviewerIndex++ {
-		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, "", ReviewGroupDispatchMeta{
+	for reviewerIndex := 0; reviewerIndex < slotCount; reviewerIndex++ {
+		slotRuntime := BuildReviewGroupExecuteRequest(impl, ReviewGroupDispatchMeta{
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
@@ -87,11 +87,10 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 		if reviewProfile.MinPower > slotRuntime.MinPowerOverride {
 			slotRuntime.MinPowerOverride = reviewProfile.MinPower
 		}
-		reviewRouteLabel := r.applyExplicitReviewerPins(&slotRuntime)
 		slotRuntime.PromptFile = artifacts.PromptAbs
 		slotRuntime.WorkDir = reviewWorkDir
 
-		slotResult, slotErr := r.reviewGroupSlot(ctx, b, resultRev, built, artifacts, reviewHarness, reviewRouteLabel, slotRuntime, caps.MaxPromptBytes)
+		slotResult, slotErr := r.reviewGroupSlot(ctx, b, resultRev, built, artifacts, slotRuntime, caps.MaxPromptBytes)
 		slot := ReviewGroupSlotResult{
 			ReviewerIndex: reviewerIndex,
 			Runtime:       slotRuntime,
@@ -133,20 +132,35 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	return out, firstErr
 }
 
-func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead, resultRev string, built BuildReviewPromptResult, artifacts *executeBeadArtifacts, reviewHarness, reviewModel string, runtime AgentRunRuntime, maxPromptBytes int) (*ReviewResult, error) {
+func reviewSlotCount(b *bead.Bead, tier string) int {
+	if tier == elevatedReviewTier {
+		return 2
+	}
+	if b != nil {
+		for _, label := range b.Labels {
+			switch strings.TrimSpace(label) {
+			case "kind:safety", "area:storage", "kind:migration":
+				return 2
+			}
+		}
+	}
+	return 1
+}
+
+const elevatedReviewTier = "elevated"
+
+func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead, resultRev string, built BuildReviewPromptResult, artifacts *executeBeadArtifacts, runtime AgentRunRuntime, maxPromptBytes int) (*ReviewResult, error) {
 	prompt := built.Prompt
 	if built.Overflow {
 		return &ReviewResult{
-			Verdict:         VerdictBlock,
-			Error:           evidence.OutcomeReviewContextOverflow,
-			Rationale:       evidence.OutcomeReviewContextOverflow,
-			ReviewerHarness: reviewHarness,
-			ReviewerModel:   reviewModel,
-			ResultRev:       resultRev,
-			ExecutionDir:    artifacts.DirRel,
-			CostUSD:         0,
-			InputBytes:      len(prompt),
-			OutputBytes:     0,
+			Verdict:      VerdictBlock,
+			Error:        evidence.OutcomeReviewContextOverflow,
+			Rationale:    evidence.OutcomeReviewContextOverflow,
+			ResultRev:    resultRev,
+			ExecutionDir: artifacts.DirRel,
+			CostUSD:      0,
+			InputBytes:   len(prompt),
+			OutputBytes:  0,
 		}, fmt.Errorf("review-group: PROMPT_BUDGET_EXCEEDED/context_overflow (assembled prompt %d bytes exceeds cap %d; see %s)", len(prompt), maxPromptBytes, artifacts.DirRel)
 	}
 
@@ -158,24 +172,22 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 
 	if runErr != nil {
 		reviewRes := &ReviewResult{
-			Verdict:         VerdictBlock,
-			Rationale:       runErr.Error(),
-			Error:           evidence.OutcomeReviewTransport,
-			ReviewerHarness: reviewHarness,
-			ReviewerModel:   reviewModel,
-			BaseRev:         resolveReviewBaseRev(r.ProjectRoot, resultRev),
-			ResultRev:       resultRev,
-			ExecutionDir:    artifacts.DirRel,
-			DurationMS:      durationMS,
-			CostUSD:         resultCost(result),
-			InputBytes:      len(prompt),
-			OutputBytes:     0,
+			Verdict:      VerdictBlock,
+			Rationale:    runErr.Error(),
+			Error:        evidence.OutcomeReviewTransport,
+			BaseRev:      resolveReviewBaseRev(r.ProjectRoot, resultRev),
+			ResultRev:    resultRev,
+			ExecutionDir: artifacts.DirRel,
+			DurationMS:   durationMS,
+			CostUSD:      resultCost(result),
+			InputBytes:   len(prompt),
+			OutputBytes:  0,
 		}
 		return reviewRes, fmt.Errorf("review-group: %s: %w", evidence.OutcomeReviewTransport, runErr)
 	}
 
-	actualHarness := reviewHarness
-	actualModel := reviewModel
+	actualHarness := ""
+	actualModel := ""
 	actualProvider := ""
 	actualPower := 0
 	if result != nil {

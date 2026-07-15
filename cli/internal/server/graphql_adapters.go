@@ -110,11 +110,28 @@ func rejectLegacyExecuteLoopWorkerArgs(raw []byte) error {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return fmt.Errorf("invalid worker args JSON: %w", err)
 	}
+	if err := rejectRemovedReviewRoutingFields(fields, ""); err != nil {
+		return err
+	}
 	if _, ok := fields["poll_interval"]; ok {
 		return fmt.Errorf("poll_interval is not supported for work worker dispatch; use mode=\"watch\" and idle_interval")
 	}
 	if _, ok := fields["once"]; ok {
 		return fmt.Errorf("once is not supported for work worker dispatch; use mode=\"once\"")
+	}
+	return nil
+}
+
+func rejectRemovedReviewRoutingFields(fields map[string]json.RawMessage, prefix string) error {
+	for _, name := range []string{"review_harness", "review_model"} {
+		if _, ok := fields[name]; !ok {
+			continue
+		}
+		field := name
+		if prefix != "" {
+			field = prefix + "." + name
+		}
+		return fmt.Errorf("%s is no longer supported; use review_tier=\"elevated\" for two reviewers; Fizeau owns concrete reviewer routing", field)
 	}
 	return nil
 }

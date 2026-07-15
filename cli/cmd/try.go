@@ -93,8 +93,7 @@ Exit codes:
 	cmd.Flags().String("reason", "", "Operator reason required by --force-claim")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
-	cmd.Flags().String("review-harness", "", "Explicit reviewer harness override (empty = Fizeau selects)")
-	cmd.Flags().String("review-model", "", "Explicit reviewer model override (empty = Fizeau selects from the stronger review power floor)")
+	cmd.Flags().String("review-tier", "", "Abstract review cardinality tier (empty = risk-proportional; elevated = two reviewers)")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
 	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout from Fizeau Execute dispatch to routing_decision; on expiry the lease is released and the bead is flagged for operator attention")
 	cmd.Flags().Duration("request-timeout", 0, "Explicit per-request provider wall-clock timeout passed to Fizeau (default: unset)")
@@ -140,8 +139,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	forceReason, _ := cmd.Flags().GetString("reason")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
-	reviewHarness, _ := cmd.Flags().GetString("review-harness")
-	reviewModel, _ := cmd.Flags().GetString("review-model")
+	reviewTier, _ := cmd.Flags().GetString("review-tier")
 	preClaimTimeout, _ := cmd.Flags().GetDuration("preclaim-timeout")
 	routeResolutionTimeout, _ := cmd.Flags().GetDuration("route-resolution-timeout")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
@@ -149,6 +147,9 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	maxPower, _ := cmd.Flags().GetInt("max-power")
 
 	forceReason = strings.TrimSpace(forceReason)
+	if reviewTier != "" && reviewTier != executeloop.ReviewTierElevated {
+		return fmt.Errorf("unknown --review-tier %q (want %q)", reviewTier, executeloop.ReviewTierElevated)
+	}
 	if noReview && !noReviewAck {
 		return fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
 	}
@@ -241,13 +242,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	var reviewer agent.CandidateReviewer
 	var postMergeReviewer agent.BeadReviewer
 	if !noReview {
-		postMergeReviewer = &agent.DefaultBeadReviewer{
-			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(beadStoreRoot),
-			BeadEvents:  bead.NewStore(beadStoreRoot),
-			Harness:     reviewHarness,
-			Model:       reviewModel,
-		}
+		postMergeReviewer = newCommandReviewer(projectRoot, beadStoreRoot, reviewTier)
 		reviewer = postMergeReviewer.(agent.CandidateReviewer)
 	}
 

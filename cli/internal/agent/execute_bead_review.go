@@ -192,7 +192,7 @@ type ReviewAC struct {
 }
 
 // ReviewGroupBundle identifies the shared evidence bundle used by a
-// two-slot review-group dispatch.
+// risk-proportional review-group dispatch.
 type ReviewGroupBundle struct {
 	GroupID   string `json:"group_id"`
 	DirAbs    string `json:"dir_abs"`
@@ -210,7 +210,7 @@ type ReviewGroupSlotResult struct {
 	Error         string          `json:"error,omitempty"`
 }
 
-// ReviewGroupResult is the structured output of a two-slot review-group
+// ReviewGroupResult is the structured output of a review-group
 // dispatch.
 type ReviewGroupResult struct {
 	BeadID    string                  `json:"bead_id"`
@@ -290,7 +290,7 @@ type BeadReviewer interface {
 
 // reviewGroupReviewer is the optional pre-close gate used by work.
 // DefaultBeadReviewer implements it; test doubles can opt in when they need
-// to exercise the unanimous-two-slot path explicitly.
+// to exercise the grouped-review path explicitly.
 type reviewGroupReviewer interface {
 	ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error)
 }
@@ -779,11 +779,10 @@ type DefaultBeadReviewer struct {
 	// tests to return canned *Result values without spinning up a real
 	// service. Takes precedence over Service.
 	Runner AgentRunner
-	// Harness and Model are explicit operator overrides for the reviewer route.
-	// When both are empty, Fizeau selects the concrete route from the abstract
-	// reviewer power constraint.
-	Harness string
-	Model   string
+	// ReviewTier is an abstract DDx-owned cardinality override. The empty value
+	// is the routine one-slot gate; "elevated" requests two reviewer slots.
+	// Fizeau alone selects the concrete route for every slot.
+	ReviewTier string
 	// Caps configures the per-section evidence caps used when assembling
 	// the review prompt (FEAT-022). When zero-valued, evidence.DefaultCaps
 	// applies.
@@ -798,22 +797,21 @@ type DefaultBeadReviewer struct {
 }
 
 // BuildReviewExecuteRequest constructs the AgentRunRuntime used for the
-// post-merge reviewer dispatch. It sets explicit reviewer overrides, attaches
-// route-neutral correlation (with role=reviewer overlaid), and derives
-// MinPower as impl.ActualPower + 1 so Fizeau can route to a stronger candidate.
-// The returned
+// post-merge reviewer dispatch. It attaches route-neutral correlation (with
+// role=reviewer overlaid) and derives MinPower as impl.ActualPower + 1 so
+// Fizeau can route to a stronger candidate. The returned
 // runtime is missing per-call plumbing (Prompt/PromptFile, WorkDir,
 // SessionLogDirOverride) — the caller fills those in before dispatching.
-func BuildReviewExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerProfile string) AgentRunRuntime {
-	return BuildReviewGroupExecuteRequest(impl, reviewerHarness, reviewerProfile, ReviewGroupDispatchMeta{})
+func BuildReviewExecuteRequest(impl ImplementerRouting) AgentRunRuntime {
+	return BuildReviewGroupExecuteRequest(impl, ReviewGroupDispatchMeta{})
 }
 
 // BuildReviewGroupExecuteRequest constructs the reviewer runtime for one
 // slot in a review group. It threads route-neutral correlation facts, overlays
 // reviewer role metadata, and stamps the review_group_id and
 // reviewer_index when provided so downstream routing / tracing can join the
-// two reviewer slots back to the same evidence bundle.
-func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerProfile string, meta ReviewGroupDispatchMeta) AgentRunRuntime {
+// reviewer slots back to the same evidence bundle.
+func BuildReviewGroupExecuteRequest(impl ImplementerRouting, meta ReviewGroupDispatchMeta) AgentRunRuntime {
 	correlation := map[string]string{}
 	for k, v := range impl.Correlation {
 		if isImplementerRouteMetadataKey(k) {
@@ -832,8 +830,6 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 	}
 	correlationID := reviewCorrelationID(correlation)
 	return AgentRunRuntime{
-		HarnessOverride:     reviewerHarness,
-		ProfileOverride:     reviewerProfile,
 		MinPowerOverride:    minPower,
 		Correlation:         correlation,
 		Role:                "reviewer",
@@ -868,17 +864,6 @@ func (r *DefaultBeadReviewer) reviewerDispatchProfile(_ context.Context, impl Im
 		floor += priorErrors
 	}
 	return reviewerDispatchProfile{MinPower: floor}
-}
-
-func (r *DefaultBeadReviewer) applyExplicitReviewerPins(runtime *AgentRunRuntime) string {
-	if runtime == nil {
-		return ""
-	}
-	if r.Model != "" {
-		runtime.ModelOverride = r.Model
-		return r.Model
-	}
-	return runtime.ProfileOverride
 }
 
 func reviewCorrelationID(correlation map[string]string) string {
@@ -1084,33 +1069,23 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// records the failure and leaves the bead open for retry.
 	if built.Overflow {
 		baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
-		reviewRouteLabel := ""
-		if r.Model != "" {
-			reviewRouteLabel = r.Model
-		}
 		overflowTelemetry := &EvidenceAssemblyTelemetry{
 			Sections:    built.Sections,
 			InputBytes:  len(prompt),
 			OutputBytes: 0,
-			Harness:     r.Harness,
-			Model:       reviewRouteLabel,
 		}
 		reviewRes := &ReviewResult{
-			Verdict:         VerdictBlock,
-			Error:           evidence.OutcomeReviewContextOverflow,
-			Rationale:       evidence.OutcomeReviewContextOverflow,
-			ReviewerHarness: r.Harness,
-			ReviewerModel:   reviewRouteLabel,
-			BaseRev:         baseRev,
-			ResultRev:       resultRev,
-			ExecutionDir:    artifacts.DirRel,
-			CostUSD:         0,
-			InputBytes:      overflowTelemetry.InputBytes,
-			OutputBytes:     overflowTelemetry.OutputBytes,
+			Verdict:      VerdictBlock,
+			Error:        evidence.OutcomeReviewContextOverflow,
+			Rationale:    evidence.OutcomeReviewContextOverflow,
+			BaseRev:      baseRev,
+			ResultRev:    resultRev,
+			ExecutionDir: artifacts.DirRel,
+			CostUSD:      0,
+			InputBytes:   overflowTelemetry.InputBytes,
+			OutputBytes:  overflowTelemetry.OutputBytes,
 		}
 		_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
-			Harness:          r.Harness,
-			Model:            reviewRouteLabel,
 			BaseRev:          baseRev,
 			ResultRev:        resultRev,
 			Verdict:          string(VerdictBlock),
@@ -1126,10 +1101,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
 	}
 
-	// Resolve reviewer constraints. An explicit reviewer harness/model wins as
-	// an operator override; otherwise DDx sends only the reviewer MinPower floor
-	// and Fizeau owns concrete routing.
-	reviewHarness := r.Harness
+	// DDx sends only the reviewer MinPower floor. Fizeau owns concrete routing.
 	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
 	// Emit reviewer-escalated event when MinPower is bumped above baseline.
 	if priorErrors > 0 && r.BeadEvents != nil {
@@ -1143,13 +1115,12 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	}
 
 	start := time.Now()
-	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, "")
+	runRuntime := BuildReviewExecuteRequest(impl)
 	// Apply escalated MinPower: use the higher of the base R4 floor and the
 	// escalated profile floor so retries reach a stronger reviewer powerClass.
 	if reviewProfile.MinPower > runRuntime.MinPowerOverride {
 		runRuntime.MinPowerOverride = reviewProfile.MinPower
 	}
-	reviewRouteLabel := r.applyExplicitReviewerPins(&runRuntime)
 	runRuntime.Prompt = prompt
 	runRuntime.WorkDir = reviewWorkDir
 	result, runErr := r.dispatchReviewRun(ctx, runRuntime)
@@ -1164,26 +1135,20 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			InputBytes:  len(prompt),
 			OutputBytes: 0,
 			ElapsedMS:   durationMS,
-			Harness:     reviewHarness,
-			Model:       reviewRouteLabel,
 		}
 		reviewRes := &ReviewResult{
-			Verdict:         VerdictBlock,
-			Rationale:       runErr.Error(),
-			Error:           evidence.OutcomeReviewTransport,
-			ReviewerHarness: reviewHarness,
-			ReviewerModel:   reviewRouteLabel,
-			BaseRev:         resolveReviewBaseRev(r.ProjectRoot, resultRev),
-			ResultRev:       resultRev,
-			ExecutionDir:    artifacts.DirRel,
-			DurationMS:      durationMS,
-			CostUSD:         resultCost(result),
-			InputBytes:      transportTelemetry.InputBytes,
-			OutputBytes:     transportTelemetry.OutputBytes,
+			Verdict:      VerdictBlock,
+			Rationale:    runErr.Error(),
+			Error:        evidence.OutcomeReviewTransport,
+			BaseRev:      resolveReviewBaseRev(r.ProjectRoot, resultRev),
+			ResultRev:    resultRev,
+			ExecutionDir: artifacts.DirRel,
+			DurationMS:   durationMS,
+			CostUSD:      resultCost(result),
+			InputBytes:   transportTelemetry.InputBytes,
+			OutputBytes:  transportTelemetry.OutputBytes,
 		}
 		_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
-			Harness:          reviewHarness,
-			Model:            reviewRouteLabel,
 			BaseRev:          reviewRes.BaseRev,
 			ResultRev:        resultRev,
 			Verdict:          string(reviewRes.Verdict),
@@ -1199,8 +1164,8 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 		return reviewRes, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewTransport, runErr)
 	}
 
-	actualHarness := reviewHarness
-	actualModel := reviewRouteLabel
+	actualHarness := ""
+	actualModel := ""
 	actualProvider := ""
 	actualPower := 0
 	if result != nil {
@@ -1316,11 +1281,11 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 
 // dispatchReviewRun is a thin SD-024 wrapper around dispatchViaResolvedConfig
 // for the post-merge reviewer. The reviewer carries no persistent
-// ResolvedConfig of its own — the durable knobs that affect a review
-// invocation (timeout, provider, evidence caps) are read from the project's
-// .ddx/config.yaml via LoadAndResolve, while reviewer-powerClass harness/model
-// are pinned via the runtime override fields. Resolution order matches the
-// execute-bead worker (runner > pre-built service > fresh service).
+// ResolvedConfig of its own. Each call loads the baseline execution config,
+// while the runtime supplies DDx-owned abstract MinPower, read-only permission,
+// and correlation constraints and clears concrete route/profile pins. Fizeau
+// alone selects the reviewer harness, provider, and model. Resolution order
+// matches the execute-bead worker (runner > pre-built service > fresh service).
 func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runtime AgentRunRuntime) (*Result, error) {
 	rcfg, _ := ddxconfig.LoadAndResolve(r.ProjectRoot, ddxconfig.CLIOverrides{})
 	return dispatchViaResolvedConfig(ctx, r.ProjectRoot, r.Service, r.Runner, rcfg, runtime)

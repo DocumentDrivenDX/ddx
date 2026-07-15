@@ -56,6 +56,38 @@ func indexOfString(values []string, want string) int {
 	return -1
 }
 
+func TestExecuteLoopReviewTierRoundTrip(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	m := NewWorkerManager(root)
+	installFastSuccessWorker(m)
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:       executeloop.ModeOnce,
+		ReviewTier: executeloop.ReviewTierElevated,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = m.Stop(record.ID)
+	})
+	_ = waitForWorkerExit(t, m, record.ID, 5*time.Second)
+
+	data, err := os.ReadFile(filepath.Join(root, record.SpecPath))
+	require.NoError(t, err)
+	var persisted ExecuteLoopWorkerSpec
+	require.NoError(t, json.Unmarshal(data, &persisted))
+	assert.Equal(t, executeloop.ReviewTierElevated, persisted.ReviewTier)
+	assert.Contains(t, string(data), `"review_tier": "elevated"`)
+	assert.NotContains(t, string(data), "review_harness")
+	assert.NotContains(t, string(data), "review_model")
+
+	args := ManagedWorkerCommandArgs(persisted, record.ID)
+	assert.Contains(t, args, "--review-tier")
+	assert.Contains(t, args, executeloop.ReviewTierElevated)
+	assert.NotContains(t, args, "--review-harness")
+	assert.NotContains(t, args, "--review-model")
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
@@ -260,8 +292,7 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 		Mode:              executeloop.ModeWatch,
 		IdleInterval:      executeloop.Duration{Duration: 45 * time.Second},
 		NoReview:          true,
-		ReviewHarness:     "review-harness",
-		ReviewModel:       "review-model",
+		ReviewTier:        executeloop.ReviewTierElevated,
 		OpaquePassthrough: true,
 		MaxCostUSD:        1.25,
 		RequestTimeout:    executeloop.Duration{Duration: 2 * time.Minute},
@@ -294,8 +325,7 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)
 	assert.Equal(t, 45*time.Second, persisted.IdleInterval.Duration)
 	assert.True(t, persisted.NoReview)
-	assert.Equal(t, "review-harness", persisted.ReviewHarness)
-	assert.Equal(t, "review-model", persisted.ReviewModel)
+	assert.Equal(t, executeloop.ReviewTierElevated, persisted.ReviewTier)
 	assert.True(t, persisted.OpaquePassthrough)
 	assert.Equal(t, 1.25, persisted.MaxCostUSD)
 	assert.Equal(t, 2*time.Minute, persisted.RequestTimeout.Duration)
@@ -1276,8 +1306,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		"mode":                "watch",
 		"idle_interval":       "17s",
 		"no_review":           true,
-		"review_harness":      "review-harness",
-		"review_model":        "review-model",
+		"review_tier":         "elevated",
 		"opaque_passthrough":  true,
 		"max_cost_usd":        0.75,
 		"request_timeout":     "47s",
@@ -1323,8 +1352,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)
 	assert.Equal(t, 17*time.Second, persisted.IdleInterval.Duration)
 	assert.True(t, persisted.NoReview)
-	assert.Equal(t, "review-harness", persisted.ReviewHarness)
-	assert.Equal(t, "review-model", persisted.ReviewModel)
+	assert.Equal(t, executeloop.ReviewTierElevated, persisted.ReviewTier)
 	assert.True(t, persisted.OpaquePassthrough)
 	assert.Equal(t, 0.75, persisted.MaxCostUSD)
 	assert.Equal(t, 47*time.Second, persisted.RequestTimeout.Duration)
@@ -1347,6 +1375,44 @@ func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code, "body: %s", w.Body.String())
 	assert.Contains(t, w.Body.String(), "poll_interval is not supported")
+}
+
+func TestRESTWorkerStartRejectsRemovedReviewRoutingFields(t *testing.T) {
+	projectRoot := setupTestDir(t)
+	srv := New(":0", projectRoot)
+	installFastSuccessWorker(srv.workers)
+
+	for _, field := range []string{"review_harness", "review_model"} {
+		t.Run(field, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{field: "removed-route-pin"})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "127.0.0.1:12345"
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusBadRequest, w.Code, "body: %s", w.Body.String())
+			assert.Contains(t, w.Body.String(), field+" is no longer supported")
+			assert.Contains(t, w.Body.String(), "Fizeau owns concrete reviewer routing")
+		})
+	}
+
+	t.Run("unrelated future field remains forward compatible", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", strings.NewReader(`{"mode":"once","future_worker_hint":"preserved-by-newer-client"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+		var record WorkerRecord
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &record))
+		t.Cleanup(func() {
+			_ = srv.workers.Stop(record.ID)
+			_ = waitForWorkerExit(t, srv.workers, record.ID, 5*time.Second)
+		})
+	})
 }
 
 func TestRESTWorkerStart_UnknownSpecVersion(t *testing.T) {

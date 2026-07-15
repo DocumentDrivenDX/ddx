@@ -641,9 +641,10 @@ These axes do not interact with the drain-level cost cap (FEAT-014), the
 rate-limit retry budget internal to a single attempt, or the no-progress counter
 tracking consecutive attempts with no commit.
 
-**Transitional single-slot allowance.** Until the two-slot quorum reviewer bead
-lands, a single reviewer slot satisfies the review gate. The removal condition
-is the landing of the bead that implements two-slot quorum aggregation.
+**Current risk-proportional close gate.** A routine bead requires one stronger
+reviewer. DDx requires two reviewers only for `kind:safety`, `area:storage`, or
+`kind:migration`, or when the operator explicitly sets `review-tier=elevated`.
+Concrete harness, provider, and model pins do not change reviewer cardinality.
 
 ### Escalation, fallback, retry, and review decision tree
 

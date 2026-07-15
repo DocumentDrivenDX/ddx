@@ -13,7 +13,7 @@ func TestReviewerRuntime_ReadOnlyProfilePlumbed(t *testing.T) {
 		Harness:     "claude",
 		ActualPower: 5,
 	}
-	rt := BuildReviewExecuteRequest(impl, "", "")
+	rt := BuildReviewExecuteRequest(impl)
 	if rt.PermissionsOverride != PermissionsReadOnlyReviewer {
 		t.Errorf("PermissionsOverride = %q; want %q", rt.PermissionsOverride, PermissionsReadOnlyReviewer)
 	}
@@ -31,7 +31,7 @@ func TestReviewerReadOnlyConstraintPassesThroughWithoutHarnessCatalog(t *testing
 		harness string
 	}{
 		{name: "unpinned"},
-		{name: "explicit opaque harness", harness: " opaque-review-harness "},
+		{name: "explicit opaque harness", harness: " opaque-reviewer-route "},
 	}
 
 	for _, tt := range tests {

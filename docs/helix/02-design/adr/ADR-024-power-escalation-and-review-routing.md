@@ -146,12 +146,12 @@ supplemental and does not override the bounded bundle. The reviewer cannot
 write files or create commits. Each reviewer must return a structured verdict
 with per-acceptance-criterion evidence.
 
-DDx requests a reviewer that is stronger than the implementer by using the
-implementer's actual power as evidence and setting reviewer `MinPower` to a
-higher floor. If actual power is unknown, DDx uses the configured abstract
-review floor; if the implementer already ran at the Fizeau contract maximum,
-DDx requests that maximum. Fizeau alone resolves the reviewer harness,
-provider, and model. DDx also supplies structured correlation facts:
+DDx requests a reviewer that is stronger than the implementer by deriving an
+abstract reviewer `MinPower` floor locally. The implementation result's
+`ActualPower` may raise that floor, but only the resulting `MinPower` constraint
+is sent to Fizeau. If actual power is unknown, DDx uses the configured abstract
+review floor. Fizeau alone resolves the reviewer harness, provider, and model.
+DDx also supplies structured correlation facts:
 
 - `role=reviewer`
 - `bead_id`
@@ -160,9 +160,11 @@ provider, and model. DDx also supplies structured correlation facts:
 - `result_rev`
 - `review_group_id`
 - `reviewer_index`
-- implementer actual power when known
 
 These request-time fields provide correlation without concrete route steering.
+DDx strips `impl_actual_power` and concrete implementation harness, provider,
+and model identity from reviewer request correlation; those values remain
+post-run audit evidence only.
 Current v0.14.50 does not accept a session ID in the request or return one in
 `ServiceFinalData`; the opaque terminal `SessionLogPath` is post-run evidence,
 not request correlation. DDx may record implementer and reviewer routes returned

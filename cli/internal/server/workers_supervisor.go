@@ -240,6 +240,19 @@ func (s *WorkerSupervisor) LoadDesiredState() (WorkerDesiredState, error) {
 	if err != nil {
 		return WorkerDesiredState{}, err
 	}
+	var desiredFields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &desiredFields); err != nil {
+		return WorkerDesiredState{}, err
+	}
+	if rawDefaultSpec, ok := desiredFields["default_spec"]; ok {
+		var defaultSpecFields map[string]json.RawMessage
+		if err := json.Unmarshal(rawDefaultSpec, &defaultSpecFields); err != nil {
+			return WorkerDesiredState{}, err
+		}
+		if err := rejectRemovedReviewRoutingFields(defaultSpecFields, "default_spec"); err != nil {
+			return WorkerDesiredState{}, fmt.Errorf("worker desired state: %w", err)
+		}
+	}
 
 	var state WorkerDesiredState
 	if err := json.Unmarshal(data, &state); err != nil {

@@ -30,11 +30,11 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 			"session_id": "sess-1",
 		},
 	}
-	got := BuildReviewExecuteRequest(impl, "claude", "review-strong")
+	got := BuildReviewExecuteRequest(impl)
 
-	assert.Equal(t, "claude", got.HarnessOverride)
+	assert.Empty(t, got.HarnessOverride)
 	assert.Empty(t, got.ModelOverride)
-	assert.Equal(t, "review-strong", got.ProfileOverride)
+	assert.Empty(t, got.ProfileOverride)
 	assert.True(t, got.ClearRoutingPins)
 	assert.True(t, got.ClearProfile)
 	assert.Equal(t, 71, got.MinPowerOverride, "MinPower must be impl.ActualPower+1 (R4 pairing)")
@@ -52,11 +52,11 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.NotContains(t, got.Correlation, "impl_actual_power")
 }
 
-func TestReviewerDispatch_UsesProfilePin(t *testing.T) {
-	got := BuildReviewExecuteRequest(ImplementerRouting{Harness: "claude"}, "", "review-strong")
+func TestReviewerDispatch_DoesNotSetConcreteRoutePins(t *testing.T) {
+	got := BuildReviewExecuteRequest(ImplementerRouting{Harness: "claude"})
 	assert.Empty(t, got.HarnessOverride)
 	assert.Empty(t, got.ModelOverride)
-	assert.Equal(t, "review-strong", got.ProfileOverride)
+	assert.Empty(t, got.ProfileOverride)
 }
 
 // TestBuildReviewExecuteRequest_ZeroPowerLeavesMinPowerZero verifies the
@@ -65,7 +65,7 @@ func TestReviewerDispatch_UsesProfilePin(t *testing.T) {
 // should remain zero so the reviewer falls back to rcfg.MinPower() rather
 // than pinning to a synthetic +1 above zero.
 func TestBuildReviewExecuteRequest_ZeroPowerLeavesMinPowerZero(t *testing.T) {
-	got := BuildReviewExecuteRequest(ImplementerRouting{}, "claude", "review-strong")
+	got := BuildReviewExecuteRequest(ImplementerRouting{})
 	assert.Zero(t, got.MinPowerOverride)
 }
 
@@ -113,7 +113,6 @@ func TestReviewBead_HappyPath_DifferentProvider_NoDegradedEvent(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		BeadEvents:  events,
-		Harness:     "claude",
 		Runner: &reviewRunnerStub{result: &Result{
 			Harness:     "claude",
 			Provider:    "anthropic", // different from implementer
@@ -150,7 +149,6 @@ func TestReviewBead_SameProviderIdentityIsEvidenceOnly(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		BeadEvents:  events,
-		Harness:     "claude",
 		Runner: &reviewRunnerStub{result: &Result{
 			Harness:     "claude",
 			Provider:    "anthropic",

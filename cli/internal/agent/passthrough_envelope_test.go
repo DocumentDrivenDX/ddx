@@ -780,14 +780,11 @@ func TestFizeauAutoRoutingExplicitPinsRemainPassthrough(t *testing.T) {
 		Model:       "claude-3-7-sonnet",
 		ActualPower: 40,
 	}
-	runRuntime := BuildReviewExecuteRequest(impl, "review-harness", "review-profile")
-	reviewer := &DefaultBeadReviewer{Model: "review-model"}
-	pinned := reviewer.applyExplicitReviewerPins(&runRuntime)
+	runRuntime := BuildReviewExecuteRequest(impl)
 
-	assert.Equal(t, "review-harness", runRuntime.HarnessOverride)
-	assert.Equal(t, "review-profile", runRuntime.ProfileOverride)
-	assert.Equal(t, "review-model", runRuntime.ModelOverride)
-	assert.Equal(t, "review-model", pinned)
+	assert.Empty(t, runRuntime.HarnessOverride)
+	assert.Empty(t, runRuntime.ProfileOverride)
+	assert.Empty(t, runRuntime.ModelOverride)
 	assert.True(t, runRuntime.ClearRoutingPins)
 	assert.True(t, runRuntime.ClearProfile)
 }

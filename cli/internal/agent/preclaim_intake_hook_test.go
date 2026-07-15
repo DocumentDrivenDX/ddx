@@ -672,7 +672,7 @@ func TestLifecycleDispatchNeverQueriesFizeauCatalog(t *testing.T) {
 	assert.False(t, decomposeSvc.listPoliciesCalled)
 
 	reviewSvc := &passthroughTestService{}
-	reviewRuntime := BuildReviewExecuteRequest(ImplementerRouting{ActualPower: 7}, "", "")
+	reviewRuntime := BuildReviewExecuteRequest(ImplementerRouting{ActualPower: 7})
 	reviewRuntime.MinPowerOverride = lifecycleStrongMinPower
 	reviewRuntime.Prompt = "review the candidate"
 	_, err = dispatchViaResolvedConfig(context.Background(), root, reviewSvc, nil, rcfg, reviewRuntime)

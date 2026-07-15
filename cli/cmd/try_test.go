@@ -873,8 +873,9 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("reason"), "try must expose --reason flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review"), "try must expose --no-review flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review-i-know-what-im-doing"), "try must expose the break-glass acknowledgement flag")
-	assert.NotNil(t, tryCmd.Flags().Lookup("review-harness"), "try must expose --review-harness flag")
-	assert.NotNil(t, tryCmd.Flags().Lookup("review-model"), "try must expose --review-model flag")
+	assert.NotNil(t, tryCmd.Flags().Lookup("review-tier"), "try must expose --review-tier flag")
+	assert.Nil(t, tryCmd.Flags().Lookup("review-harness"), "try must not expose a reviewer harness override")
+	assert.Nil(t, tryCmd.Flags().Lookup("review-model"), "try must not expose a reviewer model override")
 }
 
 // TestTry_HooksWired verifies that ddx try wires the pre-claim intake and

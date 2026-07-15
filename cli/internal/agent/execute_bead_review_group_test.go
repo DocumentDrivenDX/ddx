@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,6 +47,71 @@ func (r *reviewGroupRunnerStub) Run(opts RunArgs) (*Result, error) {
 
 const reviewerOutputRequestChanges = "```json\n{\"schema_version\":1,\"verdict\":\"REQUEST_CHANGES\",\"summary\":\"missing regression test\",\"findings\":[{\"severity\":\"warn\",\"summary\":\"missing regression test\",\"location\":\"cli/internal/agent/foo_test.go:42\"}]}\n```"
 
+func TestDefaultCloseGateSingleReviewer(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	runner := &reviewGroupRunnerStub{result: &Result{Output: reviewerOutputApprove}}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Runner:      runner,
+	}
+
+	group, err := reviewer.ReviewGroup(context.Background(), "ddx-pairing", head, ImplementerRouting{})
+	require.NoError(t, err)
+	require.Len(t, group.Slots, 1)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, 0, group.Slots[0].ReviewerIndex)
+	assert.Equal(t, lifecycleStrongMinPower, group.Slots[0].Runtime.MinPowerOverride)
+}
+
+func TestElevatedCloseGateOnlyForRiskLabelsOrReviewTierOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		labels     []string
+		reviewTier string
+		impl       ImplementerRouting
+		wantSlots  int
+	}{
+		{name: "kind safety", labels: []string{"kind:safety"}, wantSlots: 2},
+		{name: "area storage", labels: []string{"area:storage"}, wantSlots: 2},
+		{name: "kind migration", labels: []string{"kind:migration"}, wantSlots: 2},
+		{name: "explicit elevated tier", reviewTier: "elevated", wantSlots: 2},
+		{name: "ordinary bead", wantSlots: 1},
+		{
+			name:      "concrete primary route pin",
+			impl:      ImplementerRouting{Harness: "operator-harness", Provider: "operator-provider", Model: "operator-model", ActualPower: 70},
+			wantSlots: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			projectRoot, head, store := reviewPairingTestSetup(t)
+			require.NoError(t, store.Update(context.Background(), "ddx-pairing", func(b *bead.Bead) {
+				b.Labels = append([]string(nil), tc.labels...)
+			}))
+			runner := &reviewGroupRunnerStub{result: &Result{Output: reviewerOutputApprove}}
+			reviewer := &DefaultBeadReviewer{
+				ProjectRoot: projectRoot,
+				BeadStore:   store,
+				Runner:      runner,
+				ReviewTier:  tc.reviewTier,
+			}
+
+			group, err := reviewer.ReviewGroup(context.Background(), "ddx-pairing", head, tc.impl)
+			require.NoError(t, err)
+			require.Len(t, group.Slots, tc.wantSlots)
+			require.Len(t, runner.calls, tc.wantSlots)
+			for i, call := range runner.calls {
+				assert.Empty(t, call.Harness)
+				assert.Empty(t, call.Provider)
+				assert.Empty(t, call.Model)
+				assert.Empty(t, group.Slots[i].Runtime.ProfileOverride)
+			}
+		})
+	}
+}
+
 func TestReviewGroup_DispatchesTwoSlotsSameEvidence(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	runner := &reviewGroupRunnerStub{result: &Result{
@@ -59,8 +125,7 @@ func TestReviewGroup_DispatchesTwoSlotsSameEvidence(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		Runner:      runner,
-		Harness:     "claude",
-		Model:       "claude-opus-4-7",
+		ReviewTier:  "elevated",
 	}
 
 	group, err := reviewer.ReviewGroup(context.Background(), "ddx-pairing", head, ImplementerRouting{
@@ -102,8 +167,7 @@ func TestReviewGroup_CorrelationFields(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		Runner:      runner,
-		Harness:     "claude",
-		Model:       "claude-opus-4-7",
+		ReviewTier:  "elevated",
 	}
 
 	_, err := reviewer.ReviewGroup(context.Background(), "ddx-pairing", head, ImplementerRouting{
@@ -150,8 +214,7 @@ func TestReviewGroup_UsesSharedPromptFileOnDisk(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		Runner:      runner,
-		Harness:     "claude",
-		Model:       "claude-opus-4-7",
+		ReviewTier:  "elevated",
 	}
 
 	group, err := reviewer.ReviewGroup(context.Background(), "ddx-pairing", head, ImplementerRouting{
@@ -174,7 +237,7 @@ func TestReviewGroup_UsesSharedPromptFileOnDisk(t *testing.T) {
 	assert.NotEmpty(t, strings.TrimSpace(group.Bundle.GroupID))
 }
 
-func TestTwoSlotReview_DefaultDispatchesTwoReviewers(t *testing.T) {
+func TestTwoSlotReview_ElevatedDispatchesTwoReviewers(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	runner := &reviewGroupRunnerStub{result: &Result{
 		Harness:     "claude",
@@ -187,7 +250,7 @@ func TestTwoSlotReview_DefaultDispatchesTwoReviewers(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		Runner:      runner,
-		Harness:     "claude",
+		ReviewTier:  "elevated",
 	}
 
 	got, err := reviewer.Review(context.Background(), projectRoot, CandidateResult{
@@ -225,7 +288,7 @@ func TestTwoSlotReview_CorrelationFacts(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		Runner:      runner,
-		Harness:     "claude",
+		ReviewTier:  "elevated",
 	}
 
 	_, err := reviewer.Review(context.Background(), projectRoot, CandidateResult{
@@ -272,7 +335,7 @@ func TestTwoSlotReview_UnanimousApproveRequired(t *testing.T) {
 		ProjectRoot: projectRoot,
 		BeadStore:   store,
 		Runner:      runner,
-		Harness:     "claude",
+		ReviewTier:  "elevated",
 	}
 	landed := false
 	coord := &AttemptCycleCoordinator{
@@ -347,7 +410,7 @@ func TestReviewerProviderIdentityIsEvidenceOnly(t *testing.T) {
 				BeadEvents:  store,
 				EventReader: store,
 				Runner:      runner,
-				Harness:     "claude",
+				ReviewTier:  "elevated",
 			}
 			impl := ImplementerRouting{
 				Harness:     "claude",
@@ -438,7 +501,7 @@ func TestReviewerProviderIdentityIsEvidenceOnly(t *testing.T) {
 	assert.Equal(t, snapshots[0].nextRequests, snapshots[1].nextRequests,
 		"concrete reviewer provider identity must not steer the next request")
 	assert.Equal(t, []requestSnapshot{
-		{harness: "claude", minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
-		{harness: "claude", minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
+		{minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
+		{minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
 	}, snapshots[0].nextRequests)
 }

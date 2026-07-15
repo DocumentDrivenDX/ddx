@@ -18,6 +18,12 @@ import (
 // client and server together.
 const SpecCurrentVersion = 1
 
+const (
+	// ReviewTierElevated requests the two-slot close gate. The zero value is
+	// the routine one-slot gate so existing callers stay risk-proportional.
+	ReviewTierElevated = "elevated"
+)
+
 // Mode controls how the work terminates.
 type Mode string
 
@@ -84,8 +90,7 @@ type ExecuteLoopSpec struct {
 	IdleInterval Duration `json:"idle_interval,omitempty"`
 
 	NoReview               bool   `json:"no_review,omitempty"`
-	ReviewHarness          string `json:"review_harness,omitempty"`
-	ReviewModel            string `json:"review_model,omitempty"`
+	ReviewTier             string `json:"review_tier,omitempty"`
 	IgnoreCooldown         bool   `json:"ignore_cooldown,omitempty"`
 	CooldownOverrideReason string `json:"cooldown_override_reason,omitempty"`
 
@@ -178,6 +183,9 @@ func (s *ExecuteLoopSpec) Validate() error {
 	}
 	if s.SpecVersion != 0 && s.SpecVersion != SpecCurrentVersion {
 		return fmt.Errorf("executeloop: unsupported spec_version %d (want %d)", s.SpecVersion, SpecCurrentVersion)
+	}
+	if s.ReviewTier != "" && s.ReviewTier != ReviewTierElevated {
+		return fmt.Errorf("executeloop: unknown review_tier %q (want %q)", s.ReviewTier, ReviewTierElevated)
 	}
 	return nil
 }

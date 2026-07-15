@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -106,6 +107,57 @@ func TestWorkerDesiredStateV1ProfileMigrationPreservesOnlyUnambiguousPins(t *tes
 			assert.Equal(t, tt.wantProfile, loaded.DefaultSpec.Profile)
 		})
 	}
+}
+
+func TestWorkerDesiredStateRejectsRemovedReviewRoutingFields(t *testing.T) {
+	for _, field := range []string{"review_harness", "review_model"} {
+		t.Run(field, func(t *testing.T) {
+			root := t.TempDir()
+			setupBeadStore(t, root)
+			manager := NewWorkerManager(root)
+			defer manager.StopWatchdog()
+			supervisor := NewWorkerSupervisor(manager)
+			require.NoError(t, os.MkdirAll(manager.rootDir, 0o755))
+
+			raw := fmt.Sprintf(`{
+  "version": %d,
+  "project_root": %q,
+  "desired_count": 0,
+  "default_spec": {"mode":"watch", %q:"removed-route-pin"},
+  "restart": {"enabled": false}
+}`, workerDesiredStateVersion, root, field)
+			require.NoError(t, os.WriteFile(supervisor.desiredStatePath(), []byte(raw), 0o644))
+
+			_, err := supervisor.LoadDesiredState()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "default_spec."+field+" is no longer supported")
+		})
+	}
+
+	t.Run("unrelated future fields remain forward compatible", func(t *testing.T) {
+		root := t.TempDir()
+		setupBeadStore(t, root)
+		manager := NewWorkerManager(root)
+		defer manager.StopWatchdog()
+		supervisor := NewWorkerSupervisor(manager)
+		require.NoError(t, os.MkdirAll(manager.rootDir, 0o755))
+
+		raw := fmt.Sprintf(`{
+  "version": %d,
+  "project_root": %q,
+  "desired_count": 0,
+  "default_spec": {"mode":"watch", "future_spec_hint":"preserved-by-newer-client"},
+  "restart": {"enabled": false},
+  "updated_at": %q,
+  "future_supervisor_hint": "preserved-by-newer-client"
+}`, workerDesiredStateVersion, root, time.Now().UTC().Format(time.RFC3339Nano))
+		require.NoError(t, os.WriteFile(supervisor.desiredStatePath(), []byte(raw), 0o644))
+
+		loaded, err := supervisor.LoadDesiredState()
+		require.NoError(t, err)
+		assert.Equal(t, root, loaded.ProjectRoot)
+		assert.Equal(t, executeloop.ModeWatch, loaded.DefaultSpec.Mode)
+	})
 }
 
 func TestWorkerDesiredStateV1ProfileMigrationReconcilesToOpaqueExecute(t *testing.T) {

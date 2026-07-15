@@ -165,7 +165,7 @@ func newDrainReplayReviewService() *drainReplayReviewService {
 				{Name: "review-fallback", MinPower: 10, MaxPower: 20},
 			},
 			listModels: []agentlib.ModelInfo{
-				{ID: "review-model", Power: 90, Available: true, AutoRoutable: true},
+				{ID: "reviewer-model", Power: 90, Available: true, AutoRoutable: true},
 				{ID: "review-lite", Power: 20, Available: true, AutoRoutable: true},
 			},
 		},
@@ -340,7 +340,7 @@ func TestDrain_NoFabricatedFailureSignatures(t *testing.T) {
 			ProjectRoot: projectRoot,
 			BeadStore:   store,
 			Service:     reviewService,
-			Harness:     "claude",
+			ReviewTier:  "elevated",
 			BeadEvents:  store,
 			EventReader: store,
 		},

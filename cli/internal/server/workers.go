@@ -457,11 +457,8 @@ func ManagedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []str
 	if spec.NoReview {
 		args = append(args, "--no-review", "--no-review-i-know-what-im-doing")
 	}
-	if spec.ReviewHarness != "" {
-		args = append(args, "--review-harness", spec.ReviewHarness)
-	}
-	if spec.ReviewModel != "" {
-		args = append(args, "--review-model", spec.ReviewModel)
+	if spec.ReviewTier != "" {
+		args = append(args, "--review-tier", spec.ReviewTier)
 	}
 	args = append(args,
 		"--max-cost", fmt.Sprintf("%g", spec.MaxCostUSD),
@@ -1176,8 +1173,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				ProjectRoot: projectRoot,
 				BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
 				BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
-				Harness:     spec.ReviewHarness,
-				Model:       spec.ReviewModel,
+				ReviewTier:  spec.ReviewTier,
 			}
 			reviewer = postMergeReviewer.(agent.CandidateReviewer)
 		}
