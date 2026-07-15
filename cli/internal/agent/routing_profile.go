@@ -1,10 +1,7 @@
 package agent
 
-import "strings"
-
-// NormalizeRoutingProfile trims operator input while preserving an empty value.
-// Empty means unconstrained: the agent service chooses without profile-derived
-// power bounds.
+// NormalizeRoutingProfile preserves the operator-supplied Fizeau profile
+// constraint byte-for-byte. Fizeau owns profile syntax and normalization.
 func NormalizeRoutingProfile(profile string) string {
-	return strings.TrimSpace(profile)
+	return profile
 }

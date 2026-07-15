@@ -99,9 +99,9 @@ type ExecuteLoopSpec struct {
 	PreClaimTimeout    Duration `json:"preclaim_timeout,omitempty"`
 	RequestTimeout     Duration `json:"request_timeout,omitempty"`
 	RateLimitMaxWait   Duration `json:"rate_limit_max_wait,omitempty"`
-	// RouteResolutionTimeout bounds routing preflight and the resolveRoute
-	// viability check so a hung resolver cannot wedge the worker. Zero uses the
-	// binary default (agent.DefaultRouteResolutionTimeout, 60s).
+	// RouteResolutionTimeout bounds the Fizeau route stage from Execute dispatch
+	// through routing_decision so a hung route stage cannot wedge the worker.
+	// Zero uses the binary default (agent.DefaultRouteResolutionTimeout, 60s).
 	RouteResolutionTimeout Duration `json:"route_resolution_timeout,omitempty"`
 	MinPower               int      `json:"min_power,omitempty"`
 	MaxPower               int      `json:"max_power,omitempty"`

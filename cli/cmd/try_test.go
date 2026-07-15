@@ -598,7 +598,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	assert.Equal(t, float64(91), body["actual_power"])
 }
 
-func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *testing.T) {
+func TestTryZeroConfigLeavesRouteSelectionToFizeau(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -634,8 +634,8 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	lastReq := stub.lastReq
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
-	assert.Equal(t, "default", lastReq.Policy, "dispatch should request the ordinary no-requirement Fizeau policy by metadata")
-	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
+	assert.Empty(t, lastReq.Policy, "zero-config try must not select a Fizeau policy")
+	assert.Equal(t, 0, lastReq.MinPower, "difficulty-to-MinPower mapping is owned by its dedicated boundary bead")
 	assert.Empty(t, lastReq.Harness, "zero-config routing must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config routing must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
@@ -691,9 +691,9 @@ func TestTryZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testing
 
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx try should use the shared try-loop retry state machine; output=%q err=%v", out, err)
-	assert.Equal(t, "default", requests[0].Policy)
+	assert.Empty(t, requests[0].Policy)
 	assert.Equal(t, 0, requests[0].MinPower)
-	assert.Equal(t, "default", requests[1].Policy)
+	assert.Empty(t, requests[1].Policy)
 	assert.Equal(t, 6, requests[1].MinPower)
 }
 
@@ -733,8 +733,8 @@ func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
 	lastReq := stub.lastReq
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
-	assert.Equal(t, "cheap", lastReq.Policy, "cheap zero-config routing must not pick requirement-bearing air-gapped policy")
-	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
+	assert.Empty(t, lastReq.Policy, "DDx must not translate an easy hint into a Fizeau policy")
+	assert.Equal(t, 0, lastReq.MinPower)
 }
 
 func TestTryIgnoresNumericLegacyRetryFloor(t *testing.T) {
@@ -775,7 +775,7 @@ func TestTryIgnoresNumericLegacyRetryFloor(t *testing.T) {
 	lastReq := stub.lastReq
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke implementation dispatch; output=%q err=%v", out, err)
-	assert.Equal(t, "default", lastReq.Policy, "numeric retry metadata must not override default zero-config policy selection")
+	assert.Empty(t, lastReq.Policy, "numeric retry metadata must not cause DDx policy selection")
 	assert.Equal(t, 0, lastReq.MinPower, "numeric retry metadata must not become the requested MinPower")
 }
 

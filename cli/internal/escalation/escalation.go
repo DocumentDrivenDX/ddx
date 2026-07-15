@@ -32,15 +32,6 @@ func ShouldEscalate(status string) bool {
 	return EscalatableStatuses[status]
 }
 
-// ProviderCooldownDuration is how long an unhealthy harness is skipped before
-// re-probing. Five minutes gives most transient errors time to resolve without
-// locking out a provider for too long.
-//
-// Per-harness cooldown tracking moved to the upstream agent service in v0.8.0:
-// callers record failures via svc.RecordRouteAttempt and read cooldown state
-// via svc.RouteStatus's RouteCandidateStatus.Healthy (ddx-7bc0c8d5).
-const ProviderCooldownDuration = 5 * time.Minute
-
 // FormatPowerAttemptBody formats the body of a power-attempt bead event.
 func FormatPowerAttemptBody(powerClass, harness, model, probeResult, detail string) string {
 	body := fmt.Sprintf("powerClass=%s harness=%s model=%s", powerClass, harness, model)

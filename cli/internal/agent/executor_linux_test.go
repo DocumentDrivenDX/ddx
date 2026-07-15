@@ -134,7 +134,7 @@ func TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessHelper(t *testing.T) {
 }
 
 // TestOSExecutorExecuteInDir_ParentDeathSignalThreadGuard verifies that
-// executor.go locks the OS thread around cmd.Start() to ensure Pdeathsig is
+// the legacy test-only executor locks the OS thread around cmd.Start() to ensure Pdeathsig is
 // reliably associated with the creating thread. Go's runtime may migrate a
 // goroutine to a different OS thread; LockOSThread prevents that migration
 // during the critical exec window so the child inherits the parent-death signal
@@ -143,7 +143,7 @@ func TestOSExecutorExecuteInDir_ParentDeathSignalThreadGuard(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(file), "executor.go"))
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(file), "legacy_executor_test.go"))
 	require.NoError(t, err)
 
 	src := string(data)

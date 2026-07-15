@@ -9,20 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
-	agentlib "github.com/easel/fizeau"
-
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
@@ -208,17 +203,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
 	}
-	spec.Profile = agent.NormalizeRoutingProfile(spec.Profile)
-
 	noRoutingFlags := spec.Harness == "" && spec.Model == "" && spec.Provider == "" &&
 		spec.Profile == "" && spec.MinPower == 0 &&
 		spec.MaxPower == 0 && !cmd.Flags().Changed("harness") &&
 		!cmd.Flags().Changed("model") && !cmd.Flags().Changed("provider") &&
 		!cmd.Flags().Changed("profile") &&
 		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
-	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
-	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
-
 	store := bead.NewStore(beadStoreRoot)
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {
@@ -377,25 +367,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		MaxBeadCostUSD:     spec.MaxBeadCostUSD,
 	})
 
-	harnessBilledLookup := func(harnessName string) bool {
-		svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(f.WorkingDir)
-		if svcErr != nil {
-			return true
-		}
-		infos, err := svc.ListHarnesses(context.Background())
-		if err != nil {
-			return true
-		}
-		for _, h := range infos {
-			if h.Name == harnessName {
-				return escalation.CountsTowardCostCap(h.CostClass == "local", h.Billing == agentlib.BillingModelSubscription, h.CostClass)
-			}
-		}
-		return true
-	}
-
-	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, harnessBilledLookup)
-	profileSelector := newImplementationProfileSelector(projectRoot, spec.Harness)
+	// DDx consumes the cost reported by Fizeau. It does not inspect Fizeau's
+	// harness inventory or infer billing properties during attempt control.
+	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, nil)
 	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 		costCap.Add(report.Harness, report.CostUSD)
 	}
@@ -407,7 +381,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		decision, _ := work.ClassifyStop(work.StopInput{Budget: true})
 		return decision, agent.ExecuteBeadReport{
 			Status: agent.ExecuteBeadStatusExecutionFailed,
-			Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, spec.MaxCostUSD),
+			Detail: fmt.Sprintf("cost cap reached: $%.2f reported >= $%.2f cap; raise the cap or set 0 to disable.", spent, spec.MaxCostUSD),
 		}, true
 	}
 
@@ -516,30 +490,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		return reportFromResult(res), nil
 	}
 
-	var ladderOnce sync.Once
-	var ladder escalationFloorFinder
-	loadLadder := func() escalationFloorFinder {
-		ladderOnce.Do(func() {
-			ladder = powerladder.NewLadder(nil)
-			svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot)
-			if svcErr != nil {
-				return
-			}
-			modelFilter := agentlib.ModelFilter{}
-			if spec.Harness != "" {
-				modelFilter.Harness = spec.Harness
-			}
-			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
-			defer cancel()
-			models, listErr := agent.ListModelsWithProbeContainment(modelCtx, svc, modelFilter)
-			if listErr != nil {
-				return
-			}
-			ladder = powerladder.NewLadder(models)
-		})
-		return ladder
-	}
-
 	executor := f.tryExecutorOverride
 	if executor == nil {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
@@ -552,106 +502,21 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
-			inferredPolicy := routingIntent.InferredPowerClass
-			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPower(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder())
-			if unavailable {
-				applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
-				return unavailableReport, nil
-			}
-			if spec.Harness == "" && spec.Provider == "" && spec.Model == "" {
-				if learnedMinPower, learnedUnavailableReport, learned := recentProviderConnectivityMinPower(store, time.Now().UTC(), initialMinPower, spec.MaxPower, loadLadder()); learned {
-					if learnedUnavailableReport.Status != "" {
-						learnedUnavailableReport.BeadID = beadID
-						applyExecutionRoutingIntentReport(&learnedUnavailableReport, routingIntent, "", "")
-						return learnedUnavailableReport, nil
-					}
-					if learnedMinPower > initialMinPower {
-						initialMinPower = learnedMinPower
-					}
-				}
-				// Pre-dispatch route-exclusion check: if every known route at
-				// the requested floor is still inside the exclusion window,
-				// skip this dispatch and let the retry policy raise MinPower
-				// in memory for the next attempt.
-				if svcForExcl, svcExclErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot); svcExclErr == nil {
-					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
-						ctx, svcForExcl, store, beadID, resolveClaimAssignee(),
-						targetBead.Extra, time.Now().UTC(), initialMinPower,
-						svcForExcl.ResolveRoute,
-						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
-						spec.RouteResolutionTimeout.Duration,
-						loopSessionID,
-						time.Time{}, // lastActivityAt: caller lacks liveness snapshot; treat as stale → always count
-					); skip {
-						applyExecutionRoutingIntentReport(&exclusionReport, routingIntent, "", "")
-						return exclusionReport, nil
-					}
-				}
-			}
+			routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags)
+			initialMinPower := rcfg.MinPower()
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
-			if spec.Harness != "" && spec.Model == "" && initialMinPower == 0 && spec.Profile != "" {
-				if selection, selectErr := profileSelector.Select(ctx, escalation.PowerClass(spec.Profile), initialMinPower); selectErr == nil && selection.Name != "" {
-					initialProfile = selection.Name
-					initialRoutingNote = selection.Note
-					if selection.MinPower > initialMinPower {
-						initialMinPower = selection.MinPower
-					}
-					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
-						unavailableReport := routeUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
-						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, initialProfile, initialRoutingNote)
-						return unavailableReport, nil
-					}
-				}
-			}
-			if autoInferPowerClass {
-				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, initialMinPower); selectErr == nil && selection.Name != "" {
-					initialProfile = selection.Name
-					initialRoutingNote = selection.Note
-					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
-						unavailableReport := routeUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
-						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, initialProfile, initialRoutingNote)
-						return unavailableReport, nil
-					}
-				} else {
-					var degradeNote string
-					initialMinPower, unavailableReport, degradeNote, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, initialMinPower, spec.MaxPower, loadLadder())
-					if unavailable {
-						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
-						return unavailableReport, nil
-					}
-					if degradeNote != "" {
-						initialRoutingNote = degradeNote
-					}
-				}
-			}
 			perBeadBudget := spec.MaxBeadCostUSD
 			if override, ok := escalation.ParseBeadBudgetLabel(targetBead.Labels); ok {
 				perBeadBudget = override
 			}
-			perBeadTracker := escalation.NewPerBeadCostTracker(perBeadBudget, harnessBilledLookup)
+			perBeadTracker := escalation.NewPerBeadCostTracker(perBeadBudget, nil)
 			report, err := runEscalatingPowerAttempts(
 				ctx,
 				initialMinPower,
-				loadLadder(),
+				spec.MaxPower,
 				func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
-					requestProfile := initialProfile
-					routingNote := initialRoutingNote
-					if autoInferPowerClass {
-						if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestedMinPower); selectErr == nil {
-							// Empty selection means no no-extra-requirement policy covers this
-							// retry floor. Drop the stale lower policy and send MinPower-only so
-							// Fizeau can route or report no eligible candidate from live config.
-							requestProfile = selection.Name
-							if requestProfile == "" {
-								routingNote = ""
-							} else if selection.Note != "" {
-								routingNote = selection.Note
-							}
-						}
-					}
-					return singlePolicyAttempt(ctx, beadID, requestedMinPower, requestProfile, routingIntent, routingNote, spec.Harness, spec.Provider, spec.Model)
+					return singlePolicyAttempt(ctx, beadID, requestedMinPower, initialProfile, routingIntent, initialRoutingNote, spec.Harness, spec.Provider, spec.Model)
 				},
 				nil,
 				perBeadTracker,
@@ -669,7 +534,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Store:    workerStore,
 		Reviewer: reviewer,
 		EscalationNextFloor: func(actualPower int) (int, error) {
-			return nextEscalationFloor(loadLadder(), actualPower)
+			return executeloop.NextAbstractMinPower(actualPower, actualPower)
 		},
 		Executor: executor,
 	}
@@ -680,41 +545,26 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		progressLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                    spec.Mode,
-		IdleInterval:            spec.IdleInterval.Duration,
-		IgnoreCooldown:          spec.IgnoreCooldown,
-		CooldownOverrideReason:  spec.CooldownOverrideReason,
-		Log:                     progressLog,
-		CleanupLog:              cleanupLog,
-		EventSink:               loopSink,
-		WorkerID:                resolveClaimAssignee(),
-		ProjectRoot:             projectRoot,
-		TrackerSyncEnabled:      workTrackerSyncEnabled(cmd),
-		CleanupRunner:           cleanupRunner,
-		ResourceChecker:         resourceChecker,
-		ResourcePressureChecker: resourcePressureChecker,
-		ServerHealthProbe:       serverHealthProbe,
-		BinaryRefreshCheck:      f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
-		ProjectRootDirtyCheck:   agent.CanonicalRootDirtyPaths,
-		SessionID:               loopSessionID,
-		PreClaimHook:            buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:      intakeHook,
-		PreClaimTimeout:         spec.PreClaimTimeout.Duration,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
-			if spec.Harness == "" {
-				return nil
-			}
-			routeTimeout := spec.RouteResolutionTimeout.Duration
-			if routeTimeout <= 0 {
-				routeTimeout = agent.DefaultRouteResolutionTimeout
-			}
-			preflightCtx, cancel := context.WithTimeout(ctx, routeTimeout)
-			defer cancel()
-			if spec.Model != "" {
-				return agent.ValidateForExecuteLoopViaService(preflightCtx, projectRoot, spec.Harness, spec.Model, spec.Provider)
-			}
-			return agent.ValidateHarnessOnlyRouteViaService(preflightCtx, projectRoot, spec.Harness, spec.Provider, spec.Profile, spec.MinPower, spec.MaxPower)
-		},
+		Mode:                         spec.Mode,
+		IdleInterval:                 spec.IdleInterval.Duration,
+		IgnoreCooldown:               spec.IgnoreCooldown,
+		CooldownOverrideReason:       spec.CooldownOverrideReason,
+		Log:                          progressLog,
+		CleanupLog:                   cleanupLog,
+		EventSink:                    loopSink,
+		WorkerID:                     resolveClaimAssignee(),
+		ProjectRoot:                  projectRoot,
+		TrackerSyncEnabled:           workTrackerSyncEnabled(cmd),
+		CleanupRunner:                cleanupRunner,
+		ResourceChecker:              resourceChecker,
+		ResourcePressureChecker:      resourcePressureChecker,
+		ServerHealthProbe:            serverHealthProbe,
+		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
+		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,
+		SessionID:                    loopSessionID,
+		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:           intakeHook,
+		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
 		RouteResolutionTimeout:       spec.RouteResolutionTimeout.Duration,
 		ClaimSuccessRateWindow:       optionalIntFlag(cmd, "claim-rate-window", agent.DefaultClaimSuccessRateWindow),
 		ClaimSuccessRateThreshold:    optionalFloat64Flag(cmd, "claim-rate-threshold", agent.DefaultClaimSuccessRateThreshold),
@@ -869,35 +719,11 @@ func worktreeReapMaxAgeFromEnv() time.Duration {
 	return d
 }
 
-// projectHasRoutingConfig reports whether the project's .ddx/config.yaml pins a
-// routing decision that should suppress DDx's zero-config powerClass inference.
-// agent.endpoints alone is transport configuration (where providers live) and
-// does NOT pin routing — leaving it on the suppression list caused no-flag work
-// in projects with local endpoints to send an empty Policy and inherit
-// Fizeau's default policy (which, with no DDx-supplied hint, scored Opus on
-// ordinary implementation work; see ddx-e0b95b4a).
-func projectHasRoutingConfig(projectRoot string) bool {
-	if projectRoot == "" {
-		return false
-	}
-	cfgPath := ddxroot.JoinProject(projectRoot, "config.yaml")
-	if _, err := os.Stat(cfgPath); err != nil {
-		return false
-	}
-	cfg, err := config.LoadWithWorkingDir(projectRoot)
-	if err != nil || cfg == nil || cfg.Agent == nil {
-		return false
-	}
-	a := cfg.Agent
-	return strings.TrimSpace(a.Model) != ""
-}
-
-func resolveCommandExecutionHint(ctx context.Context, b *bead.Bead, noRoutingFlags, hasProjectRoutingConfig bool) escalation.ExecutionHint {
+func resolveCommandExecutionHint(ctx context.Context, b *bead.Bead, noRoutingFlags bool) escalation.ExecutionHint {
 	return escalation.ResolveExecutionHint(escalation.ExecutionHintInput{
 		Bead:                         b,
 		ReadinessEstimatedDifficulty: agent.ReadinessEstimatedDifficultyFromContext(ctx),
 		ExplicitRouting:              !noRoutingFlags,
-		ProjectRouting:               hasProjectRoutingConfig,
 	})
 }
 

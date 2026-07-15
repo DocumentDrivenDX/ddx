@@ -307,7 +307,7 @@ func TestPreDispatchLintHook_LeavesPolicyToFizeau(t *testing.T) {
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
 	assert.Zero(t, svc.lastReq.MinPower, "lint dispatch must not inherit implementation min_power pins")
-	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")
+	assert.Zero(t, svc.lastReq.MaxPower, "no max_power was supplied")
 }
 
 func TestPreDispatchLintHook_PreservesExplicitRoutingPins(t *testing.T) {
@@ -324,8 +324,9 @@ func TestPreDispatchLintHook_PreservesExplicitRoutingPins(t *testing.T) {
 	}
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
-		Harness: "codex",
-		Model:   "gpt-5.4-mini",
+		Harness:  "codex",
+		Model:    "gpt-5.4-mini",
+		MaxPower: 80,
 	})
 
 	hook := NewPreDispatchLintHook(root, store, rcfg, svc, nil)
@@ -337,5 +338,5 @@ func TestPreDispatchLintHook_PreservesExplicitRoutingPins(t *testing.T) {
 	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower, "lint dispatch must not inherit implementation min_power pins")
-	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")
+	assert.Equal(t, 80, svc.lastReq.MaxPower, "explicit operator max_power must remain sticky")
 }

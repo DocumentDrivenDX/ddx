@@ -38,7 +38,7 @@ func TestUnpinnedWorkerFallsBackAfterTypedProviderFailure(t *testing.T) {
 	report, err := runEscalatingPowerAttempts(
 		context.Background(),
 		5,
-		testEscalationLadder{floors: []int{6, 10}},
+		0,
 		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 			requested = append(requested, requestedMinPower)
 			if idx >= len(reports) {
@@ -101,7 +101,7 @@ func TestPinnedWorkerReportsHardPinExhaustedWithoutWidening(t *testing.T) {
 	report, err := runEscalatingPowerAttempts(
 		context.Background(),
 		5,
-		testEscalationLadder{floors: []int{6, 10}},
+		0,
 		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 			requested = append(requested, requestedMinPower)
 			if idx >= len(reports) {

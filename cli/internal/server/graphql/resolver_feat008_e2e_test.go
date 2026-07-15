@@ -112,9 +112,22 @@ func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (
 	return &WorkerLifecycleResult{ID: id, State: "stopped", Kind: "work"}, nil
 }
 
-// TestReviewRetryThresholdFromConfigGraphQL is the SD-024 Stage 1 configuration
-// wiring proof that the GraphQL StartWorker resolver flows configuration through
-// config.LoadAndResolve.
+func TestStartWorkerOmittedEffortRemainsUnpinned(t *testing.T) {
+	dispatcher := &capturingActionDispatcher{}
+	resolver := &mutationResolver{Resolver: &Resolver{
+		WorkingDir: t.TempDir(),
+		Actions:    dispatcher,
+	}}
+
+	_, err := resolver.StartWorker(context.Background(), StartWorkerInput{ProjectID: ""})
+	require.NoError(t, err)
+	require.Len(t, dispatcher.calls, 1)
+	_, present := dispatcher.calls[0].args["effort"]
+	assert.False(t, present, "omitted GraphQL effort must remain absent for opaque Fizeau routing")
+}
+
+// TestReviewRetryThresholdFromConfigGraphQL proves GraphQL StartWorker keeps
+// routing inputs opaque while the worker later loads non-routing project config.
 //
 // The test exercises two halves of the production wiring:
 //
@@ -158,6 +171,8 @@ library:
     url: https://github.com/example/repo
     branch: main
 review_max_retries: 5
+agent:
+  model: configured-project-model-must-not-leak
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfgYAML), 0o644))
 
@@ -183,11 +198,11 @@ review_max_retries: 5
 	assert.Equal(t, projectRoot, got.projectRoot,
 		"resolver must dispatch against the resolved project root")
 	assert.Equal(t, harnessCfg, got.args["harness"],
-		"input harness override (%s) must reach dispatcher args via LoadAndResolve",
+		"input harness override (%s) must reach dispatcher args byte-for-byte",
 		harnessCfg)
-	assert.Equal(t, "smart", got.args["profile"],
-		"with no agent.profile configured and no input override, the "+
-			"resolver's legacy fallback of \"smart\" must continue to apply")
+	assert.Empty(t, got.args["model"], "project agent.model must not enter GraphQL worker routing args")
+	assert.Empty(t, got.args["profile"],
+		"with no explicit profile, GraphQL must leave policy selection to Fizeau")
 	assert.Equal(t, "watch", got.args["mode"],
 		"GraphQL startWorker defaults server-managed workers to watch mode")
 	assert.Equal(t, "30s", got.args["idle_interval"],

@@ -1357,10 +1357,10 @@ func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
 	assert.Empty(t, got.Extra["work-retry-after"], "SetExecutionCooldown must NOT fire for provider_connectivity")
 }
 
-// TestProviderConnectivityFailure_RouteExclusionStillRecorded: AC #2 — removing
-// the bead cooldown must NOT remove the work-failed-routes entry that prevents
-// the same (provider, model) from being re-selected by Fizeau routing.
-func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
+// TestProviderConnectivityFailure_RouteEvidenceRecordedWithoutRouteMutation
+// proves DDx retains Fizeau's returned route as failure evidence without
+// storing a concrete exclusion that would bias Fizeau's next selection.
+func TestProviderConnectivityFailure_RouteEvidenceRecordedWithoutRouteMutation(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-pc-excl", Title: "Route exclusion regression"}
@@ -1390,8 +1390,18 @@ func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
 	got, err := store.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Extra["work-retry-after"], "no bead cooldown")
-	// work-failed-routes must be set — the exclusion mechanism is intact.
-	assert.NotNil(t, got.Extra["work-failed-routes"], "work-failed-routes must be recorded even when no bead cooldown is set")
+	assert.Nil(t, got.Extra["work-failed-routes"], "DDx must not persist concrete route exclusions")
+	events, err := store.Events(target.ID)
+	require.NoError(t, err)
+	var routeFailure *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "route-failure" {
+			routeFailure = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, routeFailure, "returned route failure must remain auditable evidence")
+	assert.Contains(t, routeFailure.Body, `"provider":"local-ollama"`)
 }
 
 // TestNoViableProvider_TransitionsToPausedInfra: AC #3 — a no_viable_provider outcome

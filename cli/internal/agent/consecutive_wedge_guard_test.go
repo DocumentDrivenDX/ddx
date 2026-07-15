@@ -127,10 +127,9 @@ func TestWedgeMarkerResetsOnProgress(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, afterSecond.Status, "the bead must remain re-claimable, not parked")
 }
 
-// TestWedgeNotRecordedWhenHeartbeatIsRecent verifies AC #1 (ddx-bd47e2c4): both
-// flagWedgedForOperatorAttention and routeResolutionTimeoutReport must NOT
-// increment work-consecutive-wedges when lastActivityAt advanced within the
-// budget / timeout (heartbeat progressed — not a true stall).
+// TestWedgeNotRecordedWhenHeartbeatIsRecent verifies the progress watchdog
+// does not increment work-consecutive-wedges when lastActivityAt advanced
+// within the phase budget.
 func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	beadID := first.ID
@@ -148,17 +147,6 @@ func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	assert.Equal(t, 0, readWedgeMarker(afterRecent.Extra).Count,
 		"flagWedgedForOperatorAttention must not increment when lastActivityAt is within the budget window")
 
-	// routeResolutionTimeoutReport with a recent lastActivityAt must NOT record a wedge.
-	const timeout = 5 * time.Minute
-	// recentForRoute: heartbeat updated only 30s before the timeout fired.
-	recentForRoute := frozen.Add(-30 * time.Second)
-	routeResolutionTimeoutReport(store, beadID, "worker-a", "attempt-2", frozen, timeout, recentForRoute)
-
-	afterRouteRecent, err := store.Get(context.Background(), beadID)
-	require.NoError(t, err)
-	assert.Equal(t, 0, readWedgeMarker(afterRouteRecent.Extra).Count,
-		"routeResolutionTimeoutReport must not increment when lastActivityAt is within the timeout window")
-
 	// Confirm flagWedgedForOperatorAttention DOES record when lastActivityAt is stale (>= budget).
 	stale := frozen.Add(-2 * budget)
 	require.NoError(t, store.Claim(beadID, "worker-a"))
@@ -169,16 +157,23 @@ func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	assert.Equal(t, 1, readWedgeMarker(afterStale.Extra).Count,
 		"flagWedgedForOperatorAttention must increment when lastActivityAt is stale (>= budget)")
 
-	// routeResolutionTimeoutReport must NOT increment even when lastActivityAt is
-	// stale: with fizeau quota fail-open (F1) a slow resolver is retryable —
-	// wedge gating for this site is delegated to D3 (D1c).
-	staleForRoute := frozen.Add(-2 * timeout)
-	routeResolutionTimeoutReport(store, beadID, "worker-a", "attempt-4", frozen, timeout, staleForRoute)
+}
 
-	afterRouteStale, err := store.Get(context.Background(), beadID)
+func TestRouteStageTimeoutAlwaysRecordsWedge(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	frozen := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, store.Claim(first.ID, "worker-a"))
+
+	_, err := routeResolutionTimeoutReport(
+		store, first.ID, "worker-a", "attempt-route", frozen,
+		5*time.Minute, frozen.Add(-30*time.Second),
+	)
 	require.NoError(t, err)
-	assert.Equal(t, 1, readWedgeMarker(afterRouteStale.Extra).Count,
-		"routeResolutionTimeoutReport must NOT increment the wedge counter (retryable, D1c)")
+
+	after, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, readWedgeMarker(after.Extra).Count)
+	assert.Equal(t, bead.StatusOpen, after.Status)
 }
 
 // TestWedgeMarkerClearedOnParkForOperator verifies AC #2 (ddx-bd47e2c4): when

@@ -6,7 +6,7 @@ import (
 )
 
 // TestExecuteBeadInstructionsReportsStayLocalAndUncommitted covers ddx-d532992f:
-// both the claude-variant and agent-variant execute-bead prompts must steer
+// the harness-neutral execute-bead prompt must steer
 // investigation/report outputs into the per-attempt evidence directory
 // via the bead metadata bundle path under .ddx/executions/
 // and explicitly forbid writing them to /tmp. A previous attempt (B15a)
@@ -17,8 +17,7 @@ func TestExecuteBeadInstructionsReportsStayLocalAndUncommitted(t *testing.T) {
 		name string
 		text string
 	}{
-		{"claude", executeBeadInstructionsClaudeText},
-		{"agent", executeBeadInstructionsAgentText},
+		{"route-neutral", executeBeadInstructionsText},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -59,22 +58,20 @@ func TestBuildPrompt_BundlePathAppearsOnlyInMetadata(t *testing.T) {
 		UsageRel:    ".ddx/executions/" + attemptID + "/usage.json",
 	}
 	b := representativePromptBead()
-	for _, harness := range []string{"claude", "agent"} {
-		prompt, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeefdeadbeef", "", harness, "")
-		if err != nil {
-			t.Fatalf("%s buildPrompt: %v", harness, err)
-		}
-		rendered := string(prompt)
-		if strings.Contains(rendered, "{{.AttemptDir}}") {
-			t.Fatalf("%s prompt must not contain the old {{.AttemptDir}} placeholder", harness)
-		}
-		metadataIdx := strings.Index(rendered, "<metadata ")
-		bundleIdx := strings.Index(rendered, arts.DirRel)
-		if metadataIdx == -1 || bundleIdx == -1 {
-			t.Fatalf("%s prompt missing metadata bundle path", harness)
-		}
-		if bundleIdx < metadataIdx {
-			t.Fatalf("%s prompt leaked bundle path before metadata", harness)
-		}
+	prompt, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeefdeadbeef", "", "")
+	if err != nil {
+		t.Fatalf("buildPrompt: %v", err)
+	}
+	rendered := string(prompt)
+	if strings.Contains(rendered, "{{.AttemptDir}}") {
+		t.Fatal("prompt must not contain the old {{.AttemptDir}} placeholder")
+	}
+	metadataIdx := strings.Index(rendered, "<metadata ")
+	bundleIdx := strings.Index(rendered, arts.DirRel)
+	if metadataIdx == -1 || bundleIdx == -1 {
+		t.Fatal("prompt missing metadata bundle path")
+	}
+	if bundleIdx < metadataIdx {
+		t.Fatal("prompt leaked bundle path before metadata")
 	}
 }

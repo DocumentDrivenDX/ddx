@@ -38,7 +38,7 @@ func TestWorkProviderModelUnavailableFallsBackWhenUnpinned(t *testing.T) {
 	report, err := runEscalatingPowerAttempts(
 		context.Background(),
 		5,
-		testEscalationLadder{floors: []int{6, 10}},
+		0,
 		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 			requested = append(requested, requestedMinPower)
 			got := reports[idx]
@@ -105,7 +105,7 @@ func TestWorkProviderFailureHonorsHardPins(t *testing.T) {
 	report, err := runEscalatingPowerAttempts(
 		context.Background(),
 		5,
-		testEscalationLadder{floors: []int{6, 10}},
+		0,
 		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 			requested = append(requested, requestedMinPower)
 			got := reports[idx]
@@ -167,7 +167,7 @@ func TestWorkStatusAndOperatorAttentionSurfaceTypedProviderFailure(t *testing.T)
 	finalReport, err := runEscalatingPowerAttempts(
 		context.Background(),
 		5,
-		testEscalationLadder{floors: []int{6, 10}},
+		0,
 		func(_ context.Context, _ int) (agent.ExecuteBeadReport, error) {
 			return failReport, nil
 		},

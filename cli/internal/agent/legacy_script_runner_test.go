@@ -1,5 +1,9 @@
 package agent
 
+// The directive interpreter is a test fixture, not a production harness.
+// Production script/virtual passthrough values remain opaque and execute only
+// through Fizeau.
+
 import (
 	"bufio"
 	"context"
@@ -15,9 +19,6 @@ import (
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
-// runScriptFn executes a directive file against opts.WorkDir using real filesystem
-// and git operations. The directive file path is taken from opts.Model (if it is
-// a readable file) or from opts.PromptFile as a fallback.
 func runScriptFn(opts RunArgs) (*Result, error) {
 	start := time.Now()
 	ctx := opts.Context
@@ -25,7 +26,6 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 		ctx = context.Background()
 	}
 
-	// Resolve directive file: opts.Model first, then opts.PromptFile.
 	directivePath := opts.Model
 	if directivePath == "" || !isReadableFile(directivePath) {
 		if opts.PromptFile != "" {
@@ -35,12 +35,10 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 	if directivePath == "" {
 		return nil, fmt.Errorf("script harness: no directive file (set --model or --prompt-file)")
 	}
-
 	data, err := os.ReadFile(directivePath)
 	if err != nil {
 		return nil, fmt.Errorf("script harness: read directive file %s: %w", directivePath, err)
 	}
-
 	workDir := opts.WorkDir
 	if workDir == "" {
 		workDir = "."
@@ -49,77 +47,68 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 	var outputLines []string
 	exitCode := 0
 	var execErr error
-
 	directives := parseDirectives(string(data))
-
-	// Build env interpolation map from the process/runtime environment, with
-	// correlation as the most specific source when execute-bead provides it.
 	envMap := map[string]string{
 		"DDX_BEAD_ID":         os.Getenv("DDX_BEAD_ID"),
 		"DDX_ATTEMPT_ID":      os.Getenv("DDX_ATTEMPT_ID"),
 		"DDX_WORKER_ID":       os.Getenv("DDX_WORKER_ID"),
 		"DDX_SESSION_LOG_DIR": os.Getenv("DDX_SESSION_LOG_DIR"),
 	}
-	for k, v := range opts.Env {
-		if strings.HasPrefix(k, "DDX_") {
-			envMap[k] = v
+	for key, value := range opts.Env {
+		if strings.HasPrefix(key, "DDX_") {
+			envMap[key] = value
 		}
 	}
 	if opts.SessionLogDir != "" {
 		envMap["DDX_SESSION_LOG_DIR"] = opts.SessionLogDir
 	}
 	if opts.Correlation != nil {
-		if v, ok := opts.Correlation["bead_id"]; ok {
-			envMap["DDX_BEAD_ID"] = v
+		if value, ok := opts.Correlation["bead_id"]; ok {
+			envMap["DDX_BEAD_ID"] = value
 		}
-		if v, ok := opts.Correlation["attempt_id"]; ok {
-			envMap["DDX_ATTEMPT_ID"] = v
+		if value, ok := opts.Correlation["attempt_id"]; ok {
+			envMap["DDX_ATTEMPT_ID"] = value
 		}
-		if v, ok := opts.Correlation["worker_id"]; ok {
-			envMap["DDX_WORKER_ID"] = v
+		if value, ok := opts.Correlation["worker_id"]; ok {
+			envMap["DDX_WORKER_ID"] = value
 		}
 	}
-	expand := func(s string) string {
-		return os.Expand(s, func(key string) string {
-			return envMap[key]
-		})
+	expand := func(value string) string {
+		return os.Expand(value, func(key string) string { return envMap[key] })
 	}
 
-	for i, d := range directives {
+	for index, directive := range directives {
 		if err := ctx.Err(); err != nil {
 			execErr = err
 			goto done
 		}
-		verb := d[0]
-		args := d[1:]
-
+		verb := directive[0]
+		args := directive[1:]
 		switch verb {
 		case "no-op":
 			outputLines = append(outputLines, "no-op")
-
 		case "set-exit":
 			if len(args) < 1 {
 				execErr = fmt.Errorf("script harness: set-exit requires an argument")
 				goto done
 			}
-			n, err := strconv.Atoi(args[0])
+			code, err := strconv.Atoi(args[0])
 			if err != nil {
 				execErr = fmt.Errorf("script harness: set-exit: invalid code %q", args[0])
 				goto done
 			}
-			exitCode = n
-
+			exitCode = code
 		case "sleep-ms":
 			if len(args) < 1 {
 				execErr = fmt.Errorf("script harness: sleep-ms requires an argument")
 				goto done
 			}
-			n, err := strconv.Atoi(args[0])
+			delay, err := strconv.Atoi(args[0])
 			if err != nil {
 				execErr = fmt.Errorf("script harness: sleep-ms: invalid duration %q", args[0])
 				goto done
 			}
-			timer := time.NewTimer(time.Duration(n) * time.Millisecond)
+			timer := time.NewTimer(time.Duration(delay) * time.Millisecond)
 			select {
 			case <-timer.C:
 			case <-ctx.Done():
@@ -129,22 +118,20 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				execErr = ctx.Err()
 				goto done
 			}
-
 		case "fail-during":
 			if len(args) < 1 {
 				execErr = fmt.Errorf("script harness: fail-during requires an argument")
 				goto done
 			}
-			n, err := strconv.Atoi(args[0])
+			failureIndex, err := strconv.Atoi(args[0])
 			if err != nil {
 				execErr = fmt.Errorf("script harness: fail-during: invalid index %q", args[0])
 				goto done
 			}
-			if i == n {
-				execErr = fmt.Errorf("script harness: synthetic failure at directive %d", i)
+			if index == failureIndex {
+				execErr = fmt.Errorf("script harness: synthetic failure at directive %d", index)
 				goto done
 			}
-
 		case "append-line":
 			if len(args) < 2 {
 				execErr = fmt.Errorf("script harness: append-line requires path and text")
@@ -156,23 +143,22 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				goto done
 			}
 			text := expand(strings.Join(args[1:], " "))
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				execErr = fmt.Errorf("script harness: append-line mkdir: %w", err)
 				goto done
 			}
-			f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err != nil {
 				execErr = fmt.Errorf("script harness: append-line open: %w", err)
 				goto done
 			}
-			_, werr := fmt.Fprintln(f, text)
-			f.Close()
-			if werr != nil {
-				execErr = fmt.Errorf("script harness: append-line write: %w", werr)
+			_, writeErr := fmt.Fprintln(file, text)
+			_ = file.Close()
+			if writeErr != nil {
+				execErr = fmt.Errorf("script harness: append-line write: %w", writeErr)
 				goto done
 			}
 			outputLines = append(outputLines, fmt.Sprintf("append-line %s", args[0]))
-
 		case "create-file":
 			if len(args) < 2 {
 				execErr = fmt.Errorf("script harness: create-file requires path and content")
@@ -184,16 +170,15 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				goto done
 			}
 			content := expand(strings.Join(args[1:], " "))
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				execErr = fmt.Errorf("script harness: create-file mkdir: %w", err)
 				goto done
 			}
-			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 				execErr = fmt.Errorf("script harness: create-file write: %w", err)
 				goto done
 			}
 			outputLines = append(outputLines, fmt.Sprintf("create-file %s", args[0]))
-
 		case "delete-file":
 			if len(args) < 1 {
 				execErr = fmt.Errorf("script harness: delete-file requires a path")
@@ -209,7 +194,6 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				goto done
 			}
 			outputLines = append(outputLines, fmt.Sprintf("delete-file %s", args[0]))
-
 		case "modify-line":
 			if len(args) < 3 {
 				execErr = fmt.Errorf("script harness: modify-line requires path, regex, and replacement")
@@ -221,7 +205,7 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				goto done
 			}
 			pattern := expand(args[1])
-			repl := expand(strings.Join(args[2:], " "))
+			replacement := expand(strings.Join(args[2:], " "))
 			re, err := regexp.Compile(pattern)
 			if err != nil {
 				execErr = fmt.Errorf("script harness: modify-line: bad regex %q: %w", pattern, err)
@@ -233,18 +217,17 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				goto done
 			}
 			lines := strings.Split(string(raw), "\n")
-			for li, line := range lines {
+			for lineIndex, line := range lines {
 				if re.MatchString(line) {
-					lines[li] = re.ReplaceAllString(line, repl)
+					lines[lineIndex] = re.ReplaceAllString(line, replacement)
 					break
 				}
 			}
-			if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
 				execErr = fmt.Errorf("script harness: modify-line write: %w", err)
 				goto done
 			}
 			outputLines = append(outputLines, fmt.Sprintf("modify-line %s", args[0]))
-
 		case "run":
 			if len(args) < 1 {
 				execErr = fmt.Errorf("script harness: run requires a shell command")
@@ -260,38 +243,29 @@ func runScriptFn(opts RunArgs) (*Result, error) {
 				execErr = fmt.Errorf("script harness: run %q: %w", shell, err)
 				goto done
 			}
-
 		case "commit":
 			if len(args) < 1 {
 				execErr = fmt.Errorf("script harness: commit requires a message")
 				goto done
 			}
-			msg := expand(strings.Join(args, " "))
-			if err := gitCommitAll(workDir, msg, opts.Env); err != nil {
+			message := expand(strings.Join(args, " "))
+			if err := gitCommitAll(workDir, message, opts.Env); err != nil {
 				execErr = fmt.Errorf("script harness: commit: %w", err)
 				goto done
 			}
-			outputLines = append(outputLines, fmt.Sprintf("commit %q", msg))
-
+			outputLines = append(outputLines, fmt.Sprintf("commit %q", message))
 		default:
-			execErr = fmt.Errorf("script harness: unknown directive %q at index %d", verb, i)
+			execErr = fmt.Errorf("script harness: unknown directive %q at index %d", verb, index)
 			goto done
 		}
 	}
 
 done:
 	elapsed := time.Since(start)
-	sessionID := fmt.Sprintf("script-%d", start.UnixNano())
-
 	result := &Result{
-		Harness:        "script",
-		Provider:       "script",
-		RouteReason:    "direct-override",
-		Model:          directivePath,
-		Output:         strings.Join(outputLines, "\n"),
-		ExitCode:       exitCode,
-		DurationMS:     int(elapsed.Milliseconds()),
-		AgentSessionID: sessionID,
+		Harness: "script", Provider: "script", RouteReason: "direct-override",
+		Model: directivePath, Output: strings.Join(outputLines, "\n"), ExitCode: exitCode,
+		DurationMS: int(elapsed.Milliseconds()), AgentSessionID: fmt.Sprintf("script-%d", start.UnixNano()),
 	}
 	if execErr != nil {
 		result.Error = execErr.Error()
@@ -302,46 +276,26 @@ done:
 	return result, execErr
 }
 
-// parseDirectives parses a directive file into a slice of token slices.
-// Lines starting with # are comments. Empty lines are skipped.
-// Tokens are whitespace-separated; a quoted string in position 2+ is kept together.
 func parseDirectives(content string) [][]string {
-	var out [][]string
+	var directives [][]string
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		tokens := splitDirective(line)
-		if len(tokens) == 0 {
-			continue
+		if tokens := splitDirective(line); len(tokens) > 0 {
+			directives = append(directives, tokens)
 		}
-		out = append(out, tokens)
 	}
-	return out
+	return directives
 }
 
-// splitDirective splits a directive line into tokens.
-// Returns [verb, arg1, arg2, ...] where the final argument absorbs any
-// remaining whitespace-separated words as a single string. Surrounding
-// double-quotes on the final argument are stripped.
-//
-// For directives that need 3 distinct args (modify-line: path regex repl)
-// we return verb + 3 separate fields: parts[0..2], with parts[3:] joined
-// onto the last field.
-//
-// The heuristic: each case in RunScript knows how many discrete args it
-// needs and accesses them by index; the split just returns all fields, and
-// the caller joins args[N:] for the "rest" argument.
 func splitDirective(line string) []string {
-	// We need to preserve the raw fields so callers can pick the right number.
-	// Return all whitespace-split tokens; the final quoted token has quotes stripped.
 	parts := strings.Fields(line)
 	if len(parts) == 0 {
 		return nil
 	}
-	// Strip quotes from the last token if the entire last token is quoted.
 	last := parts[len(parts)-1]
 	if len(last) >= 2 && last[0] == '"' && last[len(last)-1] == '"' {
 		parts[len(parts)-1] = last[1 : len(last)-1]
@@ -349,7 +303,6 @@ func splitDirective(line string) []string {
 	return parts
 }
 
-// resolvePath resolves a relative path against workDir and rejects absolute paths.
 func resolvePath(workDir, path string) (string, error) {
 	if filepath.IsAbs(path) {
 		return "", fmt.Errorf("script harness: absolute path rejected: %s", path)
@@ -357,12 +310,8 @@ func resolvePath(workDir, path string) (string, error) {
 	return filepath.Join(workDir, path), nil
 }
 
-// gitCommitAll runs git add -A && git commit -m msg in dir with scrubbed GIT_* env.
-func gitCommitAll(dir, msg string, extraEnv map[string]string) error {
-	for _, args := range [][]string{
-		{"add", "-A"},
-		{"commit", "-m", msg},
-	} {
+func gitCommitAll(dir, message string, extraEnv map[string]string) error {
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-m", message}} {
 		cmd := internalgit.Command(context.Background(), dir, args...)
 		cmd.Env = envWithOverrides(cmd.Env, extraEnv)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -372,13 +321,11 @@ func gitCommitAll(dir, msg string, extraEnv map[string]string) error {
 	return nil
 }
 
-// scrubbedGitEnvScript returns the environment with all GIT_* variables removed.
 func scrubbedGitEnvScript() []string {
 	return internalgit.CleanEnv()
 }
 
-// isReadableFile returns true if path points to a regular, readable file.
 func isReadableFile(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && !fi.IsDir()
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }

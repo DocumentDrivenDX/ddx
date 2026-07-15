@@ -39,9 +39,8 @@ var providerShimNames = []string{"codex", "claude", "gemini", "opencode", "pi"}
 // prctl(2)), the death-signal carries over to the provider binary the
 // wrapper execves into.
 //
-// Unlike OSExecutor.ExecuteInDir which does the full streaming+timeout
-// dance, this helper only assembles the Cmd — callers (Fizeau, via the
-// PATH shim) own start/wait. The function exists primarily so the
+// This helper only assembles the Cmd — callers (Fizeau, via the PATH shim)
+// own start/wait, streaming, and timeouts. The function exists primarily so the
 // provider-launch contract is unit-testable (see
 // TestExecutor_ProviderSpawnSetsPdeathsigAndSetpgid) and so the shim
 // scripts have a single canonical construction site.

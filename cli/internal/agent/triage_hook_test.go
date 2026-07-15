@@ -759,7 +759,7 @@ func TestPostAttemptTriageHook_LeavesPolicyToFizeau(t *testing.T) {
 		},
 	}
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default", MaxPower: 80})
 	require.Equal(t, "default", rcfg.Profile())
 
 	hook := NewPostAttemptTriageHook(root, store, rcfg, svc, nil, nil)
@@ -777,5 +777,5 @@ func TestPostAttemptTriageHook_LeavesPolicyToFizeau(t *testing.T) {
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
 	assert.Zero(t, svc.lastReq.MinPower, "triage dispatch must not inherit implementation min_power pins")
-	assert.Zero(t, svc.lastReq.MaxPower, "triage dispatch must not inherit implementation max_power pins")
+	assert.Equal(t, 80, svc.lastReq.MaxPower, "explicit operator max_power must remain sticky")
 }

@@ -18,13 +18,11 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
-	agentlib "github.com/easel/fizeau"
 )
 
 type ExecuteLoopWorkerSpec = executeloop.ExecuteLoopSpec
@@ -355,6 +353,10 @@ func executeLoopPollInterval(spec ExecuteLoopWorkerSpec) time.Duration {
 	return spec.IdleInterval.Duration
 }
 
+func executeLoopRouteResolutionTimeout(spec ExecuteLoopWorkerSpec) time.Duration {
+	return spec.RouteResolutionTimeout.Duration
+}
+
 func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
 	if spec.MaxCostUSD == 0 {
 		return policyescalation.DefaultMaxCostUSD
@@ -364,6 +366,9 @@ func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
 
 func prepareExecuteLoopWorkerSpec(projectRoot string, spec executeloop.ExecuteLoopSpec, defaultMode executeloop.Mode) (ExecuteLoopWorkerSpec, error) {
 	spec.ProjectRoot = projectRoot
+	// Server-created workers use the same route-neutral request boundary as the
+	// CLI: only fields present in this dispatch spec may reach Fizeau.
+	spec.OpaquePassthrough = true
 	if spec.Mode == "" && defaultMode != "" {
 		spec.Mode = defaultMode
 	}
@@ -519,16 +524,6 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
 		return WorkerRecord{}, err
-	}
-
-	// Pre-flight: validate harness availability and model compatibility
-	// before creating the worker record or claiming any beads.
-	// Skipped when OpaquePassthrough=true (ddx work path): routing belongs to
-	// the agent service; DDx must not pre-resolve or validate the route.
-	if !spec.OpaquePassthrough {
-		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider); err != nil {
-			return WorkerRecord{}, fmt.Errorf("work: %w", err)
-		}
 	}
 
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
@@ -886,43 +881,15 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
 
-func nextEscalationFloor(l *powerladder.Ladder, actualPower int) (int, error) {
-	if l == nil {
-		return 0, powerladder.ErrLadderExhausted
-	}
-	floor := actualPower
-	for {
-		next, err := l.Next(floor)
-		if err == nil {
-			return next, nil
-		}
-		var nvp *powerladder.NoViableProviderError
-		if errors.As(err, &nvp) {
-			floor = nvp.Floor
-			continue
-		}
-		return 0, err
-	}
-}
-
-type tryLoopFloorFinder struct {
-	ladder *powerladder.Ladder
-}
-
-func (f tryLoopFloorFinder) Next(actualPower int) (int, error) {
-	return nextEscalationFloor(f.ladder, actualPower)
-}
-
 func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
-	ladder *powerladder.Ladder,
+	maxPower int,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
 	allowInfrastructureRetry bool,
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
-	floors := tryLoopFloorFinder{ladder: ladder}
 	for {
 		report, err := attempt(ctx, minPower)
 		if recordAttempt != nil && report.BeadID != "" {
@@ -935,11 +902,12 @@ func runEscalatingPowerAttempts(
 			Status:                   report.Status,
 			Detail:                   report.Detail,
 			CurrentMinPower:          minPower,
+			MaxPower:                 maxPower,
 			ActualPower:              report.ActualPower,
 			Disrupted:                report.Disrupted,
 			BudgetExhausted:          isBudgetExhaustedFailure(report),
 			AllowInfrastructureRetry: allowInfrastructureRetry,
-		}, floors)
+		})
 		if transition.Action != executeloop.TryLoopActionRetryPower {
 			return report, nil
 		}
@@ -980,7 +948,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Effort:            spec.Effort,
 		MinPower:          spec.MinPower,
 		MaxPower:          spec.MaxPower,
-		OpaquePassthrough: spec.OpaquePassthrough,
+		OpaquePassthrough: true,
 	}
 	requestTimeout := spec.RequestTimeout.Duration
 	if requestTimeout > 0 {
@@ -1033,7 +1001,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Effort:            spec.Effort,
 				MinPower:          requestedMinPower,
 				MaxPower:          spec.MaxPower,
-				OpaquePassthrough: spec.OpaquePassthrough,
+				OpaquePassthrough: true,
 			}
 			if requestTimeout > 0 {
 				loopOverrides.ProviderRequestTimeout = &requestTimeout
@@ -1102,50 +1070,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}, nil
 		}
 
-		// Cost-cap state for this worker run. Subscription / local providers do
-		// not contribute (see escalation.CountsTowardCostCap).
+		// Cost-cap state for this worker run consumes the cost Fizeau reports.
+		// DDx does not inspect harness inventory or infer billing properties.
 		maxCostUSD := executeLoopMaxCostUSD(spec)
-		var ladderOnce sync.Once
-		var ladder *powerladder.Ladder
-		loadLadder := func() *powerladder.Ladder {
-			ladderOnce.Do(func() {
-				ladder = powerladder.NewLadder(nil)
-				modelCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-				defer cancel()
-				// Tie the fizeau service to modelCtx so its background probe
-				// goroutines terminate when this short-lived lookup ends.
-				if svc, svcErr := agent.NewServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
-					modelFilter := agentlib.ModelFilter{}
-					if harness := rcfg.Harness(); harness != "" {
-						modelFilter.Harness = harness
-					}
-					if models, listErr := svc.ListModels(modelCtx, modelFilter); listErr == nil {
-						ladder = powerladder.NewLadder(models)
-					}
-				}
-			})
-			return ladder
-		}
-		costCap = policyescalation.NewCostCapTracker(maxCostUSD, func(harnessName string) bool {
-			// Per-callback bounded ctx so fizeau probe goroutines do not
-			// outlive this cost-cap check.
-			cbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-			svc, svcErr := agent.NewServiceFromWorkDirCtx(cbCtx, projectRoot)
-			if svcErr != nil {
-				return true
-			}
-			infos, err := svc.ListHarnesses(cbCtx)
-			if err != nil {
-				return true
-			}
-			for _, h := range infos {
-				if h.Name == harnessName {
-					return policyescalation.CountsTowardCostCap(h.CostClass == "local", h.Billing == agentlib.BillingModelSubscription, h.CostClass)
-				}
-			}
-			return true
-		})
+		costCap = policyescalation.NewCostCapTracker(maxCostUSD, nil)
 		accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 			costCap.Add(report.Harness, report.CostUSD)
 		}
@@ -1156,7 +1084,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			spent := costCap.Spent()
 			return agent.ExecuteBeadReport{
 				Status: agent.ExecuteBeadStatusExecutionFailed,
-				Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, maxCostUSD),
+				Detail: fmt.Sprintf("cost cap reached: $%.2f reported >= $%.2f cap; raise the cap or set 0 to disable.", spent, maxCostUSD),
 			}, true
 		}
 		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int) (agent.ExecuteBeadReport, error) {
@@ -1191,7 +1119,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				})
 				appendPowerAttemptEvent(store, beadID, report, "ddx", time.Now().UTC())
 			}
-			report, err := runEscalatingPowerAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			report, err := runEscalatingPowerAttempts(ctx, rcfg.MinPower(), rcfg.MaxPower(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return attemptWithCostCap(ctx, beadID, requestedMinPower)
 			}, recordAttempt, strings.TrimSpace(spec.Harness) == "" && strings.TrimSpace(spec.Provider) == "" && strings.TrimSpace(spec.Model) == "")
 			if len(attempts) > 0 {
@@ -1226,23 +1154,24 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	landingOps := agent.RealLandingGitOps{}
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                  spec.Mode,
-		IdleInterval:          executeLoopPollInterval(spec),
-		Log:                   log,
-		CleanupLog:            log,
-		EventSink:             eventSink,
-		WorkerID:              id,
-		ProjectRoot:           projectRoot,
-		CleanupRunner:         agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
-		LabelFilter:           spec.LabelFilter,
-		ProgressCh:            progressCh,
-		PreClaimHook:          buildPreClaimHook(projectRoot, landingOps),
-		PreClaimIntakeHook:    intakeHook,
-		PreDispatchLintHook:   lintHook,
-		PostAttemptTriageHook: triageHook,
-		NoReview:              spec.NoReview,
-		ReviewCostCap:         costCap,
-		WakeCh:                handle.wakeCh,
+		Mode:                   spec.Mode,
+		IdleInterval:           executeLoopPollInterval(spec),
+		Log:                    log,
+		CleanupLog:             log,
+		EventSink:              eventSink,
+		WorkerID:               id,
+		ProjectRoot:            projectRoot,
+		CleanupRunner:          agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		LabelFilter:            spec.LabelFilter,
+		ProgressCh:             progressCh,
+		PreClaimHook:           buildPreClaimHook(projectRoot, landingOps),
+		PreClaimIntakeHook:     intakeHook,
+		RouteResolutionTimeout: executeLoopRouteResolutionTimeout(spec),
+		PreDispatchLintHook:    lintHook,
+		PostAttemptTriageHook:  triageHook,
+		NoReview:               spec.NoReview,
+		ReviewCostCap:          costCap,
+		WakeCh:                 handle.wakeCh,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)

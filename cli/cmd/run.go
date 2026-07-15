@@ -42,7 +42,7 @@ Examples:
   ddx run --harness codex --min-power 10 --prompt task.md
   ddx run --provider openrouter --model qwen3.6-27b --prompt task.md
   ddx run --persona code-reviewer --prompt review.md
-  ddx run --profile smart --prompt task.md
+  ddx run --profile my-fizeau-profile --prompt task.md
   ddx run --text "explain this function"`,
 		RunE: f.runRun,
 	}
@@ -56,7 +56,7 @@ Examples:
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
 	cmd.Flags().String("persona", "", "Persona name; body is prepended to the prompt as a system-prompt addendum")
-	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, smart")
+	cmd.Flags().String("profile", "", "Opaque Fizeau routing profile (empty = unconstrained)")
 	cmd.Flags().String("effort", "", "Reasoning effort override (e.g. low, medium, high)")
 	cmd.Flags().String("permissions", "", "Permission level: safe, supervised, unrestricted")
 	cmd.Flags().String("timeout", "", "Request timeout (e.g. 30s, 5m)")
@@ -184,9 +184,8 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(cmd.OutOrStdout(), result.Output)
 		}
 	case "text":
-		text := agent.ExtractOutput(result.Harness, result.Output)
-		if text != "" {
-			fmt.Fprint(cmd.OutOrStdout(), text)
+		if result.Output != "" {
+			fmt.Fprint(cmd.OutOrStdout(), result.Output)
 		}
 	default:
 		return fmt.Errorf("unknown --output value %q (valid: text, json-result, session-jsonl)", outputFmt)

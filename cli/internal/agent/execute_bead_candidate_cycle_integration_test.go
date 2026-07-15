@@ -75,7 +75,7 @@ func TestExecuteBeadWithConfig_RecordsCandidateCycleMetadata(t *testing.T) {
 		"commit chore: candidate cycle integration",
 	})
 
-	runner := NewRunner(Config{})
+	runner := scriptHarnessAgentRunner{}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
@@ -124,7 +124,7 @@ func testExecuteBeadRepairEvidenceRejectedBeforeImportPinOrPublish(t *testing.T,
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(overrides)
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-		AgentRunner:    NewRunner(Config{}),
+		AgentRunner:    scriptHarnessAgentRunner{},
 		AttemptBackend: backend,
 		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
 			return repairCycleFixableReview(), nil
@@ -180,7 +180,7 @@ func TestExecuteBeadLocalCloneValidRepairImportsPinsProjectsAndPublishesOnce(t *
 	})
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-		AgentRunner:    NewRunner(Config{}),
+		AgentRunner:    scriptHarnessAgentRunner{},
 		AttemptBackend: backend,
 		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
 			if candidate.CycleIndex > 0 {
@@ -252,7 +252,7 @@ func TestExecuteBeadCandidateImportAndPinFailuresFailClosed(t *testing.T) {
 			rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
 
 			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
-				AgentRunner:       NewRunner(Config{}),
+				AgentRunner:       scriptHarnessAgentRunner{},
 				AttemptBackend:    backend,
 				CandidateRefStore: tt.pinStore,
 				Reviewer: candidateReviewerFunc(func(context.Context, string, CandidateResult) (CandidateReviewResult, error) {

@@ -231,6 +231,19 @@ type replayBenchResult struct {
 	Err        string
 }
 
+// replayCLIOverrides constructs the route-neutral replay envelope. Empty
+// route fields remain empty even when project config names an agent model;
+// explicit operator constraints pass through to Fizeau unchanged.
+func replayCLIOverrides(harness, model, profile string, minPower int) config.CLIOverrides {
+	return config.CLIOverrides{
+		Harness:           harness,
+		Model:             model,
+		Profile:           profile,
+		MinPower:          minPower,
+		OpaquePassthrough: true,
+	}
+}
+
 // runOneReplay executes a single replay for the given attempt/bead/variant
 // and returns a replayBenchResult.
 func (f *CommandFactory) runOneReplay(
@@ -238,10 +251,7 @@ func (f *CommandFactory) runOneReplay(
 	v replayVariant,
 	gitOps agent.GitOps,
 ) replayBenchResult {
-	overrides := config.CLIOverrides{
-		Harness: v.Harness,
-		Model:   v.Model,
-	}
+	overrides := replayCLIOverrides(v.Harness, v.Model, "", 0)
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
 		return replayBenchResult{
@@ -358,12 +368,7 @@ func (f *CommandFactory) runBeadReplay(cmd *cobra.Command, args []string) error 
 		fromRev = m.BaseRev
 	}
 
-	overrides := config.CLIOverrides{
-		Harness:  harness,
-		Model:    model,
-		Profile:  profile,
-		MinPower: minPower,
-	}
+	overrides := replayCLIOverrides(harness, model, profile, minPower)
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

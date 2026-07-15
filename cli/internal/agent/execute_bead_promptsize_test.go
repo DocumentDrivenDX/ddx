@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // representativePromptBead returns the deterministic bead used by the
@@ -33,10 +34,10 @@ func representativePromptBead() *bead.Bead {
 	}
 }
 
-// renderPromptForSize renders a prompt for the given harness selector and
+// renderPromptForSize renders the harness-neutral prompt for the given
 // contextBudget using a fixed in-memory artifact bundle. It does not touch
 // the filesystem so the fixture is hermetic.
-func renderPromptForSize(t *testing.T, harness, contextBudget string) []byte {
+func renderPromptForSize(t *testing.T, contextBudget string) []byte {
 	t.Helper()
 	const attemptID = "20260101T000000-promptsize"
 	arts := &executeBeadArtifacts{
@@ -51,15 +52,15 @@ func renderPromptForSize(t *testing.T, harness, contextBudget string) []byte {
 	// Empty refs to keep the fixture hermetic — buildPrompt will emit the
 	// missing-governing fallback note for the non-minimal budget, which
 	// matches the AC for that case.
-	content, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeefdeadbeef", "", harness, contextBudget)
+	content, _, err := buildPrompt(t.TempDir(), b, nil, arts, "deadbeefdeadbeef", "", contextBudget)
 	if err != nil {
-		t.Fatalf("buildPrompt(%s, %q): %v", harness, contextBudget, err)
+		t.Fatalf("buildPrompt(%q): %v", contextBudget, err)
 	}
 	return content
 }
 
-// TestPromptSizeReport renders the execute-bead prompt for both variants
-// (Claude harness, Agent harness) at each contextBudget label ("" full,
+// TestPromptSizeReport renders the harness-neutral execute-bead prompt
+// at each contextBudget label ("" full,
 // "minimal") and writes a deterministic word/byte report. CI uploads the
 // report path named by DDX_PROMPT_SIZE_REPORT as an artifact so accidental
 // prompt bloat shows up as a diff in the artifact across runs.
@@ -77,19 +78,15 @@ func TestPromptSizeReport(t *testing.T) {
 		minimalByteBudget = 6200
 	)
 
-	// Selector at execute_bead.go routes (agent|fiz|embedded) to the Agent
-	// variant; everything else (claude/codex/opencode/unknown) to the Claude
-	// variant. One representative harness per variant is enough.
 	cases := []struct{ variant, harness string }{
-		{"claude", "claude"},
-		{"agent", "agent"},
+		{"route-neutral", ""},
 	}
 	budgets := []string{"", "minimal"}
 
 	rows := make([]row, 0, len(cases)*len(budgets))
 	for _, c := range cases {
 		for _, budget := range budgets {
-			content := renderPromptForSize(t, c.harness, budget)
+			content := renderPromptForSize(t, budget)
 			sum := sha256.Sum256(content)
 			rows = append(rows, row{
 				Variant:       c.variant,
@@ -144,14 +141,14 @@ func TestPromptSizeReport(t *testing.T) {
 				r.Variant, r.ContextBudget, r.Bytes, limit)
 		}
 	}
-	// Minimal must be strictly smaller than full for both variants — the
+	// Minimal must be strictly smaller than the full neutral prompt — the
 	// fixture's reason for existing is to catch regressions on the cheap-powerClass
 	// path.
 	byKey := map[string]row{}
 	for _, r := range rows {
 		byKey[r.Variant+"|"+r.ContextBudget] = r
 	}
-	for _, v := range []string{"claude", "agent"} {
+	for _, v := range []string{"route-neutral"} {
 		full := byKey[v+"|"]
 		min := byKey[v+"|minimal"]
 		if min.Bytes >= full.Bytes {
@@ -190,13 +187,37 @@ func TestPromptSizeReport(t *testing.T) {
 // of the same inputs. Without this, analytics grouping by prompt_sha would
 // fragment across attempts that share a prompt.
 func TestPromptSHA_DeterministicAcrossRenders(t *testing.T) {
-	a := renderPromptForSize(t, "claude", "")
-	b := renderPromptForSize(t, "claude", "")
+	a := renderPromptForSize(t, "")
+	b := renderPromptForSize(t, "")
 	if promptSHA(a) != promptSHA(b) {
 		t.Fatalf("promptSHA not deterministic: %s vs %s", promptSHA(a), promptSHA(b))
 	}
-	c := renderPromptForSize(t, "agent", "")
+	c := renderPromptForSize(t, "minimal")
 	if promptSHA(a) == promptSHA(c) {
-		t.Fatalf("promptSHA collided across variants — selector is not influencing the prompt body")
+		t.Fatal("promptSHA must distinguish full and minimal context budgets")
+	}
+}
+
+func TestExecuteBeadPromptIsInvariantAcrossExplicitHarnessConstraints(t *testing.T) {
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{})
+	var baseline []byte
+
+	for _, harness := range []string{"claude", "codex", "agent", " opaque-harness "} {
+		rcfg := cfg.Resolve(config.CLIOverrides{
+			Harness:           harness,
+			OpaquePassthrough: true,
+		})
+		if rcfg.Passthrough().Harness != harness {
+			t.Fatalf("explicit harness = %q; want byte-identical %q", rcfg.Passthrough().Harness, harness)
+		}
+
+		prompt := renderPromptForSize(t, rcfg.ContextBudget())
+		if baseline == nil {
+			baseline = prompt
+			continue
+		}
+		if string(prompt) != string(baseline) {
+			t.Errorf("explicit harness %q changed the DDx execute-bead prompt", harness)
+		}
 	}
 }

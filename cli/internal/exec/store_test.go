@@ -80,11 +80,15 @@ func TestExecStoreUsesBackendInterfaces(t *testing.T) {
 }
 
 type mockAgentRunner struct {
-	result *agent.Result
-	err    error
+	result      *agent.Result
+	err         error
+	lastConfig  config.ResolvedConfig
+	lastRuntime agent.AgentRunRuntime
 }
 
 func (m *mockAgentRunner) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime agent.AgentRunRuntime) (*agent.Result, error) {
+	m.lastConfig = rcfg
+	m.lastRuntime = runtime
 	return m.result, m.err
 }
 
@@ -293,6 +297,66 @@ func TestAgentExecutorDelegation(t *testing.T) {
 	require.Len(t, history, 1)
 	assert.Equal(t, rec.RunID, history[0].RunID)
 	assert.NotEmpty(t, history[0].AgentSessionID)
+}
+
+func TestAgentExecutorRouteConstraintsAreOpaque(t *testing.T) {
+	wd := newExecTestWorkingDir(t)
+	root := testutils.MakeInitializedDDxRoot(t, wd)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "config.yaml"), []byte(`version: "1.0"
+agent:
+  model: configured-project-model-must-not-leak
+`), 0o644))
+	writeExecArtifact(t, wd, "MET-001")
+
+	for _, tc := range []struct {
+		name        string
+		definition  string
+		harness     string
+		model       string
+		wantHarness string
+		wantModel   string
+	}{
+		{name: "unpinned", definition: "exec-agent-opaque-unpinned@1"},
+		{
+			name:        "explicit constraints",
+			definition:  "exec-agent-opaque-explicit@1",
+			harness:     " opaque-exec-harness ",
+			model:       " opaque-exec-model ",
+			wantHarness: " opaque-exec-harness ",
+			wantModel:   " opaque-exec-model ",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := map[string]string{"DDX_AGENT_PROMPT": "run the task"}
+			if tc.harness != "" {
+				env["DDX_AGENT_HARNESS"] = tc.harness
+			}
+			if tc.model != "" {
+				env["DDX_AGENT_MODEL"] = tc.model
+			}
+			writeAgentExecDefinition(t, wd, Definition{
+				ID:          tc.definition,
+				ArtifactIDs: []string{"MET-001"},
+				Executor: ExecutorSpec{
+					Kind: ExecutorKindAgent,
+					Env:  env,
+				},
+				Active:    true,
+				CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+			})
+
+			runner := &mockAgentRunner{result: &agent.Result{ExitCode: 0, Output: "ok"}}
+			store := NewStore(wd)
+			store.AgentRunner = runner
+			_, err := store.Run(context.Background(), tc.definition)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.wantHarness, runner.lastConfig.Passthrough().Harness)
+			assert.Equal(t, tc.wantModel, runner.lastConfig.Passthrough().Model)
+			assert.Empty(t, runner.lastConfig.Provider())
+			assert.Empty(t, runner.lastConfig.Profile())
+		})
+	}
 }
 
 func TestAgentExecutorDelegationFailure(t *testing.T) {
