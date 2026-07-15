@@ -3,8 +3,12 @@ package agent
 import (
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -106,6 +110,126 @@ func setupExecutionCleanupProjectRoot(t *testing.T) string {
 	return root
 }
 
+func newHermeticExecutionCleanupTestManager(
+	t *testing.T,
+	projectRoot string,
+	tempRoot string,
+	gitOps GitOps,
+	scratchRoots ...string,
+) *ExecutionCleanupManager {
+	t.Helper()
+	require.NotEmpty(t, tempRoot)
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(tempRoot), "cleanup fixture must not use the host temp root")
+	if len(scratchRoots) == 0 {
+		scratchRoots = []string{t.TempDir()}
+	}
+	for _, scratchRoot := range scratchRoots {
+		require.NotEmpty(t, scratchRoot)
+		require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(scratchRoot), "cleanup fixture must not use the host scratch root")
+	}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = append([]string(nil), scratchRoots...)
+	return mgr
+}
+
+func assertExecutionCleanupFixtureRootsUnder(t *testing.T, fixtureRoot string, mgr *ExecutionCleanupManager) {
+	t.Helper()
+	for _, root := range append([]string{mgr.tempRoot()}, mgr.scratchRoots(mgr.tempRoot())...) {
+		rel, err := filepath.Rel(fixtureRoot, root)
+		require.NoError(t, err)
+		require.False(t, rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)),
+			"cleanup root %q escaped fixture root %q", root, fixtureRoot)
+	}
+}
+
+func TestExecutionCleanupFixtures_UseHermeticRoots(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	scratchRoot := filepath.Join(fixtureRoot, "scratch")
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	require.NoError(t, os.MkdirAll(scratchRoot, 0o755))
+	mgr := newHermeticExecutionCleanupTestManager(
+		t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot,
+	)
+	assertExecutionCleanupFixtureRootsUnder(t, fixtureRoot, mgr)
+
+	auditedFixtures := []string{
+		"execution_cleanup_test.go",
+		"execution_cleanup_process_test.go",
+		"execution_cleanup_process_other_test.go",
+		"execution_resources_test.go",
+		"execute_bead_loop_cleanup_test.go",
+		"work_concurrent_attempts_test.go",
+	}
+	allowedDirectConstructors := map[string]map[string]bool{
+		"execution_cleanup_test.go": {
+			"newHermeticExecutionCleanupTestManager":                                       true,
+			"TestExecutionCleanup_DefaultScratchRootsIncludeConfiguredParentAndLegacyTemp": true,
+			"TestExecutionCleanup_DefaultRetainDays90WithoutConfig":                        true,
+			"TestExecutionCleanup_DefaultRetainDays90":                                     true,
+		},
+	}
+	mustUseHermeticManager := map[string]map[string]bool{
+		"execution_resources_test.go": {
+			"TestResourcePreflightReportsClaimLivenessReclaimedInodes": true,
+		},
+	}
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	fixtureDir := filepath.Dir(thisFile)
+	for _, filename := range auditedFixtures {
+		fset := token.NewFileSet()
+		parsed, err := parser.ParseFile(fset, filepath.Join(fixtureDir, filename), nil, 0)
+		require.NoError(t, err)
+		for _, declaration := range parsed.Decls {
+			fn, ok := declaration.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			hasHermeticManager := false
+			callsManagerCleanup := false
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				switch node := node.(type) {
+				case *ast.CallExpr:
+					if selector, ok := node.Fun.(*ast.SelectorExpr); ok && selector.Sel.Name == "Cleanup" {
+						if receiver, ok := selector.X.(*ast.Ident); ok && receiver.Name == "mgr" {
+							callsManagerCleanup = true
+						}
+					}
+					ident, ok := node.Fun.(*ast.Ident)
+					if !ok {
+						return true
+					}
+					if ident.Name == "newHermeticExecutionCleanupTestManager" {
+						hasHermeticManager = true
+					}
+					if ident.Name == "NewExecutionCleanupManager" && !allowedDirectConstructors[filename][fn.Name.Name] {
+						position := fset.Position(node.Pos())
+						t.Errorf("%s:%d: production cleanup fixture %s bypasses hermetic roots", filename, position.Line, fn.Name.Name)
+					}
+				case *ast.CompositeLit:
+					ident, ok := node.Type.(*ast.Ident)
+					if ok && ident.Name == "ExecutionCleanupManager" {
+						position := fset.Position(node.Pos())
+						t.Errorf("%s:%d: production cleanup fixture %s constructs an unaudited cleanup manager literal", filename, position.Line, fn.Name.Name)
+					}
+				}
+				return true
+			})
+			if mustUseHermeticManager[filename][fn.Name.Name] && !hasHermeticManager {
+				t.Errorf("%s: production cleanup fixture %s must install a hermetic cleanup manager", filename, fn.Name.Name)
+			}
+			if callsManagerCleanup && !hasHermeticManager {
+				t.Errorf("%s: production Cleanup invocation in %s must use hermetic roots", filename, fn.Name.Name)
+			}
+		}
+	}
+}
+
 func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
@@ -129,8 +253,7 @@ func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(otherPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(otherPath, "ignore.txt"), []byte("keep\n"), 0o644))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.Probe = executionCleanupTestProbe{
 		live: map[string]bool{
 			filepath.Clean(livePath): true,
@@ -165,8 +288,7 @@ func TestExecutionCleanup_RemovesMetadataLessUnregisteredDDXTempDirs(t *testing.
 		WorktreePath: activePath,
 	}))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -188,8 +310,7 @@ func TestExecutionCleanup_PreservesRegisteredMetadataLessWorktree(t *testing.T) 
 	gitOps := &executionCleanupTestGitOps{
 		worktrees: []string{worktreePath},
 	}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -224,8 +345,7 @@ func TestExecutionCleanup_RemovesRegisteredStaleWorktree(t *testing.T) {
 	gitOps := &executionCleanupTestGitOps{
 		worktrees: []string{worktreePath},
 	}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 	mgr.Probe = executionCleanupTestProbe{ignoreRunState: true}
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -289,8 +409,7 @@ func TestExecutionCleanup_PreservesActiveAndPreservedAttempts(t *testing.T) {
 	require.NoError(t, os.MkdirAll(refsPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(refsPath, "attempt-1"), []byte("abcdef1234567890"), 0o644))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.Probe = executionCleanupTestProbe{
 		live: map[string]bool{
 			filepath.Clean(activePath): true,
@@ -352,8 +471,7 @@ func TestExecutionCleanup_PreservesMultipleRunStateAttempts(t *testing.T) {
 		WorktreePath: activeTwoPath,
 	}))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -406,8 +524,7 @@ func TestExecutionCleanup_PreservesConcurrentLiveExecuteBeadWorktrees(t *testing
 	}))
 
 	gitOps := &executionCleanupTestGitOps{worktrees: []string{firstPath, secondPath}}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -443,8 +560,7 @@ func TestExecutionCleanup_RemovesExpiredAttemptOnlyAfterHeartbeatExpiry(t *testi
 	writeExecutionCleanupCandidate(t, worktreePath, meta, map[string]string{"scratch.txt": "active\n"})
 
 	gitOps := &executionCleanupTestGitOps{worktrees: []string{worktreePath}}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -493,8 +609,7 @@ func TestExecutionCleanup_DoesNotDeleteRegisteredActiveWorktree(t *testing.T) {
 	require.NoError(t, os.Chtimes(staleScratch, old, old))
 
 	gitOps := &executionCleanupTestGitOps{worktrees: []string{activePath}}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 	mgr.ScratchRoots = []string{parent}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
@@ -529,8 +644,7 @@ func TestExecutionCleanup_ReportsPreservedLiveAttempt(t *testing.T) {
 		},
 	}, map[string]string{"scratch.txt": "active\n"})
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{worktrees: []string{activePath}})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{worktrees: []string{activePath}})
 	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -565,8 +679,7 @@ func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
 
 	gitOps := &executionCleanupTestGitOps{listErr: errors.New("worktree list unavailable")}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -599,8 +712,7 @@ func TestExecutionCleanup_DryRunLeavesCandidatesOnDisk(t *testing.T) {
 		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
 	}))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.DryRun = true
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -634,8 +746,7 @@ func TestExecutionCleanup_RemovesStaleDDXScratchDirs(t *testing.T) {
 	require.NoError(t, os.Chtimes(stalePath, old, old))
 	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.ScratchRoots = []string{scratchRoot}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
@@ -673,8 +784,7 @@ func TestExecutionCleanup_CanReclaimForeignTestOwnedPathUnderConfiguredRoot(t *t
 	foreignTestProject := filepath.Join(os.TempDir(), "TestExecutionCleanupForeignProject", "001")
 	foreignWorktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-foreign-20260518T000000-deadbeef")
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 
 	assert.True(t, mgr.canReclaimForeignTestOwnedPath(foreignTestProject, foreignWorktree))
 }
@@ -703,8 +813,7 @@ func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {
 	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
 	require.NoError(t, os.Chtimes(freshPath, now.Add(-10*time.Minute), now.Add(-10*time.Minute)))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.ScratchRoots = []string{scratchRoot}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
@@ -753,8 +862,7 @@ func TestExecutionCleanupManager_ReclaimsStaleDDXHomeScratch(t *testing.T) {
 	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
 	// liveHome is fresh (created just now), so it stays under the scratch min age.
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.ScratchRoots = []string{scratchRoot}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
@@ -789,8 +897,7 @@ func TestExecutionCleanupSummary_ReportsScratchReclaimedInodes(t *testing.T) {
 	require.NoError(t, os.Chtimes(staleHome, old, old))
 	require.NoError(t, os.Chtimes(staleFixtureBin, old, old))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.ScratchRoots = []string{scratchRoot}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
@@ -821,12 +928,17 @@ func TestExecutionCleanupSummary_ReportsScratchReclaimedInodes(t *testing.T) {
 }
 
 func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
-	projectRoot := setupExecutionCleanupProjectRoot(t)
-	tempRoot := t.TempDir()
-	staleProjectRoot := filepath.Join(t.TempDir(), "stale-project")
-	activeProjectRoot := filepath.Join(t.TempDir(), "active-project")
+	fixtureRoot := t.TempDir()
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	scratchRoot := filepath.Join(fixtureRoot, "scratch")
+	staleProjectRoot := filepath.Join(fixtureRoot, "stale-project")
+	activeProjectRoot := filepath.Join(fixtureRoot, "active-project")
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	testutils.MakeInitializedDDxRoot(t, staleProjectRoot)
 	testutils.MakeInitializedDDxRoot(t, activeProjectRoot)
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	require.NoError(t, os.MkdirAll(scratchRoot, 0o755))
 
 	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-foreign-20260508T120000-deadbeef")
 	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-foreign-20260508T120000-feedface")
@@ -845,10 +957,10 @@ func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 		Registered:   true,
 	}, map[string]string{"scratch.txt": "active foreign\n"})
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{
 		worktrees: []string{activePath},
-	})
-	mgr.TempRoot = tempRoot
+	}, scratchRoot)
+	assertExecutionCleanupFixtureRootsUnder(t, fixtureRoot, mgr)
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -892,8 +1004,7 @@ func TestExecutionCleanup_PreservesActiveAttemptCycle(t *testing.T) {
 	}))
 
 	gitOps := &executionCleanupTestGitOps{worktrees: []string{activePath}}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -925,8 +1036,7 @@ func TestExecutionCleanup_RecoversPinnedCandidateAfterCrash(t *testing.T) {
 	}, map[string]string{"scratch.txt": "crashed\n"})
 
 	gitOps := &executionCleanupTestGitOps{}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -955,8 +1065,7 @@ func TestExecutionCleanup_ReclaimsStaleUnpinnedCandidateWorktree(t *testing.T) {
 		CycleIndex:          0,
 	}, map[string]string{"scratch.txt": "stale\n"})
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -997,8 +1106,7 @@ func TestExecutionCleanup_PrunesTemporaryCandidateRefs(t *testing.T) {
 	}))
 
 	gitOps := &executionCleanupTestGitOps{}
-	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -1024,8 +1132,7 @@ func TestExecutionCleanup_DeletesOldDirs(t *testing.T) {
 	oldTime := time.Now().AddDate(0, 0, -10)
 	oldDir := setupEvidenceDir(t, projectRoot, "20260101T000000-deadbeef", oldTime)
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1050,8 +1157,7 @@ func TestExecutionCleanup_PreservesActiveDirs(t *testing.T) {
 		StartedAt: time.Now().UTC(),
 	}))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1077,8 +1183,7 @@ func TestExecutionCleanup_RetainDaysZero_DisablesRetention(t *testing.T) {
 	oldTime := time.Now().AddDate(0, 0, -10)
 	oldDir := setupEvidenceDir(t, projectRoot, "20260101T000000-eeff0011", oldTime)
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 0 // disabled
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1097,8 +1202,7 @@ func TestExecutionCleanup_RecordsCount(t *testing.T) {
 		setupEvidenceDir(t, projectRoot, id, oldTime)
 	}
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1115,8 +1219,7 @@ func TestExecutionCleanup_DeletesOldExecutionDirs(t *testing.T) {
 	oldDir := setupEvidenceDir(t, projectRoot, "20260101T000000-exec-old", oldTime)
 	recentDir := setupEvidenceDir(t, projectRoot, "20260101T000001-exec-recent", time.Now())
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1146,8 +1249,7 @@ func TestExecutionCleanup_DeletesOldAgentLogs(t *testing.T) {
 	require.NoError(t, os.Chtimes(oldAgent, oldTime, oldTime))
 	require.NoError(t, os.Chtimes(oldSvc, oldTime, oldTime))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1176,8 +1278,7 @@ func TestExecutionCleanup_DeletesOldWorkerDirs(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(recentWorker, "status.json"), []byte(`{"id":"worker-recent","state":"running"}`), 0o644))
 	require.NoError(t, os.Chtimes(oldWorker, oldTime, oldTime))
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1220,8 +1321,7 @@ func TestExecutionCleanup_PreservesActiveItems(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(preservedWorker, "status.json"), []byte(`{"id":"worker-preserved","state":"running","pid":0}`), 0o644))
 	// keep recent mtime so it is not pruned by age
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1276,8 +1376,7 @@ func TestExecutionCleanup_RecordsCounts(t *testing.T) {
 		require.NoError(t, os.Chtimes(d, oldTime, oldTime))
 	}
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	mgr.RetainDays = 7
 
 	summary, err := mgr.Cleanup(context.Background())

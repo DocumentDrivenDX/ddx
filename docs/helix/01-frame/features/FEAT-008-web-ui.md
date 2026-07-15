@@ -102,11 +102,12 @@ show. The shared detail tabs are:
 The shared run-detail page is the canonical deep surface for anything exposed
 through the Runs tab.
 
-- Trust boundary: anyone with project read access can inspect DDx-owned prompt,
-  repository-result, gate, landing, and evidence fields. Fizeau-owned response,
-  stderr, session, and tool details are shown only as opaque attachments or
-  retained live public display events observed during `Execute`; DDx does not
-  query history or parse or normalize native logs. The
+- Trust boundary: anyone with project read access can inspect the raw prompt
+  and DDx-owned repository-result, gate, landing, and evidence fields.
+  Fizeau-owned response, stderr, and tool-call arguments, along with session
+  details, are shown only as opaque attachments or retained live public display
+  events observed during `Execute`; DDx does not query history or parse or
+  normalize native logs. The
   page applies project access control but does not become a second session-log
   authority.
 - Evidence browser whitelist: the Evidence tab renders only `*.txt`, `*.md`,
