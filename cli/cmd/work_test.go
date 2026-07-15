@@ -199,7 +199,7 @@ func TestExecuteLoopReviewTierRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, executeloop.ReviewTierElevated, spec.ReviewTier)
 
-	runtime := executeLoopAttemptRuntime(spec, nil, nil, nil, nil, ddxroot.JoinProject(dir))
+	runtime := executeLoopAttemptRuntime(spec, nil, nil, nil, nil, ddxroot.JoinProject(dir), nil)
 	reviewer, ok := runtime.Reviewer.(*agent.DefaultBeadReviewer)
 	require.True(t, ok)
 	assert.Equal(t, executeloop.ReviewTierElevated, reviewer.ReviewTier)
@@ -209,7 +209,7 @@ func TestExecuteLoopReviewTierRoundTrip(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-tier"))
 	assert.Nil(t, tryCmd.Flags().Lookup("review-harness"))
 	assert.Nil(t, tryCmd.Flags().Lookup("review-model"))
-	tryReviewer := newCommandReviewer(dir, ddxroot.JoinProject(dir), executeloop.ReviewTierElevated)
+	tryReviewer := newCommandReviewer(dir, ddxroot.JoinProject(dir), executeloop.ReviewTierElevated, nil)
 	assert.Equal(t, executeloop.ReviewTierElevated, tryReviewer.ReviewTier)
 
 	encoded, err := json.Marshal(spec)
@@ -1150,6 +1150,7 @@ func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {
 		nil,
 		nil,
 		"",
+		nil,
 	)
 
 	assert.Equal(t, "HEAD~1", runtime.FromRev)

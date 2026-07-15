@@ -14,11 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuildReviewExecuteRequest verifies that the helper produces the runtime
-// fields demanded by R4 pairing: Role=reviewer in the correlation map,
-// route-neutral implementer correlation keys are propagated, concrete route
-// metadata is omitted, and MinPower is bumped one above actual selected power.
-func TestBuildReviewExecuteRequest(t *testing.T) {
+// TestReviewRequestRaisesMinPowerWithoutSettingHarnessProviderModel proves
+// reviewer strength is expressed only through abstract MinPower. Concrete
+// fields come exclusively from the immutable operator config at dispatch.
+func TestReviewRequestRaisesMinPowerWithoutSettingHarnessProviderModel(t *testing.T) {
 	impl := ImplementerRouting{
 		Harness:     "codex",
 		Provider:    "openai",
@@ -33,10 +32,11 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	got := BuildReviewExecuteRequest(impl)
 
 	assert.Empty(t, got.HarnessOverride)
+	assert.Empty(t, got.ProviderOverride)
 	assert.Empty(t, got.ModelOverride)
 	assert.Empty(t, got.ProfileOverride)
-	assert.True(t, got.ClearRoutingPins)
-	assert.True(t, got.ClearProfile)
+	assert.False(t, got.ClearRoutingPins)
+	assert.False(t, got.ClearProfile)
 	assert.Equal(t, 71, got.MinPowerOverride, "MinPower must be impl.ActualPower+1 (R4 pairing)")
 	assert.Equal(t, "reviewer", got.Role, "Role=reviewer must be set so the dispatch request is tagged correctly")
 	assert.Equal(t, "ddx-pairing-1", got.CorrelationID, "single-review correlation ID should be derived from bead_id when no review_group_id is present")
@@ -245,7 +245,7 @@ func TestPostMergeReviewer_DispatchesWithStrongerMinPowerAndNoConcretePin(t *tes
 	assert.False(t, svc.listModelsCalled)
 }
 
-func TestPostMergeReviewer_RequestIsInvariantAcrossImplementerRouteIdentity(t *testing.T) {
+func TestReviewRequestOmitsImplementerConcreteRoute(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	newService := func() *passthroughTestService {
 		return &passthroughTestService{executeEvents: []agentlib.ServiceEvent{{

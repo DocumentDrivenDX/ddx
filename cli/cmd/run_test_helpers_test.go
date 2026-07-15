@@ -101,6 +101,8 @@ type executeCapturingStub struct {
 	resolveRouteFn   func(agentlib.RouteRequest) (*agentlib.RouteDecision, error)
 	listModels       []agentlib.ModelInfo
 	listPolicies     []agentlib.PolicyInfo
+	listModelsErr    error
+	listPoliciesErr  error
 	routeRequests    []agentlib.RouteRequest
 	modelFilters     []agentlib.ModelFilter
 	modelsPreExec    int
@@ -163,19 +165,25 @@ func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.Prov
 
 func (s *executeCapturingStub) ListModels(_ context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.executeCalled {
 		s.modelsPreExec++
 	}
 	s.modelQueries++
 	s.modelFilters = append(s.modelFilters, filter)
-	s.mu.Unlock()
+	if s.listModelsErr != nil {
+		return nil, s.listModelsErr
+	}
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
 func (s *executeCapturingStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.policyQueries++
-	s.mu.Unlock()
+	if s.listPoliciesErr != nil {
+		return nil, s.listPoliciesErr
+	}
 	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 

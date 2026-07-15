@@ -501,7 +501,7 @@ func TestReviewerProviderIdentityIsEvidenceOnly(t *testing.T) {
 	assert.Equal(t, snapshots[0].nextRequests, snapshots[1].nextRequests,
 		"concrete reviewer provider identity must not steer the next request")
 	assert.Equal(t, []requestSnapshot{
-		{minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
-		{minPower: 71, role: "reviewer", clearRoutingPins: true, clearProfile: true},
+		{minPower: 71, role: "reviewer"},
+		{minPower: 71, role: "reviewer"},
 	}, snapshots[0].nextRequests)
 }

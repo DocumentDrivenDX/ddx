@@ -1170,10 +1170,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
 		if !spec.NoReview {
 			postMergeReviewer = &agent.DefaultBeadReviewer{
-				ProjectRoot: projectRoot,
-				BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
-				BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
-				ReviewTier:  spec.ReviewTier,
+				ProjectRoot:           projectRoot,
+				BeadStore:             bead.NewStore(ddxroot.JoinProject(projectRoot)),
+				BeadEvents:            bead.NewStore(ddxroot.JoinProject(projectRoot)),
+				ReviewTier:            spec.ReviewTier,
+				PrimaryConfigSnapshot: &rcfg,
 			}
 			reviewer = postMergeReviewer.(agent.CandidateReviewer)
 		}

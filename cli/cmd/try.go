@@ -241,10 +241,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	// Post-merge reviewer (on by default, skipped via --no-review).
 	var reviewer agent.CandidateReviewer
 	var postMergeReviewer agent.BeadReviewer
-	if !noReview {
-		postMergeReviewer = newCommandReviewer(projectRoot, beadStoreRoot, reviewTier)
-		reviewer = postMergeReviewer.(agent.CandidateReviewer)
-	}
 
 	explicitMinPower := cmd.Flags().Changed("min-power")
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
@@ -412,12 +408,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	worker := &agent.ExecuteBeadWorker{
-		Store:    forcedStore,
-		Executor: executor,
-		Reviewer: postMergeReviewer,
-	}
-
 	overrides := config.CLIOverrides{
 		Assignee:          resolveClaimAssignee(),
 		Harness:           harness,
@@ -433,6 +423,15 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
 		return fmt.Errorf("load resolved config: %w", err)
+	}
+	if !noReview {
+		postMergeReviewer = newCommandReviewer(projectRoot, beadStoreRoot, reviewTier, &rcfg)
+		reviewer = postMergeReviewer.(agent.CandidateReviewer)
+	}
+	worker := &agent.ExecuteBeadWorker{
+		Store:    forcedStore,
+		Executor: executor,
+		Reviewer: postMergeReviewer,
 	}
 	if _, err := resourceChecker.Check(cmd.Context()); err != nil {
 		if resErr, ok := err.(*agent.ResourceExhaustedError); ok && resErr != nil {

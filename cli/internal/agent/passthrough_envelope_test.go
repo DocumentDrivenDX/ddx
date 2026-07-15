@@ -785,8 +785,69 @@ func TestFizeauAutoRoutingExplicitPinsRemainPassthrough(t *testing.T) {
 	assert.Empty(t, runRuntime.HarnessOverride)
 	assert.Empty(t, runRuntime.ProfileOverride)
 	assert.Empty(t, runRuntime.ModelOverride)
-	assert.True(t, runRuntime.ClearRoutingPins)
-	assert.True(t, runRuntime.ClearProfile)
+	assert.False(t, runRuntime.ClearRoutingPins)
+	assert.False(t, runRuntime.ClearProfile)
+}
+
+func TestReviewDispatchPreservesOperatorPassthroughByteForByte(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness:  " opaque-harness ",
+		Provider: " opaque-provider ",
+		Model:    " opaque-model ",
+		Profile:  " opaque-policy ",
+		MinPower: 7,
+		MaxPower: 90,
+	})
+	svc := &passthroughTestService{executeEvents: []agentlib.ServiceEvent{{
+		Type: "final",
+		Data: []byte(`{"status":"success","final_text":"{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}"}`),
+	}}}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot:           projectRoot,
+		BeadStore:             store,
+		Service:               svc,
+		PrimaryConfigSnapshot: &rcfg,
+	}
+
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, ImplementerRouting{ActualPower: 40})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, " opaque-harness ", svc.lastReq.Harness)
+	assert.Equal(t, " opaque-provider ", svc.lastReq.Provider)
+	assert.Equal(t, " opaque-model ", svc.lastReq.Model)
+	assert.Equal(t, " opaque-policy ", svc.lastReq.Policy)
+	assert.Equal(t, 90, svc.lastReq.MaxPower)
+	assert.Equal(t, 41, svc.lastReq.MinPower)
+	assert.Equal(t, PermissionsReadOnlyReviewer, svc.lastReq.Permissions)
+}
+
+func TestReviewDispatchMaxPowerConflictDoesNotRelaxPins(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness:  "pinned-harness",
+		Provider: "pinned-provider",
+		Model:    "pinned-model",
+		Profile:  "pinned-policy",
+		MaxPower: 40,
+	})
+	svc := &passthroughTestService{}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot:           projectRoot,
+		BeadStore:             store,
+		Service:               svc,
+		PrimaryConfigSnapshot: &rcfg,
+	}
+
+	_, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, ImplementerRouting{ActualPower: 40})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "min_power=41 must be less than max_power=40")
+	assert.False(t, svc.executeCalled, "conflicting immutable bounds must fail before Fizeau execution")
+	assert.Equal(t, "pinned-harness", rcfg.Harness())
+	assert.Equal(t, "pinned-provider", rcfg.Provider())
+	assert.Equal(t, "pinned-model", rcfg.Model())
+	assert.Equal(t, "pinned-policy", rcfg.Profile())
+	assert.Equal(t, 40, rcfg.MaxPower())
 }
 
 // TestRunServiceRequestCarriesPolicyForProfileDrivenHarnessRouting verifies

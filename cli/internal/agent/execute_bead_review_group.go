@@ -50,13 +50,13 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	}
 
 	priorErrors := countPriorReviewErrors(r.EventReader, beadID, resultRev)
-	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
+	reviewMinPower := reviewerMinPower(impl, priorErrors)
 	// Emit reviewer-escalated event when MinPower is bumped above baseline.
 	if priorErrors > 0 && r.BeadEvents != nil {
 		_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      ReviewerEscalatedEventKind,
-			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
-			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
+			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewMinPower, priorErrors),
+			Body:      reviewerEscalatedEventBody(reviewMinPower, priorErrors, resultRev),
 			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
@@ -82,10 +82,10 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
-		// Apply escalated MinPower: use the higher of the base R4 floor and the
-		// escalated profile floor so retries reach a stronger reviewer powerClass.
-		if reviewProfile.MinPower > slotRuntime.MinPowerOverride {
-			slotRuntime.MinPowerOverride = reviewProfile.MinPower
+		// Change only the stronger abstract floor; dispatch inherits the sealed
+		// primary operator envelope from DefaultBeadReviewer.
+		if reviewMinPower > slotRuntime.MinPowerOverride {
+			slotRuntime.MinPowerOverride = reviewMinPower
 		}
 		slotRuntime.PromptFile = artifacts.PromptAbs
 		slotRuntime.WorkDir = reviewWorkDir
