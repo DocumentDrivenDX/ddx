@@ -3,10 +3,14 @@ package agent
 import (
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -134,6 +138,41 @@ type cleanupAdvanceClaimStore struct {
 	cleanupCalls           *int32
 	claimCalls             *int32
 	firstClaimCleanupCount int32
+}
+
+// shutdownPreAttemptGateStore blocks the first candidate refresh after a
+// successful claim. Cancellation releases the gate through ctx, after which
+// the loop's existing refresh-error path releases the owned claim.
+type shutdownPreAttemptGateStore struct {
+	*bead.Store
+	claimed        int32
+	preAttemptOnce sync.Once
+	preAttempt     chan struct{}
+}
+
+func (s *shutdownPreAttemptGateStore) Claim(id, assignee string) error {
+	if err := s.Store.Claim(id, assignee); err != nil {
+		return err
+	}
+	atomic.StoreInt32(&s.claimed, 1)
+	return nil
+}
+
+func (s *shutdownPreAttemptGateStore) ClaimWithOptions(id, assignee, session, worktree string) error {
+	if err := s.Store.ClaimWithOptions(id, assignee, session, worktree); err != nil {
+		return err
+	}
+	atomic.StoreInt32(&s.claimed, 1)
+	return nil
+}
+
+func (s *shutdownPreAttemptGateStore) Get(ctx context.Context, id string) (*bead.Bead, error) {
+	if atomic.LoadInt32(&s.claimed) == 0 {
+		return s.Store.Get(ctx, id)
+	}
+	s.preAttemptOnce.Do(func() { close(s.preAttempt) })
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func (s *cleanupAdvanceClaimStore) Claim(id, assignee string) error {
@@ -542,9 +581,12 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 	inner, first, _ := newExecuteLoopTestStore(t)
 
 	var cleanupCalls int32
+	executorEntered := make(chan struct{})
+	var executorEnteredOnce sync.Once
 	worker := &ExecuteBeadWorker{
 		Store: inner,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executorEnteredOnce.Do(func() { close(executorEntered) })
 			<-ctx.Done()
 			return ExecuteBeadReport{
 				BeadID:           beadID,
@@ -574,7 +616,8 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 				atomic.AddInt32(&cleanupCalls, 1)
 				return ExecutionCleanupSummary{}, nil
 			}),
-			CleanupLog: io.Discard,
+			CleanupLog:    io.Discard,
+			CleanupTickCh: make(chan time.Time),
 			PreClaimHook: func(context.Context) error {
 				return nil
 			},
@@ -585,12 +628,14 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 		}{result: result, err: err}
 	}()
 
-	require.Eventually(t, func() bool {
-		lease, found, err := inner.ClaimLease(first.ID)
-		return err == nil && found && lease.Owner != ""
-	}, 2*time.Second, 10*time.Millisecond)
+	select {
+	case <-executorEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("executor did not start")
+	}
 
 	beforeCancel := atomic.LoadInt32(&cleanupCalls)
+	require.GreaterOrEqual(t, beforeCancel, int32(1), "startup cleanup must establish the pre-cancel baseline")
 	cancel()
 
 	select {
@@ -601,11 +646,137 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 		t.Fatal("worker did not stop after cancellation")
 	}
 
-	require.Eventually(t, func() bool {
-		return atomic.LoadInt32(&cleanupCalls) > beforeCancel
-	}, 2*time.Second, 10*time.Millisecond)
+	assert.Equal(t, beforeCancel+1, atomic.LoadInt32(&cleanupCalls),
+		"attempt cancellation must run exactly one shutdown cleanup pass after startup")
 
 	got, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Owner)
+}
+
+func TestWorkCleanup_ShutdownPassSkipsClaimBeforeAttempt(t *testing.T) {
+	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+
+	inner, first, _ := newExecuteLoopTestStore(t)
+	preAttemptEntered := make(chan struct{})
+	store := &shutdownPreAttemptGateStore{
+		Store:      inner,
+		preAttempt: preAttemptEntered,
+	}
+
+	var cleanupCalls int32
+	executorEntered := make(chan struct{})
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+			close(executorEntered)
+			return ExecuteBeadReport{}, errors.New("executor must not start before the cancellation gate")
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			ProjectRoot: projectRoot,
+			CleanupRunner: cleanupRunnerFunc(func(context.Context) (ExecutionCleanupSummary, error) {
+				atomic.AddInt32(&cleanupCalls, 1)
+				return ExecutionCleanupSummary{}, nil
+			}),
+			CleanupLog:    io.Discard,
+			CleanupTickCh: make(chan time.Time),
+			PreClaimHook: func(context.Context) error {
+				return nil
+			},
+		})
+		done <- struct {
+			result *ExecuteBeadLoopResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	select {
+	case <-preAttemptEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("post-claim pre-attempt gate was not entered")
+	}
+	beforeCancel := atomic.LoadInt32(&cleanupCalls)
+	require.GreaterOrEqual(t, beforeCancel, int32(1), "startup cleanup must establish the pre-cancel baseline")
+	cancel()
+
+	select {
+	case result := <-done:
+		require.ErrorIs(t, result.err, context.Canceled)
+		require.NotNil(t, result.result)
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not stop after pre-attempt cancellation")
+	}
+
+	assert.Equal(t, beforeCancel, atomic.LoadInt32(&cleanupCalls),
+		"claim-before-attempt cancellation must not run attempt-only shutdown cleanup")
+	select {
+	case <-executorEntered:
+		t.Fatal("executor started despite cancellation at the pre-attempt gate")
+	default:
+	}
+	got, err := inner.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Owner, "pre-attempt cancellation must release the owned claim")
+}
+
+func TestWorkCleanup_ShutdownPassSynchronizationHasNoSleep(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, filename, nil, 0)
+	require.NoError(t, err)
+
+	targets := map[string]string{
+		"TestWorkCleanup_ShutdownPassRunsOnSignal":            "executorEntered",
+		"TestWorkCleanup_ShutdownPassSkipsClaimBeforeAttempt": "preAttemptEntered",
+	}
+	found := make(map[string]bool, len(targets))
+	for _, decl := range parsed.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		syncName, target := targets[fn.Name.Name]
+		if !target {
+			continue
+		}
+		found[fn.Name.Name] = true
+		hasTypedReceive := false
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			switch expr := node.(type) {
+			case *ast.CallExpr:
+				if selector, ok := expr.Fun.(*ast.SelectorExpr); ok {
+					if pkg, ok := selector.X.(*ast.Ident); ok && pkg.Name == "time" && selector.Sel.Name == "Sleep" {
+						t.Errorf("%s must not synchronize with time.Sleep", fn.Name.Name)
+					}
+					if selector.Sel.Name == "ClaimLease" {
+						t.Errorf("%s must not use ClaimLease visibility as an attempt-start precondition", fn.Name.Name)
+					}
+				}
+			case *ast.UnaryExpr:
+				if expr.Op == token.ARROW {
+					if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == syncName {
+						hasTypedReceive = true
+					}
+				}
+			}
+			return true
+		})
+		assert.Truef(t, hasTypedReceive, "%s must synchronize by receiving from %s", fn.Name.Name, syncName)
+	}
+	for target := range targets {
+		assert.Truef(t, found[target], "missing synchronization regression %s", target)
+	}
 }
