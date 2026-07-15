@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -92,6 +94,7 @@ func TestReleaseWorkflowResolvesManualAndTagEventToSameImmutableTag(t *testing.T
 	assert.Equal(t, "${{ steps.identity.outputs.commit }}", prepare.Outputs["commit"])
 	assert.Equal(t, "${{ steps.version.outputs.version }}", prepare.Outputs["version"])
 	assert.Equal(t, "${{ steps.previous.outputs.tag }}", prepare.Outputs["previous_tag"])
+	assert.Equal(t, "${{ steps.previous.outputs.commit }}", prepare.Outputs["previous_commit"])
 
 	identityAt := stepIndex(prepare, func(step releaseWorkflowStep) bool { return step.ID == "identity" })
 	require.NotEqual(t, -1, identityAt, "prepare must resolve the requested tag to an immutable commit")
@@ -157,8 +160,12 @@ func TestReleaseWorkflowDoesNotUseAmbientRefForReleaseIdentity(t *testing.T) {
 	releaseJob := wf.Jobs["release"]
 	changelogAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool { return step.ID == "changelog" })
 	require.NotEqual(t, -1, changelogAt)
-	assert.Contains(t, releaseJob.Steps[changelogAt].Run, `RELEASE_COMMIT="${{ needs.prepare.outputs.commit }}"`)
-	assert.Contains(t, releaseJob.Steps[changelogAt].Run, `git log "${PREVIOUS_TAG}..${RELEASE_COMMIT}"`)
+	changelogStep := releaseJob.Steps[changelogAt]
+	assert.Equal(t, "${{ needs.prepare.outputs.previous_tag }}", changelogStep.Env["PREVIOUS_TAG"])
+	assert.Equal(t, "${{ needs.prepare.outputs.previous_commit }}", changelogStep.Env["BASELINE_COMMIT"])
+	assert.Equal(t, "${{ needs.prepare.outputs.commit }}", changelogStep.Env["RELEASE_COMMIT"])
+	assert.NotContains(t, changelogStep.Run, "${{", "job outputs must enter shell through env, not generated shell source")
+	assert.Contains(t, changelogStep.Run, `git log "${BASELINE_COMMIT}..${RELEASE_COMMIT}"`)
 
 	releaseAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool {
 		return strings.HasPrefix(step.Uses, "softprops/action-gh-release@")
@@ -174,6 +181,118 @@ func TestReleaseWorkflowDoesNotUseAmbientRefForReleaseIdentity(t *testing.T) {
 	})
 	require.NotEqual(t, -1, finalAt)
 	assert.Contains(t, releaseJob.Steps[finalAt].Run, `/releases/tag/${{ needs.prepare.outputs.tag }}`)
+}
+
+func TestReleaseBaselineScriptPrefersPreviousPublishedRelease(t *testing.T) {
+	fixture := newReleaseBaselineFixture(t)
+	metadata := `[
+  [
+    {"tag_name":"v0.6.2-alpha105","draft":false,"published_at":"2026-07-14T12:00:00Z"},
+    {"tag_name":"v9.9.9","draft":false,"published_at":"2026-07-13T12:00:00Z"},
+    {"tag_name":"v0.1.0\"$(id)\"","draft":false,"published_at":"2026-07-12T12:00:00Z"},
+    {"tag_name":"--format=x","draft":false,"published_at":"2026-07-11T12:00:00Z"}
+  ],
+  [
+    {"tag_name":"v0.6.2-alpha104","draft":true,"published_at":null},
+    {"tag_name":"v0.6.2-alpha103","draft":true,"published_at":null},
+    {"tag_name":"v0.6.2-alpha102","draft":false,"published_at":"2026-07-10T12:00:00Z"}
+  ]
+]`
+
+	baseline, _, err := runReleaseBaselineScript(
+		t, fixture.repo, "v0.6.2-alpha105", fixture.commits["alpha105"], metadata,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "v0.6.2-alpha102", baseline.Tag)
+	assert.Equal(t, fixture.commits["alpha102"], baseline.Commit)
+	assert.NotEqual(t, "v0.6.2-alpha104", baseline.Tag, "nearest unpublished tag must not become the changelog baseline")
+
+	t.Run("distinct prior release at the candidate commit remains eligible", func(t *testing.T) {
+		metadata := `[
+  {"tag_name":"v0.6.2-alpha105","draft":false,"published_at":"2026-07-14T12:00:00Z"},
+  {"tag_name":"v0.6.2-alpha100","draft":false,"published_at":"2026-07-09T12:00:00Z"}
+]`
+		baseline, _, err := runReleaseBaselineScript(
+			t, fixture.repo, "v0.6.2-alpha105", fixture.commits["alpha105"], metadata,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v0.6.2-alpha100", baseline.Tag)
+		assert.Equal(t, fixture.commits["alpha105"], baseline.Commit)
+	})
+}
+
+func TestReleaseChangelogIncludesCommitsBehindUnpublishedTags(t *testing.T) {
+	fixture := newReleaseBaselineFixture(t)
+	metadata := `[{"tag_name":"v0.6.2-alpha102","draft":false,"published_at":"2026-07-10T12:00:00Z"}]`
+	baseline, _, err := runReleaseBaselineScript(
+		t, fixture.repo, "v0.6.2-alpha105", fixture.commits["alpha105"], metadata,
+	)
+	require.NoError(t, err)
+	originalBaseline := baseline.Commit
+	runGitFixture(t, fixture.repo, "update-ref", "refs/tags/v0.6.2-alpha102", fixture.commits["alpha104"])
+	assert.Equal(t, fixture.commits["alpha104"], strings.TrimSpace(runGitFixture(
+		t, fixture.repo, "rev-parse", "v0.6.2-alpha102^{commit}",
+	)))
+
+	cmd := exec.Command("git", "-C", fixture.repo, "log", originalBaseline+".."+fixture.commits["alpha105"], "--format=%s", "--no-merges")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	changelog := string(out)
+	assert.Contains(t, changelog, "feat: unpublished alpha103")
+	assert.Contains(t, changelog, "fix: unpublished alpha104")
+	assert.Contains(t, changelog, "docs: change after alpha104 without its own tag")
+	assert.Contains(t, changelog, "chore: alpha105 release head")
+	assert.NotContains(t, changelog, "fix: published alpha102")
+	assert.NotContains(t, changelog, "chore: history before alpha102")
+}
+
+func TestReleaseWorkflowUsesPublishedReleaseBaseline(t *testing.T) {
+	source := loadReleaseWorkflowSource(t)
+	assert.NotContains(t, source, "git describe", "tag proximity is not publication evidence")
+
+	wf := loadReleaseWorkflow(t)
+	prepare := wf.Jobs["prepare"]
+	metadataAt := stepIndex(prepare, func(step releaseWorkflowStep) bool {
+		return strings.Contains(step.Run, "gh api --paginate --slurp") &&
+			strings.Contains(step.Run, "/releases?per_page=100")
+	})
+	previousAt := stepIndex(prepare, func(step releaseWorkflowStep) bool { return step.ID == "previous" })
+	require.NotEqual(t, -1, metadataAt, "prepare must fetch GitHub Release metadata")
+	require.NotEqual(t, -1, previousAt, "prepare must select the previous published release")
+	assert.Less(t, metadataAt, previousAt)
+	previous := prepare.Steps[previousAt]
+	assert.Contains(t, previous.Run, "python3 scripts/release-baseline.py")
+	assert.Equal(t, "${{ steps.identity.outputs.tag }}", previous.Env["RELEASE_TAG"])
+	assert.Equal(t, "${{ steps.identity.outputs.commit }}", previous.Env["RELEASE_COMMIT"])
+	assert.NotContains(t, previous.Run, "${{", "step outputs must enter shell through env, not generated shell source")
+	assert.Contains(t, previous.Run, `--release-tag "${RELEASE_TAG}"`)
+	assert.Contains(t, previous.Run, `--release-commit "${RELEASE_COMMIT}"`)
+	assert.Contains(t, previous.Run, `--releases-json "${RELEASES_JSON}"`)
+	assert.Contains(t, previous.Run, `printf 'commit=%s\n' "${BASELINE_COMMIT}"`)
+
+	releaseJob := wf.Jobs["release"]
+	changelogAt := stepIndex(releaseJob, func(step releaseWorkflowStep) bool { return step.ID == "changelog" })
+	require.NotEqual(t, -1, changelogAt)
+	changelogStep := releaseJob.Steps[changelogAt]
+	changelog := changelogStep.Run
+	assert.Contains(t, changelog, "No previous published GitHub Release baseline was proven")
+	assert.Equal(t, "${{ needs.prepare.outputs.previous_commit }}", changelogStep.Env["BASELINE_COMMIT"])
+	assert.NotContains(t, changelog, "${{", "published tag text must not be interpolated into shell source")
+	assert.Contains(t, changelog, `git log "${BASELINE_COMMIT}..${RELEASE_COMMIT}"`)
+
+	fixture := newReleaseBaselineFixture(t)
+	_, output, err := runReleaseBaselineScript(
+		t, fixture.repo, "v0.6.2-alpha105", fixture.commits["alpha105"], `[]`,
+	)
+	require.Error(t, err)
+	assert.Contains(t, output, "no previous published GitHub Release tag is reachable")
+	assert.Contains(t, output, "refusing nearest-tag fallback")
+
+	doc, err := os.ReadFile(filepath.Join(repoRoot(t), "docs", "releasing.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(doc), "newest non-draft GitHub Release")
+	assert.Contains(t, string(doc), "Do not substitute the")
+	assert.Contains(t, string(doc), "nearest local tag")
 }
 
 func TestReleaseChecklistNamesNineAssetAndSmokeProofs(t *testing.T) {
@@ -506,4 +625,96 @@ func verifyFrontendFixture(t *testing.T, dir, wantError string) {
 	}
 	require.Error(t, err, "%s", out)
 	assert.Contains(t, string(out), wantError)
+}
+
+type releaseBaselineFixture struct {
+	repo    string
+	commits map[string]string
+}
+
+type releaseBaselineSelection struct {
+	Tag    string `json:"tag"`
+	Commit string `json:"commit"`
+}
+
+func newReleaseBaselineFixture(t *testing.T) releaseBaselineFixture {
+	t.Helper()
+	repo := t.TempDir()
+	runGitFixture(t, repo, "init", "--quiet")
+	runGitFixture(t, repo, "config", "user.name", "Release Test")
+	runGitFixture(t, repo, "config", "user.email", "release-test@example.com")
+
+	commits := map[string]string{}
+	commit := func(key, subject string) {
+		t.Helper()
+		path := filepath.Join(repo, key+".txt")
+		require.NoError(t, os.WriteFile(path, []byte(subject+"\n"), 0o644))
+		runGitFixture(t, repo, "add", filepath.Base(path))
+		runGitFixture(t, repo, "commit", "--quiet", "-m", subject)
+		commits[key] = strings.TrimSpace(runGitFixture(t, repo, "rev-parse", "HEAD"))
+	}
+	tag := func(key, name string) {
+		t.Helper()
+		runGitFixture(t, repo, "tag", name, commits[key])
+	}
+
+	commit("history", "chore: history before alpha102")
+	commit("alpha102", "fix: published alpha102")
+	tag("alpha102", "v0.6.2-alpha102")
+	commit("alpha103", "feat: unpublished alpha103")
+	tag("alpha103", "v0.6.2-alpha103")
+	commit("alpha104", "fix: unpublished alpha104")
+	tag("alpha104", "v0.6.2-alpha104")
+	commit("after-alpha104", "docs: change after alpha104 without its own tag")
+	commit("alpha105", "chore: alpha105 release head")
+	tag("alpha105", "v0.6.2-alpha105")
+	tag("alpha105", "v0.6.2-alpha100")
+
+	unreachableTree := strings.TrimSpace(runGitFixture(t, repo, "rev-parse", commits["history"]+"^{tree}"))
+	commits["unreachable"] = strings.TrimSpace(runGitFixture(
+		t, repo, "commit-tree", unreachableTree, "-m", "chore: unrelated published release",
+	))
+	runGitFixture(t, repo, "update-ref", "refs/tags/v9.9.9", commits["unreachable"])
+	runGitFixture(t, repo, "update-ref", `refs/tags/v0.1.0"$(id)"`, commits["alpha104"])
+	runGitFixture(t, repo, "update-ref", "refs/tags/--format=x", commits["alpha104"])
+
+	return releaseBaselineFixture{repo: repo, commits: commits}
+}
+
+func runReleaseBaselineScript(
+	t *testing.T, repo, releaseTag, releaseCommit, metadata string,
+) (releaseBaselineSelection, string, error) {
+	t.Helper()
+	metadataPath := filepath.Join(t.TempDir(), "github-releases.json")
+	require.NoError(t, os.WriteFile(metadataPath, []byte(metadata), 0o644))
+	cmd := exec.Command(
+		"python3",
+		filepath.Join(repoRoot(t), "scripts", "release-baseline.py"),
+		"--repo", repo,
+		"--release-tag", releaseTag,
+		"--release-commit", releaseCommit,
+		"--releases-json", metadataPath,
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	output := strings.TrimSpace(stderr.String() + stdout.String())
+	if err != nil {
+		return releaseBaselineSelection{}, output, err
+	}
+	var selection releaseBaselineSelection
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &selection); decodeErr != nil {
+		return releaseBaselineSelection{}, output, decodeErr
+	}
+	return selection, output, nil
+}
+
+func runGitFixture(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+	return string(out)
 }

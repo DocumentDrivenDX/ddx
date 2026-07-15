@@ -30,6 +30,7 @@ jobs:
       commit: ${{ steps.identity.outputs.commit }}
       version: ${{ steps.version.outputs.version }}
       previous_tag: ${{ steps.previous.outputs.tag }}
+      previous_commit: ${{ steps.previous.outputs.commit }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -68,17 +69,31 @@ jobs:
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "📦 Version: $VERSION"
 
-    - name: Get previous tag
-      id: previous
+    - name: Fetch published GitHub Release metadata
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASES_JSON: ${{ runner.temp }}/github-releases.json
       run: |
-        RELEASE_COMMIT="${{ steps.identity.outputs.commit }}"
-        PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${RELEASE_COMMIT}^" 2>/dev/null || echo "")
-        echo "tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
-        if [ -n "$PREVIOUS_TAG" ]; then
-          echo "📊 Previous tag: $PREVIOUS_TAG"
-        else
-          echo "🆕 This is the first release"
-        fi
+        gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "${RELEASES_JSON}"
+        test -s "${RELEASES_JSON}"
+
+    - name: Resolve previous published release
+      id: previous
+      env:
+        RELEASE_TAG: ${{ steps.identity.outputs.tag }}
+        RELEASE_COMMIT: ${{ steps.identity.outputs.commit }}
+        RELEASES_JSON: ${{ runner.temp }}/github-releases.json
+      run: |
+        BASELINE_JSON=$(python3 scripts/release-baseline.py \
+          --repo . \
+          --release-tag "${RELEASE_TAG}" \
+          --release-commit "${RELEASE_COMMIT}" \
+          --releases-json "${RELEASES_JSON}")
+        PREVIOUS_TAG=$(jq -er '.tag | select(type == "string" and length > 0)' <<< "${BASELINE_JSON}")
+        BASELINE_COMMIT=$(jq -er '.commit | select(type == "string" and test("^[0-9a-f]{40}$"))' <<< "${BASELINE_JSON}")
+        printf 'tag=%s\n' "${PREVIOUS_TAG}" >> "${GITHUB_OUTPUT}"
+        printf 'commit=%s\n' "${BASELINE_COMMIT}" >> "${GITHUB_OUTPUT}"
+        printf '📊 Previous published GitHub Release: %s (%s)\n' "${PREVIOUS_TAG}" "${BASELINE_COMMIT}"
 
   # Build the frontend once, verify the complete static bundle, and share that
   # exact output with every Go binary build below. A fresh checkout contains
@@ -287,16 +302,21 @@ jobs:
     
     - name: Generate changelog
       id: changelog
+      env:
+        PREVIOUS_TAG: ${{ needs.prepare.outputs.previous_tag }}
+        BASELINE_COMMIT: ${{ needs.prepare.outputs.previous_commit }}
+        RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
       run: |
-        PREVIOUS_TAG="${{ needs.prepare.outputs.previous_tag }}"
-        RELEASE_COMMIT="${{ needs.prepare.outputs.commit }}"
-        
-        # Generate changelog
-        if [ -z "$PREVIOUS_TAG" ]; then
-          COMMITS=$(git log "$RELEASE_COMMIT" --pretty=format:"- %s (%an)" --no-merges)
-        else
-          COMMITS=$(git log "${PREVIOUS_TAG}..${RELEASE_COMMIT}" --pretty=format:"- %s (%an)" --no-merges)
+        if [ -z "${PREVIOUS_TAG}" ] || ! [[ "${BASELINE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "❌ No previous published GitHub Release baseline was proven; refusing to generate a partial changelog" >&2
+          exit 1
         fi
+        if ! [[ "${RELEASE_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "${BASELINE_COMMIT}" "${RELEASE_COMMIT}"; then
+          echo "❌ Published-release baseline is not an ancestor of the immutable release commit" >&2
+          exit 1
+        fi
+        printf '📊 Generating changelog after %s (%s)\n' "${PREVIOUS_TAG}" "${BASELINE_COMMIT}"
+        COMMITS=$(git log "${BASELINE_COMMIT}..${RELEASE_COMMIT}" --pretty=format:"- %s (%an)" --no-merges)
         
         # Categorize commits
         echo "# Changelog" > CHANGELOG.md
