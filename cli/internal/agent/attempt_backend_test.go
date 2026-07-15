@@ -49,7 +49,7 @@ func TestExecuteBeadWithConfig_LocalCloneBackendImportsResult(t *testing.T) {
 	})
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner:    scriptHarnessAgentRunner{},
 		AttemptBackend: LocalCloneAttemptBackend{},

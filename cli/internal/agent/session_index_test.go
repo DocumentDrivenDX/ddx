@@ -303,7 +303,7 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	svc := &passthroughTestService{}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "fake-model",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "fake-model"})
 	_, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{
 		Prompt:                "hello",
 		SessionLogDirOverride: embeddedLogDir,

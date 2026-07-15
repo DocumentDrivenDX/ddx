@@ -76,7 +76,7 @@ func TestExecuteBeadWithConfig_RecordsCandidateCycleMetadata(t *testing.T) {
 	})
 
 	runner := scriptHarnessAgentRunner{}
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})
@@ -176,6 +176,7 @@ func TestExecuteBeadLocalCloneValidRepairImportsPinsProjectsAndPublishesOnce(t *
 	backend := &recordingCandidateTransportBackend{inner: LocalCloneAttemptBackend{}}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{
 		Harness:        "script",
+		Model:          directivePath,
 		AttemptBackend: AttemptBackendLocalClone,
 	})
 
@@ -249,7 +250,7 @@ func TestExecuteBeadCandidateImportAndPinFailuresFailClosed(t *testing.T) {
 			})
 			backend := &recordingCandidateTransportBackend{inner: WorktreeAttemptBackend{}, importErr: tt.importErr}
 			reviewCalls := 0
-			rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script"})
+			rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
 
 			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
 				AgentRunner:       scriptHarnessAgentRunner{},

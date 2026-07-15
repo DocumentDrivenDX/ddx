@@ -32,7 +32,7 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,
@@ -83,7 +83,7 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  nil,
 		AgentRunner: runner,
@@ -113,7 +113,7 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: dirFile})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,

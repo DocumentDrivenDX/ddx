@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,6 +33,7 @@ type passthroughTestService struct {
 	lastReq             agentlib.ServiceExecuteRequest
 	executeRequests     []agentlib.ServiceExecuteRequest
 	listHarnessesCalled bool
+	listProvidersCalled bool
 	listModelsCalled    bool
 	listPoliciesCalled  bool
 	listModels          []agentlib.ModelInfo
@@ -87,6 +89,7 @@ func (s *passthroughTestService) TailSessionLog(ctx context.Context, sessionID s
 }
 
 func (s *passthroughTestService) ListProviders(ctx context.Context) ([]agentlib.ProviderInfo, error) {
+	s.listProvidersCalled = true
 	return nil, nil
 }
 
@@ -142,9 +145,103 @@ func resolvedWithPassthrough(harness, provider, model string, minPower, maxPower
 	return cfg.Resolve(config.CLIOverrides{
 		Harness:  harness,
 		Provider: provider,
+		Model:    model,
 		MinPower: minPower,
 		MaxPower: maxPower,
 	})
+}
+
+func TestProviderTimeoutIsExplicitOnly(t *testing.T) {
+	workDir := t.TempDir()
+	ddxDir := testutils.MakeInitializedDDxRoot(t, workDir)
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+agent:
+  endpoints:
+    - type: openai
+      base_url: http://127.0.0.1:1/v1
+      request_timeout_seconds: 17
+`), 0o600))
+
+	provider := "openai-127-0-0-1-1"
+	base := config.NewTestConfigForRun(config.TestRunConfigOpts{})
+	omitted := base.Resolve(config.CLIOverrides{Provider: provider})
+	omittedSvc := &passthroughTestService{}
+	_, err := executeOnService(context.Background(), omittedSvc, workDir, omitted, AgentRunRuntime{Prompt: "omitted timeout"})
+	require.NoError(t, err)
+	assert.Zero(t, omittedSvc.lastReq.ProviderTimeout, "omitted provider timeout must remain unset")
+	assert.False(t, omittedSvc.listHarnessesCalled)
+	assert.False(t, omittedSvc.listProvidersCalled)
+	assert.False(t, omittedSvc.listModelsCalled)
+	assert.False(t, omittedSvc.listPoliciesCalled)
+
+	explicitTimeout := 37*time.Second + 123*time.Millisecond
+	explicit := base.Resolve(config.CLIOverrides{
+		Provider:               provider,
+		ProviderRequestTimeout: &explicitTimeout,
+	})
+	explicitSvc := &passthroughTestService{}
+	_, err = executeOnService(context.Background(), explicitSvc, workDir, explicit, AgentRunRuntime{Prompt: "explicit timeout"})
+	require.NoError(t, err)
+	assert.Equal(t, explicitTimeout, explicitSvc.lastReq.ProviderTimeout)
+	assert.False(t, explicitSvc.listHarnessesCalled)
+	assert.False(t, explicitSvc.listProvidersCalled)
+	assert.False(t, explicitSvc.listModelsCalled)
+	assert.False(t, explicitSvc.listPoliciesCalled)
+}
+
+func TestExplicitPublicExecutionConstraintsSurviveProviderDetachment(t *testing.T) {
+	idleTimeout := 43*time.Second + 17*time.Millisecond
+	providerTimeout := 47*time.Second + 29*time.Millisecond
+	wallTimeout := 53*time.Second + 31*time.Millisecond
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		WallClock: wallTimeout,
+	}).Resolve(config.CLIOverrides{
+		Harness:                " opaque-harness ",
+		Provider:               " opaque-provider ",
+		Model:                  " opaque-model ",
+		Profile:                " opaque-policy ",
+		Effort:                 " opaque-reasoning ",
+		Permissions:            "unrestricted",
+		Timeout:                &idleTimeout,
+		ProviderRequestTimeout: &providerTimeout,
+		MinPower:               7,
+		MaxPower:               11,
+	})
+	svc := &passthroughTestService{}
+	runtime := AgentRunRuntime{
+		Prompt:        "preserve every public constraint",
+		WorkDir:       filepath.Join(t.TempDir(), " opaque-workdir "),
+		Role:          "implementer",
+		CorrelationID: "bead-123:attempt-456",
+		Correlation: map[string]string{
+			"bead_id": " bead-123 ",
+			"opaque":  " correlation-value ",
+		},
+		Env: map[string]string{
+			"OPAQUE_ENV": " env-value ",
+		},
+	}
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, runtime)
+	require.NoError(t, err)
+	req := svc.lastReq
+	assert.Equal(t, " opaque-harness ", req.Harness)
+	assert.Equal(t, " opaque-provider ", req.Provider)
+	assert.Equal(t, " opaque-model ", req.Model)
+	assert.Equal(t, " opaque-policy ", req.Policy)
+	assert.Equal(t, agentlib.Reasoning(" opaque-reasoning "), req.Reasoning)
+	assert.Equal(t, "unrestricted", req.Permissions)
+	assert.Equal(t, wallTimeout, req.Timeout)
+	assert.Equal(t, idleTimeout, req.IdleTimeout)
+	assert.Equal(t, providerTimeout, req.ProviderTimeout)
+	assert.Equal(t, 7, req.MinPower)
+	assert.Equal(t, 11, req.MaxPower)
+	assert.Equal(t, runtime.WorkDir, req.WorkDir)
+	assert.Equal(t, runtime.Role, req.Role)
+	assert.Equal(t, runtime.CorrelationID, req.CorrelationID)
+	assert.Equal(t, " bead-123 ", req.Metadata["bead_id"])
+	assert.Equal(t, " correlation-value ", req.Metadata["opaque"])
+	assert.Equal(t, " env-value ", req.Metadata["OPAQUE_ENV"])
 }
 
 // TestPassthroughEnvelope_InvariantUnderPowerEscalation (AC3): bumping MinPower

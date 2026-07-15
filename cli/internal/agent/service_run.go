@@ -44,9 +44,9 @@ func ResolveServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 }
 
 // ResolvePreflightServiceFromWorkDir returns a short-lived service instance for
-// pre-dispatch model/route checks. Production uses a constructor with disabled
-// background provider probes; tests still honor SetServiceRunFactory so they can
-// observe requests without a real service.
+// execution and capability queries. Production disables background provider
+// probes; tests still honor SetServiceRunFactory so they can observe requests
+// without a real service.
 func ResolvePreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	if serviceRunFactory != nil {
 		return serviceRunFactory(workDir)
@@ -64,21 +64,6 @@ func resolveService(workDir string) (agentlib.FizeauService, error) {
 		factory = NewServiceFromWorkDir
 	}
 	return factory(workDir)
-}
-
-// appendProviderTimeoutHint appends a configuration override hint to errMsg
-// when it indicates a provider request timeout fired. Helps operators find
-// the knob to adjust (AC4 of ddx-2c63bb95).
-func appendProviderTimeoutHint(errMsg string, providerTimeout time.Duration) string {
-	if errMsg == "" || !strings.Contains(errMsg, "provider request timeout") {
-		return errMsg
-	}
-	return errMsg + fmt.Sprintf(
-		"; request_timeout=%s exceeded — override via"+
-			" agent.endpoints.<name>.request_timeout_seconds in .ddx/config.yaml"+
-			" or pass --request-timeout DURATION to execute-bead/work",
-		providerTimeout.Round(time.Second),
-	)
 }
 
 // RunWithConfigViaService dispatches a single agent invocation through the
@@ -194,7 +179,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		permissions = rcfg.Permissions()
 	}
 
-	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, rcfg.ProviderRequestTimeout())
+	providerTimeout := rcfg.ProviderRequestTimeout()
 
 	minPower := rcfg.MinPower()
 	if runtime.MinPowerOverride > 0 {
@@ -379,7 +364,6 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 			result.AgentSessionID = final.SessionLogPath
 		}
 	}
-	result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 	normalizeServiceFinalExitCode(result)
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,

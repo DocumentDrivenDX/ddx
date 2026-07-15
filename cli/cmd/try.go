@@ -97,7 +97,7 @@ Exit codes:
 	cmd.Flags().String("review-model", "", "Explicit reviewer model override (empty = Fizeau selects from the stronger review power floor)")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
 	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout from Fizeau Execute dispatch to routing_decision; on expiry the lease is released and the bead is flagged for operator attention")
-	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
+	cmd.Flags().Duration("request-timeout", 0, "Explicit per-request provider wall-clock timeout passed to Fizeau (default: unset)")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
 

@@ -384,7 +384,7 @@ func TestRunModelOverride(t *testing.T) {
 	r := newTestRunner(mock)
 	r.Config.Models = map[string]string{"codex": "gpt-5.4"}
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-4o"}).Resolve(config.CLIOverrides{Harness: "codex"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-4o"}).Resolve(config.CLIOverrides{Harness: "codex", Model: "gpt-4o"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "gpt-4o")
@@ -613,7 +613,7 @@ func TestRunWithUnknownModelWarns(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-99-turbo"}).Resolve(config.CLIOverrides{Harness: "codex"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-99-turbo"}).Resolve(config.CLIOverrides{Harness: "codex", Model: "gpt-99-turbo"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -834,7 +834,7 @@ func TestRunPiWithModelAndEffort(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "pi-minimax",
-	}).Resolve(config.CLIOverrides{Harness: "pi", Effort: "high"})
+	}).Resolve(config.CLIOverrides{Harness: "pi", Model: "pi-minimax", Effort: "high"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "task"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "--model")
@@ -933,7 +933,7 @@ func TestRunGeminiWithModel(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "gemini-2.5",
-	}).Resolve(config.CLIOverrides{Harness: "gemini"})
+	}).Resolve(config.CLIOverrides{Harness: "gemini", Model: "gemini-2.5"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "task"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "-m")

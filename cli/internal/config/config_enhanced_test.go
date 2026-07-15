@@ -121,7 +121,7 @@ func TestValidateResolve(t *testing.T) {
 		assert.Equal(t, BeadQualityModeWarnOnly, rcfg.BeadQualityMode(), "default bead-quality mode")
 	})
 
-	t.Run("agent config supplies model fallback", func(t *testing.T) {
+	t.Run("agent config model never becomes an execution constraint", func(t *testing.T) {
 		cfg := &NewConfig{
 			Version: "1.0",
 			Agent: &AgentConfig{
@@ -133,7 +133,7 @@ func TestValidateResolve(t *testing.T) {
 		rcfg := cfg.Resolve(CLIOverrides{})
 
 		assert.Empty(t, rcfg.Harness())
-		assert.Equal(t, "claude-opus", rcfg.Model())
+		assert.Empty(t, rcfg.Model())
 		assert.Equal(t, "ask", rcfg.Permissions())
 		assert.Equal(t, 5*time.Second, rcfg.Timeout())
 	})

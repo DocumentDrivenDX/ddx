@@ -131,7 +131,7 @@ func TestWork_ClaudeSubprocessDeathSynthesizesTerminalOutcome(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Harness: "claude",
 		Model:   "opus",
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "claude", Model: "opus"})
 
 	gitOps := &artifactTestGitOps{
 		projectRoot: projectRoot,

@@ -27,7 +27,8 @@ type CLIOverrides struct {
 	AttemptBackend string
 	// ProviderRequestTimeout, when non-nil, overrides the per-request wall-clock
 	// cap applied to a single Chat/ChatStream call. Corresponds to --request-timeout
-	// on execute-bead and work. Zero pointer means "use config or model default".
+	// on execute-bead and work. A nil or zero value remains unset for Fizeau and
+	// the selected provider to interpret.
 	ProviderRequestTimeout *time.Duration
 	// MinPower and MaxPower are passthrough power-bounds for the upstream agent
 	// routing contract (CONTRACT-003 / FEAT-006). DDx passes these to
@@ -36,11 +37,9 @@ type CLIOverrides struct {
 	// --max-power on execute-bead and work.
 	MinPower int
 	MaxPower int
-	// OpaquePassthrough, when true, prevents Resolve from falling back to
-	// agent.model from the project config when the caller did not supply a
-	// model explicitly. Used by the ddx work path (FEAT-010 / ddx-c4231775):
-	// routing belongs to the agent service; DDx must not inject a
-	// config-sourced model.
+	// OpaquePassthrough is retained for persisted worker-spec compatibility.
+	// Routing constraints are always opaque and explicit now, so this field no
+	// longer changes resolution behavior.
 	OpaquePassthrough bool
 }
 
@@ -75,9 +74,6 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 
 	r.model = overrides.Model
 	r.explicitModel = overrides.Model != ""
-	if r.model == "" && !overrides.OpaquePassthrough && agent != nil {
-		r.model = agent.Model
-	}
 
 	r.provider = overrides.Provider
 	r.explicitProvider = overrides.Provider != ""
@@ -325,9 +321,9 @@ func (r ResolvedConfig) WallClock() time.Duration {
 	return r.wallClock
 }
 
-// ProviderRequestTimeout returns the per-request wall-clock cap override
-// set via --request-timeout. Zero means "use the model-class or endpoint default"
-// (resolved by agent.ResolveProviderRequestTimeout at dispatch time).
+// ProviderRequestTimeout returns the explicit per-request wall-clock cap set
+// by the caller. Zero remains unset so provider timeout policy belongs to
+// Fizeau and the selected provider.
 func (r ResolvedConfig) ProviderRequestTimeout() time.Duration {
 	r.requireSealed()
 	return r.providerRequestTimeout

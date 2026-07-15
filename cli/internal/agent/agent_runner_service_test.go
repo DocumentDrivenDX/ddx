@@ -160,7 +160,7 @@ func TestFizeauPassthrough_RawModelUnchanged(t *testing.T) {
 
 			rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 				Model: model,
-			}).Resolve(config.CLIOverrides{Harness: "agent"})
+			}).Resolve(config.CLIOverrides{Harness: "agent", Model: model})
 
 			_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 				Prompt: "test",
@@ -212,7 +212,7 @@ func TestFizeauPassthrough_RecordsActualModelFromRouting(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "qwen36",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "qwen36"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "test",
@@ -252,7 +252,7 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "claude-sonnet-4-6"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "hello",
@@ -289,7 +289,7 @@ func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "claude-sonnet-4-6"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "hello",

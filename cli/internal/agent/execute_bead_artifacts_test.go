@@ -235,7 +235,7 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 		},
 	}
 
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: "test-model"}).Resolve(config.CLIOverrides{Harness: "test-harness"})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: "test-model"}).Resolve(config.CLIOverrides{Harness: "test-harness", Model: "test-model"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: &artifactTestAgentRunner{},
 	}, gitOps)

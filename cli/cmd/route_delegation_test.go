@@ -34,7 +34,15 @@ func newRouteDelegationProject(t *testing.T, beadID string) string {
 	dir := minimalProjectDir(t)
 	configBytes, err := os.ReadFile(filepath.Join(ddxroot.JoinProject(dir), "config.yaml"))
 	require.NoError(t, err)
-	configBytes = append(configBytes, []byte("agent:\n  model: configured-project-model-must-not-leak\n")...)
+	configBytes = append(configBytes, []byte(`agent:
+  model: configured-project-model-must-not-leak
+  reasoning_levels:
+    codex: [configured-project-reasoning-must-not-leak]
+  endpoints:
+    - type: openai
+      base_url: http://127.0.0.1:1/v1
+      api_key: configured-project-credential-must-not-load
+`)...)
 	stateRoot := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(stateRoot, 0o755))
 	configPath := filepath.Join(stateRoot, "config.yaml")
@@ -140,56 +148,55 @@ func TestInferredMinPowerConflictWithMaxPowerErrors(t *testing.T) {
 	assert.Empty(t, capturedImplementationRequests(stub), "conflicting bounds must fail before Fizeau dispatch")
 }
 
-func TestUnpinnedEntryPointsIgnoreConfiguredProjectModel(t *testing.T) {
+func TestRunProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = routeDelegationExecute
+	dir := newRouteDelegationProject(t, "")
+	out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(),
+		"run", "--min-power", "7", "--text", "hello", "--json", "--timeout", "5s")
+	require.NoError(t, err, "output=%q", out)
+	require.Len(t, stub.requests, 1)
+	assertRouteNeutralRequest(t, stub.requests[0])
+	assert.Contains(t, out, "fizeau-chosen-harness", "returned route is retained as evidence")
+	assert.Empty(t, capturedRouteRequests(stub))
+	assert.Zero(t, modelQueriesBeforeExecute(stub))
+}
 
-	t.Run("run", func(t *testing.T) {
-		stub := installExecuteCapturingStub(t)
-		stub.executeFn = routeDelegationExecute
-		dir := newRouteDelegationProject(t, "")
-		out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(),
-			"run", "--min-power", "7", "--text", "hello", "--json", "--timeout", "5s")
-		require.NoError(t, err, "output=%q", out)
-		require.Len(t, stub.requests, 1)
-		assertRouteNeutralRequest(t, stub.requests[0])
-		assert.Contains(t, out, "fizeau-chosen-harness", "returned route is retained as evidence")
-		assert.Empty(t, capturedRouteRequests(stub))
-		assert.Zero(t, modelQueriesBeforeExecute(stub))
-	})
+func TestTryProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = routeDelegationExecute
+	dir := newRouteDelegationProject(t, "ddx-try-route-delegation")
+	factory := NewCommandFactory(dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	out, err := executeCommand(factory.NewRootCommand(),
+		"try", "ddx-try-route-delegation", "--min-power", "7",
+		"--no-review", "--no-review-i-know-what-im-doing")
+	require.Error(t, err, "try currently reports no-changes as a non-zero command result; output=%q", out)
+	requests := capturedImplementationRequests(stub)
+	require.NotEmpty(t, requests, "try must reach Fizeau Execute; output=%q", out)
+	assertRouteNeutralRequest(t, requests[0])
+	assert.Empty(t, capturedRouteRequests(stub))
+	assert.Zero(t, modelQueriesBeforeExecute(stub))
+	assertReturnedRouteEvidence(t, dir, "ddx-try-route-delegation")
+}
 
-	t.Run("try", func(t *testing.T) {
-		stub := installExecuteCapturingStub(t)
-		stub.executeFn = routeDelegationExecute
-		dir := newRouteDelegationProject(t, "ddx-try-route-delegation")
-		factory := NewCommandFactory(dir)
-		factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
-		out, err := executeCommand(factory.NewRootCommand(),
-			"try", "ddx-try-route-delegation", "--min-power", "7",
-			"--no-review", "--no-review-i-know-what-im-doing")
-		require.Error(t, err, "try currently reports no-changes as a non-zero command result; output=%q", out)
-		requests := capturedImplementationRequests(stub)
-		require.NotEmpty(t, requests, "try must reach Fizeau Execute; output=%q", out)
-		assertRouteNeutralRequest(t, requests[0])
-		assert.Empty(t, capturedRouteRequests(stub))
-		assert.Zero(t, modelQueriesBeforeExecute(stub))
-		assertReturnedRouteEvidence(t, dir, "ddx-try-route-delegation")
-	})
-
-	t.Run("work", func(t *testing.T) {
-		stub := installExecuteCapturingStub(t)
-		stub.executeFn = routeDelegationExecute
-		dir := newRouteDelegationProject(t, "ddx-work-neutral-delegation")
-		out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(),
-			"work", "--once", "--project", dir, "--min-power", "7",
-			"--no-review", "--no-review-i-know-what-im-doing")
-		require.NoError(t, err, "output=%q", out)
-		requests := capturedImplementationRequests(stub)
-		require.NotEmpty(t, requests, "work must reach Fizeau Execute; output=%q", out)
-		assertRouteNeutralRequest(t, requests[0])
-		assert.Empty(t, capturedRouteRequests(stub))
-		assert.Zero(t, modelQueriesBeforeExecute(stub))
-		assertReturnedRouteEvidence(t, dir, "ddx-work-neutral-delegation")
-	})
+func TestWorkProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = routeDelegationExecute
+	dir := newRouteDelegationProject(t, "ddx-work-neutral-delegation")
+	out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(),
+		"work", "--once", "--project", dir, "--min-power", "7",
+		"--no-review", "--no-review-i-know-what-im-doing")
+	require.NoError(t, err, "output=%q", out)
+	requests := capturedImplementationRequests(stub)
+	require.NotEmpty(t, requests, "work must reach Fizeau Execute; output=%q", out)
+	assertRouteNeutralRequest(t, requests[0])
+	assert.Empty(t, capturedRouteRequests(stub))
+	assert.Zero(t, modelQueriesBeforeExecute(stub))
+	assertReturnedRouteEvidence(t, dir, "ddx-work-neutral-delegation")
 }
 
 // TestExplicitOperatorRoutePassthroughPreservedByteForByte is the
@@ -339,4 +346,6 @@ func assertRouteNeutralRequest(t *testing.T, req agentlib.ServiceExecuteRequest)
 	assert.Empty(t, req.Provider)
 	assert.Empty(t, req.Model)
 	assert.Empty(t, req.Policy)
+	assert.Empty(t, req.Reasoning)
+	assert.Zero(t, req.ProviderTimeout)
 }
