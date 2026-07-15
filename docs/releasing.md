@@ -45,6 +45,18 @@ Review the commits since the prior release, the proposed version, and any
 operator-facing migration notes. Record a pre-tag Go/No-Go decision before
 creating the tag.
 
+The prior changelog baseline is the newest non-draft GitHub Release whose tag
+is an ancestor of the candidate commit. It is not necessarily the nearest git
+tag: an unpublished prerelease tag does not establish a user-visible release
+boundary. The workflow peels that tag during `prepare` and carries the resulting
+commit SHA into the release job; the changelog never resolves the mutable tag
+name a second time. Confirm the expected baseline with GitHub Release metadata
+before tagging:
+
+```bash
+gh release list --limit 100 --json tagName,isDraft,publishedAt
+```
+
 ## 2. Create and push one annotated tag
 
 Create the annotated tag at the already-verified commit, inspect its peeled
@@ -206,6 +218,16 @@ rechecked later.
 ## Failure and recovery
 
 - Before pushing a tag, fix the candidate and rerun all gates.
+- The prepare job fails closed when GitHub Release metadata is unavailable or
+  no previous published GitHub Release tag is reachable from the release
+  commit. Restore API access, fetch the missing tags, or repair the GitHub
+  Release metadata, then rerun the same immutable tag. Do not substitute the
+  nearest local tag or hand-set a shorter changelog range: unpublished tags
+  must remain inside the next published release's notes.
+- A repository with no prior published release has no automatic changelog
+  baseline. This workflow intentionally rejects that first-release case. Define
+  and review a one-time full-history bootstrap in the workflow before creating
+  the first release; do not inject an ad hoc tag or commit into a running job.
 - If the workflow fails after the immutable tag is pushed but before a usable
   release exists, fix the workflow on `main` and manually dispatch the same tag.
   Record both run URLs; do not claim that rerun archives are byte-identical.
