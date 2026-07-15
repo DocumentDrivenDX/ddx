@@ -107,34 +107,11 @@ func dirtyWorktreePaths(dir string) []string {
 	return paths
 }
 
-// EvidenceLandExcludePathspecs returns git pathspec-exclusion fragments
-// applied when landEvidence / VerifyCleanWorktree stage the evidence
-// directory. Only excludes the multi-thousand-line embedded session log
-// (the single file that actually explodes past provider context
-// limits). prompt.md, usage.json, manifest.json, and result.json remain
-// tracked — they are small and serve the audit-trail contract. The
-// gitignore written by `ddx init` already treats .ddx/executions/*/
-// embedded as ignored; this pathspec is defence-in-depth for force-add
-// paths.
-//
-// Regression anchor: ddx-39e27896 — session logs landed as tracked
-// evidence caused retry prompts to balloon past 2M+ tokens and crash
-// every provider with n_keep > n_ctx.
-func EvidenceLandExcludePathspecs() []string {
-	return []string{
-		":(exclude,glob).ddx/executions/*/embedded/**",
-	}
-}
-
 // EvidenceReviewExcludePathspecs returns git pathspec-exclusion fragments
-// applied when review-prompt synthesis runs `git show <rev>` over the
-// evidence commit. Broader than EvidenceLandExcludePathspecs: excludes
-// prompt.md and usage.json too, because even though they're tracked for
-// audit, they're execution-artifact noise from the reviewer's
-// perspective — the reviewer wants to see the implementation diff, not
-// the prior attempt's prompt or token counters. This also protects
-// against old commits (pre-fix) that committed the session log
-// directly.
+// applied when review-prompt synthesis reads legacy revisions from before
+// execution evidence became local-only. Those histories can contain embedded
+// logs, prompt.md, and usage.json; filter that historical noise so it cannot
+// inflate current reviewer prompts. New execution paths never commit evidence.
 //
 // Regression anchor: ddx-39e27896.
 func EvidenceReviewExcludePathspecs() []string {
@@ -165,6 +142,12 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	if err := internalgit.Command(context.Background(), dir, addArgs...).Run(); err != nil {
 		return false, fmt.Errorf("staging changes: %w", err)
 	}
+	// Execution evidence is per-machine state. The pathspecs avoid staging it
+	// under normal ignore configurations; this reset is the fail-safe for stale
+	// or selectively-unignored project rules and preserves every file on disk.
+	if err := internalgit.Command(context.Background(), dir, "reset", "-q", "HEAD", "--", ".ddx/executions").Run(); err != nil {
+		return false, fmt.Errorf("excluding local execution evidence from synthesized commit: %w", err)
+	}
 	statusOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").Output()
 	if len(bytes.TrimSpace(statusOut)) == 0 {
 		return false, nil
@@ -185,34 +168,8 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 		ignoreProbe string
 	}{
 		{
-			pathspec:    ":(exclude).ddx/executions/*/embedded/**",
-			ignoreProbe: ".ddx/executions/.ddx-check-ignore/embedded",
-		},
-		{
-			pathspec:    ":(exclude).ddx/executions/*/no_changes_rationale.txt",
-			ignoreProbe: ".ddx/executions/.ddx-check-ignore/no_changes_rationale.txt",
-		},
-		// Exclude DDx-managed evidence bundle files written to the attempt
-		// worktree by execute_bead.go itself. These are committed separately by
-		// commitEvidenceBundleInWorktree and must not appear in the agent's code
-		// commit (which SynthesizeCommit creates). Prior to this worktree-evidence
-		// design, these files lived in projectRoot and were invisible to
-		// SynthesizeCommit (which runs in wtPath).
-		{
-			pathspec:    ":(exclude).ddx/executions/*/prompt.md",
-			ignoreProbe: ".ddx/executions/.ddx-check-ignore/prompt.md",
-		},
-		{
-			pathspec:    ":(exclude).ddx/executions/*/manifest.json",
-			ignoreProbe: ".ddx/executions/.ddx-check-ignore/manifest.json",
-		},
-		{
-			pathspec:    ":(exclude).ddx/executions/*/result.json",
-			ignoreProbe: ".ddx/executions/.ddx-check-ignore/result.json",
-		},
-		{
-			pathspec:    ":(exclude).ddx/executions/*/usage.json",
-			ignoreProbe: ".ddx/executions/.ddx-check-ignore/usage.json",
+			pathspec:    ":(exclude,glob).ddx/executions/**",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore",
 		},
 		{
 			pathspec:    ":(exclude).claude/skills",

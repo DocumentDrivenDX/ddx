@@ -64,18 +64,20 @@ The first release does not require multi-project discovery, cross-project
 scheduling, or multi-host coordination. A worker instance binds to exactly one
 project context for the duration of a loop.
 
-Each attempt also has a tracked execution-evidence bundle under
+Each attempt also has a machine-local, untracked execution-evidence bundle under
 `.ddx/executions/<attempt-id>/`. The supervisor may read and surface those
 artifacts, but it does not reinterpret them as generic `exec-runs`
-attachments; the bundle is the canonical tracked evidence for one
-`execute-bead` attempt.
+attachments; the bundle is the canonical detailed local evidence for one
+`execute-bead` attempt. ADR-026 governs its retention and optional external
+mirroring.
 
 The bundle contents and write order are owned by `execute-bead` and
 specified in FEAT-006 §"Execute-Bead Evidence Bundle". At minimum, the
 bundle contains `prompt.md`, `manifest.json`, and `result.json`, and is
-committed alongside the iteration (landed or preserved). The supervisor
-must not treat the absence of any of those files as a normal post-run
-state.
+retained outside Git whether the implementation iteration lands or is
+preserved. For a newly finalized, unexpired attempt, the supervisor must not
+treat the absence of any of those files as a normal post-run state; ADR-026
+retention may remove an expired bundle later.
 
 The prompt delivered to the agent for each attempt is compiled by the
 **execute-bead prompt rationalizer** from bead fields and resolved governing

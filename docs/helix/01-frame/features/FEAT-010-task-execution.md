@@ -116,7 +116,7 @@ Suggesting the command or explaining the conditions is the correct action.
 
 **Current situation:** DDx has accreted two independent run-storage shapes
 — `.ddx/exec-runs/` for generic execution evidence and
-`.ddx/executions/<attempt-id>/` for tracked bead-attempt bundles. Loop behavior,
+`.ddx/executions/<attempt-id>/` for local-only bead-attempt bundles. Loop behavior,
 worktree lifecycle, and bead resolution are spread across legacy command
 surfaces without a clean layering story. There is no single place to introspect "what runs
 happened, at what layer, with what evidence."

@@ -250,14 +250,13 @@ bead-attempt workflow:
 33. Epic worktrees are long-lived only for the lifetime of an active epic
     worker; once the epic is merged, abandoned, or reset, DDx must remove the
     managed epic worktree and leave no orphaned epic worktree behind
-34. **Tracked execution-evidence bundle.** Each execute-bead attempt writes
-    a tracked bundle at `.ddx/executions/<attempt-id>/` containing at least
+34. **Local execution-evidence bundle.** Each execute-bead attempt writes
+    a machine-local, untracked bundle at `.ddx/executions/<attempt-id>/` containing at least
     `prompt.md`, `manifest.json`, and `result.json` per FEAT-006
-    §"Execute-Bead Evidence Bundle". The bundle is committed as part of the
-    iteration (landed or preserved under the hidden ref in requirement 26).
-    The DDx default `.gitignore` template and git safety posture must not
-    exclude `.ddx/executions/` from tracking; only the ignored runtime
-    scratch paths listed in FEAT-006 may be excluded.
+    §"Execute-Bead Evidence Bundle". Per ADR-026, the bundle never enters an
+    iteration commit or hidden preservation ref. DDx excludes the tree from
+    Git locally, retains it according to the configured local policy, and may
+    copy it to an operator-configured external mirror.
 35. **Canonical commit provenance trailers.** Each iteration commit
     (landed or preserved) carries the canonical Git trailer set defined in
     FEAT-006 §"Canonical Git trailers": `Ddx-Attempt-Id`, `Ddx-Worker-Id`,

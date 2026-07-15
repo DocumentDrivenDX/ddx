@@ -55,6 +55,12 @@ func (b *lockSurfacePrepareBackend) Run(ctx context.Context, req AttemptBackendR
 func (b *lockSurfacePrepareBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
 	return b.inner.PublishResult(ctx, ws, res)
 }
+func (b *lockSurfacePrepareBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.ImportCandidate(ctx, ws, res)
+}
+func (b *lockSurfacePrepareBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.ReleaseCandidateImport(ctx, ws)
+}
 
 func (b *lockSurfacePrepareBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	return b.inner.Cleanup(ctx, ws)
@@ -162,13 +168,8 @@ func (g *lockSurfaceLandingGitOps) CountCommits(dir, base, tip string) int {
 	g.mu.Unlock()
 	return g.real.CountCommits(dir, base, tip)
 }
-
-func (g *lockSurfaceLandingGitOps) StageDir(dir, relPath string) error {
-	return g.real.StageDir(dir, relPath)
-}
-
-func (g *lockSurfaceLandingGitOps) CommitStaged(dir, msg string) (string, error) {
-	return g.real.CommitStaged(dir, msg)
+func (g *lockSurfaceLandingGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return g.real.VerifyCandidateHistory(dir, base, tip)
 }
 
 func (g *lockSurfaceLandingGitOps) DiffNumstat(dir, base, tip string) (string, error) {
@@ -239,13 +240,8 @@ func (g *lockSurfaceCheckoutSyncGitOps) HeadRevAt(dir string) (string, error) {
 func (g *lockSurfaceCheckoutSyncGitOps) CountCommits(dir, base, tip string) int {
 	return g.real.CountCommits(dir, base, tip)
 }
-
-func (g *lockSurfaceCheckoutSyncGitOps) StageDir(dir, relPath string) error {
-	return g.real.StageDir(dir, relPath)
-}
-
-func (g *lockSurfaceCheckoutSyncGitOps) CommitStaged(dir, msg string) (string, error) {
-	return g.real.CommitStaged(dir, msg)
+func (g *lockSurfaceCheckoutSyncGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return g.real.VerifyCandidateHistory(dir, base, tip)
 }
 
 func (g *lockSurfaceCheckoutSyncGitOps) DiffNumstat(dir, base, tip string) (string, error) {
@@ -308,13 +304,8 @@ func (g *sleepLandingGitOps) CountCommits(dir, base, tip string) int {
 	}
 	return g.real.CountCommits(dir, base, tip)
 }
-
-func (g *sleepLandingGitOps) StageDir(dir, relPath string) error {
-	return g.real.StageDir(dir, relPath)
-}
-
-func (g *sleepLandingGitOps) CommitStaged(dir, msg string) (string, error) {
-	return g.real.CommitStaged(dir, msg)
+func (g *sleepLandingGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return g.real.VerifyCandidateHistory(dir, base, tip)
 }
 
 func (g *sleepLandingGitOps) DiffNumstat(dir, base, tip string) (string, error) {

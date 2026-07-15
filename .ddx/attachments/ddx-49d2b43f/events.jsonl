@@ -1,0 +1,1 @@
+{"actor":"","body":"","created_at":"2026-07-15T07:50:35.445040451Z","kind":"reopen","source":"","summary":"lefthook pre-commit -race gate still fails coordinator metric fixtures under full-package execution"}

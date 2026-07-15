@@ -98,9 +98,9 @@ DDx treats context as a budget that must be reset between units of work.
 - **One attempt = one isolated worktree.** `ddx try` (see
   [FEAT-010](../../01-frame/features/FEAT-010-task-execution.md)) runs the
   attempt in a dedicated git worktree off a known base revision. The agent's
-  side effects are bounded to that worktree; the worktree's final state is
-  captured as evidence under `.ddx/executions/` and either merged or
-  preserved.
+  side effects are bounded to that worktree. Candidate code commits are either
+  merged or preserved; the detailed execution bundle is copied under
+  `.ddx/executions/` as local-only evidence and never enters candidate history.
 - **`ddx work` is a loop of bounded executions, not a session.** The
   drain layer iterates `ddx try` over the ready queue. Each iteration is a
   fresh invocation. There is no shared agent state across beads — the loop

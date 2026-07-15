@@ -95,9 +95,9 @@ func (f *CommandFactory) runBeadReview(cmd *cobra.Command, args []string) error 
 	return err
 }
 
-// beadReviewGitShow runs `git show <rev>` with pathspec exclusions for
-// execution-evidence noise so the review prompt's <diff> section stays
-// bounded. See agent.EvidenceReviewExcludePathspecs and ddx-39e27896.
+// beadReviewGitShow runs `git show <rev>` with pathspec exclusions for legacy
+// execution-evidence commits so reviews of old history stay bounded. Current
+// attempts never commit these paths. See ddx-39e27896.
 func beadReviewGitShow(projectRoot, rev string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

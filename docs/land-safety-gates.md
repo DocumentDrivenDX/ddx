@@ -41,7 +41,7 @@ git diff main...<preserve_ref>
 - Syntax sanity gate: preserves obviously broken `.json`, `.go`, and truncated
   `.svelte` results before they touch the target branch.
 - Post-land gate: if `git.post_land_command` is configured, DDx runs it after
-  the local target ref advances and before evidence commits or push. Failure
+  the local target ref advances and before local evidence finalization or push. Failure
   restores the target ref to its pre-land SHA and preserves the attempted
   result.
 

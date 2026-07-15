@@ -178,8 +178,9 @@ Migration rules:
 3. A one-shot rewrite can normalize legacy records into `.ddx/runs/`.
 4. After the documented cutoff, fallback readers are removed.
 
-The migration must preserve git-tracked execute-bead evidence. It must not
-rewrite historical bead attempt commits or `closing_commit_sha` pointers.
+The migration must preserve machine-local execute-bead bundles without adding
+them to Git. It must not rewrite legacy bead attempt commits or
+`closing_commit_sha` pointers.
 
 ## Layer 3.5: Auto-Recovery
 

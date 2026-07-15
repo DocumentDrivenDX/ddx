@@ -1051,12 +1051,22 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
 			}
+			// Verify local evidence before landing. A staged/tracked evidence
+			// violation must stop here, before the coordinator can mutate history.
+			if res != nil && res.AttemptID != "" {
+				if candidateErr := agent.VerifyCandidateHasNoExecutionEvidence(projectRoot, res.BaseRev, res.ResultRev); candidateErr != nil {
+					return agent.ExecuteBeadReport{}, errors.Join(err, fmt.Errorf("validating local execution evidence boundary: %w", candidateErr))
+				}
+				if retentionErr := agent.VerifyCleanWorktree(projectRoot, res.AttemptID); retentionErr != nil {
+					return agent.ExecuteBeadReport{}, errors.Join(err, fmt.Errorf("retaining local execution evidence: %w", retentionErr))
+				}
+			}
 			// Preserve operator-cancel results as-is; the worker has already
 			// classified them (preserved / operator_cancel / preserved_needs_review)
 			// and overriding here would lose the cancel signal.
 			operatorCancel := res != nil && res.Reason == agent.OperatorCancelReason
-			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 && !operatorCancel {
-				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, landSafetyConfigFromConfig(projectRoot), log); landErr != nil && err == nil {
+			if err == nil && !operatorCancel && agent.PrepareCandidateCycleLanding(res) {
+				if landErr := evaluateGatesAndSubmit(projectRoot, res, nil, gitOps, coordinator, landSafetyConfigFromConfig(projectRoot), log); landErr != nil {
 					err = landErr
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev && !operatorCancel {
@@ -1065,11 +1075,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			} else if res != nil && res.ExitCode != 0 && !operatorCancel {
 				res.Outcome = "preserved"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-			}
-			// Safety net: commit any leftover evidence files that Land()
-			// did not pick up (e.g. HEAD was detached, or no land ran).
-			if res != nil && res.AttemptID != "" {
-				_ = agent.VerifyCleanWorktree(projectRoot, res.AttemptID)
 			}
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
@@ -2350,11 +2355,28 @@ type landSafetyConfig struct {
 func evaluateGatesAndSubmit(
 	projectRoot string,
 	res *agent.ExecuteBeadResult,
+	executionErr error,
 	gitOps agent.GitOps,
 	coordinator gateLandSubmitter,
 	safety landSafetyConfig,
 	log io.Writer,
 ) error {
+	// A non-nil execution error is authoritative even when the paired result
+	// still carries a success-looking outcome. In particular, isolated-clone
+	// publication can fail after the candidate and evidence bundle exist; no
+	// such result may reach a preserve ref, gate worktree, or coordinator.
+	if executionErr != nil {
+		return executionErr
+	}
+	if res == nil {
+		return fmt.Errorf("cannot evaluate landing gates for a nil result")
+	}
+	// Defense in depth at the server's final submit boundary: scan every
+	// candidate commit before gates can preserve it or the coordinator can land
+	// it. This catches add-then-delete histories whose final tree is clean.
+	if err := agent.VerifyCandidateHasNoExecutionEvidence(projectRoot, res.BaseRev, res.ResultRev); err != nil {
+		return fmt.Errorf("validating server landing candidate: %w", err)
+	}
 	wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps)
 	if ctxErr != nil {
 		// Soft-fail: log and skip gate eval rather than abort the land.

@@ -257,6 +257,12 @@ func (b *signalPrepareBackend) Run(ctx context.Context, req AttemptBackendRunReq
 func (b *signalPrepareBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
 	return b.inner.PublishResult(ctx, ws, res)
 }
+func (b *signalPrepareBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.ImportCandidate(ctx, ws, res)
+}
+func (b *signalPrepareBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.ReleaseCandidateImport(ctx, ws)
+}
 
 func (b *signalPrepareBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	return b.inner.Cleanup(ctx, ws)
@@ -282,6 +288,12 @@ func (b delayPrepareBackend) Run(ctx context.Context, req AttemptBackendRunReque
 
 func (b delayPrepareBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
 	return b.inner.PublishResult(ctx, ws, res)
+}
+func (b delayPrepareBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.ImportCandidate(ctx, ws, res)
+}
+func (b delayPrepareBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.ReleaseCandidateImport(ctx, ws)
 }
 
 func (b delayPrepareBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
