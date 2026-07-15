@@ -28,7 +28,7 @@ func writeMinimalConfig(t *testing.T, workDir string) {
 	}
 }
 
-func writeEndpointConfig(t *testing.T, workDir string) string {
+func writeProviderStatusConfig(t *testing.T, workDir string) string {
 	t.Helper()
 	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
@@ -38,9 +38,7 @@ func writeEndpointConfig(t *testing.T, workDir string) string {
 bead:
   id_prefix: "pt"
 agent:
-  endpoints:
-    - type: lmstudio
-      base_url: http://127.0.0.1:9/v1
+  timeout_ms: 300000
 `
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
@@ -95,7 +93,7 @@ func TestHarnessStatusesIncludesSubprocessHarnesses(t *testing.T) {
 // resolver now annotates rows with kind=ENDPOINT and lastCheckedAt — AC 1.
 func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 	workDir := t.TempDir()
-	endpointName := writeEndpointConfig(t, workDir)
+	endpointName := writeProviderStatusConfig(t, workDir)
 	ctx := graphqlInventoryContext(t, workDir, &graphqlInventoryStub{providers: []agentlib.ProviderInfo{{
 		Name: endpointName, Type: "lmstudio", Status: "unknown",
 	}}})
@@ -133,7 +131,7 @@ func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 // usage counts populate correctly. AC 2 row "Deliverable 2 usage+quota".
 func TestProviderStatusesUsageFromSessionIndex(t *testing.T) {
 	workDir := t.TempDir()
-	endpointName := writeEndpointConfig(t, workDir)
+	endpointName := writeProviderStatusConfig(t, workDir)
 	ctx := graphqlInventoryContext(t, workDir, &graphqlInventoryStub{providers: []agentlib.ProviderInfo{{
 		Name: endpointName, Type: "lmstudio", Status: "unknown",
 	}}})
@@ -452,7 +450,7 @@ func TestProviderStatusesPerfFixture(t *testing.T) {
 	}
 	workDir := t.TempDir()
 	// Seed 5 endpoints + 2 harnesses; 1,200 session rows distributed across them.
-	writeMultiEndpointConfig(t, workDir)
+	writeProviderStatusPerfConfig(t, workDir)
 	providers := make([]agentlib.ProviderInfo, 0, 5)
 	for _, name := range []string{"ep-a", "ep-b", "ep-c", "ep-d", "ep-e"} {
 		providers = append(providers, agentlib.ProviderInfo{Name: name, Type: "openai", Status: "connected"})
@@ -599,8 +597,9 @@ func TestBuildSparklineSuppressesBelowFloor(t *testing.T) {
 	}
 }
 
-// writeMultiEndpointConfig writes a 5-endpoint config used by the perf test.
-func writeMultiEndpointConfig(t *testing.T, workDir string) {
+// writeProviderStatusPerfConfig writes the generic DDx config used by the
+// Fizeau-inventory performance fixture.
+func writeProviderStatusPerfConfig(t *testing.T, workDir string) {
 	t.Helper()
 	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
@@ -610,9 +609,7 @@ func writeMultiEndpointConfig(t *testing.T, workDir string) {
 bead:
   id_prefix: "pt"
 agent:
-  endpoints:
-    - type: lmstudio
-      base_url: http://127.0.0.1:9/v1
+  timeout_ms: 300000
 `
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)

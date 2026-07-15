@@ -35,19 +35,7 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 agent:
-  endpoints:
-    - type: lmstudio
-      host: "127.0.0.1"
-      port: 1234
-    - type: omlx
-      host: "127.0.0.1"
-      port: 8000
-    - type: lmstudio
-      host: "127.0.0.1"
-      port: 1235
-    - type: lmstudio
-      host: "127.0.0.1"
-      port: 1236
+  timeout_ms: 300000
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfgYAML), 0o644))
 

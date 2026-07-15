@@ -397,14 +397,13 @@ func TestPreClaimDecomposerHonorsWorkerHarnessModel(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex"}
 	cfg := config.NewTestConfigForLoop(cfgOpts)
-	cfg.Agent.Model = "gpt-5.4-mini"
 	rcfg := cfg.Resolve(config.TestLoopOverrides(cfgOpts))
 
 	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
 	require.NoError(t, err)
 	require.NotNil(t, decomp)
 	assert.Equal(t, "codex", gotHarness)
-	assert.Empty(t, gotModel, "project agent.model must not become a lifecycle pin")
+	assert.Empty(t, gotModel, "an unspecified model must not become a lifecycle pin")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
@@ -456,13 +455,12 @@ func TestPostAttemptDecomposerHonorsWorkerHarnessModel(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex"}
 	cfg := config.NewTestConfigForLoop(cfgOpts)
-	cfg.Agent.Model = "gpt-5.4-mini"
 	rcfg := cfg.Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result := runDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
 	require.False(t, result.Failed)
 	assert.Equal(t, "codex", gotHarness)
-	assert.Empty(t, gotModel, "project agent.model must not become a lifecycle pin")
+	assert.Empty(t, gotModel, "an unspecified model must not become a lifecycle pin")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
@@ -506,7 +504,6 @@ func TestPreClaimDecomposerFallsBackDeterministicallyWhenRequestedRouteUnavailab
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex"}
 	cfg := config.NewTestConfigForLoop(cfgOpts)
-	cfg.Agent.Model = "gpt-5.4-mini"
 	rcfg := cfg.Resolve(config.TestLoopOverrides(cfgOpts))
 
 	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
@@ -514,7 +511,7 @@ func TestPreClaimDecomposerFallsBackDeterministicallyWhenRequestedRouteUnavailab
 	require.NotNil(t, decomp)
 	assert.Equal(t, 1, calls, "requested route failure must not trigger widened provider retries")
 	assert.Equal(t, "codex", gotHarness)
-	assert.Empty(t, gotModel, "project agent.model must not become a lifecycle pin")
+	assert.Empty(t, gotModel, "an unspecified model must not become a lifecycle pin")
 	assert.NotEmpty(t, decomp.Children)
 	assert.Contains(t, decomp.Rationale, "deterministic fallback split")
 

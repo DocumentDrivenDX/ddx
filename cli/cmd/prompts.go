@@ -31,7 +31,7 @@ func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error
 		libPath = cfg.Library.Path
 	}
 
-	promptsDir := filepath.Join(workingDir, libPath, "prompts")
+	promptsDir := resolvePromptsDir(workingDir, libPath)
 
 	// Check if prompts directory exists
 	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {
@@ -96,14 +96,13 @@ func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error
 	return err
 }
 
-// runPromptsShow implements the prompts show command
-func runPromptsShow(cmd *cobra.Command, args []string) error {
+// runPromptsShow implements the prompts show command.
+func (f *CommandFactory) runPromptsShow(cmd *cobra.Command, args []string) error {
 	promptName := args[0]
 
-	// Get working directory from command factory context
-	workingDir := "."
-	if factory, ok := cmd.Context().Value("factory").(*CommandFactory); ok {
-		workingDir = factory.WorkingDir
+	workingDir := f.WorkingDir
+	if workingDir == "" {
+		workingDir = "."
 	}
 
 	// Get library path using working directory
@@ -118,10 +117,11 @@ func runPromptsShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Try different paths for the prompt
+	promptsDir := resolvePromptsDir(workingDir, libPath)
 	possiblePaths := []string{
-		filepath.Join(libPath, "prompts", promptName+".md"),
-		filepath.Join(libPath, "prompts", promptName),
-		filepath.Join(libPath, "prompts", promptName, "README.md"),
+		filepath.Join(promptsDir, promptName+".md"),
+		filepath.Join(promptsDir, promptName),
+		filepath.Join(promptsDir, promptName, "README.md"),
 	}
 
 	var promptPath string
@@ -144,4 +144,11 @@ func runPromptsShow(cmd *cobra.Command, args []string) error {
 
 	_, _ = fmt.Fprint(cmd.OutOrStdout(), string(content))
 	return nil
+}
+
+func resolvePromptsDir(workingDir, libPath string) string {
+	if filepath.IsAbs(libPath) {
+		return filepath.Join(libPath, "prompts")
+	}
+	return filepath.Join(workingDir, libPath, "prompts")
 }

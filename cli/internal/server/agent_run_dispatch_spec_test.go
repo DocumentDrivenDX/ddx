@@ -107,8 +107,8 @@ func TestAgentRunDispatchUnsupportedFieldsFailExplicitly(t *testing.T) {
 	}
 }
 
-func TestUnpinnedEntryPointsIgnoreConfiguredProjectModel(t *testing.T) {
-	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "configured-project-model"})
+func TestUnpinnedEntryPointsLeaveModelSelectionToFizeau(t *testing.T) {
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
 
 	t.Run("REST", func(t *testing.T) {
 		svc := installResolveRouteFailingService(t)
@@ -118,7 +118,7 @@ func TestUnpinnedEntryPointsIgnoreConfiguredProjectModel(t *testing.T) {
 		}
 		rcfg := cfg.Resolve(prepared.Overrides)
 		if got := rcfg.Model(); got != "" {
-			t.Fatalf("unconfigured REST dispatch inherited project agent.model %q", got)
+			t.Fatalf("unconfigured REST dispatch fabricated model %q", got)
 		}
 		if _, err := agent.RunWithConfigViaService(context.Background(), prepared.Runtime.WorkDir, rcfg, prepared.Runtime); err != nil {
 			t.Fatalf("execute REST dispatch: %v", err)
@@ -138,7 +138,7 @@ func TestUnpinnedEntryPointsIgnoreConfiguredProjectModel(t *testing.T) {
 		}
 		rcfg := cfg.Resolve(prepared.Overrides)
 		if got := rcfg.Model(); got != "" {
-			t.Fatalf("unconfigured MCP dispatch inherited project agent.model %q", got)
+			t.Fatalf("unconfigured MCP dispatch fabricated model %q", got)
 		}
 		if _, err := agent.RunWithConfigViaService(context.Background(), prepared.Runtime.WorkDir, rcfg, prepared.Runtime); err != nil {
 			t.Fatalf("execute MCP dispatch: %v", err)

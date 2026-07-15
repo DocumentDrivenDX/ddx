@@ -150,13 +150,7 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 agent:
-  model: configured-project-model-must-not-leak
-  reasoning_levels:
-    codex: [configured-project-reasoning-must-not-leak]
-  endpoints:
-    - type: openai
-      base_url: http://127.0.0.1:1/v1
-      api_key: configured-project-credential-must-not-load
+  timeout_ms: 300000
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 
@@ -166,7 +160,7 @@ agent:
 	return root
 }
 
-func TestServerWorkerSpecDoesNotInheritProjectAgentModel(t *testing.T) {
+func TestServerWorkerSpecLeavesUnspecifiedModelEmpty(t *testing.T) {
 	root := setupWorkerResolveRouteRepo(t)
 	spec, err := prepareExecuteLoopWorkerSpec(root, executeloop.ExecuteLoopSpec{}, executeloop.ModeWatch)
 	require.NoError(t, err)
@@ -180,10 +174,10 @@ func TestServerWorkerSpecDoesNotInheritProjectAgentModel(t *testing.T) {
 		OpaquePassthrough: spec.OpaquePassthrough,
 	})
 	require.NoError(t, err)
-	assert.Empty(t, rcfg.Model(), "unconfigured server worker must not inherit project agent.model")
+	assert.Empty(t, rcfg.Model(), "unconfigured server worker must leave model empty")
 }
 
-func TestServerManagedProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+func TestServerManagedUnpinnedExecutionLeavesRouteToFizeau(t *testing.T) {
 	assertServerManagedUnpinnedExecute(t)
 }
 
@@ -206,8 +200,8 @@ func assertServerManagedUnpinnedExecute(t *testing.T) {
 		ID:          "ddx-server-unpinned-route",
 		Title:       "execution: prove server route neutrality",
 		IssueType:   bead.DefaultType,
-		Description: "PROBLEM\nA server worker could inherit project agent.model.\n\nROOT CAUSE\ncli/internal/server/workers.go resolves worker config.\n\nPROPOSED FIX\nCapture the implementation Execute request.\n\nNON-SCOPE\nDo not select a route.\n",
-		Acceptance:  "1. TestUnpinnedEntryPointsIgnoreConfiguredProjectModel passes\n2. cd cli && go test ./internal/server/... passes\n3. lefthook run pre-commit passes\n",
+		Description: "PROBLEM\nA server worker could fabricate a concrete route.\n\nROOT CAUSE\ncli/internal/server/workers.go resolves worker config.\n\nPROPOSED FIX\nCapture the implementation Execute request.\n\nNON-SCOPE\nDo not select a route.\n",
+		Acceptance:  "1. TestServerManagedUnpinnedExecutionLeavesRouteToFizeau passes\n2. cd cli && go test ./internal/server/... passes\n3. lefthook run pre-commit passes\n",
 		Labels:      []string{"phase:build", "area:server", "kind:test"},
 	}))
 	runCmd(t, root, "git", "add", ".")

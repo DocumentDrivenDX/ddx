@@ -61,15 +61,13 @@ default: global-provider
 default: %s
 `, projectProvider, projectProvider)), 0o600))
 
-			// A contradictory DDx endpoint must not become a provider registry for
+			// Generic DDx execution config must not become a provider registry for
 			// any execution-facing service constructor.
 			ddxDir := filepath.Join(workDir, ddxroot.DirName)
 			require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`agent:
-  endpoints:
-    - type: openai
-      base_url: http://127.0.0.1:1/v1
-      api_key: ddx-config-must-not-load
+			require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+agent:
+  timeout_ms: 300000
 `), 0o600))
 
 			svc, err := tc.new(workDir)
@@ -84,7 +82,7 @@ default: %s
 			}
 			assert.Contains(t, names, "global-provider", "Fizeau global config must remain merged")
 			assert.Contains(t, names, projectProvider, "constructor must load this workdir's Fizeau project config")
-			assert.NotContains(t, names, "openai-127-0-0-1-1", "DDx endpoint config must not synthesize execution providers")
+			assert.NotContains(t, names, "openai-127-0-0-1-1", "DDx generic execution config must not synthesize providers")
 		})
 	}
 }

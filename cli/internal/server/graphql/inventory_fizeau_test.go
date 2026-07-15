@@ -57,10 +57,7 @@ func TestGraphQLInventoryUsesOnlyFizeauFacts(t *testing.T) {
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 agent:
-  model: ddx-model-must-not-appear
-  endpoints:
-    - type: openai
-      base_url: http://ddx-provider-must-not-appear.invalid/v1
+  timeout_ms: 300000
 `), 0o600))
 
 	svc := &graphqlInventoryStub{

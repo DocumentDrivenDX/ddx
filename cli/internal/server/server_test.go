@@ -23,7 +23,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
-// TestMain scrubs all GIT_* environment variables before running tests.
+// TestMain isolates global config and scrubs all GIT_* environment variables.
 // Lefthook sets GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_AUTHOR_*,
 // GIT_COMMITTER_*, GIT_CONFIG_PARAMETERS, etc. during pre-commit. If these
 // leak into subprocess git calls made by tests (e.g. `git init` in a
@@ -52,8 +52,12 @@ func isolateServerTestTempRoot() func() {
 	}
 	oldTmp, hadTmp := os.LookupEnv("TMPDIR")
 	oldExecWorktreeRoot, hadExecWorktreeRoot := os.LookupEnv("DDX_EXEC_WT_DIR")
+	oldHome, hadHome := os.LookupEnv("HOME")
+	oldXDGConfigHome, hadXDGConfigHome := os.LookupEnv("XDG_CONFIG_HOME")
 	_ = os.Setenv("TMPDIR", tempRoot)
 	_ = os.Setenv("DDX_EXEC_WT_DIR", filepath.Join(tempRoot, "exec-worktrees"))
+	_ = os.Setenv("HOME", filepath.Join(tempRoot, "home"))
+	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(tempRoot, "config"))
 	return func() {
 		if hadTmp {
 			_ = os.Setenv("TMPDIR", oldTmp)
@@ -64,6 +68,16 @@ func isolateServerTestTempRoot() func() {
 			_ = os.Setenv("DDX_EXEC_WT_DIR", oldExecWorktreeRoot)
 		} else {
 			_ = os.Unsetenv("DDX_EXEC_WT_DIR")
+		}
+		if hadHome {
+			_ = os.Setenv("HOME", oldHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+		if hadXDGConfigHome {
+			_ = os.Setenv("XDG_CONFIG_HOME", oldXDGConfigHome)
+		} else {
+			_ = os.Unsetenv("XDG_CONFIG_HOME")
 		}
 		_ = os.RemoveAll(tempRoot)
 	}

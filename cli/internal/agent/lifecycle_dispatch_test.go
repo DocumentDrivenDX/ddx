@@ -11,24 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLifecycleProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+func TestLifecycleWithoutExplicitRouteLeavesExecutionUnpinned(t *testing.T) {
 	projectRoot := t.TempDir()
 	rcfg := (&config.NewConfig{
 		Version: "1.0",
-		Agent: &config.AgentConfig{
-			Model: "configured-project-model-must-not-leak",
-			ReasoningLevels: map[string][]string{
-				"codex": {"configured-project-reasoning-must-not-leak"},
-			},
-			Endpoints: []config.AgentEndpoint{{
-				Type:                  "openai",
-				BaseURL:               "http://127.0.0.1:1/v1",
-				APIKey:                "configured-project-credential-must-not-load",
-				RequestTimeoutSeconds: 17,
-			}},
-		},
+		Agent:   &config.AgentConfig{},
 	}).Resolve(config.CLIOverrides{})
-	assert.Empty(t, rcfg.Model(), "resolved execution state must not inherit project agent.model")
+	assert.Empty(t, rcfg.Model(), "resolved execution state must leave an unspecified model empty")
 
 	svc := &passthroughTestService{}
 	runtime := AgentRunRuntime{

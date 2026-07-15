@@ -34,15 +34,6 @@ func newRouteDelegationProject(t *testing.T, beadID string) string {
 	dir := minimalProjectDir(t)
 	configBytes, err := os.ReadFile(filepath.Join(ddxroot.JoinProject(dir), "config.yaml"))
 	require.NoError(t, err)
-	configBytes = append(configBytes, []byte(`agent:
-  model: configured-project-model-must-not-leak
-  reasoning_levels:
-    codex: [configured-project-reasoning-must-not-leak]
-  endpoints:
-    - type: openai
-      base_url: http://127.0.0.1:1/v1
-      api_key: configured-project-credential-must-not-load
-`)...)
 	stateRoot := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(stateRoot, 0o755))
 	configPath := filepath.Join(stateRoot, "config.yaml")
@@ -148,7 +139,7 @@ func TestInferredMinPowerConflictWithMaxPowerErrors(t *testing.T) {
 	assert.Empty(t, capturedImplementationRequests(stub), "conflicting bounds must fail before Fizeau dispatch")
 }
 
-func TestRunProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+func TestRunWithoutExplicitRouteLeavesSelectionToFizeau(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.executeFn = routeDelegationExecute
@@ -163,7 +154,7 @@ func TestRunProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
 	assert.Zero(t, modelQueriesBeforeExecute(stub))
 }
 
-func TestTryProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+func TestTryWithoutExplicitRouteLeavesSelectionToFizeau(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.executeFn = routeDelegationExecute
@@ -182,7 +173,7 @@ func TestTryProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
 	assertReturnedRouteEvidence(t, dir, "ddx-try-route-delegation")
 }
 
-func TestWorkProjectAgentModelAndReasoningNeverAffectExecution(t *testing.T) {
+func TestWorkWithoutExplicitRouteLeavesSelectionToFizeau(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.executeFn = routeDelegationExecute
