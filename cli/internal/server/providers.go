@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -21,17 +20,18 @@ import (
 // ProviderSummary is the list-response item for GET /api/providers.
 // -1 sentinels on numeric fields mean unknown (FEAT-014 zero-fabrication).
 type ProviderSummary struct {
-	Harness            string   `json:"harness"`
-	DisplayName        string   `json:"display_name"`
-	Status             string   `json:"status"`         // available | unavailable | unknown
-	AuthState          string   `json:"auth_state"`     // authenticated | unauthenticated | unknown
-	QuotaHeadroom      string   `json:"quota_headroom"` // ok | blocked | unknown
-	SignalSources      []string `json:"signal_sources"`
-	FreshnessTS        string   `json:"freshness_ts,omitempty"`
-	LastCheckedTS      string   `json:"last_checked_ts,omitempty"`
-	RecentSuccessRate  float64  `json:"recent_success_rate"`   // -1 when sample_count < 3
-	RecentLatencyP50MS int      `json:"recent_latency_p50_ms"` // -1 when unknown
-	CostClass          string   `json:"cost_class"`
+	Harness             string   `json:"harness"`
+	DisplayName         string   `json:"display_name"`
+	Status              string   `json:"status"`         // available | unavailable | unknown
+	AuthState           string   `json:"auth_state"`     // authenticated | unauthenticated | unknown
+	QuotaHeadroom       string   `json:"quota_headroom"` // ok | blocked | unknown
+	AutoRoutingEligible bool     `json:"auto_routing_eligible"`
+	SignalSources       []string `json:"signal_sources"`
+	FreshnessTS         string   `json:"freshness_ts,omitempty"`
+	LastCheckedTS       string   `json:"last_checked_ts,omitempty"`
+	RecentSuccessRate   float64  `json:"recent_success_rate"`   // -1 when sample_count < 3
+	RecentLatencyP50MS  int      `json:"recent_latency_p50_ms"` // -1 when unknown
+	CostClass           string   `json:"cost_class"`
 }
 
 // ProviderModelQuota is per-model quota info within a provider detail.
@@ -86,16 +86,17 @@ type ProviderRoutingSignals struct {
 
 // ProviderDetail is the response shape for GET /api/providers/{harness}.
 type ProviderDetail struct {
-	Harness         string                   `json:"harness"`
-	DisplayName     string                   `json:"display_name"`
-	Status          string                   `json:"status"`
-	AuthState       string                   `json:"auth_state"`
-	Models          []ProviderModelQuota     `json:"models"`
-	HistoricalUsage *ProviderHistoricalUsage `json:"historical_usage,omitempty"`
-	BurnEstimate    *ProviderBurnEstimate    `json:"burn_estimate,omitempty"`
-	RoutingSignals  ProviderRoutingSignals   `json:"routing_signals"`
-	SignalSources   []string                 `json:"signal_sources"`
-	FreshnessTS     string                   `json:"freshness_ts,omitempty"`
+	Harness             string                   `json:"harness"`
+	DisplayName         string                   `json:"display_name"`
+	Status              string                   `json:"status"`
+	AuthState           string                   `json:"auth_state"`
+	AutoRoutingEligible bool                     `json:"auto_routing_eligible"`
+	Models              []ProviderModelQuota     `json:"models"`
+	HistoricalUsage     *ProviderHistoricalUsage `json:"historical_usage,omitempty"`
+	BurnEstimate        *ProviderBurnEstimate    `json:"burn_estimate,omitempty"`
+	RoutingSignals      ProviderRoutingSignals   `json:"routing_signals"`
+	SignalSources       []string                 `json:"signal_sources"`
+	FreshnessTS         string                   `json:"freshness_ts,omitempty"`
 }
 
 // ---- HTTP handlers ----
@@ -107,20 +108,24 @@ type ProviderDetail struct {
 // handleAgentModels and is well below test-suite per-test budgets.
 const providerHandlerTimeout = 10 * time.Second
 
-// handleListProviders serves GET /api/providers — list all configured harnesses
-// with routing availability, auth state, quota/headroom, and signal freshness.
-// Not project-scoped; provider config is host+user global.
+// handleListProviders serves GET /api/providers — list Fizeau harnesses with
+// factual availability, auth state, quota/headroom, and signal freshness.
 func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), providerHandlerTimeout)
 	defer cancel()
-
-	now := time.Now().UTC()
-	infos, err := listHarnessInfos(ctx, s.WorkingDir)
+	svc, err := inventoryServiceForRequest(ctx, s.workingDirForRequest(r))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	report := liveRouteStatusReport(ctx, s.WorkingDir)
+
+	now := time.Now().UTC()
+	infos, err := listHarnessInfos(ctx, svc)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	report := liveRouteStatusReport(ctx, svc)
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
@@ -129,8 +134,8 @@ func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// handleShowProvider serves GET /api/providers/{harness} — full routing signal
-// snapshot per FEAT-014 read-model fields.
+// handleShowProvider serves GET /api/providers/{harness} with the factual
+// Fizeau inventory row plus current routing-signal enrichment.
 func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	harnessName := r.PathValue("harness")
 	if harnessName == "" {
@@ -139,8 +144,13 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), providerHandlerTimeout)
 	defer cancel()
+	svc, err := inventoryServiceForRequest(ctx, s.workingDirForRequest(r))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 
-	infos, err := listHarnessInfos(ctx, s.WorkingDir)
+	infos, err := listHarnessInfos(ctx, svc)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -152,7 +162,7 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	report := liveRouteStatusReport(ctx, s.WorkingDir)
+	report := liveRouteStatusReport(ctx, svc)
 
 	detail := buildProviderDetail(info, report, now)
 	writeJSON(w, http.StatusOK, detail)
@@ -160,22 +170,29 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 
 // ---- MCP tool implementations ----
 
-func (s *Server) mcpProviderList() mcpToolResult {
+func (s *Server) mcpProviderList(requestCtx context.Context) mcpToolResult {
 	// Bound the ctx so the fizeau probe goroutines started inside
 	// listHarnessInfos / liveRouteStatusReport are cancelled when the MCP
 	// call returns. Without this they would inherit context.Background()
 	// and leak for the lifetime of the server process. The timeout also
 	// guards against a slow subprocess inside RouteStatus.
-	ctx, cancel := context.WithTimeout(context.Background(), providerHandlerTimeout)
+	if requestCtx == nil {
+		requestCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(requestCtx, providerHandlerTimeout)
 	defer cancel()
-
-	now := time.Now().UTC()
-	infos, err := listHarnessInfos(ctx, s.WorkingDir)
+	svc, err := inventoryServiceForRequest(ctx, s.WorkingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 
-	report := liveRouteStatusReport(ctx, s.WorkingDir)
+	now := time.Now().UTC()
+	infos, err := listHarnessInfos(ctx, svc)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+
+	report := liveRouteStatusReport(ctx, svc)
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
@@ -188,17 +205,24 @@ func (s *Server) mcpProviderList() mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
-func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
+func (s *Server) mcpProviderShow(requestCtx context.Context, harnessName string) mcpToolResult {
 	if harnessName == "" {
 		return mcpToolResult{Content: []mcpContent{mcpText("harness required")}, IsError: true}
 	}
 	// Bound the ctx so probe goroutines started inside listHarnessInfos /
 	// liveRouteStatusReport terminate when the MCP call returns. The
 	// timeout also guards against a slow subprocess inside RouteStatus.
-	ctx, cancel := context.WithTimeout(context.Background(), providerHandlerTimeout)
+	if requestCtx == nil {
+		requestCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(requestCtx, providerHandlerTimeout)
 	defer cancel()
+	svc, err := inventoryServiceForRequest(ctx, s.WorkingDir)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
 
-	infos, err := listHarnessInfos(ctx, s.WorkingDir)
+	infos, err := listHarnessInfos(ctx, svc)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
@@ -208,7 +232,7 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	}
 
 	now := time.Now().UTC()
-	report := liveRouteStatusReport(ctx, s.WorkingDir)
+	report := liveRouteStatusReport(ctx, svc)
 
 	detail := buildProviderDetail(info, report, now)
 	data, err := json.Marshal(detail)
@@ -234,17 +258,18 @@ func buildProviderSummary(
 	}
 
 	return ProviderSummary{
-		Harness:            info.Name,
-		DisplayName:        harnessDisplayName(info.Name),
-		Status:             providerStatusStrInfo(info),
-		AuthState:          harnessAuthStateStr(info),
-		QuotaHeadroom:      harnessQuotaHeadroomStr(info),
-		SignalSources:      sources,
-		FreshnessTS:        freshnessTS,
-		LastCheckedTS:      now.UTC().Format(time.RFC3339),
-		RecentSuccessRate:  perf.SuccessRate,
-		RecentLatencyP50MS: perf.P50LatencyMS,
-		CostClass:          info.CostClass,
+		Harness:             info.Name,
+		DisplayName:         harnessDisplayName(info.Name),
+		Status:              providerStatusStrInfo(info),
+		AuthState:           harnessAuthStateStr(info),
+		QuotaHeadroom:       harnessQuotaHeadroomStr(info),
+		AutoRoutingEligible: info.AutoRoutingEligible,
+		SignalSources:       sources,
+		FreshnessTS:         freshnessTS,
+		LastCheckedTS:       now.UTC().Format(time.RFC3339),
+		RecentSuccessRate:   perf.SuccessRate,
+		RecentLatencyP50MS:  perf.P50LatencyMS,
+		CostClass:           info.CostClass,
 	}
 }
 
@@ -267,13 +292,14 @@ func buildProviderDetail(
 
 	statusStr := providerStatusStrInfo(info)
 	return ProviderDetail{
-		Harness:         info.Name,
-		DisplayName:     harnessDisplayName(info.Name),
-		Status:          statusStr,
-		AuthState:       harnessAuthStateStr(info),
-		Models:          models,
-		HistoricalUsage: historicalUsage,
-		BurnEstimate:    burnEstimate,
+		Harness:             info.Name,
+		DisplayName:         harnessDisplayName(info.Name),
+		Status:              statusStr,
+		AuthState:           harnessAuthStateStr(info),
+		AutoRoutingEligible: info.AutoRoutingEligible,
+		Models:              models,
+		HistoricalUsage:     historicalUsage,
+		BurnEstimate:        burnEstimate,
 		RoutingSignals: ProviderRoutingSignals{
 			Availability: statusStr,
 			RequestFit:   harnessRequestFitStr(info),
@@ -421,13 +447,9 @@ func computeProviderBurnEstimate(
 // paths that may shell out to subprocesses; see the liveRouteStatusReport
 // doc-comment for the upstream-ctx-ignore caveat. The detached-goroutine
 // pattern bounds the wall-clock cost to ctx's deadline.
-func listHarnessInfos(ctx context.Context, workDir string) ([]agentlib.HarnessInfo, error) {
+func listHarnessInfos(ctx context.Context, svc inventoryService) ([]agentlib.HarnessInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
-	if err != nil {
-		return nil, err
 	}
 	type result struct {
 		infos []agentlib.HarnessInfo
@@ -471,13 +493,9 @@ func findHarnessInfo(infos []agentlib.HarnessInfo, name string) (agentlib.Harnes
 // detached goroutine and a ctx.Done() race is observed. On timeout the
 // handler returns a nil report (treated as "no live data available"); the
 // upstream goroutine completes asynchronously and is GC'd.
-func liveRouteStatusReport(ctx context.Context, workDir string) *agentlib.RouteStatusReport {
+func liveRouteStatusReport(ctx context.Context, svc inventoryService) *agentlib.RouteStatusReport {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
-	if err != nil {
-		return nil
 	}
 	type result struct {
 		report *agentlib.RouteStatusReport

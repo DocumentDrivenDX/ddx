@@ -96,18 +96,21 @@ func TestHarnessStatusesIncludesSubprocessHarnesses(t *testing.T) {
 func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 	workDir := t.TempDir()
 	endpointName := writeEndpointConfig(t, workDir)
+	ctx := graphqlInventoryContext(t, workDir, &graphqlInventoryStub{providers: []agentlib.ProviderInfo{{
+		Name: endpointName, Type: "lmstudio", Status: "unknown",
+	}}})
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
 	start := time.Now()
-	statuses, err := r.ProviderStatuses(context.Background())
+	statuses, err := r.ProviderStatuses(ctx)
 	if err != nil {
 		t.Fatalf("ProviderStatuses: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-		t.Fatalf("ProviderStatuses took %s; expected configured snapshot first-paint under 500ms", elapsed)
+		t.Fatalf("ProviderStatuses took %s; expected Fizeau inventory first-paint under 500ms", elapsed)
 	}
 	if len(statuses) != 1 || statuses[0].Name != endpointName {
-		t.Fatalf("expected configured endpoint %q, got %#v", endpointName, statuses)
+		t.Fatalf("expected Fizeau-listed endpoint %q, got %#v", endpointName, statuses)
 	}
 	// Even when zero endpoints are configured, the resolver must succeed.
 	for _, s := range statuses {
@@ -115,16 +118,13 @@ func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 			t.Errorf("endpoint row %q: got kind %q want ENDPOINT", s.Name, s.Kind)
 		}
 		if s.Reachable {
-			t.Errorf("endpoint row %q: configured snapshot must not fabricate reachability", s.Name)
+			t.Errorf("endpoint row %q: listing must not fabricate reachability", s.Name)
 		}
 		if s.Detail == "" {
 			t.Errorf("endpoint row %q: missing detail", s.Name)
 		}
 		if s.LastCheckedAt == nil || *s.LastCheckedAt == "" {
 			t.Errorf("endpoint row %q: missing lastCheckedAt", s.Name)
-		}
-		if s.DefaultForProfile == nil {
-			t.Errorf("endpoint row %q: defaultForProfile must not be nil", s.Name)
 		}
 	}
 }
@@ -134,6 +134,9 @@ func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 func TestProviderStatusesUsageFromSessionIndex(t *testing.T) {
 	workDir := t.TempDir()
 	endpointName := writeEndpointConfig(t, workDir)
+	ctx := graphqlInventoryContext(t, workDir, &graphqlInventoryStub{providers: []agentlib.ProviderInfo{{
+		Name: endpointName, Type: "lmstudio", Status: "unknown",
+	}}})
 
 	now := time.Now().UTC()
 	// 3 sessions for endpoint provider in last hour, 1 more from 5h ago.
@@ -155,7 +158,7 @@ func TestProviderStatusesUsageFromSessionIndex(t *testing.T) {
 	}, now.Add(-5*time.Hour))
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
-	statuses, err := r.ProviderStatuses(context.Background())
+	statuses, err := r.ProviderStatuses(ctx)
 	if err != nil {
 		t.Fatalf("ProviderStatuses: %v", err)
 	}
@@ -450,6 +453,11 @@ func TestProviderStatusesPerfFixture(t *testing.T) {
 	workDir := t.TempDir()
 	// Seed 5 endpoints + 2 harnesses; 1,200 session rows distributed across them.
 	writeMultiEndpointConfig(t, workDir)
+	providers := make([]agentlib.ProviderInfo, 0, 5)
+	for _, name := range []string{"ep-a", "ep-b", "ep-c", "ep-d", "ep-e"} {
+		providers = append(providers, agentlib.ProviderInfo{Name: name, Type: "openai", Status: "connected"})
+	}
+	ctx := graphqlInventoryContext(t, workDir, &graphqlInventoryStub{providers: providers})
 	now := time.Now().UTC()
 	names := []string{"ep-a", "ep-b", "ep-c", "ep-d", "ep-e", "claude", "codex"}
 	kinds := []string{"provider", "provider", "provider", "provider", "provider", "harness", "harness"}
@@ -471,8 +479,8 @@ func TestProviderStatusesPerfFixture(t *testing.T) {
 	}
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
-	// Warm the cache.
-	if _, err := r.ProviderStatuses(context.Background()); err != nil {
+	// Warm session-derived caches before measuring the resolver path.
+	if _, err := r.ProviderStatuses(ctx); err != nil {
 		t.Fatalf("ProviderStatuses warmup: %v", err)
 	}
 
@@ -480,7 +488,7 @@ func TestProviderStatusesPerfFixture(t *testing.T) {
 	durations := make([]time.Duration, 0, iterations)
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		if _, err := r.ProviderStatuses(context.Background()); err != nil {
+		if _, err := r.ProviderStatuses(ctx); err != nil {
 			t.Fatalf("ProviderStatuses iter %d: %v", i, err)
 		}
 		durations = append(durations, time.Since(start))

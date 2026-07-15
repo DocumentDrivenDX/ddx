@@ -6,7 +6,18 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	agentlib "github.com/easel/fizeau"
 )
+
+func providerModelsTestContext(t *testing.T, workDir, name string, listModels func(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error)) context.Context {
+	t.Helper()
+	stub := &graphqlInventoryStub{
+		providers:    []agentlib.ProviderInfo{{Name: name, BaseURL: "https://api.example.com"}},
+		listModelsFn: listModels,
+	}
+	return graphqlInventoryContext(t, workDir, stub)
+}
 
 func TestSanitizeBaseURL(t *testing.T) {
 	cases := []struct {
@@ -44,20 +55,13 @@ func TestProviderModelsCacheServesFromCacheWithinTTL(t *testing.T) {
 	})
 
 	var calls int32
-	prev := providerModelsFetcher
-	providerModelsFetcher = func(ctx context.Context, workDir, name string, kind ProviderKind) (*ProviderModelsResult, error) {
+	workDir := t.TempDir()
+	ctx := providerModelsTestContext(t, workDir, "openai", func(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 		atomic.AddInt32(&calls, 1)
-		return &ProviderModelsResult{
-			Name:      name,
-			Kind:      kind,
-			BaseURL:   "https://api.example.com",
-			FetchedAt: time.Now().UTC().Format(time.RFC3339),
-		}, nil
-	}
-	t.Cleanup(func() { providerModelsFetcher = prev })
+		return []agentlib.ModelInfo{}, nil
+	})
 
-	r := &queryResolver{Resolver: &Resolver{WorkingDir: "/tmp/wd"}}
-	ctx := context.Background()
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
 
 	first, err := r.ProviderModels(ctx, "openai", ProviderKindEndpoint)
 	if err != nil {
@@ -85,6 +89,70 @@ func TestProviderModelsCacheServesFromCacheWithinTTL(t *testing.T) {
 	}
 }
 
+// TestProviderModelsCacheRevalidatesCurrentFizeauIdentity proves a model
+// payload cached for one request seam cannot preserve membership or canonical
+// identity across later Fizeau listings for the same project.
+func TestProviderModelsCacheRevalidatesCurrentFizeauIdentity(t *testing.T) {
+	providerModelsCache.Lock()
+	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+	providerModelsCache.inFlight = make(map[string]chan struct{})
+	providerModelsCache.Unlock()
+	t.Cleanup(func() {
+		providerModelsCache.Lock()
+		providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+		providerModelsCache.inFlight = make(map[string]chan struct{})
+		providerModelsCache.Unlock()
+	})
+
+	workDir := t.TempDir()
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	seed := &graphqlInventoryStub{
+		providers: []agentlib.ProviderInfo{{Name: "provider", BaseURL: "https://old.example/v1"}},
+		models:    []agentlib.ModelInfo{{ID: "old-model"}},
+	}
+	seedCtx := graphqlInventoryContext(t, workDir, seed)
+	first, err := r.ProviderModels(seedCtx, "provider", ProviderKindEndpoint)
+	if err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	if first.FromCache || first.Name != "provider" || len(first.Models) != 1 || first.Models[0].ID != "old-model" {
+		t.Fatalf("unexpected seed result: %#v", first)
+	}
+
+	removed := &graphqlInventoryStub{}
+	removedCtx := graphqlInventoryContext(t, workDir, removed)
+	if got, err := r.ProviderModels(removedCtx, "provider", ProviderKindEndpoint); err == nil {
+		t.Fatalf("removed provider returned stale cached row: %#v", got)
+	}
+	if got := removed.modelCalls.Load(); got != 0 {
+		t.Fatalf("removed provider must fail membership before ListModels, got %d model calls", got)
+	}
+
+	// EqualFold still matches this request, but the canonical Fizeau identity
+	// changed. Exact canonical cache keys force a fresh model payload.
+	changed := &graphqlInventoryStub{
+		providers: []agentlib.ProviderInfo{{Name: "PROVIDER", BaseURL: "https://new.example/v1"}},
+		models:    []agentlib.ModelInfo{{ID: "new-model"}},
+	}
+	changedCtx := graphqlInventoryContext(t, workDir, changed)
+	current, err := r.ProviderModels(changedCtx, "provider", ProviderKindEndpoint)
+	if err != nil {
+		t.Fatalf("changed canonical identity: %v", err)
+	}
+	if current.FromCache {
+		t.Fatalf("changed canonical identity returned the prior cached row: %#v", current)
+	}
+	if current.Name != "PROVIDER" || current.BaseURL != "https://new.example/v1" {
+		t.Fatalf("current Fizeau identity not preserved: %#v", current)
+	}
+	if len(current.Models) != 1 || current.Models[0].ID != "new-model" {
+		t.Fatalf("changed identity returned stale models: %#v", current.Models)
+	}
+	if got := changed.lastFilter.Provider; got != "PROVIDER" {
+		t.Fatalf("ListModels filter = %q, want canonical current identity", got)
+	}
+}
+
 // TestProviderModelsCacheExpiresAfterTTL verifies expired entries trigger a
 // fresh live fetch.
 func TestProviderModelsCacheExpiresAfterTTL(t *testing.T) {
@@ -104,15 +172,13 @@ func TestProviderModelsCacheExpiresAfterTTL(t *testing.T) {
 	t.Cleanup(func() { providerModelsCacheTTL = prevTTL })
 
 	var calls int32
-	prev := providerModelsFetcher
-	providerModelsFetcher = func(ctx context.Context, workDir, name string, kind ProviderKind) (*ProviderModelsResult, error) {
+	workDir := t.TempDir()
+	ctx := providerModelsTestContext(t, workDir, "p", func(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 		atomic.AddInt32(&calls, 1)
-		return &ProviderModelsResult{Name: name, Kind: kind, FetchedAt: time.Now().UTC().Format(time.RFC3339Nano)}, nil
-	}
-	t.Cleanup(func() { providerModelsFetcher = prev })
+		return []agentlib.ModelInfo{}, nil
+	})
 
-	r := &queryResolver{Resolver: &Resolver{WorkingDir: "/tmp/wd"}}
-	ctx := context.Background()
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
 
 	if _, err := r.ProviderModels(ctx, "p", ProviderKindEndpoint); err != nil {
 		t.Fatalf("first: %v", err)
@@ -142,16 +208,14 @@ func TestProviderModelsInFlightGuard(t *testing.T) {
 
 	var calls int32
 	release := make(chan struct{})
-	prev := providerModelsFetcher
-	providerModelsFetcher = func(ctx context.Context, workDir, name string, kind ProviderKind) (*ProviderModelsResult, error) {
+	workDir := t.TempDir()
+	ctx := providerModelsTestContext(t, workDir, "p", func(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 		atomic.AddInt32(&calls, 1)
 		<-release
-		return &ProviderModelsResult{Name: name, Kind: kind, FetchedAt: time.Now().UTC().Format(time.RFC3339)}, nil
-	}
-	t.Cleanup(func() { providerModelsFetcher = prev })
+		return []agentlib.ModelInfo{}, nil
+	})
 
-	r := &queryResolver{Resolver: &Resolver{WorkingDir: "/tmp/wd"}}
-	ctx := context.Background()
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
 
 	const N = 8
 	var wg sync.WaitGroup
@@ -188,17 +252,15 @@ func TestRefreshProviderModelsBypassesCache(t *testing.T) {
 	})
 
 	var calls int32
-	prev := providerModelsFetcher
-	providerModelsFetcher = func(ctx context.Context, workDir, name string, kind ProviderKind) (*ProviderModelsResult, error) {
+	workDir := t.TempDir()
+	ctx := providerModelsTestContext(t, workDir, "p", func(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 		atomic.AddInt32(&calls, 1)
-		return &ProviderModelsResult{Name: name, Kind: kind, FetchedAt: time.Now().UTC().Format(time.RFC3339Nano)}, nil
-	}
-	t.Cleanup(func() { providerModelsFetcher = prev })
+		return []agentlib.ModelInfo{}, nil
+	})
 
-	resolver := &Resolver{WorkingDir: "/tmp/wd"}
+	resolver := &Resolver{WorkingDir: workDir}
 	q := &queryResolver{Resolver: resolver}
 	m := &mutationResolver{Resolver: resolver}
-	ctx := context.Background()
 
 	if _, err := q.ProviderModels(ctx, "p", ProviderKindEndpoint); err != nil {
 		t.Fatalf("seed query: %v", err)

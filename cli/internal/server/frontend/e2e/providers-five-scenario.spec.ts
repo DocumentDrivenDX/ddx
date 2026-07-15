@@ -20,9 +20,9 @@ interface MockProvider {
 	detail: string;
 	modelCount: number;
 	isDefault: boolean;
+	autoRoutingEligible: boolean;
 	cooldownUntil: string | null;
 	lastCheckedAt: string;
-	defaultForProfile: string[];
 	recentWorkerCount: number;
 	usage: {
 		tokensUsedLastHour: number;
@@ -46,9 +46,9 @@ const PROVIDERS: MockProvider[] = [
 		detail: 'api key configured',
 		modelCount: 4,
 		isDefault: true,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
-		defaultForProfile: ['default'],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
@@ -65,9 +65,9 @@ const PROVIDERS: MockProvider[] = [
 		detail: 'api key configured',
 		modelCount: 3,
 		isDefault: false,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
@@ -84,9 +84,9 @@ const PROVIDERS: MockProvider[] = [
 		detail: 'connected',
 		modelCount: 200,
 		isDefault: false,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
@@ -103,9 +103,9 @@ const PROVIDERS: MockProvider[] = [
 		detail: 'connected',
 		modelCount: 3,
 		isDefault: false,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
@@ -122,9 +122,9 @@ const PROVIDERS: MockProvider[] = [
 		detail: 'connected',
 		modelCount: 2,
 		isDefault: false,
+		autoRoutingEligible: false,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
@@ -132,39 +132,36 @@ const PROVIDERS: MockProvider[] = [
 	}
 ];
 
-const MODELS_BY_KEY: Record<string, { id: string; contextLength: number | null; available: boolean }[]> = {
+const MODELS_BY_KEY: Record<
+	string,
+	{ id: string; contextLength: number | null; available: boolean; autoRoutable: boolean }[]
+> = {
 	'HARNESS|claude': [
-		{ id: 'claude-sonnet-4-6', contextLength: 200000, available: true },
-		{ id: 'claude-opus-4-7', contextLength: 200000, available: true },
-		{ id: 'claude-haiku-4-5', contextLength: 200000, available: true },
-		{ id: 'claude-haiku-3-5', contextLength: 200000, available: true }
+		{ id: 'claude-sonnet-4-6', contextLength: 200000, available: true, autoRoutable: true },
+		{ id: 'claude-opus-4-7', contextLength: 200000, available: true, autoRoutable: true },
+		{ id: 'claude-haiku-4-5', contextLength: 200000, available: true, autoRoutable: true },
+		{ id: 'claude-haiku-3-5', contextLength: 200000, available: true, autoRoutable: true }
 	],
 	'HARNESS|codex': [
-		{ id: 'gpt-5', contextLength: 256000, available: true },
-		{ id: 'gpt-5-mini', contextLength: 128000, available: true },
-		{ id: 'o3-mini', contextLength: 128000, available: true }
+		{ id: 'gpt-5', contextLength: 256000, available: true, autoRoutable: true },
+		{ id: 'gpt-5-mini', contextLength: 128000, available: true, autoRoutable: true },
+		{ id: 'o3-mini', contextLength: 128000, available: true, autoRoutable: false }
 	],
 	'ENDPOINT|openrouter': Array.from({ length: 200 }, (_, i) => ({
 		id: `openrouter/model-${i + 1}`,
 		contextLength: 32768,
-		available: true
+		available: true,
+		autoRoutable: true
 	})),
 	'ENDPOINT|lmstudio @vidar': [
-		{ id: 'qwen2.5-coder-32b-instruct', contextLength: 32768, available: true },
-		{ id: 'llama-3.1-70b', contextLength: 8192, available: true },
-		{ id: 'mistral-7b', contextLength: 8192, available: true }
+		{ id: 'qwen2.5-coder-32b-instruct', contextLength: 32768, available: true, autoRoutable: true },
+		{ id: 'llama-3.1-70b', contextLength: 8192, available: true, autoRoutable: true },
+		{ id: 'mistral-7b', contextLength: 8192, available: true, autoRoutable: true }
 	],
 	'ENDPOINT|lmstudio @bragi': [
-		{ id: 'qwen2.5-coder-7b', contextLength: 32768, available: true },
-		{ id: 'phi-4', contextLength: 16384, available: true }
+		{ id: 'qwen2.5-coder-7b', contextLength: 32768, available: true, autoRoutable: false },
+		{ id: 'phi-4', contextLength: 16384, available: true, autoRoutable: false }
 	]
-};
-
-const DEFAULT_ROUTE = {
-	modelRef: 'code-large',
-	resolvedProvider: 'claude',
-	resolvedModel: 'claude-sonnet-4-6',
-	strategy: 'first-available'
 };
 
 interface RefreshCounter {
@@ -203,18 +200,8 @@ async function mockGraphQL(
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: {
-						providerStatuses: endpoints,
-						harnessStatuses: harnesses,
-						defaultRouteStatus: DEFAULT_ROUTE
-					}
+					data: { providerStatuses: endpoints, harnessStatuses: harnesses }
 				})
-			});
-		} else if (body.query.includes('DefaultRouteStatus')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { defaultRouteStatus: DEFAULT_ROUTE } })
 			});
 		} else if (body.query.includes('RefreshProviderModels')) {
 			refreshCounter.count += 1;

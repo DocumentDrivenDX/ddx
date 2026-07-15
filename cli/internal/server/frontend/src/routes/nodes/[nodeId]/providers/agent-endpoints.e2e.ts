@@ -14,9 +14,9 @@ const ENDPOINT_ROWS = [
 		detail: 'connected',
 		modelCount: 3,
 		isDefault: true,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
-		defaultForProfile: ['default'],
 		recentWorkerCount: 220,
 		usage: {
 			tokensUsedLastHour: 12000,
@@ -44,9 +44,9 @@ const HARNESS_ROWS = [
 		detail: '/usr/local/bin/claude',
 		modelCount: 0,
 		isDefault: false,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 65,
 		usage: {
 			tokensUsedLastHour: 5000,
@@ -76,9 +76,9 @@ const HARNESS_ROWS = [
 		detail: '/usr/local/bin/codex',
 		modelCount: 0,
 		isDefault: false,
+		autoRoutingEligible: false,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 12,
 		usage: {
 			tokensUsedLastHour: 0,
@@ -218,14 +218,6 @@ async function mockGraphQL(page: Page) {
 						harnessStatuses: HARNESS_ROWS
 					}
 				})
-			});
-			return;
-		}
-		if (q.includes('DefaultRouteStatus')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { defaultRouteStatus: null } })
 			});
 			return;
 		}

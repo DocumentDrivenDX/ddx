@@ -1715,28 +1715,6 @@ type ReworkReport {
 # Providers
 # ============================================
 
-"""Provider represents an agent provider/harness configuration"""
-type Provider implements Node {
-  """Unique provider identifier"""
-  id: ID!
-  """Display name"""
-  name: String!
-  """Provider kind (e.g. "cli", "api")"""
-  kind: String!
-  """Default model for this provider"""
-  defaultModel: String
-  """Available model identifiers"""
-  models: [String!]
-  """Default effort level"""
-  defaultEffort: String
-  """Available effort levels"""
-  effortLevels: [String!]
-  """Default execution timeout in milliseconds"""
-  timeoutMs: Int
-  """Granted permission scopes"""
-  permissions: [String!]
-}
-
 """ProviderKind distinguishes endpoint providers from subprocess harnesses."""
 enum ProviderKind {
   """API-endpoint provider configured via base URL + key (e.g. anthropic, openai-compat)."""
@@ -1770,11 +1748,9 @@ type ProviderQuota {
   resetAt: String
 }
 
-"""ProviderStatus is the live connectivity status of a configured endpoint provider
-or subprocess harness, mirroring the output of `legacy agent providers` and
-`legacy agent list` / `legacy agent doctor`."""
+"""ProviderStatus presents one provider or harness returned by Fizeau inventory."""
 type ProviderStatus {
-  """Provider/harness name from agent config"""
+  """Canonical provider/harness name returned by Fizeau."""
   name: String!
   """Kind: endpoint provider or subprocess harness."""
   kind: ProviderKind!
@@ -1782,7 +1758,7 @@ type ProviderStatus {
   providerType: String!
   """API base URL for endpoints; "(subprocess)" for harnesses."""
   baseURL: String!
-  """Configured model identifier"""
+  """Default model identifier reported by Fizeau."""
   model: String!
   """Live connectivity status message"""
   status: String!
@@ -1792,8 +1768,10 @@ type ProviderStatus {
   detail: String!
   """Number of models discovered via /v1/models (endpoints) or harness model count (harnesses)."""
   modelCount: Int!
-  """True when this is the default provider/harness."""
+  """True when Fizeau marks this provider as the default."""
   isDefault: Boolean!
+  """Whether Fizeau reports this provider/harness as eligible for automatic routing."""
+  autoRoutingEligible: Boolean!
   """RFC3339 timestamp when health cooldown expires, if on cooldown"""
   cooldownUntil: String
   """RFC3339 timestamp of the last probe result (cached or live)."""
@@ -1802,8 +1780,6 @@ type ProviderStatus {
   usage: ProviderUsage
   """Quota ceiling + reset from the harness/provider. Null when unreported."""
   quota: ProviderQuota
-  """Profile names where this row is the default candidate (may be empty)."""
-  defaultForProfile: [String!]!
   """Hourly token totals for the last 24 hours, oldest-first. Empty when fewer
   than 6 non-zero hourly buckets are available; the UI uses that floor to
   decide whether to render the inline sparkline (FEAT-014 AC 2)."""
@@ -1844,8 +1820,10 @@ type ProviderModelEntry {
   id: String!
   """Optional context-window length, when known."""
   contextLength: Int
-  """Whether the model is currently routable (configured and reachable)."""
+  """Whether Fizeau reports the model as currently available."""
   available: Boolean!
+  """Whether Fizeau reports the model as eligible for automatic routing."""
+  autoRoutable: Boolean!
 }
 
 """ProviderModelsResult bundles a cached discovery snapshot for one provider or harness."""
@@ -1862,16 +1840,6 @@ type ProviderModelsResult {
   fetchedAt: String!
   """True when the result was served from cache without a live fetch."""
   fromCache: Boolean!
-}
-
-"""DefaultRouteStatus shows which provider/model the default route resolves to."""
-type DefaultRouteStatus {
-  """Selected provider name, or null if no healthy candidate found"""
-  resolvedProvider: String
-  """Selected model identifier, or null if no healthy candidate found"""
-  resolvedModel: String
-  """Routing strategy (e.g. "first-available")"""
-  strategy: String
 }
 
 """QueueSummary is a compact project queue status for action dispatch."""
@@ -2889,27 +2857,11 @@ type Query {
     since: String
   ): ReworkReport!
 
-  # ==========================================
-  # Provider Queries
-  # ==========================================
-
-  """List all agent providers (maps to GET /api/providers)"""
-  providers: [Provider!]!
-
-  """Fetch a single provider by harness name (maps to GET /api/providers/{harness})"""
-  provider(
-    """Harness/provider name"""
-    name: String!
-  ): Provider
-
-  """List configured API providers with live connectivity status (mirrors `legacy agent providers`)"""
+  """List Fizeau API providers with live connectivity status."""
   providerStatuses: [ProviderStatus!]!
 
-  """List subprocess harnesses with live reachability, kind=HARNESS. Equivalent surface to `legacy agent list` + `legacy agent doctor`."""
+  """List Fizeau subprocess harnesses with live reachability, kind=HARNESS."""
   harnessStatuses: [ProviderStatus!]!
-
-  """Show which provider/model the default model-ref resolves to (mirrors `legacy agent route-status`)"""
-  defaultRouteStatus: DefaultRouteStatus
 
   """Return cached model discovery for one provider or harness. Cached for 60s with a single in-flight fetch per (name, kind). Use refreshProviderModels to force a refresh."""
   providerModels(

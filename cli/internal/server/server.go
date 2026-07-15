@@ -4157,10 +4157,10 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		path, _ := call.Arguments["path"].(string)
 		return s.mcpShowProject(id, path)
 	case "ddx_provider_list":
-		return s.mcpProviderList()
+		return s.mcpProviderList(r.Context())
 	case "ddx_provider_show":
 		harness, _ := call.Arguments["harness"].(string)
-		return s.mcpProviderShow(harness)
+		return s.mcpProviderShow(r.Context(), harness)
 	case "ddx_list_plugins":
 		return s.mcpListPlugins()
 	}
@@ -4232,7 +4232,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_agent_models":
 		providerName, _ := call.Arguments["provider"].(string)
 		showAll, _ := call.Arguments["all"].(bool)
-		return s.mcpAgentModels(workingDir, providerName, showAll)
+		return s.mcpAgentModels(r.Context(), workingDir, providerName, showAll)
 	case "ddx_agent_capabilities":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentCapabilities(workingDir, harness)

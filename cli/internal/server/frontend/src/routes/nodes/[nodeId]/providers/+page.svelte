@@ -62,9 +62,9 @@
 				detail
 				modelCount
 				isDefault
+				autoRoutingEligible
 				cooldownUntil
 				lastCheckedAt
-				defaultForProfile
 				recentWorkerCount
 				usage {
 					tokensUsedLastHour
@@ -91,9 +91,9 @@
 				detail
 				modelCount
 				isDefault
+				autoRoutingEligible
 				cooldownUntil
 				lastCheckedAt
-				defaultForProfile
 				recentWorkerCount
 				usage {
 					tokensUsedLastHour
@@ -124,6 +124,7 @@
 					id
 					contextLength
 					available
+					autoRoutable
 				}
 			}
 		}
@@ -141,18 +142,8 @@
 					id
 					contextLength
 					available
+					autoRoutable
 				}
-			}
-		}
-	`;
-
-	const DEFAULT_ROUTE_QUERY = gql`
-		query DefaultRouteStatus {
-			defaultRouteStatus {
-				modelRef
-				resolvedProvider
-				resolvedModel
-				strategy
 			}
 		}
 	`;
@@ -182,9 +173,9 @@
 		detail: string;
 		modelCount: number;
 		isDefault: boolean;
+		autoRoutingEligible: boolean;
 		cooldownUntil: string | null;
 		lastCheckedAt: string | null;
-		defaultForProfile: string[];
 		recentWorkerCount: number;
 		usage: ProviderUsage | null;
 		quota: ProviderQuota | null;
@@ -195,6 +186,7 @@
 		id: string;
 		contextLength: number | null;
 		available: boolean;
+		autoRoutable: boolean;
 	}
 
 	interface ProviderModelsResult {
@@ -206,18 +198,9 @@
 		models: ProviderModelEntry[];
 	}
 
-	interface DefaultRouteStatus {
-		modelRef: string;
-		resolvedProvider: string | null;
-		resolvedModel: string | null;
-		strategy: string | null;
-	}
-
-	// First-paint state: we render the table from the query result as soon as
-	// it lands. The query itself returns cached probe results — a live refresh
-	// action will enqueue fresh probes in a future iteration.
+	// First-paint state: render the factual Fizeau listings as soon as the query
+	// returns. Polling refreshes those same inventory facts.
 	let rows = $state<ProviderStatus[]>([]);
-	let defaultRoute = $state<DefaultRouteStatus | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let firstPaintAt = $state<number | null>(null);
@@ -291,8 +274,7 @@
 	// Polling interval for live row patching after first paint. Chosen to be
 	// short enough that probe results surface within the 5s AC budget but long
 	// enough to not hammer the server. AC 1: rows patch within 5s of probe
-	// completion — since the resolver returns cached rows updated asynchronously
-	// by refreshProviderStatuses, polling here is sufficient to reflect them.
+	// completion while avoiding excessive inventory requests.
 	const POLL_INTERVAL_MS = 2500;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -306,9 +288,7 @@
 
 	onMount(() => {
 		const client = createClient();
-		// First paint: provider + harness rows. defaultRouteStatus fires in
-		// parallel via a separate query so a slow route-resolver can't delay
-		// the table from rendering. AC 1: table interactive within 500ms.
+		// First paint is listing-only: inventory never predicts a future route.
 		refresh(client)
 			.catch((e) => {
 				error = e instanceof Error ? e.message : String(e);
@@ -316,16 +296,6 @@
 			.finally(() => {
 				loading = false;
 			});
-
-		client
-			.request<{ defaultRouteStatus: DefaultRouteStatus | null }>(DEFAULT_ROUTE_QUERY)
-			.then((res) => {
-				defaultRoute = res.defaultRouteStatus ?? null;
-			})
-			.catch(() => {
-				// Non-fatal: the default-route widget is informational only.
-			});
-
 		pollTimer = setInterval(() => {
 			refresh(client).catch(() => {
 				// Polling errors are transient; keep the last-known rows.
@@ -515,49 +485,6 @@
 	</div>
 
 	{#if section === 'availability'}
-	<!-- Default route widget -->
-	{#if defaultRoute && defaultRoute.modelRef}
-		<div
-			class="border border-border-line bg-bg-surface p-4 dark:border-dark-border-line dark:bg-dark-bg-surface"
-		>
-			<h2 class="mb-2 text-body-sm font-medium text-fg-muted dark:text-dark-fg-muted">
-				Current route for default profile
-			</h2>
-			<div class="flex flex-wrap gap-4 text-body-sm">
-				<span class="text-fg-muted dark:text-dark-fg-muted">
-					Model ref: <span class="font-mono-code text-mono-code font-medium text-fg-ink dark:text-dark-fg-ink"
-						>{defaultRoute.modelRef}</span
-					>
-				</span>
-				{#if defaultRoute.strategy}
-					<span class="text-fg-muted dark:text-dark-fg-muted">
-						Strategy: <span class="font-medium text-fg-ink dark:text-dark-fg-ink"
-							>{defaultRoute.strategy}</span
-						>
-					</span>
-				{/if}
-				{#if defaultRoute.resolvedProvider}
-					<span class="text-fg-muted dark:text-dark-fg-muted">
-						Resolves to:
-						<span class="font-medium text-status-closed">
-							{defaultRoute.resolvedProvider}
-						</span>
-						{#if defaultRoute.resolvedModel}
-							/
-							<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"
-								>{defaultRoute.resolvedModel}</span
-							>
-						{/if}
-					</span>
-				{:else}
-					<span class="font-medium text-status-failed">
-						No healthy candidate available
-					</span>
-				{/if}
-			</div>
-		</div>
-	{/if}
-
 	<!-- Unified table -->
 	{#if loading}
 		<div class="py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted" data-testid="loading">
@@ -610,6 +537,14 @@
 										class="ml-1 inline-flex items-center border border-border-line px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 									>
 										default
+									</span>
+								{/if}
+								{#if row.autoRoutingEligible}
+									<span
+										class="ml-1 inline-flex items-center border border-border-line px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
+										data-testid="endpoint-auto-routing-{row.name}"
+									>
+										auto-routing
 									</span>
 								{/if}
 								{#if row.cooldownUntil}
@@ -765,6 +700,9 @@
 													{#each shown as m (m.id)}
 														<li class="text-fg-ink dark:text-dark-fg-ink">
 															<span class={m.available ? '' : 'text-fg-muted line-through dark:text-dark-fg-muted'}>{m.id}</span>
+															{#if m.autoRoutable}
+																<span class="text-label-caps text-fg-muted dark:text-dark-fg-muted">· auto</span>
+															{/if}
 															{#if m.contextLength}
 																<span class="text-label-caps text-fg-muted dark:text-dark-fg-muted">· {m.contextLength}</span>
 															{/if}
@@ -792,8 +730,8 @@
 					{#if rows.length === 0}
 						<tr>
 							<td colspan="9" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
-								No agent endpoints configured. Add providers to .ddx/config.yaml or install a
-								harness binary.
+								No agent inventory reported by Fizeau. Configure Fizeau or install a harness
+								binary.
 							</td>
 						</tr>
 					{/if}

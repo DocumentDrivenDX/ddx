@@ -32,9 +32,9 @@ const ENDPOINT_FIXTURE = [
 		detail: 'connected',
 		modelCount: 5,
 		isDefault: true,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-29T12:00:00Z',
-		defaultForProfile: ['default'],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
@@ -50,9 +50,9 @@ const ENDPOINT_FIXTURE = [
 		detail: 'connected',
 		modelCount: 3,
 		isDefault: false,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-29T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
@@ -68,9 +68,9 @@ const ENDPOINT_FIXTURE = [
 		detail: 'connected',
 		modelCount: 5,
 		isDefault: false,
+		autoRoutingEligible: true,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-29T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
@@ -86,9 +86,9 @@ const ENDPOINT_FIXTURE = [
 		detail: 'connected',
 		modelCount: 5,
 		isDefault: false,
+		autoRoutingEligible: false,
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-29T12:00:00Z',
-		defaultForProfile: [],
 		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
@@ -206,16 +206,7 @@ async function installGraphqlMocks(
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: {
-						providerStatuses: ENDPOINT_FIXTURE,
-						harnessStatuses: [],
-						defaultRouteStatus: {
-							modelRef: 'code-medium',
-							resolvedProvider: 'lmstudio-a',
-							resolvedModel: 'qwen3.6-35b',
-							strategy: 'first-available'
-						}
-					}
+					data: { providerStatuses: ENDPOINT_FIXTURE, harnessStatuses: [] }
 				})
 			});
 			return;
