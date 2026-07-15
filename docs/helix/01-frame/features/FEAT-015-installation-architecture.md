@@ -253,13 +253,12 @@ Desired behavior:
 - **No Repo Bloat:** plugins live in `.ddx/plugins/` (gitignored or committed per user preference)
 - **Git-Trackable Skills:** `ddx init` copies real files, not symlinks
 - **Git-Trackable Versions:** `.ddx/versions.yaml` committed to git — teammates get version gate on clone
-- **Git-Trackable Execution Evidence:** `.ddx/executions/<attempt-id>/` is
-  the tracked execute-bead attempt bundle defined in FEAT-006 §"Execute-Bead
-  Evidence Bundle". `ddx init` and any DDx-managed `.gitignore` template
-  must leave `.ddx/executions/` trackable so bundles committed by
-  `execute-bead` survive clones. Only the ignored runtime scratch paths
-  listed in FEAT-006 (`.ddx/exec-runs.d/`, `.ddx/agent-logs/`,
-  `.ddx/.execute-bead-wt-*/`) may be excluded from tracking.
+- **Local-Only Execution Evidence:** `.ddx/executions/<attempt-id>/` is the
+  machine-local execute-bead attempt bundle defined in FEAT-006
+  §"Execute-Bead Evidence Bundle". Per ADR-026, `ddx init` and runtime safety
+  keep `.ddx/executions/` untracked; bundles are retention-bounded locally and
+  survive beyond one machine only through an operator-configured external
+  mirror. They are never committed merely to survive clones.
 - **Local Symlinks Only:** symlinks are used only for `ddx plugin install --local`
 - **Offline-First:** bootstrap skills work without network; version gate is local-only
 - **Idempotent:** multiple runs of same command produce same result
@@ -282,7 +281,7 @@ project/
 │   ├── versions.yaml     (system-managed: ddx_version)
 │   ├── plugins.yaml      (project plugin state)
 │   ├── library/
-│   ├── executions/       (tracked execute-bead attempt bundles; see FEAT-006)
+│   ├── executions/       (machine-local execute-bead attempt bundles; see ADR-026)
 │   │   └── <attempt-id>/ (prompt.md, manifest.json, result.json, ...)
 │   └── plugins/
 │       └── helix/        (registry install: real files; local install: symlink)

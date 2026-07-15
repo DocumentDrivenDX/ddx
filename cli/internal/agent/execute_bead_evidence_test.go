@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -12,9 +15,9 @@ import (
 
 // TestExecuteBeadLandsEvidence is the AC (1) regression test: a simulated
 // successful execute-bead attempt against a real temp git repo asserts that
-// (a) after the run returns the working tree is clean, and (b) at least one
-// file under .ddx/executions/<attempt-id>/ is present in a committed state.
-// AC (2): the worker's closing_commit_sha still resolves after the merge.
+// the working tree is clean while the local evidence remains outside durable
+// branch history. AC (2): the worker's closing_commit_sha still resolves after
+// the merge.
 func TestExecuteBeadLandsEvidence(t *testing.T) {
 	r := newLandTestRepo(t)
 
@@ -177,8 +180,8 @@ func TestLandNoEvidenceDir(t *testing.T) {
 	}
 }
 
-// TestVerifyCleanWorktree verifies the safety net: VerifyCleanWorktree
-// commits leftover evidence files that the land flow did not pick up.
+// TestVerifyCleanWorktree verifies the normal safety-net path when the project
+// already ignores execution evidence.
 func TestVerifyCleanWorktree(t *testing.T) {
 	r := newLandTestRepo(t)
 
@@ -211,8 +214,8 @@ func TestVerifyCleanWorktree(t *testing.T) {
 	}
 }
 
-// TestVerifyCleanWorktreeNoOp verifies VerifyCleanWorktree is a no-op
-// when the evidence dir is already committed.
+// TestVerifyCleanWorktreeNoOp verifies VerifyCleanWorktree is a no-op when the
+// evidence directory does not exist.
 func TestVerifyCleanWorktreeNoOp(t *testing.T) {
 	r := newLandTestRepo(t)
 
@@ -220,6 +223,315 @@ func TestVerifyCleanWorktreeNoOp(t *testing.T) {
 	if err := VerifyCleanWorktree(r.dir, attemptID); err != nil {
 		t.Errorf("VerifyCleanWorktree should be no-op when evidence dir doesn't exist: %v", err)
 	}
+}
+
+func TestVerifyCleanWorktree_MissingGitignoreUsesLocalExcludeAndNeverCommitsEvidence(t *testing.T) {
+	r := newLandTestRepo(t)
+	r.runGit("rm", ".gitignore")
+	r.runGit("commit", "-m", "remove project gitignore")
+
+	attemptID := "20260715T120000-localexc"
+	dirRel := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
+	evidenceFile := filepath.Join(r.dir, filepath.FromSlash(dirRel), "result.json")
+	if err := os.MkdirAll(filepath.Dir(evidenceFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wantBytes := []byte(`{"status":"preserved"}`)
+	if err := os.WriteFile(evidenceFile, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	headBefore := r.resolveRef("HEAD")
+
+	if err := VerifyCleanWorktree(r.dir, attemptID); err != nil {
+		t.Fatalf("VerifyCleanWorktree: %v", err)
+	}
+	// A second call must not duplicate the local rule.
+	if err := VerifyCleanWorktree(r.dir, attemptID); err != nil {
+		t.Fatalf("VerifyCleanWorktree second call: %v", err)
+	}
+
+	if got := r.resolveRef("HEAD"); got != headBefore {
+		t.Fatalf("HEAD changed: got %s, want %s", got, headBefore)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("tracked .gitignore must remain absent, stat err=%v", err)
+	}
+	excludeBytes := readGitExclude(t, r)
+	if count := countExactLines(string(excludeBytes), executionEvidenceLocalExclude); count != 1 {
+		t.Fatalf("local exclude rule count = %d, want 1; exclude contents:\n%s", count, excludeBytes)
+	}
+	if got := r.runGit("status", "--porcelain", "--untracked-files=all", "--", dirRel); got != "" {
+		t.Fatalf("evidence remains visible in status:\n%s", got)
+	}
+	if got := r.runGit("ls-files", "--", dirRel); got != "" {
+		t.Fatalf("evidence was added to the index: %s", got)
+	}
+	if got := r.runGit("log", "--format=%H", "--all", "--", dirRel); got != "" {
+		t.Fatalf("evidence appeared in history: %s", got)
+	}
+	gotBytes, err := os.ReadFile(evidenceFile)
+	if err != nil {
+		t.Fatalf("reading retained evidence: %v", err)
+	}
+	if string(gotBytes) != string(wantBytes) {
+		t.Fatalf("evidence bytes changed: got %q, want %q", gotBytes, wantBytes)
+	}
+}
+
+func TestVerifyCleanWorktree_TrackedOrStagedEvidenceFailsWithoutMutation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prepare func(*landTestRepo, string)
+		wantErr string
+	}{
+		{
+			name: "tracked",
+			prepare: func(r *landTestRepo, dirRel string) {
+				r.runGit("add", "-f", "--", dirRel)
+				r.runGit("commit", "-m", "seed forbidden tracked evidence")
+			},
+			wantErr: "tracked",
+		},
+		{
+			name: "staged",
+			prepare: func(r *landTestRepo, dirRel string) {
+				r.runGit("add", "-f", "--", dirRel)
+			},
+			wantErr: "staged",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newLandTestRepo(t)
+			attemptID := "20260715T120100-" + tc.name
+			dirRel := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
+			evidenceFile := filepath.Join(r.dir, filepath.FromSlash(dirRel), "result.json")
+			if err := os.MkdirAll(filepath.Dir(evidenceFile), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			wantBytes := []byte(`{"state":"` + tc.name + `"}`)
+			if err := os.WriteFile(evidenceFile, wantBytes, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			tc.prepare(r, dirRel)
+
+			headBefore := r.resolveRef("HEAD")
+			statusBefore := r.runGit("status", "--porcelain=v1", "--untracked-files=all")
+			indexBefore := r.runGit("diff", "--cached", "--binary")
+			excludeBefore := readGitExclude(t, r)
+
+			err := VerifyCleanWorktree(r.dir, attemptID)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("VerifyCleanWorktree error = %v, want actionable %q error", err, tc.wantErr)
+			}
+			if got := r.resolveRef("HEAD"); got != headBefore {
+				t.Fatalf("HEAD changed: got %s, want %s", got, headBefore)
+			}
+			if got := r.runGit("status", "--porcelain=v1", "--untracked-files=all"); got != statusBefore {
+				t.Fatalf("worktree/index status mutated:\nBEFORE:\n%s\nAFTER:\n%s", statusBefore, got)
+			}
+			if got := r.runGit("diff", "--cached", "--binary"); got != indexBefore {
+				t.Fatalf("staged diff mutated:\nBEFORE:\n%s\nAFTER:\n%s", indexBefore, got)
+			}
+			if got := readGitExclude(t, r); string(got) != string(excludeBefore) {
+				t.Fatalf("info/exclude mutated on invariant failure:\nBEFORE:\n%s\nAFTER:\n%s", excludeBefore, got)
+			}
+			gotBytes, readErr := os.ReadFile(evidenceFile)
+			if readErr != nil {
+				t.Fatalf("reading evidence after failure: %v", readErr)
+			}
+			if string(gotBytes) != string(wantBytes) {
+				t.Fatalf("evidence bytes changed: got %q, want %q", gotBytes, wantBytes)
+			}
+		})
+	}
+}
+
+func TestLandRejectsCandidateContainingExecutionEvidence(t *testing.T) {
+	r := newLandTestRepo(t)
+	r.runGit("rm", ".gitignore")
+	r.runGit("commit", "-m", "remove execution ignore coverage")
+	baseRev := r.resolveRef("HEAD")
+	resultRev := r.commitOnFiles(baseRev, "feat: forbidden evidence candidate", map[string]string{
+		"feature.txt": "feature\n",
+		".ddx/executions/attempt/custom-report.md": "local report\n",
+	})
+
+	_, err := Land(r.dir, LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      baseRev,
+		ResultRev:    resultRev,
+		BeadID:       "ddx-forbidden-evidence",
+		AttemptID:    "20260715T131000-candidate",
+		TargetBranch: "main",
+	}, RealLandingGitOps{})
+	if err == nil || !strings.Contains(err.Error(), "local execution evidence path") {
+		t.Fatalf("Land error = %v, want local evidence invariant rejection", err)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != baseRev {
+		t.Fatalf("main moved despite rejected candidate: got %s, want %s", got, baseRev)
+	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
+}
+
+func TestLandRejectsCandidateWhoseHistoryAddedThenDeletedExecutionEvidence(t *testing.T) {
+	r := newLandTestRepo(t)
+	r.runGit("rm", ".gitignore")
+	r.runGit("commit", "-m", "remove execution ignore coverage")
+	baseRev := r.resolveRef("HEAD")
+	evidencePath := ".ddx/executions/attempt/transient-report.md"
+	addRev := r.commitOnFiles(baseRev, "feat: add transient evidence", map[string]string{
+		"feature.txt": "feature\n",
+		evidencePath:  "local report\n",
+	})
+	resultRev := r.commitDeleteOn(addRev, evidencePath, "chore: delete transient evidence")
+
+	if got := r.runGit("diff", "--name-only", baseRev+".."+resultRev, "--", ExecuteBeadArtifactDir); got != "" {
+		t.Fatalf("test precondition failed: final candidate tree still changes evidence: %s", got)
+	}
+	_, err := Land(r.dir, LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      baseRev,
+		ResultRev:    resultRev,
+		BeadID:       "ddx-transient-evidence",
+		AttemptID:    "20260715T131100-add-delete",
+		TargetBranch: "main",
+	}, RealLandingGitOps{})
+	if err == nil || !strings.Contains(err.Error(), "candidate history commit") {
+		t.Fatalf("Land error = %v, want add-then-delete history rejection", err)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != baseRev {
+		t.Fatalf("main moved despite rejected add-then-delete history: got %s, want %s", got, baseRev)
+	}
+	assertNoExecutionEvidenceOnBranch(t, r, "main")
+}
+
+func TestVerifyCleanWorktree_ConcurrentLocalExcludeInstallIsIdempotent(t *testing.T) {
+	r := newLandTestRepo(t)
+	r.runGit("rm", ".gitignore")
+	r.runGit("commit", "-m", "remove project gitignore")
+
+	const workers = 12
+	attemptIDs := make([]string, workers)
+	for i := range workers {
+		attemptIDs[i] = fmt.Sprintf("20260715T1202%02d-concurrent", i)
+		dir := filepath.Join(r.dir, ExecuteBeadArtifactDir, attemptIDs[i])
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeEvidenceFile(t, dir, "result.json", `{"status":"preserved"}`)
+	}
+
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for _, attemptID := range attemptIDs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- VerifyCleanWorktree(r.dir, attemptID)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent VerifyCleanWorktree: %v", err)
+		}
+	}
+
+	excludeBytes := readGitExclude(t, r)
+	if count := countExactLines(string(excludeBytes), executionEvidenceLocalExclude); count != 1 {
+		t.Fatalf("concurrent local exclude rule count = %d, want 1; contents:\n%s", count, excludeBytes)
+	}
+	if got := r.runGit("status", "--porcelain", "--untracked-files=all", "--", ExecuteBeadArtifactDir); got != "" {
+		t.Fatalf("concurrent evidence paths remain visible in status:\n%s", got)
+	}
+}
+
+func TestPreHarnessEvidenceExcludeResolvesRepositoryFromSubdirectory(t *testing.T) {
+	r := newLandTestRepo(t)
+	subdir := filepath.Join(r.dir, "nested", "workspace")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureExecutionEvidenceLocalExcludeForWorkspace(subdir); err != nil {
+		t.Fatalf("installing local exclude from repository subdirectory: %v", err)
+	}
+	if count := countExactLines(string(readGitExclude(t, r)), executionEvidenceLocalExclude); count != 1 {
+		t.Fatalf("repository-local exclude count = %d, want 1", count)
+	}
+}
+
+// TestEvidenceRetentionErrorsAreNeverDiscarded is a source-level regression
+// guard over the three production execution entry points. Runtime injection at
+// this layer would duplicate each command/server fixture; the contract being
+// guarded is structural: every helper call must branch on and return its error.
+func TestEvidenceRetentionErrorsAreNeverDiscarded(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	agentDir := filepath.Dir(thisFile)
+	for _, target := range []struct {
+		path            string
+		landingBoundary string
+	}{
+		{filepath.Join(agentDir, "..", "..", "cmd", "execute_loop_shared.go"), "if prepareCandidateCycleLanding(res)"},
+		{filepath.Join(agentDir, "..", "..", "cmd", "try.go"), "if prepareCandidateCycleLanding(res)"},
+		{filepath.Join(agentDir, "..", "server", "workers.go"), "operatorCancel :="},
+	} {
+		source, err := os.ReadFile(target.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", target.path, err)
+		}
+		text := string(source)
+		if strings.Contains(text, "_ = agent.VerifyCleanWorktree") {
+			t.Errorf("%s discards VerifyCleanWorktree errors", target.path)
+		}
+		verifyAt := strings.Index(text, "if retentionErr := agent.VerifyCleanWorktree")
+		if verifyAt < 0 {
+			t.Errorf("%s does not branch on VerifyCleanWorktree errors", target.path)
+			continue
+		}
+		if !strings.Contains(text, `fmt.Errorf("retaining local execution evidence: %w", retentionErr)`) {
+			t.Errorf("%s does not wrap and surface VerifyCleanWorktree errors", target.path)
+		}
+		if !strings.Contains(text[verifyAt:], "errors.Join(") {
+			t.Errorf("%s does not preserve an existing execution error with the retention failure", target.path)
+		}
+		boundaryAt := strings.Index(text[verifyAt:], target.landingBoundary)
+		if boundaryAt < 0 {
+			t.Errorf("%s does not verify evidence before landing boundary %q", target.path, target.landingBoundary)
+		}
+	}
+}
+
+func readGitExclude(t *testing.T, r *landTestRepo) []byte {
+	t.Helper()
+	excludePath := r.runGit("rev-parse", "--git-path", "info/exclude")
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(r.dir, filepath.FromSlash(excludePath))
+	}
+	content, err := os.ReadFile(excludePath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("read Git info/exclude: %v", err)
+	}
+	return content
+}
+
+func countExactLines(content, want string) int {
+	count := 0
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == want {
+			count++
+		}
+	}
+	return count
 }
 
 func writeEvidenceFile(t *testing.T, dir, name, content string) {

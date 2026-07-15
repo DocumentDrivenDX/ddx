@@ -50,8 +50,8 @@ type ExecuteBeadResult struct {
 	// TargetBranch is the resolved branch that received the landing. It uses the
 	// landed_branch JSON name because callers care about the post-land location.
 	TargetBranch string `json:"landed_branch,omitempty"`
-	// EvidenceRev is the SHA of the trailing evidence commit when it differs from
-	// ImplementationRev. Populated by the evidence committer; empty otherwise.
+	// EvidenceRev is retained for decoding legacy results that referenced a
+	// trailing evidence commit. Current attempts never populate it.
 	EvidenceRev string `json:"evidence_rev,omitempty"`
 
 	// Outcome and Status are initially set by the worker to task-level values
@@ -279,19 +279,27 @@ var RunStateRefreshInterval = 10 * time.Second
 //
 // See SD-024 / TD-024 §Runtime structs and §Stage 3.
 type ExecuteBeadRuntime struct {
-	FromRev         string // base git revision (default: HEAD)
-	PromptFile      string // override prompt file (auto-generated if empty)
-	Output          io.Writer
-	WorkerID        string // from DDX_WORKER_ID env or caller
-	BeadStoreRoot   string // canonical bead store for linked/external tracker roots
-	BeadEvents      BeadEventAppender
-	BeadCancel      BeadCancelStore // optional: enables operator-cancel mid-attempt poll
-	ResourceChecker ExecutionResourceChecker
-	Service         agentlib.FizeauService
-	AgentRunner     AgentRunner
-	Reviewer        CandidateReviewer
-	NoReview        bool
-	AttemptBackend  AttemptBackend
+	FromRev                string // base git revision (default: HEAD)
+	PromptFile             string // override prompt file (auto-generated if empty)
+	Output                 io.Writer
+	WorkerID               string // from DDX_WORKER_ID env or caller
+	BeadStoreRoot          string // canonical bead store for linked/external tracker roots
+	BeadEvents             BeadEventAppender
+	BeadCancel             BeadCancelStore // optional: enables operator-cancel mid-attempt poll
+	ResourceChecker        ExecutionResourceChecker
+	Service                agentlib.FizeauService
+	AgentRunner            AgentRunner
+	Reviewer               CandidateReviewer
+	Repair                 RepairPass
+	RepairMaxCycles        int
+	CandidateRefStore      CandidateRefStore
+	NoReview               bool
+	AttemptBackend         AttemptBackend
+	candidateImport        func(candidate CandidateResult) error
+	candidateImportRelease func(candidate CandidateResult) error
+	// EvidenceFileCopier is an internal test seam for controlled local-evidence
+	// publication. Production leaves it nil and uses the filesystem copier.
+	EvidenceFileCopier func(source, target string, mode os.FileMode) error
 	// RateLimitMaxWait bounds the per-bead total wait spent on rate-limit
 	// retries (ddx-c6e3db02 RateLimitRetryContract / TD-031 §8.4). Zero uses
 	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
@@ -373,6 +381,16 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 		_ = ClearWorktreeActiveCycle(wtPath)
 	}()
 
+	refStore := runtime.CandidateRefStore
+	if refStore == nil {
+		insideGitWorktree, err := gitWorktreeStatus(projectRoot)
+		if err != nil {
+			return fmt.Errorf("checking project root before candidate pinning: %w", err)
+		}
+		if insideGitWorktree {
+			refStore = &GitCandidateRefStore{}
+		}
+	}
 	coord := &AttemptCycleCoordinator{
 		Pass: staticCandidateResultPass{
 			candidate: CandidateResult{
@@ -381,15 +399,27 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 				CycleIndex:   res.CycleIndex,
 			},
 		},
-		RefStore:    &GitCandidateRefStore{},
-		ProjectRoot: projectRoot,
-		BeadEvents:  runtime.BeadEvents,
-		Reviewer:    runtime.Reviewer,
-		NoReview:    runtime.NoReview,
+		RefStore:        refStore,
+		ProjectRoot:     projectRoot,
+		BeadEvents:      runtime.BeadEvents,
+		Reviewer:        runtime.Reviewer,
+		Repair:          runtime.Repair,
+		RepairMaxCycles: runtime.RepairMaxCycles,
+		NoReview:        runtime.NoReview,
+		ValidateCandidate: func(candidate CandidateResult) error {
+			return VerifyCandidateHasNoExecutionEvidence(candidate.WorktreePath, candidate.Report.BaseRev, candidate.Report.ResultRev)
+		},
+		ImportCandidate:        runtime.candidateImport,
+		ReleaseCandidateImport: runtime.candidateImportRelease,
 	}
 	cycleResult, err := coord.Run(ctx, res.BeadID)
-	if err != nil {
-		return err
+	projectCandidateCycleReport(res, cycleResult.Report)
+	return err
+}
+
+func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadReport) {
+	if res == nil {
+		return
 	}
 	// Project every outcome-bearing field from the candidate-cycle report back
 	// onto the execute result. A review malfunction, request-changes, block, or
@@ -397,7 +427,10 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 	// status so the loop's landing/close decision (and the durable decision
 	// audit) reflect the cycle's real disposition instead of a stale success
 	// (ddx-0c7d976c).
-	report := cycleResult.Report
+	res.ResultRev = report.ResultRev
+	if report.ImplementationRev != "" {
+		res.ImplementationRev = report.ImplementationRev
+	}
 	res.Status = report.Status
 	res.Detail = report.Detail
 	if report.Error != "" {
@@ -412,7 +445,6 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 	res.CandidateRef = report.CandidateRef
 	res.CycleIndex = report.CycleIndex
 	res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
-	return nil
 }
 
 // Artifact paths for an execute-bead attempt.
@@ -799,7 +831,7 @@ func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info R
 // local Runner path so the worker subprocess receives the execute-bead Git
 // isolation environment (PATH wrapper + scrubbed Git-local env). Unpinned
 // routes still fall back to the service path.
-func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (*ExecuteBeadResult, error) {
+func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (result *ExecuteBeadResult, retErr error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -974,31 +1006,67 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
 	}
 	var res *ExecuteBeadResult
+	preserveEvidenceSource := false
 	defer func() {
+		if preserveEvidenceSource {
+			return
+		}
 		preserveAttemptWorktree := runtime.PreserveAttemptWorktree && attemptBackend.Name() == AttemptBackendWorktree
 		if preserveAttemptWorktree {
 			return
 		}
-		if res != nil && attemptBackend.Name() == AttemptBackendWorktree {
-			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, res.Outcome, false) {
+		if result != nil && attemptBackend.Name() == AttemptBackendWorktree {
+			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, result.Outcome, false) {
 				return
 			}
 		}
 		_ = attemptBackend.Cleanup(ctx, workspace)
 	}()
 
-	// evidenceCommittedInWt is true when the evidence bundle was successfully
-	// committed inside the attempt worktree (normal success path). The deferred
-	// publish below is a no-op in that case; for all other paths it copies the
-	// bundle from wtPath to projectRoot so VerifyCleanWorktree can commit it.
 	evidenceDir := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
-	var evidenceCommittedInWt bool
+	// Install the shared repository-local exclusion before prompts, bundles, or
+	// harness commands can create and stage execution evidence in this worktree.
+	// This closes script/custom harness paths that run their own broad git add.
+	if err := withMainGitLock(projectRoot, "evidence_local_exclude", func() error {
+		// The project root must be protected before an independent clone backend
+		// publishes into it; the attempt repo needs its own rule so its harness
+		// cannot stage the bundle. Linked worktrees resolve both calls to the
+		// common repository exclude and the second call is an idempotent no-op.
+		if err := ensureExecutionEvidenceLocalExcludeForWorkspace(projectRoot); err != nil {
+			return err
+		}
+		if sameFilesystemPath(projectRoot, wtPath) {
+			return nil
+		}
+		return ensureExecutionEvidenceLocalExcludeForWorkspace(wtPath)
+	}); err != nil {
+		return nil, fmt.Errorf("installing pre-harness execution evidence exclude: %w", err)
+	}
 	defer func() {
 		// Runs BEFORE WorktreeRemove (registered later = first in LIFO order).
-		if evidenceCommittedInWt {
-			publishEvidenceBundleToProjectRoot(projectRoot, wtPath, filepath.ToSlash(filepath.Join(evidenceDir, "embedded")))
-		} else {
-			publishEvidenceBundleToProjectRoot(projectRoot, wtPath, evidenceDir)
+		// Any publication/verification failure keeps the source worktree intact
+		// and joins the returned error, including exits that otherwise return a
+		// nil result after bundle creation.
+		if err := finalizeLocalExecutionEvidenceWithCopier(projectRoot, wtPath, evidenceDir, attemptID, runtime.EvidenceFileCopier); err != nil {
+			preserveEvidenceSource = true
+			if result != nil {
+				if result.Error == "" {
+					result.Error = err.Error()
+				} else {
+					result.Error = result.Error + "; " + err.Error()
+				}
+				result.Reason = "local execution evidence publication failed"
+				result.Outcome = ExecuteBeadOutcomeTaskFailed
+				result.Status = ExecuteBeadStatusExecutionFailed
+				if result.ExitCode == 0 {
+					result.ExitCode = 1
+				}
+				result.FailureMode = ClassifyFailureMode(result.Outcome, result.ExitCode, result.Error)
+				if artifactsErr := writeArtifactJSON(filepath.Join(wtPath, filepath.FromSlash(evidenceDir), "result.json"), result); artifactsErr != nil {
+					retErr = errors.Join(retErr, fmt.Errorf("recording local evidence publication failure: %w", artifactsErr))
+				}
+			}
+			retErr = errors.Join(retErr, err)
 		}
 	}()
 	publishAttemptResult := func(res *ExecuteBeadResult) error {
@@ -1032,16 +1100,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Prepare artifacts (context load, prompt generation).
 	artifacts, beadCtx, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
 	if err != nil {
-		res := &ExecuteBeadResult{
-			BeadID:      beadID,
-			AttemptID:   attemptID,
-			WorkerID:    runtime.WorkerID,
-			BaseRev:     baseRev,
-			ResultRev:   baseRev, // no commits; ResultRev == BaseRev signals no output
-			ExitCode:    1,
-			Error:       err.Error(),
-			Outcome:     ExecuteBeadOutcomeTaskFailed,
-			ProjectRoot: projectRoot,
+		res = &ExecuteBeadResult{
+			BeadID:       beadID,
+			AttemptID:    attemptID,
+			WorkerID:     runtime.WorkerID,
+			BaseRev:      baseRev,
+			ResultRev:    baseRev, // no commits; ResultRev == BaseRev signals no output
+			ExitCode:     1,
+			Error:        err.Error(),
+			Outcome:      ExecuteBeadOutcomeTaskFailed,
+			ProjectRoot:  projectRoot,
+			WorktreePath: wtPath,
 		}
 		// Bundle lives in the attempt worktree after the fix; check there.
 		wtBundleDir := filepath.Join(wtPath, ExecuteBeadArtifactDir, attemptID)
@@ -1259,7 +1328,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	resultRev, revErr := gitOps.HeadRev(wtPath)
 	if revErr != nil {
 		headRevErr := fmt.Sprintf("failed to read worktree HEAD: %v", revErr)
-		res := &ExecuteBeadResult{
+		res = &ExecuteBeadResult{
 			BeadID:                      beadID,
 			AttemptID:                   attemptID,
 			WorkerID:                    runtime.WorkerID,
@@ -1434,6 +1503,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		ManifestFile:                artifacts.ManifestRel,
 		ResultFile:                  artifacts.ResultRel,
 		UsageFile:                   usageFileRel,
+		WorktreePath:                wtPath,
 		StartedAt:                   startedAt,
 		FinishedAt:                  finishedAt,
 	}
@@ -1499,6 +1569,18 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 	}
 
+	// Reject evidence-bearing candidates before any backend publication,
+	// preserve-ref creation, gate, or landing path can make them durable.
+	if err := VerifyCandidateHasNoExecutionEvidence(wtPath, res.BaseRev, res.ResultRev); err != nil {
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.Reason = "local execution evidence entered candidate history"
+		res.Error = err.Error()
+		res.FailureMode = FailureModeAttemptIntegrity
+		populateWorkerStatus(res)
+		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		return res, err
+	}
+
 	// Operator-cancel override (ADR-022 §Cancel SLA). When the mid-attempt
 	// poll detected cancel-requested:true on the bead, force the result into
 	// the preserved_for_review channel with reason "operator_cancel" so the
@@ -1531,8 +1613,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// files uncommitted. Such attempts are demoted to task_failed with a distinct
 	// FailureMode so the orchestrator preserves them for review (rather than
 	// merging) and an operator can tell the DDx validation rejection apart from
-	// an implementation failure. The evidence-bundle commit (below) has not run
-	// yet, so the reflog only carries the agent's own commits.
+	// an implementation failure. Execution evidence stays outside Git, so the
+	// reflog carries only candidate implementation commits.
 	if res.Outcome == ExecuteBeadOutcomeTaskSucceeded && res.ExitCode == 0 && res.ImplementationRev != "" {
 		verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
 			BaseRev:           baseRev,
@@ -1547,10 +1629,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.Error = verdict.Detail
 			res.FailureMode = FailureModeAttemptIntegrity
 		}
-	}
-
-	if err := publishAttemptResult(res); err != nil {
-		return res, fmt.Errorf("publishing attempt result: %w", err)
 	}
 
 	// Record routing evidence on the bead (best-effort; errors are discarded).
@@ -1574,19 +1652,49 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	})
 
 	populateWorkerStatus(res)
-	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, runtime, res); err != nil {
-		return nil, fmt.Errorf("recording candidate cycle state: %w", err)
+	cycleRuntime := runtime
+	cycleRuntime.candidateImport = func(candidate CandidateResult) error {
+		candidateResult := *res
+		projectCandidateCycleReport(&candidateResult, candidate.Report)
+		return attemptBackend.ImportCandidate(ctx, workspace, &candidateResult)
+	}
+	cycleRuntime.candidateImportRelease = func(CandidateResult) error {
+		return attemptBackend.ReleaseCandidateImport(ctx, workspace)
+	}
+	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, cycleRuntime, res); err != nil {
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.ExitCode = 1
+		if res.FailureMode == FailureModeAttemptIntegrity {
+			res.Reason = "local execution evidence entered candidate history"
+		} else if res.Reason == "" {
+			res.Reason = res.Detail
+		}
+		populateWorkerStatus(res)
+		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		return res, fmt.Errorf("recording candidate cycle state: %w", err)
 	}
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
+	}
+	// Defense in depth immediately before backend publication. Candidate-cycle
+	// repair is allowed to replace ResultRev, so re-scan the projected final
+	// history even though every cycle is also validated before ref pinning.
+	if err := VerifyCandidateHasNoExecutionEvidence(wtPath, res.BaseRev, res.ResultRev); err != nil {
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.Reason = "local execution evidence entered candidate history"
+		res.Error = err.Error()
+		res.ExitCode = 1
+		res.FailureMode = FailureModeAttemptIntegrity
+		populateWorkerStatus(res)
+		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		return res, err
 	}
 
 	// Execution evidence is per-machine working state and must NEVER be
 	// committed (ddx-d10073a8). ResultRev stays the implementation/code commit;
 	// the evidence bundle is published to the project root on disk (the deferred
-	// publish above, evidenceCommittedInWt=false) where landing/review/audit read
-	// it directly. Nothing evidence-bearing rides the merge/ff into the durable
-	// branch.
+	// publish above) where landing/review/audit read it directly. Nothing
+	// evidence-bearing rides the merge/ff into the durable branch.
 	if err := publishAttemptResult(res); err != nil {
 		return res, fmt.Errorf("publishing attempt result: %w", err)
 	}
@@ -1780,13 +1888,13 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 }
 
 func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, *bead.Bead, error) {
-	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID, runtime.BeadStoreRoot)
-	if err != nil {
-		return nil, nil, err
-	}
 	artifacts, err := createArtifactBundle(projectRoot, wtPath, attemptID)
 	if err != nil {
 		return nil, nil, err
+	}
+	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID, runtime.BeadStoreRoot)
+	if err != nil {
+		return artifacts, nil, err
 	}
 
 	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.Harness(), rcfg.ContextBudget())
@@ -2021,11 +2129,11 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 //     pre-staging no-staged-files runs do not count as acceptance evidence
 // 11. Do not modify files outside bead scope
 // 12. Never run `ddx init`
-// 13. Keep .ddx/executions/ intact
+// 13. Keep .ddx/executions/ intact, local, and untracked
 // 14. Do not rewrite CLAUDE.md / AGENTS.md unless asked
 // 15. Bead description overrides CLAUDE.md / YAGNI defaults
-// 16. Reports go under the bead metadata bundle path, never /tmp, committed
-//     alongside code
+// 16. Reports go under the bead metadata bundle path, never /tmp, and remain
+//     untracked local evidence
 // 17. Write no_changes_rationale.txt before exiting empty
 // 18. Step 0 size-check + decomposition (ddx bead create / dep add / update)
 // 19. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
@@ -2083,7 +2191,7 @@ const instrInvestigationReports = `
 
 ## Reports
 
-Reports go under the bead metadata ` + "`bundle`" + ` path in ` + "`.ddx/executions/`" + `. **Never write reports to ` + "`/tmp`" + ` or outside the repo**. Use a named in-repo path when given; otherwise write ` + "`<short-name>.md`" + ` there. Commit it with the code.`
+Write reports to the metadata ` + "`bundle`" + ` under ` + "`.ddx/executions/`" + `, never ` + "`/tmp`" + ` or elsewhere. Use the named path or ` + "`<short-name>.md`" + `. Bundle files are local-only: never stage or commit them. Commit only requested deliverables outside the bundle.`
 
 // instrReviewGate is the shared review-as-gate rule.
 const instrReviewGate = `
@@ -2106,7 +2214,7 @@ const instrCoreConstraints = `
 ## Constraints
 
 - Work only inside this execution worktree.
-- Keep ` + "`.ddx/executions/`" + ` intact — DDx uses it as execution evidence.
+- Keep ` + "`.ddx/executions/`" + ` intact, local, and untracked; never stage or commit it.
 - **Never run ` + "`ddx init`" + `** — the workspace is initialized.
 - Do not modify files outside the bead's named scope.
 - Do not rewrite CLAUDE.md, AGENTS.md, or other instruction files unless the bead asks.`
@@ -2430,98 +2538,292 @@ func executeBeadCacheHitRate(inputTokens, cachedTokens int) float64 {
 	return float64(cachedTokens) / float64(totalPromptInput)
 }
 
-// VerifyCleanWorktree checks that the project root's working tree has no
-// untracked execution evidence files for the given attempt. If evidence files
-// remain (e.g. because the land flow did not commit them), it stages and
-// commits them as a safety net. Returns nil when the evidence dir is clean
-// or was successfully committed.
+const executionEvidenceLocalExclude = "/.ddx/executions/"
+
+// gitWorktreeStatus reports whether workspace resolves inside a Git worktree.
+// Locale is pinned because the only recoverable error is Git's explicit
+// not-a-repository diagnosis. Missing Git, corrupt metadata, permission
+// failures, and every other probe error remain fail-closed.
+func gitWorktreeStatus(workspace string) (bool, error) {
+	cmd := internalgit.Command(context.Background(), workspace,
+		"rev-parse", "--is-inside-work-tree",
+	)
+	cmd.Env = envWithOverrides(cmd.Env, map[string]string{"LC_ALL": "C", "LANG": "C"})
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		message := strings.ToLower(string(out))
+		if strings.Contains(message, "not a git repository") {
+			return false, nil
+		}
+		return false, fmt.Errorf("checking workspace Git metadata: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	if strings.TrimSpace(string(out)) != "true" {
+		return false, fmt.Errorf("workspace %s is not inside a Git worktree", workspace)
+	}
+	return true, nil
+}
+
+// VerifyCleanWorktree keeps local execution evidence out of Git without
+// deleting it. Repositories created before execution evidence became
+// per-machine state may be missing the project .gitignore rule, so the safety
+// net installs an idempotent repository-local exclude in Git's info/exclude.
+// It never changes the tracked .gitignore, stages files, or creates commits.
+//
+// Evidence that is already tracked or staged is an invariant violation. That
+// state requires an operator decision, so fail before mutating even the local
+// exclude file and leave the worktree, index, and history untouched.
 func VerifyCleanWorktree(projectRoot, attemptID string) error {
 	if attemptID == "" {
 		return nil
 	}
+	insideGitWorktree, err := gitWorktreeStatus(projectRoot)
+	if err != nil {
+		return err
+	}
+	if !insideGitWorktree {
+		// Plain-directory attempt backends cannot have staged or tracked files.
+		// They still retain the published bundle on local disk.
+		return nil
+	}
 	evidenceDir := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
 
-	out, _ := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain", "--", evidenceDir).Output()
-	if len(strings.TrimSpace(string(out))) == 0 {
-		return nil
+	stagedOut, stagedErr := internalgit.Command(context.Background(), projectRoot,
+		"diff", "--cached", "--name-only", "--", evidenceDir,
+	).CombinedOutput()
+	if stagedErr != nil {
+		return fmt.Errorf("checking staged execution evidence: %s: %w", strings.TrimSpace(string(stagedOut)), stagedErr)
+	}
+	if len(strings.TrimSpace(string(stagedOut))) != 0 {
+		return fmt.Errorf("execution evidence is staged under %s; refusing to alter the index, history, or evidence files", evidenceDir)
 	}
 
-	// Exclude embedded session logs from the evidence commit; they stay
-	// on disk for post-hoc inspection but must NOT be tracked — the
-	// multi-thousand-line .jsonl files are what caused ddx-39e27896
-	// (retry prompts ballooning past provider context limits).
-	// manifest.json, result.json, prompt.md, usage.json remain tracked
-	// per the existing audit-trail contract (gitignore un-ignores them).
-	addArgs := append([]string{"add", "--", evidenceDir}, EvidenceLandExcludePathspecs()...)
-	addOut, addErr := internalgit.Command(context.Background(), projectRoot, addArgs...).CombinedOutput()
-	if addErr != nil {
-		return fmt.Errorf("staging leftover evidence: %s: %w", strings.TrimSpace(string(addOut)), addErr)
-	}
-	diffOut, _ := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--name-only", "--", evidenceDir).Output()
-	if len(strings.TrimSpace(string(diffOut))) == 0 {
-		return nil
-	}
-	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(attemptID))
-	commitOut, commitErr := internalgit.Command(context.Background(), projectRoot,
-		"-c", "user.name=ddx-land-coordinator",
-		"-c", "user.email=coordinator@ddx.local",
-		"commit", "-m", msg,
+	trackedOut, trackedErr := internalgit.Command(context.Background(), projectRoot,
+		"ls-files", "--", evidenceDir,
 	).CombinedOutput()
-	if commitErr != nil {
-		return fmt.Errorf("committing leftover evidence: %s: %w", strings.TrimSpace(string(commitOut)), commitErr)
+	if trackedErr != nil {
+		return fmt.Errorf("checking tracked execution evidence: %s: %w", strings.TrimSpace(string(trackedOut)), trackedErr)
+	}
+	if len(strings.TrimSpace(string(trackedOut))) != 0 {
+		return fmt.Errorf("execution evidence is tracked under %s; remove it from Git explicitly before retrying (DDx made no changes)", evidenceDir)
+	}
+
+	evidenceAbs := filepath.Join(projectRoot, filepath.FromSlash(evidenceDir))
+	if _, err := os.Stat(evidenceAbs); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("checking local execution evidence %s: %w", evidenceDir, err)
+	}
+
+	// Serialize only the short repository-metadata update. This is the same
+	// process-shared lock used by other main-Git mutations, and it is acquired
+	// after the harness has returned, never across LLM work.
+	if err := withMainGitLock(projectRoot, "evidence_local_exclude", func() error {
+		return ensureExecutionEvidenceLocalExclude(projectRoot)
+	}); err != nil {
+		return fmt.Errorf("installing repository-local execution evidence exclude: %w", err)
+	}
+
+	statusOut, statusErr := internalgit.Command(context.Background(), projectRoot,
+		"status", "--porcelain", "--untracked-files=all", "--", evidenceDir,
+	).CombinedOutput()
+	if statusErr != nil {
+		return fmt.Errorf("verifying local execution evidence exclusion: %s: %w", strings.TrimSpace(string(statusOut)), statusErr)
+	}
+	if len(strings.TrimSpace(string(statusOut))) != 0 {
+		return fmt.Errorf("execution evidence under %s remains visible to Git after installing %s in info/exclude; inspect repository ignore rules (DDx did not stage, commit, or delete evidence)", evidenceDir, executionEvidenceLocalExclude)
 	}
 	return nil
 }
 
-// commitEvidenceBundleInWorktree stages the evidence directory in the attempt
-// worktree and commits it so Land() can find the bundle inside the landing
-// finalization worktree without copying from the project root. Returns the new
-// HEAD SHA on success, or "" if staging finds nothing to commit (e.g. because
-// the worktree is not a real git repo in tests or staging fails).
-func commitEvidenceBundleInWorktree(wtPath, dirRel, attemptID string) string {
-	if dirRel == "" {
-		return ""
+// VerifyCandidateHasNoExecutionEvidence rejects implementation revisions that
+// change any path under the local-only execution tree. The local exclude and
+// synthesis filters prevent normal paths from creating such commits; this
+// revision-level check is the final defence against harness-authored commits.
+func VerifyCandidateHasNoExecutionEvidence(projectRoot, baseRev, resultRev string) error {
+	if strings.TrimSpace(baseRev) == "" || strings.TrimSpace(resultRev) == "" || baseRev == resultRev {
+		return nil
 	}
-	dirArg := filepath.FromSlash(dirRel)
-	addArgs := append([]string{"add", "--", dirArg}, EvidenceLandExcludePathspecs()...)
-	if _, err := internalgit.Command(context.Background(), wtPath, addArgs...).CombinedOutput(); err != nil {
-		return ""
+	insideGitWorktree, err := gitWorktreeStatus(projectRoot)
+	if err != nil {
+		return err
 	}
-	diffOut, _ := internalgit.Command(context.Background(), wtPath, "diff", "--cached", "--name-only", "--", dirArg).Output()
-	if len(strings.TrimSpace(string(diffOut))) == 0 {
-		return ""
+	if !insideGitWorktree {
+		// Plain-directory test and in-memory backends have no candidate Git
+		// history to inspect. Real repositories remain fail-closed above.
+		return nil
 	}
-	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(attemptID))
-	if _, err := internalgit.Command(context.Background(), wtPath,
-		"-c", "user.name=ddx-land-coordinator",
-		"-c", "user.email=coordinator@ddx.local",
-		"commit", "--no-verify", "-m", msg,
-	).CombinedOutput(); err != nil {
-		return ""
+	revsOut, err := internalgit.Command(context.Background(), projectRoot,
+		"rev-list", "--reverse", baseRev+".."+resultRev,
+	).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("listing candidate commits for local execution evidence: %s: %w", strings.TrimSpace(string(revsOut)), err)
 	}
-	headOut, headErr := internalgit.Command(context.Background(), wtPath, "rev-parse", "HEAD").Output()
-	if headErr != nil {
-		return ""
+	for _, commit := range strings.Fields(string(revsOut)) {
+		pathsOut, diffErr := internalgit.Command(context.Background(), projectRoot,
+			"diff-tree", "--root", "-m", "--no-commit-id", "--name-only", "-r", "-z", commit, "--",
+		).CombinedOutput()
+		if diffErr != nil {
+			return fmt.Errorf("checking candidate commit %s for local execution evidence: %s: %w", commit, strings.TrimSpace(string(pathsOut)), diffErr)
+		}
+		for _, raw := range bytes.Split(pathsOut, []byte{0}) {
+			path := filepath.ToSlash(strings.TrimSpace(string(raw)))
+			if isExecutionEvidencePath(path) {
+				return fmt.Errorf("candidate history commit %s changes local execution evidence path %s; refusing to preserve or land it", commit, path)
+			}
+		}
 	}
-	return strings.TrimSpace(string(headOut))
+	return nil
+}
+
+func ensureExecutionEvidenceLocalExclude(projectRoot string) error {
+	pathOut, pathErr := internalgit.Command(context.Background(), projectRoot,
+		"rev-parse", "--git-path", "info/exclude",
+	).CombinedOutput()
+	if pathErr != nil {
+		return fmt.Errorf("resolving repository-local Git exclude: %s: %w", strings.TrimSpace(string(pathOut)), pathErr)
+	}
+	excludePath := strings.TrimSpace(string(pathOut))
+	if excludePath == "" {
+		return fmt.Errorf("resolving repository-local Git exclude: Git returned an empty path")
+	}
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(projectRoot, filepath.FromSlash(excludePath))
+	}
+
+	content, readErr := os.ReadFile(excludePath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return fmt.Errorf("reading repository-local Git exclude %s: %w", excludePath, readErr)
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.TrimSpace(line) == executionEvidenceLocalExclude {
+			return nil
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return fmt.Errorf("creating repository-local Git exclude directory: %w", err)
+	}
+	f, openErr := os.OpenFile(excludePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if openErr != nil {
+		return fmt.Errorf("opening repository-local Git exclude %s: %w", excludePath, openErr)
+	}
+	prefix := ""
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		prefix = "\n"
+	}
+	if _, writeErr := io.WriteString(f, prefix+executionEvidenceLocalExclude+"\n"); writeErr != nil {
+		_ = f.Close()
+		return fmt.Errorf("writing repository-local Git exclude %s: %w", excludePath, writeErr)
+	}
+	if closeErr := f.Close(); closeErr != nil {
+		return fmt.Errorf("closing repository-local Git exclude %s: %w", excludePath, closeErr)
+	}
+	return nil
+}
+
+// ensureExecutionEvidenceLocalExcludeForWorkspace installs the local rule when
+// Git resolves workspace (including a subdirectory) into a worktree. Some
+// unit-test attempt backends use plain directories; only Git's explicit
+// not-a-repository result is skipped. Missing Git, corrupt metadata, permission
+// failures, and all other errors remain fail-closed.
+func ensureExecutionEvidenceLocalExcludeForWorkspace(workspace string) error {
+	insideGitWorktree, err := gitWorktreeStatus(workspace)
+	if err != nil {
+		return err
+	}
+	if !insideGitWorktree {
+		return nil
+	}
+	return ensureExecutionEvidenceLocalExclude(workspace)
 }
 
 // publishEvidenceBundleToProjectRoot copies the evidence bundle from the
 // isolated attempt worktree to the project root. Used by non-landing paths
-// (no-changes, task-failed, operator-cancel) so that VerifyCleanWorktree can
-// commit the bundle. A no-op when the source does not exist or when wtPath and
-// projectRoot resolve to the same path.
-func publishEvidenceBundleToProjectRoot(projectRoot, wtPath, dirRel string) {
+// (no-changes, task-failed, operator-cancel) so local evidence remains
+// available after the isolated worktree is removed. A no-op when the source
+// does not exist or when wtPath and projectRoot resolve to the same path.
+func publishEvidenceBundleToProjectRoot(projectRoot, wtPath, dirRel string) error {
+	return publishEvidenceBundleToProjectRootWithCopier(projectRoot, wtPath, dirRel, nil)
+}
+
+func publishEvidenceBundleToProjectRootWithCopier(projectRoot, wtPath, dirRel string, copier func(source, target string, mode os.FileMode) error) error {
 	if dirRel == "" || sameFilesystemPath(projectRoot, wtPath) {
-		return
+		return nil
+	}
+	if copier == nil {
+		copier = copyLocalExecutionEvidenceFile
 	}
 	src := filepath.Join(wtPath, filepath.FromSlash(dirRel))
 	dst := filepath.Join(projectRoot, filepath.FromSlash(dirRel))
 	info, err := os.Stat(src)
-	if err != nil || !info.IsDir() {
-		return
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat local execution evidence source %s: %w", src, err)
 	}
-	_ = filepath.WalkDir(src, func(path string, d os.DirEntry, walkErr error) error {
+	if !info.IsDir() {
+		return fmt.Errorf("local execution evidence source %s is not a directory", src)
+	}
+	parent := filepath.Dir(dst)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return fmt.Errorf("preparing local execution evidence destination %s: %w", parent, err)
+	}
+	staging, err := os.MkdirTemp(parent, "."+filepath.Base(dst)+".publish-")
+	if err != nil {
+		return fmt.Errorf("preparing local execution evidence staging directory: %w", err)
+	}
+	stagingOwned := true
+	defer func() {
+		if stagingOwned {
+			_ = os.RemoveAll(staging)
+		}
+	}()
+
+	if dstInfo, statErr := os.Stat(dst); statErr == nil {
+		if !dstInfo.IsDir() {
+			return fmt.Errorf("local execution evidence destination %s is not a directory", dst)
+		}
+		if err := copyLocalExecutionEvidenceTree(dst, staging, copier); err != nil {
+			return fmt.Errorf("copying existing local execution evidence %s into staging: %w", dst, err)
+		}
+	} else if !os.IsNotExist(statErr) {
+		return fmt.Errorf("checking local execution evidence destination %s: %w", dst, statErr)
+	}
+	if err := copyLocalExecutionEvidenceTree(src, staging, copier); err != nil {
+		return fmt.Errorf("copying local execution evidence %s to %s: %w", src, dst, err)
+	}
+
+	backup := ""
+	if _, statErr := os.Stat(dst); statErr == nil {
+		backupDir, backupErr := os.MkdirTemp(parent, "."+filepath.Base(dst)+".previous-")
+		if backupErr != nil {
+			return fmt.Errorf("preparing local execution evidence replacement: %w", backupErr)
+		}
+		if removeErr := os.Remove(backupDir); removeErr != nil {
+			return fmt.Errorf("preparing local execution evidence backup path: %w", removeErr)
+		}
+		backup = backupDir
+		if renameErr := os.Rename(dst, backup); renameErr != nil {
+			return fmt.Errorf("backing up local execution evidence destination %s: %w", dst, renameErr)
+		}
+	}
+	if renameErr := os.Rename(staging, dst); renameErr != nil {
+		if backup != "" {
+			_ = os.Rename(backup, dst)
+		}
+		return fmt.Errorf("publishing local execution evidence %s: %w", dst, renameErr)
+	}
+	stagingOwned = false
+	if backup != "" {
+		_ = os.RemoveAll(backup)
+	}
+	return nil
+}
+
+func copyLocalExecutionEvidenceTree(src, dst string, copier func(source, target string, mode os.FileMode) error) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -2533,12 +2835,34 @@ func publishEvidenceBundleToProjectRoot(projectRoot, wtPath, dirRel string) {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
 		}
-		return os.WriteFile(target, data, 0o644)
+		return copier(path, target, info.Mode().Perm())
 	})
+}
+
+func copyLocalExecutionEvidenceFile(source, target string, mode os.FileMode) error {
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(target, data, mode)
+}
+
+func finalizeLocalExecutionEvidence(projectRoot, wtPath, dirRel, attemptID string) error {
+	return finalizeLocalExecutionEvidenceWithCopier(projectRoot, wtPath, dirRel, attemptID, nil)
+}
+
+func finalizeLocalExecutionEvidenceWithCopier(projectRoot, wtPath, dirRel, attemptID string, copier func(source, target string, mode os.FileMode) error) error {
+	if err := publishEvidenceBundleToProjectRootWithCopier(projectRoot, wtPath, dirRel, copier); err != nil {
+		return err
+	}
+	if err := VerifyCleanWorktree(projectRoot, attemptID); err != nil {
+		return fmt.Errorf("verifying published local execution evidence: %w", err)
+	}
+	return nil
 }
 
 func excludeCleanupMetadataFromWorktreeGit(wtPath string) error {

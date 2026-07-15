@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,7 +43,7 @@ func TestWaitForEmptyGitIndex_RecoversFromStaleIndex(t *testing.T) {
 
 	// 100ms is well under any plausible operator-contention window, so
 	// the test exercises the recovery path rather than waiting it out.
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
 		t.Fatalf("waitForEmptyGitIndex did not recover: %v", err)
 	}
 
@@ -57,7 +58,7 @@ func TestWaitForEmptyGitIndex_RecoversFromStaleIndex(t *testing.T) {
 func TestWaitForEmptyGitIndex_NoChangesReturnsImmediately(t *testing.T) {
 	r := newLandTestRepo(t)
 	start := time.Now()
-	if err := waitForEmptyGitIndex(r.dir, 2*time.Second, false); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 2*time.Second); err != nil {
 		t.Fatalf("clean worktree should not error: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
@@ -76,7 +77,7 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 
 	// Operator-staged work is checkpoint-committed — never refused or
 	// reset — and pre-claim proceeds.
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
 		t.Fatalf("staged operator work should be checkpointed, not refused: %v", err)
 	}
 	content, rerr := os.ReadFile(filepath.Join(r.dir, "operator.txt"))
@@ -86,6 +87,43 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 	if log := r.runGit("log", "--all", "--format=%s", "--", "operator.txt"); !strings.Contains(log, "checkpoint local tree before land") {
 		t.Fatalf("operator work was not checkpoint-committed; log=%q", log)
 	}
+}
+
+// TestWaitForEmptyGitIndex_HeldMainLockDoesNotReacquire guards the fetch
+// ancestry path, which enters index recovery while already holding the shared
+// main-Git lock. Recovery must use that ownership directly; recursively
+// acquiring the non-reentrant directory lock self-deadlocks until timeout.
+func TestWaitForEmptyGitIndex_HeldMainLockDoesNotReacquire(t *testing.T) {
+	r := newLandTestRepo(t)
+	r.writeFile("operator.txt", "operator's local work\n")
+	r.runGit("add", "operator.txt")
+
+	wantLockDir := trackerLockPath(r.dir)
+	var (
+		mu      sync.Mutex
+		samples []TrackerLockSample
+	)
+	previousSink := SetTrackerLockMetricsSink(func(sample TrackerLockSample) {
+		if sample.LockDir != wantLockDir {
+			return
+		}
+		mu.Lock()
+		samples = append(samples, sample)
+		mu.Unlock()
+	})
+	t.Cleanup(func() { SetTrackerLockMetricsSink(previousSink) })
+
+	err := withMainGitLock(r.dir, "outer_recovery_probe", func() error {
+		return waitForEmptyGitIndexWithLockState(r.dir, 100*time.Millisecond, true)
+	})
+	require.NoError(t, err)
+
+	mu.Lock()
+	got := append([]TrackerLockSample(nil), samples...)
+	mu.Unlock()
+	require.Len(t, got, 1, "locked recovery must not acquire a nested main-Git lock")
+	require.Equal(t, "outer_recovery_probe", got[0].Section)
+	require.Zero(t, got[0].Retries, "the unique temp-repo lock must not contend with itself")
 }
 
 // TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles verifies ddx-df77e668
@@ -108,7 +146,7 @@ func TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := waitForEmptyGitIndex(r.dir, 2*time.Second, false); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 2*time.Second); err != nil {
 		t.Fatalf("staged tracker files must not block pre-claim: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
@@ -137,7 +175,7 @@ func TestWaitForEmptyGitIndex_StagedCodeStillBlocksAlongsideTracker(t *testing.T
 	// The staged code file is checkpoint-committed (tracker files are
 	// excluded from the checkpoint and remain live state), and pre-claim
 	// proceeds.
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
 		t.Fatalf("staged code should be checkpointed, not refused: %v", err)
 	}
 	if log := r.runGit("log", "--all", "--format=%s", "--", "main.go"); !strings.Contains(log, "checkpoint local tree before land") {
@@ -154,54 +192,86 @@ func TestWaitForEmptyGitIndex_RecoversFromCorruptIndex(t *testing.T) {
 	r := newLandTestRepo(t)
 	indexPath := filepath.Join(r.dir, ".git", "index")
 	require.NoError(t, os.WriteFile(indexPath, []byte("bad"), 0o644))
+	var lockSamples []TrackerLockSample
+	previousSink := SetTrackerLockMetricsSink(func(sample TrackerLockSample) {
+		lockSamples = append(lockSamples, sample)
+	})
+	t.Cleanup(func() { SetTrackerLockMetricsSink(previousSink) })
 
-	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond, false); err != nil {
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
 		t.Fatalf("waitForEmptyGitIndex did not recover corrupt index: %v", err)
 	}
 
 	if got := r.runGit("diff", "--cached", "--name-status"); got != "" {
 		t.Fatalf("index should be clean after recovery, got %q", got)
 	}
+	foundLockedRecovery := false
+	for _, sample := range lockSamples {
+		if sample.Section == "landing_index_recovery" {
+			foundLockedRecovery = true
+			if sample.Hold > time.Second {
+				t.Fatalf("corrupt-index recovery held the shared lock too long: %s", sample.Hold)
+			}
+		}
+	}
+	if !foundLockedRecovery {
+		t.Fatal("corrupt-index read-tree mutation ran without the landing_index_recovery lock")
+	}
 }
 
-// TestLandAdvancer_SelfRecoversDdxOwnedDirtyPaths verifies that the landing
-// advancer checkpoints DDx-owned staged evidence instead of returning a land
-// retry when the landing checkout contains only .ddx/executions/* dirty paths.
-func TestLandAdvancer_SelfRecoversDdxOwnedDirtyPaths(t *testing.T) {
-	r := newLandTestRepo(t)
+// TestLandingBoundaryNeverCommitsStagedExecutionEvidence proves that the
+// landing index guard removes only evidence-only state from the index. Bytes
+// remain on disk, HEAD does not move, and no execution path reaches history.
+// A mixed evidence+code set retains the existing protection for real work:
+// code is checkpointed, while evidence is excluded from that commit and then
+// narrowly unstaged on the next guard pass.
+func TestLandingBoundaryNeverCommitsStagedExecutionEvidence(t *testing.T) {
+	t.Run("all evidence", func(t *testing.T) {
+		r := newLandTestRepo(t)
+		const evidenceDir = ".ddx/executions/20260708T000000-test"
+		resultPath := filepath.Join(r.dir, evidenceDir, "result.json")
+		manifestPath := filepath.Join(r.dir, evidenceDir, "manifest.json")
+		r.writeFile(filepath.ToSlash(filepath.Join(evidenceDir, "result.json")), "result-bytes\n")
+		r.writeFile(filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json")), "manifest-bytes\n")
+		r.runGit("add", "-f", "--", evidenceDir)
 
-	r.writeFile(".ddx/executions/20260708T000000-test/kept.json", "kept-old\n")
-	r.writeFile(".ddx/executions/20260708T000000-test/removed.json", "removed-old\n")
-	r.runGit("add", "-f", ".ddx/executions/20260708T000000-test/kept.json", ".ddx/executions/20260708T000000-test/removed.json")
-	r.runGit("commit", "-m", "seed execution evidence")
+		headBefore := r.resolveRef("HEAD")
+		resultBefore, err := os.ReadFile(resultPath)
+		require.NoError(t, err)
+		manifestBefore, err := os.ReadFile(manifestPath)
+		require.NoError(t, err)
 
-	baseRev := r.resolveRef("HEAD")
-	r.writeFile(".ddx/executions/20260708T000000-test/kept.json", "kept-new\n")
-	r.runGit("add", "-f", ".ddx/executions/20260708T000000-test/kept.json")
-	r.runGit("rm", "-f", ".ddx/executions/20260708T000000-test/removed.json")
+		require.NoError(t, waitForEmptyGitIndex(r.dir, 100*time.Millisecond))
+		require.Equal(t, headBefore, r.resolveRef("HEAD"), "evidence-only cleanup must not create a commit")
+		require.Empty(t, r.runGit("diff", "--cached", "--name-only"), "evidence-only index must be cleared")
+		require.Empty(t, r.runGit("ls-files", "--", evidenceDir), "evidence must not remain tracked")
+		require.Empty(t, r.runGit("log", "--all", "--format=%H", "--", evidenceDir), "evidence must not reach history")
 
-	staged := r.runGit("diff", "--cached", "--name-status")
-	if !strings.Contains(staged, "M\t.ddx/executions/20260708T000000-test/kept.json") || !strings.Contains(staged, "D\t.ddx/executions/20260708T000000-test/removed.json") {
-		t.Fatalf("setup did not reproduce staged evidence dirty paths; staged=%q", staged)
-	}
+		resultAfter, err := os.ReadFile(resultPath)
+		require.NoError(t, err)
+		manifestAfter, err := os.ReadFile(manifestPath)
+		require.NoError(t, err)
+		require.Equal(t, resultBefore, resultAfter, "result evidence bytes must be retained")
+		require.Equal(t, manifestBefore, manifestAfter, "manifest evidence bytes must be retained")
+	})
 
-	resultRev := r.commitOn(baseRev, "worker.txt", "worker output\n", "feat: worker result")
-	landed, err := Land(r.dir, LandRequest{
-		WorktreeDir: r.dir,
-		BaseRev:     baseRev,
-		ResultRev:   resultRev,
-		BeadID:      "ddx-evidence",
-		AttemptID:   "20260708T000000-test",
-	}, RealLandingGitOps{})
-	if err != nil {
-		t.Fatalf("Land should self-recover DDx-owned evidence paths: %v", err)
-	}
-	if landed == nil || landed.Status != "landed" {
-		t.Fatalf("expected land to proceed, got %#v", landed)
-	}
+	t.Run("mixed set preserves code without committing evidence", func(t *testing.T) {
+		r := newLandTestRepo(t)
+		const evidenceDir = ".ddx/executions/20260708T000001-mixed"
+		evidencePath := filepath.Join(r.dir, evidenceDir, "result.json")
+		r.writeFile(filepath.ToSlash(filepath.Join(evidenceDir, "result.json")), "mixed-evidence-bytes\n")
+		r.writeFile("operator.go", "package operator\n")
+		r.runGit("add", "-f", "--", evidenceDir, "operator.go")
+		evidenceBefore, err := os.ReadFile(evidencePath)
+		require.NoError(t, err)
 
-	log := r.runGit("log", "--all", "--format=%s", "--", ".ddx/executions/20260708T000000-test/kept.json")
-	if !strings.Contains(log, "checkpoint local tree before land") {
-		t.Fatalf("evidence was not checkpointed; log=%q", log)
-	}
+		require.NoError(t, waitForEmptyGitIndex(r.dir, 100*time.Millisecond))
+		require.Empty(t, r.runGit("diff", "--cached", "--name-only"), "guard must finish with a clean index")
+		require.Contains(t, r.runGit("log", "--all", "--format=%s", "--", "operator.go"), "checkpoint local tree before land")
+		require.Empty(t, r.runGit("log", "--all", "--format=%H", "--", evidenceDir), "mixed-set checkpoint must exclude evidence")
+
+		evidenceAfter, err := os.ReadFile(evidencePath)
+		require.NoError(t, err)
+		require.Equal(t, evidenceBefore, evidenceAfter, "mixed-set evidence bytes must be retained")
+	})
 }

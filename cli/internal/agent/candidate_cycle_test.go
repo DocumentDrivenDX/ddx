@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -729,6 +730,80 @@ func TestRepairCycle_NoHistoryRewrite(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(string(logOut)), "\n")
 	assert.Equal(t, []string{"repair commit", "implementation commit"}, lines)
+}
+
+func TestRepairCycleEvidenceHistoryRejectedBeforeRePinOrLand(t *testing.T) {
+	projectRoot, baseRev := initTestGitRepo(t)
+	wtPath := filepath.Join(t.TempDir(), "candidate")
+	out, err := exec.Command("git", "-C", projectRoot, "worktree", "add", "--detach", wtPath, baseRev).CombinedOutput()
+	require.NoError(t, err, "git worktree add: %s", out)
+	t.Cleanup(func() {
+		_, _ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", wtPath).CombinedOutput()
+	})
+	implRev := commitTestFile(t, wtPath, "implementation.txt", "implementation\n", "implementation commit")
+
+	landCalls := 0
+	reviewCalls := 0
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:            beadID,
+					AttemptID:         "attempt-repair-evidence",
+					Status:            ExecuteBeadStatusSuccess,
+					BaseRev:           baseRev,
+					ResultRev:         implRev,
+					ImplementationRev: implRev,
+				},
+				WorktreePath: wtPath,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewCalls++
+			return repairCycleFixableReview(), nil
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			evidenceRel := filepath.Join(ddxroot.DirName, "executions", "attempt-repair-evidence", "report.md")
+			require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(wtPath, evidenceRel)), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(wtPath, evidenceRel), []byte("local evidence\n"), 0o644))
+			out, addErr := exec.Command("git", "-C", wtPath, "add", "-f", "--", evidenceRel).CombinedOutput()
+			require.NoError(t, addErr, "git add evidence: %s", out)
+			out, commitErr := exec.Command("git", "-C", wtPath, "commit", "-m", "repair: force-add local evidence").CombinedOutput()
+			require.NoError(t, commitErr, "git commit evidence: %s", out)
+			out, rmErr := exec.Command("git", "-C", wtPath, "rm", "--", evidenceRel).CombinedOutput()
+			require.NoError(t, rmErr, "git rm evidence: %s", out)
+			out, commitErr = exec.Command("git", "-C", wtPath, "commit", "-m", "repair: delete local evidence").CombinedOutput()
+			require.NoError(t, commitErr, "git commit evidence deletion: %s", out)
+			repairedRev, revErr := exec.Command("git", "-C", wtPath, "rev-parse", "HEAD").Output()
+			require.NoError(t, revErr)
+			repaired := candidate
+			repaired.Report.ResultRev = strings.TrimSpace(string(repairedRev))
+			repaired.CycleIndex = 1
+			return repaired, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			landCalls++
+			return candidate.Report, nil
+		}),
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+		ValidateCandidate: func(candidate CandidateResult) error {
+			return VerifyCandidateHasNoExecutionEvidence(candidate.WorktreePath, candidate.Report.BaseRev, candidate.Report.ResultRev)
+		},
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-evidence")
+	require.ErrorContains(t, err, "candidate history commit")
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.Report.Status)
+	assert.Equal(t, FailureModeAttemptIntegrity, result.Report.OutcomeReason)
+	assert.Equal(t, 1, reviewCalls, "repaired candidate must be rejected before a second review")
+	assert.Zero(t, landCalls, "evidence-bearing repaired candidate must not land")
+	refsOut, refsErr := exec.Command("git", "-C", projectRoot, "for-each-ref", "--format=%(refname)", "refs/ddx/iterations/attempt-repair-evidence/").Output()
+	require.NoError(t, refsErr)
+	assert.Empty(t, strings.TrimSpace(string(refsOut)), "integrity rejection must retain no candidate ref")
+	mainRev, mainErr := exec.Command("git", "-C", projectRoot, "rev-parse", "refs/heads/main").Output()
+	require.NoError(t, mainErr)
+	assert.Equal(t, baseRev, strings.TrimSpace(string(mainRev)), "integrity rejection must not move the target")
 }
 
 func TestRepairCycle_RerunsChecksAndReview(t *testing.T) {

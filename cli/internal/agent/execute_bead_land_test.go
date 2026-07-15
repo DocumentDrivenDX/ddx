@@ -272,7 +272,7 @@ func (r *landTestRepo) commitExecuteBeadEvidence(baseSHA string, res *ExecuteBea
 	cmd = exec.Command("git", "-C", wt,
 		"-c", "user.name=ddx-land-coordinator",
 		"-c", "user.email=coordinator@ddx.local",
-		"commit", "--no-verify", "-m", "chore: add execution evidence ["+res.AttemptID[:16]+"]",
+		"commit", "--no-verify", "-m", "legacy: execution artifact ["+res.AttemptID[:16]+"]",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git commit evidence: %s: %v", string(out), err)
@@ -397,13 +397,8 @@ func (g *localOnlyGitOps) HeadRevAt(dir string) (string, error) {
 func (g *localOnlyGitOps) CountCommits(dir, base, tip string) int {
 	return g.real.CountCommits(dir, base, tip)
 }
-
-func (g *localOnlyGitOps) StageDir(dir, relPath string) error {
-	return g.real.StageDir(dir, relPath)
-}
-
-func (g *localOnlyGitOps) CommitStaged(dir, msg string) (string, error) {
-	return g.real.CommitStaged(dir, msg)
+func (g *localOnlyGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return g.real.VerifyCandidateHistory(dir, base, tip)
 }
 
 func (g *localOnlyGitOps) DiffNumstat(dir, base, tip string) (string, error) {
@@ -1541,13 +1536,8 @@ func (g *interleavedCheckoutSyncLandingGitOps) HeadRevAt(dir string) (string, er
 func (g *interleavedCheckoutSyncLandingGitOps) CountCommits(dir, base, tip string) int {
 	return g.real.CountCommits(dir, base, tip)
 }
-
-func (g *interleavedCheckoutSyncLandingGitOps) StageDir(dir, relPath string) error {
-	return g.real.StageDir(dir, relPath)
-}
-
-func (g *interleavedCheckoutSyncLandingGitOps) CommitStaged(dir, msg string) (string, error) {
-	return g.real.CommitStaged(dir, msg)
+func (g *interleavedCheckoutSyncLandingGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return g.real.VerifyCandidateHistory(dir, base, tip)
 }
 
 func (g *interleavedCheckoutSyncLandingGitOps) DiffNumstat(dir, base, tip string) (string, error) {
@@ -1857,8 +1847,8 @@ func TestLand_MergeRequired_IndexCleanAfterMerge(t *testing.T) {
 		t.Errorf("ddx-7e659c95 regression: tracked.txt has unexpected status after merge landing: %q", statusOut)
 	}
 
-	// Sanity: main tip must equal the evidence commit (or the merge commit if
-	// no evidence was committed, but evidence is set here).
+	// Sanity: main tip must equal the landed implementation or merge commit;
+	// local execution evidence never creates a trailing commit.
 	if land.NewTip == "" {
 		t.Fatalf("NewTip must not be empty after successful land")
 	}
@@ -2264,9 +2254,10 @@ func TestBuildLandRequest_UsesImplementationRevNotEvidenceRev(t *testing.T) {
 	}
 }
 
-// TestBuildLandRequest_UsesResultRevBeforeFirstLand ensures the first landing
-// still submits the evidence-bundle commit when ResultRev already points at
-// that trailing audit commit but LandedRev has not been set yet.
+// TestBuildLandRequest_UsesResultRevBeforeFirstLand preserves compatibility
+// with a legacy result whose ResultRev already points at a trailing evidence
+// commit and whose LandedRev has not been set yet. Current attempts never
+// create this shape.
 func TestBuildLandRequest_UsesResultRevBeforeFirstLand(t *testing.T) {
 	const implSHA = "impl1111impl2222impl3333impl4444impl5555"
 	const evidenceSHA = "evid1111evid2222evid3333evid4444evid5555"
@@ -2379,58 +2370,6 @@ func TestSyncWorkTreeToHead_DoesNotClobberBeadsJSONL(t *testing.T) {
 	}
 	if string(got) != liveContent {
 		t.Errorf("beads.jsonl was clobbered by SyncWorkTreeToHead\ngot:  %q\nwant: %q", string(got), liveContent)
-	}
-}
-
-// TestStageDirForcesGitIgnored verifies that StageDir uses --force so that
-// files under a gitignored directory are staged successfully. Regression for
-// ddx-723bd318: projects whose .gitignore covers .ddx/executions/ had every
-// bead silently preserved because StageDir staged nothing.
-func TestStageDirForcesGitIgnored(t *testing.T) {
-	dir := t.TempDir()
-	runGit := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), err)
-		}
-	}
-	runGit("init", "-b", "main")
-	runGit("config", "user.name", "Test")
-	runGit("config", "user.email", "test@test.local")
-
-	// Commit .gitignore covering .ddx/executions/ before staging evidence.
-	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".ddx/executions/\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".gitignore")
-	runGit("commit", "-m", "init")
-
-	// Create evidence file under the gitignored directory.
-	attemptID := "20260510T000000-gitignore-stagetest"
-	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
-	fullDir := filepath.Join(dir, evidenceDir)
-	if err := os.MkdirAll(fullDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(fullDir, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	ops := RealLandingGitOps{}
-	if err := ops.StageDir(dir, filepath.ToSlash(evidenceDir)); err != nil {
-		t.Fatalf("StageDir on gitignored path: %v", err)
-	}
-
-	cmd := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only")
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git diff --cached: %v", err)
-	}
-	staged := strings.TrimSpace(string(out))
-	wantFile := filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json"))
-	if !strings.Contains(staged, wantFile) {
-		t.Fatalf("gitignored manifest.json not in staged index; staged=%q want %q", staged, wantFile)
 	}
 }
 
