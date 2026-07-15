@@ -52,6 +52,20 @@ func initTrackerLockRepo(t *testing.T) string {
 	return root
 }
 
+func requireLockCapViolation(t *testing.T, path string) Violation {
+	t.Helper()
+
+	var violation Violation
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		return json.Unmarshal(data, &violation) == nil
+	}, 2*time.Second, 10*time.Millisecond, "cap violation evidence was not written")
+	return violation
+}
+
 // TestLockCap_DefaultIndexLockCap10s asserts the default cap for
 // .git/index.lock is 10s and is overridable via DDX_LOCK_CAP_INDEX_MS.
 func TestLockCap_DefaultIndexLockCap10s(t *testing.T) {
@@ -64,24 +78,54 @@ func TestLockCap_DefaultIndexLockCap10s(t *testing.T) {
 		"index.lock cap must be configurable via DDX_LOCK_CAP_INDEX_MS")
 }
 
-// TestLockCap_ExceedingCapForceReleases asserts that holding past the cap
-// triggers a forced release and the underlying lock file is removed.
-func TestLockCap_ExceedingCapForceReleases(t *testing.T) {
+// TestLockCapViolationDoesNotReleaseLiveLock proves that a cap is an
+// observation threshold: evidence is written while the owner retains the live
+// lock and a contender still cannot enter.
+func TestLockCapViolationDoesNotReleaseLiveLock(t *testing.T) {
 	SetSink(nil)
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, "index.lock")
 	require.NoError(t, os.WriteFile(lockPath, []byte("held"), 0o644))
 
 	cfg := CapConfig{Cap: 30 * time.Millisecond, LockPath: lockPath, EvidenceDir: dir}
+	var violation Violation
 	err := InstrumentCapped("index.lock", "index.commit", cfg, func() error {
-		time.Sleep(200 * time.Millisecond)
-		return nil
+		violation = requireLockCapViolation(t, filepath.Join(dir, "lock-violation.json"))
+
+		contender, contenderErr := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if contender != nil {
+			require.NoError(t, contender.Close())
+		}
+		require.Error(t, contenderErr, "a contender must not enter while the live owner still holds the lock")
+		assert.True(t, os.IsExist(contenderErr), "contender failure must report the owner's existing lock")
+
+		_, statErr := os.Stat(lockPath)
+		require.NoError(t, statErr, "cap observation must retain the live lock")
+		return os.Remove(lockPath)
 	})
 	require.NoError(t, err)
 
-	_, statErr := os.Stat(lockPath)
-	assert.True(t, os.IsNotExist(statErr),
-		"lock file must be force-released after exceeding the cap")
+	assert.Equal(t, "index.lock", violation.LockName)
+	assert.GreaterOrEqual(t, violation.ActualHoldMS, cfg.Cap.Milliseconds())
+	assert.NotEmpty(t, violation.Stack)
+}
+
+// TestLockCapNormalRelease proves that an owner can release normally after an
+// over-cap observation and a contender can acquire only after that release.
+func TestLockCapNormalRelease(t *testing.T) {
+	SetSink(nil)
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "tracker.lock")
+	require.NoError(t, os.Mkdir(lockPath, 0o755))
+
+	cfg := CapConfig{Cap: 30 * time.Millisecond, LockPath: lockPath, EvidenceDir: dir}
+	require.NoError(t, InstrumentCapped("tracker.lock", "tracker.commit", cfg, func() error {
+		requireLockCapViolation(t, filepath.Join(dir, "lock-violation.json"))
+		return os.Remove(lockPath)
+	}))
+
+	require.NoError(t, os.Mkdir(lockPath, 0o755),
+		"a contender must acquire after the owner performs its normal release")
 }
 
 // TestLockCap_ViolationWrittenToEvidence asserts a lock-violation.json appears

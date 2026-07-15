@@ -15,9 +15,9 @@ import (
 )
 
 // Default hold-time caps. A worker that holds one of the named locks past its
-// cap is treated as hung: the lock is force-released and the violation is
-// surfaced, rather than letting the indefinite hold cascade into tracker-lock
-// timeouts (the failure mode observed 2026-05-17).
+// cap emits violation evidence while retaining ownership until its normal
+// release path. The cap is an observation threshold, not permission to break a
+// lock whose owner may still be live.
 const (
 	DefaultIndexLockCap   = 10 * time.Second
 	DefaultTrackerLockCap = 30 * time.Second
@@ -54,14 +54,16 @@ func capFromEnv(name string, def time.Duration) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
-// CapConfig parameterises hold-time cap enforcement for a single instrumented
-// lock window. The zero value disables enforcement, so InstrumentCapped then
+// CapConfig parameterises hold-time cap observation for a single instrumented
+// lock window. The zero value disables observation, so InstrumentCapped then
 // behaves exactly like a pure metric wrapper.
 type CapConfig struct {
-	// Cap is the maximum hold time. Zero or negative disables enforcement.
+	// Cap is the maximum hold time before a violation is observed. Zero or
+	// negative disables cap observation.
 	Cap time.Duration
-	// LockPath is the filesystem path force-released (os.RemoveAll) when the
-	// cap is exceeded. Empty skips force-release.
+	// LockPath identifies the filesystem lock being observed. It is retained in
+	// the configuration for callers that resolve lock identity centrally, but a
+	// cap violation never mutates or removes this path.
 	LockPath string
 	// EvidenceDir receives lock-violation.json when the cap is exceeded.
 	// Empty skips the evidence record.
@@ -79,16 +81,15 @@ type Violation struct {
 	Stack        string `json:"stack"`
 }
 
-// InstrumentCapped behaves like Instrument but additionally enforces a
+// InstrumentCapped behaves like Instrument but additionally observes a
 // hold-time cap. It emits an "acquire" event, runs critical, and emits a
 // matching "release" event. If cfg.Cap > 0 and the hold exceeds the cap, a
-// watchdog fires once: it captures a stack trace, force-releases the lock by
-// removing cfg.LockPath, writes <cfg.EvidenceDir>/lock-violation.json, and
-// emits an error-severity "violation" event via the metric helper.
+// watchdog fires once: it captures a stack trace, writes
+// <cfg.EvidenceDir>/lock-violation.json, and emits an error-severity
+// "violation" event via the metric helper.
 //
-// The critical section is NOT interrupted — it runs to completion
-// (release-only behaviour); the forced release and violation record are the
-// loud signal that a hold ran too long. critical's error is returned
+// The critical section and its lock are NOT interrupted or mutated. The owner
+// remains authoritative for normal release, and critical's error is returned
 // unchanged.
 func InstrumentCapped(lockName, operation string, cfg CapConfig, critical func() error) (err error) {
 	pid := os.Getpid()
@@ -104,7 +105,7 @@ func InstrumentCapped(lockName, operation string, cfg CapConfig, critical func()
 	var timer *time.Timer
 	if cfg.Cap > 0 {
 		timer = time.AfterFunc(cfg.Cap, func() {
-			enforceCapViolation(lockName, operation, pid, acquiredAt, cfg)
+			observeCapViolation(lockName, operation, pid, acquiredAt, cfg)
 		})
 	}
 
@@ -126,15 +127,11 @@ func InstrumentCapped(lockName, operation string, cfg CapConfig, critical func()
 	return critical()
 }
 
-// enforceCapViolation is the watchdog action run when a hold exceeds its cap:
-// force-release the lock, write the evidence record, and emit the error event.
-func enforceCapViolation(lockName, operation string, pid int, acquiredAt time.Time, cfg CapConfig) {
+// observeCapViolation is the watchdog action run when a hold exceeds its cap:
+// retain the live lock, write the evidence record, and emit the error event.
+func observeCapViolation(lockName, operation string, pid int, acquiredAt time.Time, cfg CapConfig) {
 	held := time.Since(acquiredAt)
 	stack := string(debug.Stack())
-
-	if cfg.LockPath != "" {
-		_ = os.RemoveAll(cfg.LockPath)
-	}
 
 	if cfg.EvidenceDir != "" {
 		_ = writeViolation(cfg.EvidenceDir, Violation{
@@ -177,11 +174,11 @@ var (
 	capEvidenceDir string
 )
 
-// SetCapEnforcement enables hold-time cap enforcement process-wide for the two
-// named locks. projectRoot locates the lock files to force-release;
-// evidenceDir (may be "") receives lock-violation.json on a violation. Passing
-// an empty projectRoot disables enforcement (the default), leaving Instrument
-// a pure metric wrapper. Safe for concurrent use.
+// SetCapEnforcement enables hold-time cap observation process-wide for the two
+// named locks. projectRoot locates the observed lock identities; evidenceDir
+// (may be "") receives lock-violation.json on a violation. Passing an empty
+// projectRoot disables cap observation (the default), leaving Instrument a pure
+// metric wrapper. Safe for concurrent use.
 func SetCapEnforcement(projectRoot, evidenceDir string) {
 	capEnfMu.Lock()
 	defer capEnfMu.Unlock()
@@ -191,8 +188,8 @@ func SetCapEnforcement(projectRoot, evidenceDir string) {
 }
 
 // resolveCapConfig builds the CapConfig that Instrument applies to lockName
-// from the process-wide enforcement state. It returns the zero CapConfig
-// (no enforcement) when enforcement is disabled or lockName has no cap.
+// from the process-wide observation state. It returns the zero CapConfig
+// (no observation) when cap observation is disabled or lockName has no cap.
 func resolveCapConfig(lockName string) CapConfig {
 	capEnfMu.RLock()
 	enabled := capEnabled
@@ -235,7 +232,7 @@ func SharedMainGitLockRoot(projectRoot string) string {
 }
 
 // SharedTrackerLockPath resolves the process-shared tracker lock used by
-// withMainGitLock and cap enforcement.
+// withMainGitLock and cap observation.
 func SharedTrackerLockPath(projectRoot string) string {
 	return filepath.Join(SharedMainGitLockRoot(projectRoot), ddxroot.DirName, ".git-tracker.lock")
 }
