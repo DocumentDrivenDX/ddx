@@ -243,6 +243,9 @@ func TestResourcePreflightReportsClaimLivenessReclaimedInodes(t *testing.T) {
 	checker := NewExecutionResourceChecker(projectRoot, &executionCleanupTestGitOps{})
 	checker.TempRoot = tempRoot
 	checker.SoftMinFreeInodes = 100
+	checker.CleanupRunner = newHermeticExecutionCleanupTestManager(
+		t, projectRoot, tempRoot, &executionCleanupTestGitOps{},
+	)
 
 	healthy := false
 	checker.RootProbe = func(path string) (ExecutionResourceRootCheck, error) {

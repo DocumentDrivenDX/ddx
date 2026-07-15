@@ -190,8 +190,7 @@ func TestWorkCleanup_RunsAtStartup(t *testing.T) {
 		},
 	}
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 	runner := cleanupRunnerFunc(func(ctx context.Context) (ExecutionCleanupSummary, error) {
 		atomic.AddInt32(&cleanupCalls, 1)
 		return mgr.Cleanup(ctx)
@@ -271,9 +270,7 @@ func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim(t *testing.T) {
 		claimCalls:           new(int32),
 	}
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
-	mgr.ScratchRoots = []string{scratchRoot}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot)
 	runner := cleanupRunnerFunc(func(ctx context.Context) (ExecutionCleanupSummary, error) {
 		atomic.AddInt32(&cleanupCalls, 1)
 		return mgr.Cleanup(ctx)
@@ -343,9 +340,7 @@ func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim_DoesNotTouchSharedScra
 		claimCalls:           new(int32),
 	}
 
-	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
-	mgr.TempRoot = tempRoot
-	mgr.ScratchRoots = []string{scratchRoot}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot)
 	runner := cleanupRunnerFunc(func(ctx context.Context) (ExecutionCleanupSummary, error) {
 		atomic.AddInt32(&cleanupCalls, 1)
 		return mgr.Cleanup(ctx)

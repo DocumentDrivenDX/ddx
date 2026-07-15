@@ -81,8 +81,7 @@ func TestWorkConcurrentAttempts_CleanupPreservesBothLiveWorktrees(t *testing.T) 
 		assert.DirExists(t, path)
 	}
 
-	mgr := NewExecutionCleanupManager(projectRoot, &RealGitOps{})
-	mgr.TempRoot = execRoot
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, execRoot, &RealGitOps{})
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
 
