@@ -73,6 +73,23 @@ func TestProjectCandidateCycleReportPropagatesRepairedRevisions(t *testing.T) {
 	assert.Equal(t, 1, res.CycleIndex)
 }
 
+func TestProjectCandidateCycleReportPropagatesRepairCostAndDuration(t *testing.T) {
+	res := &ExecuteBeadResult{
+		CostUSD:    0.25,
+		DurationMS: 1200,
+	}
+	report := ExecuteBeadReport{
+		Status:     ExecuteBeadStatusSuccess,
+		CostUSD:    0.75,
+		DurationMS: 3400,
+	}
+
+	projectCandidateCycleReport(res, report)
+
+	assert.Equal(t, 0.75, res.CostUSD, "durable result must include cumulative repair cost")
+	assert.Equal(t, 3400, res.DurationMS, "durable result must include cumulative repair duration")
+}
+
 // reviewMalfunctionReport drives the real applyWorkerCandidateCycle path for
 // beadID with a reviewer that returns an empty/unparseable result, then
 // converts the resulting ExecuteBeadResult into the loop-facing report shape

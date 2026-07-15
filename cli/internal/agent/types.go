@@ -57,8 +57,9 @@ type AgentRunRuntime struct {
 	// HarnessOverride, ProviderOverride, ModelOverride, ProfileOverride, and
 	// PermissionsOverride let a caller override one durable knob from rcfg for
 	// this single invocation without re-resolving the full ResolvedConfig.
-	// SD-024 step B22d-d: execute-bead sets permissions=unrestricted; hidden
-	// lifecycle calls use profile-only routing hints sourced from fizeau.
+	// Hidden lifecycle calls use profile-only routing hints sourced from fizeau.
+	// Execute-bead implementation and repair calls inherit the sealed config
+	// permissions unchanged; Fizeau owns harness-specific defaults.
 	HarnessOverride     string
 	ProviderOverride    string
 	ModelOverride       string
