@@ -473,16 +473,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
 				return reportFromResult(res), nil
 			}
-		} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {
-			if res.ResultRev != "" && res.ResultRev != res.BaseRev {
-				res.Outcome = "preserved"
-			} else {
-				res.Outcome = "error"
-			}
-			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-		} else if res != nil && res.ResultRev == res.BaseRev {
-			res.Outcome = "no-changes"
-			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+		} else {
+			normalizeUnlandedAttemptResult(res)
 		}
 		return reportFromResult(res), nil
 	}
