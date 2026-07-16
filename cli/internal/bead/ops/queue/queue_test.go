@@ -36,6 +36,32 @@ func createBead(t *testing.T, s *bead.Store, id, title string, priority int) *be
 	return got
 }
 
+type recordingLoader struct {
+	beads   []bead.Bead
+	applied []string
+}
+
+func (l *recordingLoader) ReadAll(context.Context) ([]bead.Bead, error) {
+	return append([]bead.Bead(nil), l.beads...), nil
+}
+
+func (l *recordingLoader) Apply(id string, op bead.Operation) error {
+	l.applied = append(l.applied, id)
+	for i := range l.beads {
+		if l.beads[i].ID == id {
+			return op.Apply(&l.beads[i])
+		}
+	}
+	return nil
+}
+
+func queueRank(t *testing.T, b bead.Bead) int {
+	t.Helper()
+	rank, ok := bead.QueueRank(b.Extra)
+	require.True(t, ok, "%s must have an explicit queue rank", b.ID)
+	return rank
+}
+
 // TestOpsQueue_Top_MovesBeadToFront verifies that Top sets an explicit rank that
 // places the target before unranked beads in the same priority bucket.
 func TestOpsQueue_Top_MovesBeadToFront(t *testing.T) {
@@ -62,6 +88,147 @@ func TestOpsQueue_Top_MovesBeadToFront(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ready, 2)
 	assert.Equal(t, "b", ready[0].ID, "b should be first after Top")
+}
+
+// TestOpsQueue_TopRepeatedCallsStrictlyReorder proves Top never ties a newly
+// topped bead with an existing rank-zero entry. Each call must place its target
+// uniquely first while preserving the prior top order behind it.
+func TestOpsQueue_TopRepeatedCallsStrictlyReorder(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	for i, id := range []string{"a", "b", "c"} {
+		b := &bead.Bead{
+			ID:        id,
+			Title:     id,
+			Status:    bead.StatusOpen,
+			Priority:  0,
+			IssueType: "task",
+			CreatedAt: now.Add(time.Duration(i) * time.Minute),
+			UpdatedAt: now.Add(time.Duration(i) * time.Minute),
+		}
+		require.NoError(t, s.Create(context.Background(), b))
+	}
+
+	wantAfterTop := map[string][]string{
+		"a": {"a", "b", "c"},
+		"b": {"b", "a", "c"},
+		"c": {"c", "b", "a"},
+	}
+	for _, id := range []string{"a", "b", "c"} {
+		require.NoError(t, beadqueue.Top(context.Background(), s, id))
+		ready, err := s.ReadyExecution()
+		require.NoError(t, err)
+		gotIDs := make([]string, 0, len(ready))
+		for _, row := range ready {
+			gotIDs = append(gotIDs, row.ID)
+		}
+		assert.Equal(t, wantAfterTop[id], gotIDs)
+	}
+
+	ranks := make(map[any]string, 3)
+	for _, id := range []string{"a", "b", "c"} {
+		got, err := s.Get(context.Background(), id)
+		require.NoError(t, err)
+		rank, ok := got.Extra["queue-rank"]
+		require.True(t, ok, "%s must have an explicit rank", id)
+		if prior, exists := ranks[rank]; exists {
+			t.Fatalf("%s and %s share queue-rank %v", prior, id, rank)
+		}
+		ranks[rank] = id
+	}
+}
+
+func TestOpsQueue_TopRankZeroWritesOnlyTarget(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	l := &recordingLoader{beads: []bead.Bead{
+		{ID: "old", Priority: 0, CreatedAt: now, Extra: map[string]any{"queue-rank": 0}},
+		{ID: "new", Priority: 0, CreatedAt: now.Add(time.Minute)},
+	}}
+
+	require.NoError(t, beadqueue.Top(context.Background(), l, "new"))
+	require.Equal(t, []string{"new"}, l.applied)
+	assert.Equal(t, -1, queueRank(t, l.beads[1]))
+	assert.Equal(t, 0, queueRank(t, l.beads[0]))
+}
+
+func TestOpsQueue_TopPrecedesLegacyAliasRank(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	s := newStore(t)
+	require.NoError(t, s.Create(context.Background(), &bead.Bead{
+		ID: "store-old", Title: "old", Status: bead.StatusOpen, Priority: 0, IssueType: "task",
+		CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue_rank": -7},
+	}))
+	require.NoError(t, s.Create(context.Background(), &bead.Bead{
+		ID: "store-new", Title: "new", Status: bead.StatusOpen, Priority: 0, IssueType: "task",
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute),
+	}))
+	require.NoError(t, beadqueue.Top(context.Background(), s, "store-new"))
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 2)
+	assert.Equal(t, []string{"store-new", "store-old"}, []string{ready[0].ID, ready[1].ID})
+
+	// The sparse path must still mutate only the target bead.
+	l := &recordingLoader{beads: []bead.Bead{
+		{ID: "old", Priority: 0, CreatedAt: now, Extra: map[string]any{"queue_rank": -7}},
+		{ID: "new", Priority: 0, CreatedAt: now.Add(time.Minute)},
+	}}
+
+	require.NoError(t, beadqueue.Top(context.Background(), l, "new"))
+	require.Equal(t, []string{"new"}, l.applied, "a sparse Top must write only its target")
+	assert.Equal(t, -8, queueRank(t, l.beads[1]))
+	assert.Equal(t, -7, queueRank(t, l.beads[0]))
+}
+
+func TestOpsQueue_TopAtMinimumRankRenormalizesWithoutOverflow(t *testing.T) {
+	t.Parallel()
+	maxRank := int(^uint(0) >> 1)
+	minRank := -maxRank - 1
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	l := &recordingLoader{beads: []bead.Bead{
+		{ID: "old", Priority: 0, CreatedAt: now, Extra: map[string]any{"queue-rank": minRank}},
+		{ID: "new", Priority: 0, CreatedAt: now.Add(time.Minute)},
+	}}
+
+	require.NoError(t, beadqueue.Top(context.Background(), l, "new"))
+	require.Equal(t, []string{"new", "old"}, l.applied)
+	assert.Equal(t, 0, queueRank(t, l.beads[1]))
+	assert.Equal(t, 10, queueRank(t, l.beads[0]))
+}
+
+func TestOpsQueue_MoveRenormalizesAtMaxIntTail(t *testing.T) {
+	t.Parallel()
+	maxRank := int(^uint(0) >> 1)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	l := &recordingLoader{beads: []bead.Bead{
+		{ID: "old", Priority: 0, CreatedAt: now, Extra: map[string]any{"queue-rank": maxRank}},
+		{ID: "new", Priority: 0, CreatedAt: now.Add(time.Minute)},
+	}}
+
+	require.NoError(t, beadqueue.Move(context.Background(), l, "new", 1))
+	require.Equal(t, []string{"old", "new"}, l.applied)
+	assert.Equal(t, 0, queueRank(t, l.beads[0]))
+	assert.Equal(t, 10, queueRank(t, l.beads[1]))
+}
+
+func TestOpsQueue_MoveBetweenExtremeRanksDoesNotOverflow(t *testing.T) {
+	t.Parallel()
+	maxRank := int(^uint(0) >> 1)
+	minRank := -maxRank - 1
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	l := &recordingLoader{beads: []bead.Bead{
+		{ID: "first", Priority: 0, CreatedAt: now, Extra: map[string]any{"queue-rank": minRank}},
+		{ID: "last", Priority: 0, CreatedAt: now.Add(time.Minute), Extra: map[string]any{"queue-rank": maxRank}},
+		{ID: "middle", Priority: 0, CreatedAt: now.Add(2 * time.Minute)},
+	}}
+
+	require.NoError(t, beadqueue.Move(context.Background(), l, "middle", 1))
+	require.Equal(t, []string{"middle"}, l.applied)
+	assert.Equal(t, minRank+1, queueRank(t, l.beads[2]))
 }
 
 // TestOpsQueue_Move_PreservesPriorityBucket verifies that Move sets queue-rank
