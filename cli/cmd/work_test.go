@@ -418,35 +418,61 @@ func TestWork_ClaimNotFoundRace_DoesNotFailUnderBeadUpdateChurn(t *testing.T) {
 	require.NoError(t, store.Claim(targetID, "worker-a"))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
+	firstChurn := make(chan struct{})
+	churnResult := make(chan error, 1)
 	var churnWG sync.WaitGroup
 	churnWG.Add(1)
 	go func() {
 		defer churnWG.Done()
+		update := func() error {
+			return baseStore.Update(context.Background(), churnID, func(b *bead.Bead) {
+				if b.Notes == "" {
+					b.Notes = "churn"
+					return
+				}
+				b.Notes = b.Notes + "\nchurn"
+			})
+		}
+
+		if err := update(); err != nil {
+			churnResult <- err
+			return
+		}
+		close(firstChurn)
+
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
+				churnResult <- nil
 				return
 			case <-ticker.C:
-				_ = baseStore.Update(context.Background(), churnID, func(b *bead.Bead) {
-					if b.Notes == "" {
-						b.Notes = "churn"
-						return
-					}
-					b.Notes = b.Notes + "\nchurn"
-				})
+				if err := update(); err != nil {
+					churnResult <- err
+					return
+				}
 			}
 		}
 	}()
+	defer func() {
+		cancel()
+		churnWG.Wait()
+	}()
+
+	select {
+	case <-firstChurn:
+	case err := <-churnResult:
+		require.NoError(t, err, "the first churn update must succeed")
+	}
 
 	got, err := resolveAttemptBead(context.Background(), targetID, store, func() attemptBeadReader {
 		return bead.NewStoreWithCollection(baseStore.Dir, baseStore.Collection)
 	}, nil)
 	cancel()
 	churnWG.Wait()
+	require.NoError(t, <-churnResult, "continued churn must not fail")
 
 	require.NoError(t, err)
 	require.NotNil(t, got)
