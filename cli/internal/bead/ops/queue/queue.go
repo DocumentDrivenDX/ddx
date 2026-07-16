@@ -7,8 +7,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
@@ -22,13 +20,11 @@ type Loader interface {
 	Apply(id string, op bead.Operation) error
 }
 
-// Top moves a bead to the front of its priority bucket by assigning the top
-// rank value (0). Beads without an explicit rank sort after all ranked beads.
+// Top moves a bead strictly before every other bead in its priority bucket.
+// It shares Move's sparse-rank and bucket-local renormalization contract so an
+// existing rank-zero bead cannot tie with (and sort before) the new target.
 func Top(ctx context.Context, l Loader, id string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return l.Apply(id, bead.QueueSetTop{})
+	return Move(ctx, l, id, 0)
 }
 
 // Move inserts a bead at the given position (0-based index) within its priority
@@ -140,8 +136,8 @@ func sortedBucket(beads []bead.Bead, priority int) []bead.Bead {
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		ir, iok := parseRank(out[i])
-		jr, jok := parseRank(out[j])
+		ir, iok := bead.QueueRank(out[i].Extra)
+		jr, jok := bead.QueueRank(out[j].Extra)
 		if iok != jok {
 			return iok
 		}
@@ -154,44 +150,6 @@ func sortedBucket(beads []bead.Bead, priority int) []bead.Bead {
 		return out[i].ID < out[j].ID
 	})
 	return out
-}
-
-// parseRank extracts the queue-rank integer from a bead's Extra map.
-func parseRank(b bead.Bead) (int, bool) {
-	if b.Extra == nil {
-		return 0, false
-	}
-	switch v := b.Extra["queue-rank"].(type) {
-	case int:
-		return v, true
-	case int8:
-		return int(v), true
-	case int16:
-		return int(v), true
-	case int32:
-		return int(v), true
-	case int64:
-		return int(v), true
-	case uint:
-		return int(v), true
-	case uint8:
-		return int(v), true
-	case uint16:
-		return int(v), true
-	case uint32:
-		return int(v), true
-	case uint64:
-		return int(v), true
-	case float32:
-		return int(v), v == float32(int(v))
-	case float64:
-		return int(v), v == float64(int(v))
-	case string:
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			return n, true
-		}
-	}
-	return 0, false
 }
 
 // sparseRank computes a rank for targetID that fits between its neighbors in
@@ -212,14 +170,14 @@ func sparseRank(desired []bead.Bead, targetID string) (int, bool) {
 
 	// All beads before target must have explicit ranks for sparse-rank to work.
 	for i := 0; i < targetIdx; i++ {
-		if _, ok := parseRank(desired[i]); !ok {
+		if _, ok := bead.QueueRank(desired[i].Extra); !ok {
 			return 0, false
 		}
 	}
 
 	var prevRank *int
 	for i := targetIdx - 1; i >= 0; i-- {
-		if r, ok := parseRank(desired[i]); ok {
+		if r, ok := bead.QueueRank(desired[i].Extra); ok {
 			prevRank = &r
 			break
 		}
@@ -227,7 +185,7 @@ func sparseRank(desired []bead.Bead, targetID string) (int, bool) {
 
 	var nextRank *int
 	for i := targetIdx + 1; i < len(desired); i++ {
-		if r, ok := parseRank(desired[i]); ok {
+		if r, ok := bead.QueueRank(desired[i].Extra); ok {
 			nextRank = &r
 			break
 		}
@@ -235,15 +193,32 @@ func sparseRank(desired []bead.Bead, targetID string) (int, bool) {
 
 	switch {
 	case prevRank != nil && nextRank != nil:
-		if *nextRank-*prevRank <= 1 {
+		// Incrementing the lower bound avoids overflow in both the old
+		// next-prev gap calculation and the old prev+next midpoint. A value
+		// fits only when the increment remains strictly below the upper bound.
+		if *prevRank == maxInt() {
 			return 0, false
 		}
-		return (*prevRank + *nextRank) / 2, true
+		rank := *prevRank + 1
+		if rank >= *nextRank {
+			return 0, false
+		}
+		return rank, true
 	case prevRank != nil:
+		if *prevRank == maxInt() {
+			return 0, false
+		}
 		return *prevRank + 1, true
 	case nextRank != nil:
+		if *nextRank == minInt() {
+			return 0, false
+		}
 		return *nextRank - 1, true
 	default:
 		return 0, true
 	}
 }
+
+func maxInt() int { return int(^uint(0) >> 1) }
+
+func minInt() int { return -maxInt() - 1 }

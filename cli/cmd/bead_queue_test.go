@@ -70,6 +70,54 @@ func TestBeadQueueTopSetsRankWithoutChangingPriority(t *testing.T) {
 	assert.Equal(t, "ddx-queue-b", ids[0])
 }
 
+func TestBeadQueueTopPrecedesExistingRankZero(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	seedQueueBeads(t, workingDir, []bead.Bead{
+		{ID: "ddx-old-top", Title: "Old top", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 0}},
+		{ID: "ddx-new-top", Title: "New top", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute)},
+	})
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "queue", "top", "ddx-new-top")
+	require.NoError(t, err)
+
+	oldTop := readBeadJSON(t, factory, "ddx-old-top")
+	newTop := readBeadJSON(t, factory, "ddx-new-top")
+	oldRank, oldOK := oldTop["queue-rank"].(float64)
+	newRank, newOK := newTop["queue-rank"].(float64)
+	require.True(t, oldOK)
+	require.True(t, newOK)
+	assert.Less(t, newRank, oldRank, "new top must strictly precede the existing rank-zero bead")
+
+	assert.Equal(t, []string{"ddx-new-top", "ddx-old-top"}, readReadyIDs(t, factory))
+}
+
+func TestBeadQueueTopPreservesOtherPriorityBucket(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	seedQueueBeads(t, workingDir, []bead.Bead{
+		{ID: "ddx-p0-old", Title: "P0 old", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 0}},
+		{ID: "ddx-p0-new", Title: "P0 new", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute)},
+		{ID: "ddx-p1-a", Title: "P1 A", Status: bead.StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute), Extra: map[string]any{"queue-rank": -7, "marker": "unchanged-a"}},
+		{ID: "ddx-p1-b", Title: "P1 B", Status: bead.StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now.Add(3 * time.Minute), UpdatedAt: now.Add(3 * time.Minute), Extra: map[string]any{"queue-rank": 4, "marker": "unchanged-b"}},
+	})
+
+	beforeA := readBeadJSON(t, factory, "ddx-p1-a")
+	beforeB := readBeadJSON(t, factory, "ddx-p1-b")
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "queue", "top", "ddx-p0-new")
+	require.NoError(t, err)
+
+	assert.Equal(t, beforeA, readBeadJSON(t, factory, "ddx-p1-a"))
+	assert.Equal(t, beforeB, readBeadJSON(t, factory, "ddx-p1-b"))
+	assert.Equal(t, float64(-7), beforeA["queue-rank"])
+	assert.Equal(t, float64(4), beforeB["queue-rank"])
+}
+
 func TestBeadUpdateQueueRankAliasCanonicalizes(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
