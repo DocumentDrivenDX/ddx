@@ -23,6 +23,19 @@ func routeDelegationExecute(req agentlib.ServiceExecuteRequest) (<-chan agentlib
 	if req.Role != "" && req.Role != "implementer" {
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
 	} else {
+		// Route-delegation tests intentionally produce no implementation commit.
+		// Make that a typed no-change result instead of relying on equal revisions
+		// being interpreted as no_changes by the command wrapper.
+		if attemptID := req.Metadata["attempt_id"]; attemptID != "" {
+			bundleDir := filepath.Join(req.WorkDir, ddxroot.DirName, "executions", attemptID)
+			if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+				return nil, err
+			}
+			rationale := "status: open\nreason: route-delegation fixture intentionally makes no implementation commit\nsuggested_action: retry with smart agent\n"
+			if err := os.WriteFile(filepath.Join(bundleDir, "no_changes_rationale.txt"), []byte(rationale), 0o644); err != nil {
+				return nil, err
+			}
+		}
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok","routing_actual":{"harness":"fizeau-chosen-harness","provider":"fizeau-chosen-provider","model":"fizeau-chosen-model","power":8}}`)}
 	}
 	close(ch)

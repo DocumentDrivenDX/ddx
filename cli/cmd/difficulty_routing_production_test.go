@@ -382,6 +382,12 @@ func TestReturnedRouteIdentityIsEvidenceOnly(t *testing.T) {
 							payload := fmt.Sprintf(`{"status":"error","exit_code":1,"error":%q,"routing_actual":{"harness":%q,"provider":%q,"model":%q,"power":7}}`, failure.error, identity.harness, identity.provider, identity.model)
 							ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(payload)}
 						} else {
+							attemptID := req.Metadata["attempt_id"]
+							require.NotEmpty(t, attemptID)
+							bundleDir := filepath.Join(req.WorkDir, ddxroot.DirName, "executions", attemptID)
+							require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+							rationale := "status: open\nreason: routing fixture intentionally makes no implementation commit\nsuggested_action: retry with smart agent\n"
+							require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "no_changes_rationale.txt"), []byte(rationale), 0o644))
 							payload := fmt.Sprintf(`{"status":"success","final_text":"ok","routing_actual":{"harness":%q,"provider":%q,"model":%q,"power":8}}`, identity.harness, identity.provider, identity.model)
 							ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(payload)}
 						}
