@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -48,11 +49,21 @@ type ExecuteBeadLoopRuntime struct {
 	// findings never stop the worker — warn and operator_attention
 	// severities are surfaced as diagnostics only (ddx-e9182ba1).
 	ResourcePressureChecker ResourcePressureChecker
-	CleanupInterval         time.Duration
-	CleanupTickCh           <-chan time.Time
-	EventSink               io.Writer
-	ProgressCh              chan<- ProgressEvent
-	PreClaimHook            func(ctx context.Context) error
+	// LoadPressureSnapshot, when non-nil, supplies the host load sample used
+	// immediately before Claim. LoadPressureSleeper is the corresponding
+	// context-cancellable delay seam. A nil snapshot disables load pacing so
+	// direct Run callers remain deterministic; production entry points wire
+	// workerstatus.HostLoadPressureSnapshot explicitly.
+	LoadPressureSnapshot func() workerstatus.LoadPressureSnapshot
+	LoadPressureSleeper  func(context.Context, time.Duration) error
+	// LoadPressureThreshold overrides the default five-minute load per CPU
+	// threshold. Zero selects workerstatus.DefaultLoadPressureThreshold.
+	LoadPressureThreshold float64
+	CleanupInterval       time.Duration
+	CleanupTickCh         <-chan time.Time
+	EventSink             io.Writer
+	ProgressCh            chan<- ProgressEvent
+	PreClaimHook          func(ctx context.Context) error
 	// PreClaimIntakeHook runs after routing preflight and before Claim. It
 	// classifies the candidate for actionability/scope; only
 	// actionable_atomic proceeds directly to Claim. Non-atomic outcomes
@@ -2559,6 +2570,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			_, _ = fmt.Fprintf(runtime.Log, "complexity gate: %s (skipping %s)\n", reason, candidate.ID)
 		}
 		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	// Pace host load after candidate/complexity acceptance but before the final
+	// freshness read. No claim, lease, or tracker mutation exists during the
+	// cancellable delay; refreshCandidateBeforeClaim revalidates immediately
+	// afterward so the worker never claims from a stale pre-sleep snapshot.
+	if loadErr := waitForLoadPressureBeforeClaim(ctx, runtime, candidate.ID, emit); loadErr != nil {
+		if exitReason == "" {
+			applyStop(work.StopInput{ContextErr: loadErr})
+		}
+		return executeBeadIterationOutcome{Stop: true}, loadErr
 	}
 	freshCandidate, staleSkip, refreshErr := w.refreshCandidateBeforeClaim(ctx, candidate)
 	if refreshErr != nil {
@@ -7793,6 +7814,110 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+const (
+	defaultLoadPressureBackoffBase = 5 * time.Second
+	defaultLoadPressureBackoffMax  = 30 * time.Second
+)
+
+func (r ExecuteBeadLoopRuntime) effectiveLoadPressureThreshold() float64 {
+	if r.LoadPressureThreshold > 0 && !math.IsNaN(r.LoadPressureThreshold) && !math.IsInf(r.LoadPressureThreshold, 0) {
+		return r.LoadPressureThreshold
+	}
+	return workerstatus.DefaultLoadPressureThreshold
+}
+
+func loadPressureBackoffDelay(snapshot workerstatus.LoadPressureSnapshot) time.Duration {
+	if snapshot.Threshold <= 0 || math.IsNaN(snapshot.Threshold) || math.IsInf(snapshot.Threshold, 0) ||
+		math.IsNaN(snapshot.NormalizedRatio) || snapshot.NormalizedRatio <= snapshot.Threshold {
+		return 0
+	}
+	factor := snapshot.NormalizedRatio / snapshot.Threshold
+	maxFactor := float64(defaultLoadPressureBackoffMax) / float64(defaultLoadPressureBackoffBase)
+	// Clamp while the value is still floating point. Converting a huge or
+	// infinite factor to time.Duration before the clamp can overflow and turn
+	// an extreme load ratio into the minimum delay instead of the maximum.
+	if math.IsInf(factor, 1) || factor >= maxFactor {
+		return defaultLoadPressureBackoffMax
+	}
+	delay := time.Duration(float64(defaultLoadPressureBackoffBase) * factor)
+	if delay < defaultLoadPressureBackoffBase {
+		return defaultLoadPressureBackoffBase
+	}
+	if delay > defaultLoadPressureBackoffMax {
+		return defaultLoadPressureBackoffMax
+	}
+	return delay
+}
+
+func waitForLoadPressureBeforeClaim(
+	ctx context.Context,
+	runtime ExecuteBeadLoopRuntime,
+	beadID string,
+	emit func(string, map[string]any),
+) error {
+	// Nil is intentionally a no-op. Production entry points wire the host
+	// sampler explicitly; direct Run tests stay deterministic and portable.
+	if runtime.LoadPressureSnapshot == nil {
+		return nil
+	}
+	threshold := runtime.effectiveLoadPressureThreshold()
+	snapshot := runtime.LoadPressureSnapshot()
+	snapshot.Threshold = threshold
+	snapshot.Overloaded = snapshot.Supported && snapshot.Available && snapshot.NormalizedRatio > threshold
+
+	sourceState := "available"
+	if !snapshot.Supported {
+		sourceState = "unsupported"
+	} else if !snapshot.Available {
+		sourceState = "unavailable"
+	}
+	fields := map[string]any{
+		"bead_id":          beadID,
+		"load5":            snapshot.Load5,
+		"cpu_count":        snapshot.CPUCount,
+		"normalized_ratio": snapshot.NormalizedRatio,
+		"threshold":        snapshot.Threshold,
+		"supported":        snapshot.Supported,
+		"available":        snapshot.Available,
+		"source_state":     sourceState,
+	}
+	if !snapshot.Supported || !snapshot.Available {
+		diagnostic := snapshot.Diagnostic
+		if diagnostic == "" {
+			diagnostic = "load pressure snapshot unavailable"
+		}
+		fields["diagnostic"] = diagnostic
+		// This is best-effort loop telemetry only. It intentionally does not
+		// append durable bead evidence or mutate the candidate.
+		if emit != nil {
+			emit("loop.load_pressure_unavailable", fields)
+		}
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "load pressure unavailable before claim (%s): %s; proceeding without backoff\n", beadID, diagnostic)
+		}
+		return nil
+	}
+	if !snapshot.Overloaded {
+		return nil
+	}
+
+	delay := loadPressureBackoffDelay(snapshot)
+	fields["delay"] = delay.String()
+	fields["delay_ms"] = delay.Milliseconds()
+	if emit != nil {
+		emit("loop.load_pressure_backoff", fields)
+	}
+	if runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "load pressure backoff before claim (%s): load5=%.2f cpus=%d normalized=%.2f threshold=%.2f delay=%s\n",
+			beadID, snapshot.Load5, snapshot.CPUCount, snapshot.NormalizedRatio, snapshot.Threshold, delay)
+	}
+	sleeper := runtime.LoadPressureSleeper
+	if sleeper == nil {
+		sleeper = sleepWithContext
+	}
+	return sleeper(ctx, delay)
 }
 
 // sleepOrWake sleeps for d unless ctx is cancelled or a wake signal arrives on

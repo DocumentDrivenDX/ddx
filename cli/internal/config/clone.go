@@ -90,6 +90,7 @@ func (w *WorkersConfig) Clone() *WorkersConfig {
 	}
 	out := *w
 	out.MaxCount = clonePtrInt(w.MaxCount)
+	out.LoadPressureThreshold = w.LoadPressureThreshold
 	if w.DefaultSpec != nil {
 		spec := *w.DefaultSpec
 		out.DefaultSpec = &spec
