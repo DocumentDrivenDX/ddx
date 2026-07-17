@@ -164,6 +164,38 @@ func TestRunWithConfigViaService_InstallsProviderShim(t *testing.T) {
 		"RunWithConfigViaService must install ddx-provider-shim on PATH so fizeau's LookPath(codex/claude/…) finds the Pdeathsig wrapper; got PATH=%s", path)
 }
 
+func TestProviderShimUsesConfiguredExecutionScratchRoot(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	originalPATH := os.Getenv("PATH")
+	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
+	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
+	wantScratchRoot := filepath.Dir(configuredRoot)
+	require.Equal(t, wantScratchRoot, config.ExecutionScratchRoot(""))
+
+	dir, cleanup, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
+	require.NoError(t, err)
+	require.NotEmpty(t, dir)
+	require.Equal(t, wantScratchRoot, filepath.Dir(dir))
+	require.NotEqual(t, os.TempDir(), filepath.Dir(dir), "provider shim must not be created directly beneath the raw OS temp root")
+	require.True(t, strings.HasPrefix(filepath.Base(dir), "ddx-provider-shim-"))
+	require.Equal(t, dir+string(os.PathListSeparator)+originalPATH, os.Getenv("PATH"))
+	require.Equal(t, dir, providerShimDirPath)
+
+	reusedDir, reusedCleanup, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "different-ddx"))
+	require.NoError(t, err)
+	require.Equal(t, dir, reusedDir)
+	reusedCleanup()
+	require.DirExists(t, dir, "cleanup from a reuse call must remain a no-op")
+	require.Equal(t, dir+string(os.PathListSeparator)+originalPATH, os.Getenv("PATH"))
+
+	cleanup()
+	require.NoDirExists(t, dir)
+	require.Equal(t, originalPATH, os.Getenv("PATH"))
+	require.Empty(t, providerShimDirPath, "cleanup must reset process-wide reuse state")
+}
+
 // TestRunWithConfigViaService_UsesProviderShimExecutableResolver proves the
 // sole production service entrypoint resolves the ddx executable through the
 // shared validator before mutating PATH.
