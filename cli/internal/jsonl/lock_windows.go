@@ -3,33 +3,27 @@
 package jsonl
 
 import (
-	"fmt"
+	"errors"
 	"os"
-	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 func tryLockFile(f *os.File) error {
-	handle := syscall.Handle(f.Fd())
-	var overlapped syscall.Overlapped
-	ok, err := syscall.LockFileEx(handle, syscall.LOCKFILE_FAIL_IMMEDIATELY|syscall.LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped)
-	if ok {
+	handle := windows.Handle(f.Fd())
+	var overlapped windows.Overlapped
+	err := windows.LockFileEx(handle, windows.LOCKFILE_FAIL_IMMEDIATELY|windows.LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped)
+	if err == nil {
 		return nil
 	}
-	if err == syscall.ERROR_LOCK_VIOLATION {
+	if errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
 		return errLockHeld
 	}
-	if err != nil {
-		return err
-	}
-	return fmt.Errorf("lock acquisition failed")
+	return err
 }
 
 func unlockFile(f *os.File) error {
-	handle := syscall.Handle(f.Fd())
-	var overlapped syscall.Overlapped
-	ok, err := syscall.UnlockFileEx(handle, 1, 0, &overlapped)
-	if ok {
-		return nil
-	}
-	return err
+	handle := windows.Handle(f.Fd())
+	var overlapped windows.Overlapped
+	return windows.UnlockFileEx(handle, 0, 1, 0, &overlapped)
 }
