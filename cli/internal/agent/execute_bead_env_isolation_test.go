@@ -291,6 +291,7 @@ func TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree(t *testing.T) {
 	t.Setenv("GIT_WORK_TREE", primary)
 	t.Setenv("GIT_INDEX_FILE", filepath.Join(primary, ".git", "index"))
 	runCoreBareRepairFixture(t)
+	runLandFixtureGitMutationPaths(t)
 
 	afterConfig, err := os.ReadFile(primaryConfig)
 	require.NoError(t, err)
@@ -330,4 +331,23 @@ func runCoreBareRepairFixture(t *testing.T) {
 	require.NoError(t, err, "fixture must observe its own repaired worktree")
 	_, err = runGitIntegOutput(fixture, "config", "--local", "--get", "core.bare")
 	require.Error(t, err, "fixture core.bare must be removed by repair")
+}
+
+// runLandFixtureGitMutationPaths exercises every landTestRepo helper that
+// creates commits in a linked fixture worktree. The hostile parent Git
+// selection is deliberately still installed by the caller.
+func runLandFixtureGitMutationPaths(t *testing.T) {
+	t.Helper()
+	r := newLandTestRepo(t)
+	created := r.commitOnFiles(r.baseSHA, "feat: fixture files", map[string]string{
+		"delete-me.txt": "temporary\n",
+		"keep-me.txt":   "retained\n",
+	})
+	r.commitDeleteOn(created, "delete-me.txt", "test: delete fixture file")
+	r.commitExecuteBeadEvidence(r.baseSHA, &ExecuteBeadResult{
+		AttemptID: "20260717T000000Z",
+		// Use an unignored legacy path: this proof exercises the fixture Git
+		// subprocesses, not the separate evidence-ignore policy.
+		ExecutionDir: "fixture-evidence",
+	}, nil)
 }

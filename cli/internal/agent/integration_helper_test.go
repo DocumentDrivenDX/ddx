@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -22,18 +23,11 @@ import (
 // Git helpers
 // ---------------------------------------------------------------------------
 
-// scrubbedGitEnvInteg returns the current environment with all GIT_* variables
-// removed, ensuring test-local git subprocesses don't inherit parent repo state.
+// scrubbedGitEnvInteg uses the production canonical Git-local-environment
+// scrubber. Keeping fixtures on the same list prevents tests from missing a
+// repository-selection variable added by Git after this package was written.
 func scrubbedGitEnvInteg() []string {
-	parent := os.Environ()
-	env := make([]string, 0, len(parent))
-	for _, kv := range parent {
-		if strings.HasPrefix(kv, "GIT_") {
-			continue
-		}
-		env = append(env, kv)
-	}
-	return env
+	return internalgit.CleanEnv()
 }
 
 // fixtureGitEnvInteg adds an explicit, TestMain-owned global config after
