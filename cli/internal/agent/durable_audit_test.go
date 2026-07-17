@@ -119,6 +119,68 @@ func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *
 	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
 }
 
+func TestDurableAuditCommitOutsideTrackerLock(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	dirtyPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dirtyPath), 0o755))
+	require.NoError(t, os.WriteFile(dirtyPath, []byte("{\"attempt_id\":\"outside-lock\"}\n"), 0o644))
+
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() { durableAuditGitRunner = origRunner })
+	var commitStarted atomic.Bool
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "commit" {
+			commitStarted.Store(true)
+			_, err := os.Stat(trackerLockPath(projectRoot))
+			require.True(t, os.IsNotExist(err), "Git commit began while tracker lock still existed: %v", err)
+		}
+		return origRunner(ctx, gitDir, args...)
+	}
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260717T000001-outside-lock"))
+	assert.True(t, commitStarted.Load(), "test must observe the durable audit commit")
+}
+
+func TestDurableAuditFlushesOncePerDrainIteration(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	// A drain iteration can write more than one durable attempt event before its
+	// final audit flush. Both rows must land in the one resulting audit commit.
+	for _, attemptID := range []string{"20260717T000002-first", "20260717T000002-second"} {
+		require.NoError(t, attemptmetrics.AppendRow(projectRoot, attemptmetrics.AttemptRow{
+			SchemaVersion: attemptmetrics.SchemaVersion,
+			AttemptID:     attemptID,
+			BeadID:        "ddx-durable-audit-batch",
+			TSEnd:         attemptmetrics.Rfc3339(time.Now().UTC()),
+			Outcome:       ExecuteBeadStatusExecutionFailed,
+		}))
+	}
+
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() { durableAuditGitRunner = origRunner })
+	var operations []string
+	var operationsMu sync.Mutex
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && (args[0] == "add" || args[0] == "commit") {
+			operationsMu.Lock()
+			operations = append(operations, args[0])
+			operationsMu.Unlock()
+		}
+		return origRunner(ctx, gitDir, args...)
+	}
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260717T000002-drain"))
+	operationsMu.Lock()
+	assert.Equal(t, []string{"add", "commit"}, operations, "one ordered Git flush is required for the iteration")
+	operationsMu.Unlock()
+
+	stateRoot := ddxroot.Path(context.Background(), projectRoot)
+	contents, err := os.ReadFile(filepath.Join(stateRoot, "metrics", "attempts.jsonl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), "20260717T000002-first")
+	assert.Contains(t, string(contents), "20260717T000002-second")
+	assert.Equal(t, "chore: update tracker (execute-bead 20260717T000002-drain)", runGitInteg(t, stateRoot, "log", "-1", "--pretty=%s"))
+}
+
 func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
 	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
 	projectRoot := testutils.NewFixtureRepo(t, "standard")
