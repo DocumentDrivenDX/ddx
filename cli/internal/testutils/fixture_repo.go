@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // fixtureRepoBaseName is the leaf directory name given to every fixture
@@ -96,7 +98,7 @@ var (
 
 // DDxBinary resolves a ddx binary for fixture seeding and subprocess tests. It
 // prefers $DDX_BIN, then `ddx` on PATH, and otherwise lazily builds one from
-// cli/ once per process. The built binary lives in an os.MkdirTemp dir that
+// cli/ once per process. The built binary lives in DDx execution scratch that
 // outlives any single test so concurrent fixtures can share it.
 func DDxBinary(t *testing.T) string {
 	t.Helper()
@@ -115,11 +117,11 @@ func DDxBinary(t *testing.T) string {
 // per process and returns its path. Tests that must exercise the current source
 // (rather than a possibly-stale `ddx` on PATH) should build with this and pin it
 // via t.Setenv("DDX_BIN", ...) so NewFixtureRepo seeds with the same binary. The
-// binary lives in an os.MkdirTemp dir that outlives any single test.
+// binary lives in DDx execution scratch that outlives any single test.
 func BuildDDxBinary(t *testing.T) string {
 	t.Helper()
 	builtBinaryOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "ddx-fixture-bin-*")
+		dir, err := fixtureBinaryScratchDir("ddx-fixture-bin-*")
 		if err != nil {
 			builtBinaryErr = err
 			return
@@ -147,7 +149,7 @@ func BuildDDxBinary(t *testing.T) string {
 func BuildDDxFizeauTestSeamBinary(t *testing.T) string {
 	t.Helper()
 	builtFizeauTestSeamBinaryOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "ddx-fizeau-testseam-bin-*")
+		dir, err := fixtureBinaryScratchDir("ddx-fizeau-testseam-bin-*")
 		if err != nil {
 			builtFizeauTestSeamBinaryErr = err
 			return
@@ -165,6 +167,13 @@ func BuildDDxFizeauTestSeamBinary(t *testing.T) string {
 		t.Fatalf("build ddx Fizeau test-seam binary from source: %v", builtFizeauTestSeamBinaryErr)
 	}
 	return builtFizeauTestSeamBinaryPath
+}
+
+// fixtureBinaryScratchDir creates process-lifetime scratch for binaries shared
+// by tests. An empty project root intentionally selects the configured global
+// execution scratch root without coupling the binary to any one fixture repo.
+func fixtureBinaryScratchDir(pattern string) (string, error) {
+	return config.MkdirExecutionScratch("", pattern)
 }
 
 // cliDir walks up from the test's working directory to the directory that
