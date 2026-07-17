@@ -36,13 +36,51 @@ func scrubbedGitEnvInteg() []string {
 	return env
 }
 
+// fixtureGitEnvInteg adds an explicit, TestMain-owned global config after
+// stripping Git's repository-selection variables.  Keeping this in one helper
+// makes every integration fixture fail before a git subprocess can mutate
+// anything when its private config scope was not established.
+func fixtureGitEnvInteg() ([]string, error) {
+	if testFixtureGitConfigPath == "" {
+		return nil, errors.New("test fixture private git config is not initialized")
+	}
+	info, err := os.Stat(testFixtureGitConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("stat test fixture private git config: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("test fixture private git config is not a regular file: %s", testFixtureGitConfigPath)
+	}
+	env := scrubbedGitEnvInteg()
+	env = append(env,
+		"GIT_CONFIG_GLOBAL="+testFixtureGitConfigPath,
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_CONFIG_NOSYSTEM=1",
+	)
+	return env, nil
+}
+
+// fixtureGitCommand is the shared command constructor for real Git fixture
+// repositories.  Do not use exec.Command("git", ...) in agent tests: test
+// binaries can be launched by hooks with GIT_DIR/GIT_WORK_TREE set, and -C or
+// cmd.Dir does not override those inherited selectors.
+func fixtureGitCommand(t *testing.T, dir string, args ...string) *exec.Cmd {
+	t.Helper()
+	env, err := fixtureGitEnvInteg()
+	if err != nil {
+		t.Fatalf("refusing to run fixture git %v in %s without private config: %v", args, dir, err)
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = env
+	return cmd
+}
+
 // runGitInteg runs a git command in dir with scrubbed GIT_* env.
 // Fails the test on non-zero exit.
 func runGitInteg(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = scrubbedGitEnvInteg()
+	cmd := fixtureGitCommand(t, dir, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
@@ -53,9 +91,13 @@ func runGitInteg(t *testing.T, dir string, args ...string) string {
 // runGitIntegOutput runs a git command and returns (output, error) — for cases
 // where failure is expected or handled by the caller.
 func runGitIntegOutput(dir string, args ...string) (string, error) {
+	env, envErr := fixtureGitEnvInteg()
+	if envErr != nil {
+		return "", fmt.Errorf("refusing to run fixture git %v in %s without private config: %w", args, dir, envErr)
+	}
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = scrubbedGitEnvInteg()
+	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }

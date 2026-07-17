@@ -3,7 +3,6 @@ package agent
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -112,8 +111,7 @@ func initReportTestRepo(t *testing.T) string {
 
 func gitReportTest(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
+	cmd := fixtureGitCommand(t, dir, args...)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v\n%s", args, string(out))
 	return strings.TrimSpace(string(out))

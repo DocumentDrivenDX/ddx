@@ -486,6 +486,12 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/beads.lock/"):
 		return true
+	case strings.HasPrefix(path, ".ddx/beads.lock.") && strings.HasSuffix(path, ".lock"):
+		// Collection-lock recovery uses a stable sibling advisory-lock sidecar
+		// (for example .ddx/beads.lock.stale-break.lock). It is runtime
+		// coordination state, never bead implementation work, and must not
+		// make the next pre-dispatch checkpoint refuse an otherwise clean tree.
+		return true
 	case strings.HasPrefix(path, ".ddx/attachments/"):
 		return true
 	case strings.HasPrefix(path, ".ddx/harness-sessions/"):

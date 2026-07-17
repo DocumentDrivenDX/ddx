@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,8 +21,7 @@ func initTestGitRepo(t *testing.T) (string, string) {
 
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
+		cmd := fixtureGitCommand(t, dir, args...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -35,7 +33,7 @@ func initTestGitRepo(t *testing.T) (string, string) {
 	run("add", "README.md")
 	run("commit", "-m", "initial")
 
-	rawRev, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	rawRev, err := fixtureGitCommand(t, dir, "rev-parse", "HEAD").Output()
 	require.NoError(t, err)
 	return dir, strings.TrimSpace(string(rawRev))
 }
@@ -43,7 +41,7 @@ func initTestGitRepo(t *testing.T) (string, string) {
 // gitRevParse resolves ref in dir, failing the test if not found.
 func gitRevParse(t *testing.T, dir, ref string) (string, error) {
 	t.Helper()
-	out, err := exec.Command("git", "-C", dir, "rev-parse", ref).Output()
+	out, err := fixtureGitCommand(t, dir, "rev-parse", ref).Output()
 	if err != nil {
 		return "", err
 	}
