@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,15 +194,18 @@ func (a *AxonBackend) WriteAll(beads []Bead) error {
 	return fmt.Errorf("bead: axon write corpus requires GraphQL transport")
 }
 
-func (a *AxonBackend) WithLock(fn func() error) error {
+func (a *AxonBackend) WithLock(fn func() error) (err error) {
 	wait := a.LockWait
 	if wait <= 0 {
 		wait = 10 * time.Second
 	}
-	if err := acquireDirLock(a.Dir, a.LockDir, wait); err != nil {
+	lease, err := acquireDirLock(a.Dir, a.LockDir, wait)
+	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(a.LockDir)
+	defer func() {
+		err = errors.Join(err, lease.Release())
+	}()
 	return fn()
 }
 

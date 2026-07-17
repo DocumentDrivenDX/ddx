@@ -2,6 +2,7 @@ package bead
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -123,14 +124,17 @@ func (j *JSONLBackend) Apply(ctx context.Context, id string, op Operation) error
 	})
 }
 
-func (j *JSONLBackend) WithLock(fn func() error) error {
+func (j *JSONLBackend) WithLock(fn func() error) (err error) {
 	wait := j.LockWait
 	if wait <= 0 {
 		wait = 10 * time.Second
 	}
-	if err := acquireDirLock(j.Dir, j.LockDir, wait); err != nil {
+	lease, err := acquireDirLock(j.Dir, j.LockDir, wait)
+	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(j.LockDir)
+	defer func() {
+		err = errors.Join(err, lease.Release())
+	}()
 	return fn()
 }
