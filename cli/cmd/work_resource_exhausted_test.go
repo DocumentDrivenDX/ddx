@@ -77,9 +77,7 @@ func TestWorkResourceExhausted_PrintsOperatorMessage(t *testing.T) {
 	require.NoError(t, os.MkdirAll(execTempRoot, 0o755))
 	t.Setenv("DDX_EXEC_WT_DIR", execTempRoot)
 
-	homeDir, err := os.MkdirTemp("", "ddx-home-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	homeDir := t.TempDir()
 	agentCfgDir := filepath.Join(homeDir, ".config", "agent")
 	require.NoError(t, os.MkdirAll(agentCfgDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(agentCfgDir, "config.yaml"), []byte(`providers:
@@ -160,9 +158,7 @@ func TestWorkResourceExhaustionEndToEnd_StopsBeforeNextClaim(t *testing.T) {
 	require.NoError(t, os.MkdirAll(execTempRoot, 0o755))
 	t.Setenv("DDX_EXEC_WT_DIR", execTempRoot)
 
-	homeDir, err := os.MkdirTemp("", "ddx-home-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	homeDir := t.TempDir()
 	agentCfgDir := filepath.Join(homeDir, ".config", "agent")
 	require.NoError(t, os.MkdirAll(agentCfgDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(agentCfgDir, "config.yaml"), []byte(`providers:
