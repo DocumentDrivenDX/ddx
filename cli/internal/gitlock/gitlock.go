@@ -4,13 +4,17 @@
 package gitlock
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -32,6 +36,45 @@ const RecoveryAttempts = 3
 // LiveOwnerWait is the wait between retries when a live process holds the lock.
 // Short by design: stalling is not acceptable here.
 var LiveOwnerWait = 500 * time.Millisecond
+
+type ownerProbeKind uint8
+
+const (
+	ownerProbeUnknown ownerProbeKind = iota
+	ownerProbeAbsent
+	ownerProbeLive
+	ownerProbeDead
+)
+
+type ownerProbeResult struct {
+	kind   ownerProbeKind
+	pid    int
+	detail string
+}
+
+type ownerProbeFunc func(string) ownerProbeResult
+
+type staleLockTransitionStage string
+
+const (
+	staleLockStageSourceObserved staleLockTransitionStage = "source_observed"
+	staleLockStageGuardAttempted staleLockTransitionStage = "guard_attempted"
+	staleLockStageGuardContended staleLockTransitionStage = "guard_contended"
+	staleLockStageGuardAcquired  staleLockTransitionStage = "guard_acquired"
+	staleLockStageRenamed        staleLockTransitionStage = "renamed"
+)
+
+type staleLockTransitionObserver func(staleLockTransitionStage)
+
+type staleLockTransitionGuard struct {
+	file  *os.File
+	mutex *sync.Mutex
+}
+
+var (
+	staleLockGuardMutexes sync.Map
+	staleLockTombstoneSeq atomic.Uint64
+)
 
 // IsIndexLockError reports whether the git output is the .git/index.lock-exists error.
 func IsIndexLockError(output string) bool {
@@ -66,25 +109,64 @@ func IsTransientGitContention(output string, err error) bool {
 	return false
 }
 
-// IndexLockPath returns the absolute path to .git/index.lock for projectRoot.
+// IndexLockPath returns the absolute path to Git's index.lock for projectRoot.
+// It returns an empty string when Git cannot resolve the path. Recovery uses
+// the error-returning resolver directly and therefore fails closed.
 func IndexLockPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".git", "index.lock")
+	path, err := resolveIndexLockPath(projectRoot)
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
-// findGitRoot walks up from dir to find the directory that contains a .git
-// entry. Returns dir unchanged if .git cannot be found (graceful fallback).
-func findGitRoot(dir string) string {
-	current := dir
-	for {
-		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
-			return current
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return dir
-		}
-		current = parent
+func resolveIndexLockPath(projectRoot string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := internalgit.Command(
+		ctx,
+		projectRoot,
+		"rev-parse",
+		"--path-format=absolute",
+		"--git-path",
+		"index.lock",
+	).Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve git index.lock from %s: %w", projectRoot, err)
 	}
+	path := strings.TrimSpace(string(out))
+	if path == "" {
+		return "", fmt.Errorf("resolve git index.lock from %s: empty path", projectRoot)
+	}
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("resolve git index.lock from %s: non-absolute path %q", projectRoot, path)
+	}
+	// rev-parse resolves an existing index.lock symlink to its target. Retain
+	// the exact --git-path result for ordinary files, but recover the lexical
+	// gitdir sibling when it is itself a malformed non-regular object so the
+	// safety check can reject the canonical symlink rather than inspect or
+	// mutate its target.
+	gitDirOut, gitDirErr := internalgit.Command(
+		ctx,
+		projectRoot,
+		"rev-parse",
+		"--path-format=absolute",
+		"--git-dir",
+	).Output()
+	if gitDirErr != nil {
+		return "", fmt.Errorf("resolve gitdir from %s: %w", projectRoot, gitDirErr)
+	}
+	gitDir := strings.TrimSpace(string(gitDirOut))
+	if gitDir == "" || !filepath.IsAbs(gitDir) {
+		return "", fmt.Errorf("resolve gitdir from %s: invalid absolute path %q", projectRoot, gitDir)
+	}
+	lexicalLockPath := filepath.Join(filepath.Clean(gitDir), "index.lock")
+	if info, lstatErr := os.Lstat(lexicalLockPath); lstatErr == nil && !info.Mode().IsRegular() {
+		return lexicalLockPath, nil
+	} else if lstatErr != nil && !os.IsNotExist(lstatErr) {
+		return "", fmt.Errorf("inspect lexical git index.lock %s: %w", lexicalLockPath, lstatErr)
+	}
+	return filepath.Clean(path), nil
 }
 
 // LsofTimeout bounds the lsof call in IndexLockOwner. On Linux, lsof can
@@ -94,32 +176,105 @@ func findGitRoot(dir string) string {
 var LsofTimeout = 2 * time.Second
 
 // IndexLockOwner attempts to identify the pid that currently holds lockPath
-// open. Uses lsof if available on PATH. Returns (0, nil) if no owner can be
-// determined. Failure to identify is not itself an error.
+// open. A nil error with pid zero means lsof positively reported no owner.
+// Missing tooling, timeouts, execution failures, and malformed output return
+// an error because those unknown outcomes must not authorize stale recovery.
 func IndexLockOwner(lockPath string) (int, error) {
-	lsof, err := exec.LookPath("lsof")
-	if err != nil {
+	probe := probeIndexLockOwner(lockPath)
+	switch probe.kind {
+	case ownerProbeLive, ownerProbeDead:
+		return probe.pid, nil
+	case ownerProbeAbsent:
 		return 0, nil
+	default:
+		return 0, errors.New(probe.detail)
+	}
+}
+
+type lsofRunner func(context.Context, string, string) ([]byte, []byte, error)
+
+func probeIndexLockOwner(lockPath string) ownerProbeResult {
+	return probeIndexLockOwnerWith(lockPath, exec.LookPath, runLsof)
+}
+
+func runLsof(ctx context.Context, executable, lockPath string) ([]byte, []byte, error) {
+	cmd := exec.CommandContext(ctx, executable, "-t", "--", lockPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	return out, stderr.Bytes(), err
+}
+
+func probeIndexLockOwnerWith(
+	lockPath string,
+	lookPath func(string) (string, error),
+	run lsofRunner,
+) ownerProbeResult {
+	lsof, err := lookPath("lsof")
+	if err != nil {
+		return ownerProbeResult{kind: ownerProbeUnknown, detail: fmt.Sprintf("owner probe unknown: lsof unavailable: %v", err)}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), LsofTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, lsof, "-t", "--", lockPath).Output()
+	out, stderr, err := run(ctx, lsof, lockPath)
+	exitCode := 0
 	if err != nil {
-		// lsof exits non-zero when no process has the file open, or when
-		// the context deadline is exceeded (timed out). Either way we
-		// cannot determine an owner.
-		return 0, nil
+		exitCode = -1
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+	return classifyLsofProbe(out, stderr, exitCode, err, ctx.Err() != nil)
+}
+
+func classifyLsofProbe(out, stderr []byte, exitCode int, runErr error, timedOut bool) ownerProbeResult {
+	if strings.TrimSpace(string(stderr)) != "" {
+		return ownerProbeResult{kind: ownerProbeUnknown, detail: "owner probe unknown: lsof wrote diagnostics: " + strings.TrimSpace(string(stderr))}
+	}
+	if runErr != nil {
+		if timedOut || errors.Is(runErr, context.DeadlineExceeded) {
+			return ownerProbeResult{kind: ownerProbeUnknown, detail: "owner probe unknown: lsof timed out"}
+		}
+		if exitCode == 1 &&
+			strings.TrimSpace(string(out)) == "" && strings.TrimSpace(string(stderr)) == "" {
+			return ownerProbeResult{kind: ownerProbeAbsent, detail: "no owner found"}
+		}
+		detail := strings.TrimSpace(string(stderr))
+		if detail == "" {
+			detail = runErr.Error()
+		}
+		return ownerProbeResult{kind: ownerProbeUnknown, detail: "owner probe unknown: lsof execution failed: " + detail}
+	}
+	if exitCode != 0 {
+		return ownerProbeResult{kind: ownerProbeUnknown, detail: fmt.Sprintf("owner probe unknown: lsof exited %d without an execution error", exitCode)}
 	}
 	s := strings.TrimSpace(string(out))
 	if s == "" {
-		return 0, nil
+		return ownerProbeResult{kind: ownerProbeUnknown, detail: "owner probe unknown: lsof returned empty successful output"}
 	}
-	first := strings.SplitN(s, "\n", 2)[0]
-	pid, perr := strconv.Atoi(strings.TrimSpace(first))
-	if perr != nil {
-		return 0, nil
+	lines := strings.Split(s, "\n")
+	pids := make([]int, 0, len(lines))
+	seen := make(map[int]struct{}, len(lines))
+	for _, line := range lines {
+		parsed, parseErr := strconv.Atoi(strings.TrimSpace(line))
+		if parseErr != nil || parsed <= 0 {
+			return ownerProbeResult{kind: ownerProbeUnknown, detail: "owner probe unknown: malformed lsof output"}
+		}
+		if _, exists := seen[parsed]; !exists {
+			seen[parsed] = struct{}{}
+			pids = append(pids, parsed)
+		}
 	}
-	return pid, nil
+	for _, pid := range pids {
+		if processAlive(pid) {
+			return ownerProbeResult{kind: ownerProbeLive, pid: pid, detail: "live owner"}
+		}
+	}
+	if len(pids) != 1 {
+		return ownerProbeResult{kind: ownerProbeUnknown, detail: "owner probe unknown: ambiguous lsof owner set"}
+	}
+	return ownerProbeResult{kind: ownerProbeDead, pid: pids[0], detail: "identified owner is dead"}
 }
 
 // IndexLockRecoveryResult describes the outcome of one recovery attempt
@@ -138,17 +293,27 @@ type IndexLockRecoveryResult struct {
 	Reason string
 }
 
-// RecoverGitIndexLock inspects .git/index.lock under projectRoot. If the lock
-// has no live owner — either lsof identifies a dead pid, or no pid holds it
-// and the mtime is past StaleAge — the lock is removed. Otherwise the lock is
-// left in place and the result describes the live owner.
+// RecoverGitIndexLock inspects Git's actual index.lock under projectRoot. A
+// stale candidate is moved only while holding a stable advisory transition
+// guard and only when the current pathname still names the exact regular-file
+// identity inspected by this attempt.
 //
 // projectRoot may be a subdirectory of the git repo; RecoverGitIndexLock
 // walks up to find the actual .git directory so callers that operate on
 // subdirectories (e.g. .ddx/) still find the correct lock file.
 func RecoverGitIndexLock(projectRoot string) (IndexLockRecoveryResult, error) {
-	projectRoot = findGitRoot(projectRoot)
-	lockPath := IndexLockPath(projectRoot)
+	return recoverGitIndexLockObserved(projectRoot, nil, probeIndexLockOwner)
+}
+
+func recoverGitIndexLockObserved(
+	projectRoot string,
+	observer staleLockTransitionObserver,
+	probeOwner ownerProbeFunc,
+) (IndexLockRecoveryResult, error) {
+	lockPath, err := resolveIndexLockPath(projectRoot)
+	if err != nil {
+		return IndexLockRecoveryResult{}, err
+	}
 	info, statErr := os.Lstat(lockPath)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
@@ -156,43 +321,261 @@ func RecoverGitIndexLock(projectRoot string) (IndexLockRecoveryResult, error) {
 		}
 		return IndexLockRecoveryResult{}, fmt.Errorf("stat %s: %w", lockPath, statErr)
 	}
+	if !info.Mode().IsRegular() {
+		return IndexLockRecoveryResult{
+			Reason: fmt.Sprintf("lock path is not a regular file: %s", lockPath),
+		}, nil
+	}
 	age := time.Since(info.ModTime())
-	pid, _ := IndexLockOwner(lockPath)
-
-	if pid > 0 {
-		alive := processAlive(pid)
-		if !alive {
-			if rmErr := os.Remove(lockPath); rmErr != nil && !os.IsNotExist(rmErr) {
-				return IndexLockRecoveryResult{OwnerPID: pid, Age: age},
-					fmt.Errorf("remove lock owned by dead pid %d: %w", pid, rmErr)
-			}
-			return IndexLockRecoveryResult{
-				Removed: true, OwnerPID: pid, OwnerAlive: false, Age: age,
-				Reason: fmt.Sprintf("removed: owner pid %d not alive (lock age %s)", pid, age.Round(time.Second)),
-			}, nil
+	probe := probeOwner(lockPath)
+	base := IndexLockRecoveryResult{OwnerPID: probe.pid, Age: age}
+	stale := false
+	switch probe.kind {
+	case ownerProbeLive:
+		base.OwnerAlive = true
+		base.Reason = fmt.Sprintf("live owner pid %d (lock age %s)", probe.pid, age.Round(time.Second))
+		return base, nil
+	case ownerProbeDead:
+		stale = true
+	case ownerProbeAbsent:
+		if age < StaleAge {
+			base.Reason = fmt.Sprintf("no owner found but lock is fresh (age %s < %s)", age.Round(time.Second), StaleAge)
+			return base, nil
 		}
-		return IndexLockRecoveryResult{
-			OwnerPID: pid, OwnerAlive: true, Age: age,
-			Reason: fmt.Sprintf("live owner pid %d (lock age %s)", pid, age.Round(time.Second)),
-		}, nil
+		stale = true
+	case ownerProbeUnknown:
+		base.Reason = probe.detail
+		return base, nil
+	default:
+		base.Reason = "owner probe unknown: invalid probe outcome"
+		return base, nil
+	}
+	if !stale {
+		base.Reason = "lock is not stale"
+		return base, nil
 	}
 
-	if age >= StaleAge {
-		if rmErr := os.Remove(lockPath); rmErr != nil && !os.IsNotExist(rmErr) {
-			return IndexLockRecoveryResult{Age: age},
-				fmt.Errorf("remove unowned stale lock (age %s): %w", age, rmErr)
+	// Pin the source object before attempting the transition. The pre-probe
+	// lstat and post-probe open must still describe the same regular file so an
+	// ownership observation for one inode can never authorize another.
+	candidate, openErr := openPinnedStaleLock(lockPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			base.Reason = "lock identity changed before source capture"
+			return base, nil
 		}
-		return IndexLockRecoveryResult{
-			Removed: true, Age: age,
-			Reason: fmt.Sprintf("removed: no owner found, age %s >= stale threshold %s",
-				age.Round(time.Second), StaleAge),
-		}, nil
+		return base, fmt.Errorf("open stale index lock %s: %w", lockPath, openErr)
+	}
+	candidateOpen := true
+	defer func() {
+		if candidateOpen {
+			_ = candidate.Close()
+		}
+	}()
+	pinned, statErr := candidate.Stat()
+	if statErr != nil {
+		return base, fmt.Errorf("stat pinned index lock %s: %w", lockPath, statErr)
+	}
+	if !pinned.Mode().IsRegular() || !os.SameFile(info, pinned) {
+		base.Reason = "lock identity changed before source capture"
+		return base, nil
+	}
+	if observer != nil {
+		observer(staleLockStageSourceObserved)
 	}
 
-	return IndexLockRecoveryResult{
-		Age:    age,
-		Reason: fmt.Sprintf("no owner found but lock is fresh (age %s < %s)", age.Round(time.Second), StaleAge),
-	}, nil
+	guard, acquired, guardErr := tryAcquireStaleLockTransitionGuard(lockPath, observer)
+	if guardErr != nil {
+		return base, fmt.Errorf("acquire index-lock stale-break guard: %w", guardErr)
+	}
+	if !acquired {
+		base.Reason = "stale-break guard contended"
+		return base, nil
+	}
+
+	tombstone, renamed, transitionErr := renamePinnedStaleLock(lockPath, pinned)
+	base.Removed = renamed
+	if transitionErr == nil && renamed && observer != nil {
+		observer(staleLockStageRenamed)
+	}
+	releaseErr := releaseStaleLockTransitionGuard(guard)
+	if transitionErr != nil {
+		return base, errors.Join(transitionErr, releaseErr)
+	}
+	if releaseErr != nil {
+		return base, fmt.Errorf("release index-lock stale-break guard: %w", releaseErr)
+	}
+	if !renamed {
+		base.Reason = "lock identity changed before guarded rename"
+		return base, nil
+	}
+
+	// The advisory guard is intentionally released before private tombstone
+	// disposal. Recheck identity after release and remove only the exact unique
+	// tombstone produced by this contender; never remove the canonical path.
+	tombstoneInfo, tombstoneErr := os.Lstat(tombstone)
+	if tombstoneErr != nil {
+		return base, fmt.Errorf("verify stale index-lock tombstone %s: %w", tombstone, tombstoneErr)
+	}
+	if !tombstoneInfo.Mode().IsRegular() || !os.SameFile(pinned, tombstoneInfo) {
+		return base, fmt.Errorf("verify stale index-lock tombstone %s: identity changed", tombstone)
+	}
+	if closeErr := candidate.Close(); closeErr != nil {
+		candidateOpen = false
+		return base, fmt.Errorf("close pinned stale index lock before tombstone removal: %w", closeErr)
+	}
+	candidateOpen = false
+	if removeErr := os.Remove(tombstone); removeErr != nil {
+		return base, fmt.Errorf("remove stale index-lock tombstone %s: %w", tombstone, removeErr)
+	}
+	base.Removed = true
+	if probe.kind == ownerProbeDead {
+		base.Reason = fmt.Sprintf("removed: owner pid %d not alive (lock age %s)", probe.pid, age.Round(time.Second))
+	} else {
+		base.Reason = fmt.Sprintf("removed: proven no owner, age %s >= stale threshold %s", age.Round(time.Second), StaleAge)
+	}
+	return base, nil
+}
+
+func staleLockTransitionGuardPath(lockPath string) string {
+	return lockPath + ".stale-break.lock"
+}
+
+func staleLockTombstonePath(lockPath string) string {
+	suffix := fmt.Sprintf("%d-%d-%d", os.Getpid(), time.Now().UnixNano(), staleLockTombstoneSeq.Add(1))
+	return filepath.Join(filepath.Dir(lockPath), filepath.Base(lockPath)+".tombstone."+suffix+".lock")
+}
+
+func staleLockGuardMutex(path string) *sync.Mutex {
+	mutex := &sync.Mutex{}
+	actual, _ := staleLockGuardMutexes.LoadOrStore(path, mutex)
+	return actual.(*sync.Mutex)
+}
+
+func tryAcquireStaleLockTransitionGuard(lockPath string, observer staleLockTransitionObserver) (*staleLockTransitionGuard, bool, error) {
+	guardPath, err := filepath.Abs(staleLockTransitionGuardPath(lockPath))
+	if err != nil {
+		return nil, false, err
+	}
+	if observer != nil {
+		observer(staleLockStageGuardAttempted)
+	}
+	mutex := staleLockGuardMutex(guardPath)
+	if !mutex.TryLock() {
+		if observer != nil {
+			observer(staleLockStageGuardContended)
+		}
+		return nil, false, nil
+	}
+	prior, priorErr := os.Lstat(guardPath)
+	if priorErr != nil && !os.IsNotExist(priorErr) {
+		mutex.Unlock()
+		return nil, false, priorErr
+	}
+	if priorErr == nil && !prior.Mode().IsRegular() {
+		mutex.Unlock()
+		return nil, false, fmt.Errorf("stale-break guard is not a regular file: %s", guardPath)
+	}
+	guardFile, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		mutex.Unlock()
+		return nil, false, err
+	}
+	opened, err := guardFile.Stat()
+	if err != nil || !opened.Mode().IsRegular() {
+		_ = guardFile.Close()
+		mutex.Unlock()
+		if err != nil {
+			return nil, false, err
+		}
+		return nil, false, fmt.Errorf("opened stale-break guard is not a regular file: %s", guardPath)
+	}
+	current, err := os.Lstat(guardPath)
+	if err != nil || !current.Mode().IsRegular() || !os.SameFile(opened, current) ||
+		(priorErr == nil && !os.SameFile(prior, opened)) {
+		_ = guardFile.Close()
+		mutex.Unlock()
+		if err != nil {
+			return nil, false, err
+		}
+		return nil, false, fmt.Errorf("stale-break guard identity changed: %s", guardPath)
+	}
+	locked, err := tryLockStaleLockGuardFile(guardFile)
+	if err != nil {
+		_ = guardFile.Close()
+		mutex.Unlock()
+		return nil, false, err
+	}
+	if !locked {
+		_ = guardFile.Close()
+		mutex.Unlock()
+		if observer != nil {
+			observer(staleLockStageGuardContended)
+		}
+		return nil, false, nil
+	}
+	lockedInfo, statErr := guardFile.Stat()
+	lockedCurrent, lstatErr := os.Lstat(guardPath)
+	if statErr != nil || lstatErr != nil || !lockedInfo.Mode().IsRegular() ||
+		!lockedCurrent.Mode().IsRegular() || !os.SameFile(lockedInfo, lockedCurrent) ||
+		!os.SameFile(opened, lockedInfo) {
+		unlockErr := unlockStaleLockGuardFile(guardFile)
+		closeErr := guardFile.Close()
+		mutex.Unlock()
+		return nil, false, errors.Join(
+			fmt.Errorf("stale-break guard identity changed after advisory acquisition: %s", guardPath),
+			statErr,
+			lstatErr,
+			unlockErr,
+			closeErr,
+		)
+	}
+	if observer != nil {
+		observer(staleLockStageGuardAcquired)
+	}
+	return &staleLockTransitionGuard{file: guardFile, mutex: mutex}, true, nil
+}
+
+func releaseStaleLockTransitionGuard(guard *staleLockTransitionGuard) error {
+	if guard == nil {
+		return nil
+	}
+	var err error
+	if guard.file != nil {
+		err = errors.Join(unlockStaleLockGuardFile(guard.file), guard.file.Close())
+	}
+	if guard.mutex != nil {
+		guard.mutex.Unlock()
+	}
+	return err
+}
+
+func renamePinnedStaleLock(lockPath string, pinned os.FileInfo) (string, bool, error) {
+	current, err := os.Lstat(lockPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if !current.Mode().IsRegular() || !os.SameFile(pinned, current) {
+		return "", false, nil
+	}
+	tombstone := staleLockTombstonePath(lockPath)
+	if err := os.Rename(lockPath, tombstone); err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	renamedInfo, err := os.Lstat(tombstone)
+	if err == nil && renamedInfo.Mode().IsRegular() && os.SameFile(pinned, renamedInfo) {
+		return tombstone, true, nil
+	}
+	// A pathname replacement in the final check/rename window must not be
+	// deleted or restored over a possibly fresh canonical lock. Leave the
+	// contender-unique tombstone untouched for operator inspection.
+	return tombstone, true, errors.Join(fmt.Errorf("stale index-lock identity changed during rename"), err)
 }
 
 // RunGitWithIndexLockRecovery runs `git args...` in dir and, on
