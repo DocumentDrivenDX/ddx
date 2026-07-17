@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // ProviderLaunchSubcommand is the hidden ddx subcommand path that wraps a
@@ -129,7 +131,7 @@ func EnsureProviderShimOnPATH(ddxBinary string) (dir string, cleanup func(), err
 		return providerShimDirPath, func() {}, nil
 	}
 
-	tmpDir, err := os.MkdirTemp("", "ddx-provider-shim-")
+	tmpDir, err := config.MkdirExecutionScratch("", "ddx-provider-shim-")
 	if err != nil {
 		return "", func() {}, fmt.Errorf("provider-shim: mkdir: %w", err)
 	}
