@@ -18,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -468,16 +469,20 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		ProjectRoot:             projectRoot,
 		ResourceChecker:         resourceChecker,
 		ResourcePressureChecker: buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride),
-		SessionID:               loopSessionID,
-		RouteResolutionTimeout:  routeResolutionTimeout,
-		PreClaimHook:            buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:      intakeHook,
-		PreClaimTimeout:         preClaimTimeout,
-		PreDispatchLintHook:     lintHook,
-		PostAttemptTriageHook:   triageHook,
-		ProseEvidenceHook:       proseHook,
-		FinalizeDurableAudit:    f.buildAttemptAuditFinalizer(projectRoot, store),
-		NoReview:                noReview,
+		LoadPressureThreshold:   rcfg.LoadPressureThreshold(),
+		LoadPressureSnapshot: func() workerstatus.LoadPressureSnapshot {
+			return workerstatus.HostLoadPressureSnapshot(rcfg.LoadPressureThreshold())
+		},
+		SessionID:              loopSessionID,
+		RouteResolutionTimeout: routeResolutionTimeout,
+		PreClaimHook:           buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:     intakeHook,
+		PreClaimTimeout:        preClaimTimeout,
+		PreDispatchLintHook:    lintHook,
+		PostAttemptTriageHook:  triageHook,
+		ProseEvidenceHook:      proseHook,
+		FinalizeDurableAudit:   f.buildAttemptAuditFinalizer(projectRoot, store),
+		NoReview:               noReview,
 	})
 	if runErr != nil {
 		if (errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded)) && result != nil && len(result.Results) > 0 {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"strings"
 	"time"
 
@@ -257,6 +258,10 @@ type WorkersConfig struct {
 	// string uses the built-in default that matches bead.HeartbeatInterval
 	// (30s today).
 	HeartbeatInterval string `yaml:"heartbeat_interval,omitempty" json:"heartbeat_interval,omitempty"`
+	// LoadPressureThreshold is the maximum accepted five-minute load average
+	// per logical CPU before workers pace new claims. Zero or negative values
+	// use the built-in default of 2.5.
+	LoadPressureThreshold float64 `yaml:"load_pressure_threshold,omitempty" json:"load_pressure_threshold,omitempty"`
 }
 
 // Default values for WorkersConfig resolvers. These mirror the hardcoded
@@ -267,6 +272,7 @@ const (
 	defaultNoChangesVerifyTimeout  = 30 * time.Minute
 	defaultMaxNoChangesBeforeClose = 3
 	defaultHeartbeatInterval       = 30 * time.Second
+	defaultLoadPressureThreshold   = 2.5
 )
 
 // ResolveNoProgressCooldown returns the effective no-progress cooldown for
@@ -316,6 +322,15 @@ func (w *WorkersConfig) ResolveHeartbeatInterval() time.Duration {
 		return defaultHeartbeatInterval
 	}
 	return d
+}
+
+// ResolveLoadPressureThreshold returns the effective normalized host-load
+// threshold. Non-positive values select the default 2.5 ratio.
+func (w *WorkersConfig) ResolveLoadPressureThreshold() float64 {
+	if w == nil || w.LoadPressureThreshold <= 0 || math.IsNaN(w.LoadPressureThreshold) || math.IsInf(w.LoadPressureThreshold, 0) {
+		return defaultLoadPressureThreshold
+	}
+	return w.LoadPressureThreshold
 }
 
 // WorkerDefaultSpec mirrors the knobs a one-click "+ Add worker" dispatch

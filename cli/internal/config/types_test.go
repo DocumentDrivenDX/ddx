@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -135,6 +136,45 @@ func TestWorkersConfigResolvers(t *testing.T) {
 		w := &WorkersConfig{HeartbeatInterval: "15s"}
 		if got := w.ResolveHeartbeatInterval(); got != 15*time.Second {
 			t.Errorf("override = %s, want 15s", got)
+		}
+	})
+
+	t.Run("LoadPressureThreshold_default", func(t *testing.T) {
+		var w *WorkersConfig
+		if got := w.ResolveLoadPressureThreshold(); got != 2.5 {
+			t.Errorf("nil receiver = %v, want 2.5", got)
+		}
+	})
+	t.Run("LoadPressureThreshold_non_positive_uses_default", func(t *testing.T) {
+		w := &WorkersConfig{LoadPressureThreshold: -1}
+		if got := w.ResolveLoadPressureThreshold(); got != 2.5 {
+			t.Errorf("non-positive = %v, want 2.5", got)
+		}
+	})
+	t.Run("LoadPressureThreshold_non_finite_uses_default", func(t *testing.T) {
+		for name, threshold := range map[string]float64{
+			"NaN":               math.NaN(),
+			"positive infinity": math.Inf(1),
+			"negative infinity": math.Inf(-1),
+		} {
+			t.Run(name, func(t *testing.T) {
+				w := &WorkersConfig{LoadPressureThreshold: threshold}
+				if got := w.ResolveLoadPressureThreshold(); got != 2.5 {
+					t.Errorf("non-finite = %v, want 2.5", got)
+				}
+			})
+		}
+	})
+	t.Run("LoadPressureThreshold_override", func(t *testing.T) {
+		w := &WorkersConfig{LoadPressureThreshold: 3.25}
+		if got := w.ResolveLoadPressureThreshold(); got != 3.25 {
+			t.Errorf("override = %v, want 3.25", got)
+		}
+	})
+	t.Run("LoadPressureThreshold_flows_through_resolved_config", func(t *testing.T) {
+		rcfg := (&NewConfig{Workers: &WorkersConfig{LoadPressureThreshold: 3.25}}).Resolve(CLIOverrides{})
+		if got := rcfg.LoadPressureThreshold(); got != 3.25 {
+			t.Errorf("resolved override = %v, want 3.25", got)
 		}
 	})
 }

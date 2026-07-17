@@ -68,6 +68,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.noChangesVerificationTimeout = workers.ResolveNoChangesVerificationTimeout()
 	r.maxNoChangesBeforeClose = workers.ResolveMaxNoChangesBeforeClose()
 	r.heartbeatInterval = workers.ResolveHeartbeatInterval()
+	r.loadPressureThreshold = workers.ResolveLoadPressureThreshold()
 
 	r.harness = overrides.Harness
 	r.explicitHarness = overrides.Harness != ""
@@ -178,6 +179,7 @@ type ResolvedConfig struct {
 	noChangesVerificationTimeout       time.Duration
 	maxNoChangesBeforeClose            int
 	heartbeatInterval                  time.Duration
+	loadPressureThreshold              float64
 	harness                            string
 	model                              string
 	provider                           string
@@ -248,6 +250,13 @@ func (r ResolvedConfig) MaxNoChangesBeforeClose() int {
 func (r ResolvedConfig) HeartbeatInterval() time.Duration {
 	r.requireSealed()
 	return r.heartbeatInterval
+}
+
+// LoadPressureThreshold is the normalized five-minute load per CPU ratio at
+// which workers begin pacing new claims.
+func (r ResolvedConfig) LoadPressureThreshold() float64 {
+	r.requireSealed()
+	return r.loadPressureThreshold
 }
 
 func (r ResolvedConfig) Harness() string {

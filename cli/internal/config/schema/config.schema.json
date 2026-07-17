@@ -629,6 +629,10 @@
         "heartbeat_interval": {
           "type": "string",
           "description": "How often a claim owner refreshes its heartbeat while holding a bead. Parsed via time.ParseDuration (e.g. \"15s\"). Empty or unparseable falls back to the built-in default (30s)."
+        },
+        "load_pressure_threshold": {
+          "type": "number",
+          "description": "Maximum five-minute load average per logical CPU before workers pace new claims. Unset or non-positive values use the built-in default (2.5)."
         }
       },
       "additionalProperties": false
