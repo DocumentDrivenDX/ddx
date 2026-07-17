@@ -44,9 +44,10 @@ type staleLockTransitionGuard struct {
 type staleLockGuardStage string
 
 const (
-	staleLockGuardStageAttempted staleLockGuardStage = "attempted"
-	staleLockGuardStageContended staleLockGuardStage = "contended"
-	staleLockGuardStageAcquired  staleLockGuardStage = "acquired"
+	staleLockGuardStageAttempted    staleLockGuardStage = "attempted"
+	staleLockGuardStageContended    staleLockGuardStage = "contended"
+	staleLockGuardStageAcquired     staleLockGuardStage = "acquired"
+	staleLockGuardStageBeforeRename staleLockGuardStage = "before-rename"
 )
 
 var staleLockGuardMutexes sync.Map
@@ -93,6 +94,12 @@ func (s *Store) acquireLock() (dirLockLease, error) {
 // standalone JSONLBackend. dir is the directory to ensure exists before the
 // lock is taken; lockDir is the lock directory itself; wait bounds the spin.
 func acquireDirLock(dir, lockDir string, wait time.Duration) (dirLockLease, error) {
+	return acquireDirLockWithMetadataWriter(dir, lockDir, wait, writeCollectionLockMetadata)
+}
+
+type collectionLockMetadataWriter func(lockDir string, lease dirLockLease) error
+
+func acquireDirLockWithMetadataWriter(dir, lockDir string, wait time.Duration, writeMetadata collectionLockMetadataWriter) (dirLockLease, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return dirLockLease{}, fmt.Errorf("bead: lock dir: %w", err)
 	}
@@ -101,19 +108,25 @@ func acquireDirLock(dir, lockDir string, wait time.Duration) (dirLockLease, erro
 	if err != nil {
 		return dirLockLease{}, fmt.Errorf("bead: lock owner token: %w", err)
 	}
-	lease := dirLockLease{lockDir: lockDir, ownerToken: ownerToken, guardWait: wait}
+	// Store the same effective budget used by acquisition in the lease. In
+	// particular, a caller-supplied zero or negative wait means one immediate
+	// attempt; guarded release must not silently expand that budget to 10s.
+	effectiveWait := wait
+	if effectiveWait < 0 {
+		effectiveWait = 0
+	}
+	lease := dirLockLease{lockDir: lockDir, ownerToken: ownerToken, guardWait: effectiveWait}
 
-	deadline := time.Now().Add(wait)
+	deadline := time.Now().Add(effectiveWait)
 	for {
 		err := os.Mkdir(lockDir, 0o755)
 		if err == nil {
-			if err := writeCollectionLockMetadata(lockDir, lease); err != nil {
+			if err := writeMetadata(lockDir, lease); err != nil {
 				// Once owner_token is durable enough to read, guarded release can
 				// safely clean this partial acquisition. If writing the token itself
 				// failed, leave the malformed canonical directory in place rather
 				// than risk deleting a replacement after an unguarded cleanup race.
-				_ = lease.Release()
-				return dirLockLease{}, err
+				return dirLockLease{}, errors.Join(err, lease.Release())
 			}
 			return lease, nil
 		}
@@ -184,7 +197,7 @@ func breakStaleLockDirObserved(lockDir string, observer func(staleLockGuardStage
 	// canonical directory and its metadata are inspected again under guard,
 	// and only the unique tombstone returned by that guarded transition is
 	// eligible for removal.
-	tombstoneDir, broke, renameErr := renameFreshlyStaleLockDir(lockDir)
+	tombstoneDir, broke, renameErr := renameFreshlyStaleLockDirObserved(lockDir, observer)
 	guardErr := releaseStaleLockBreakGuard(guard)
 	if renameErr != nil {
 		return false, errors.Join(renameErr, guardErr)
@@ -205,14 +218,21 @@ func breakStaleLockDirObserved(lockDir string, observer func(staleLockGuardStage
 // stable stale-break guard for lockDir. It returns the unique tombstone owned
 // by this transition; callers must never remove the canonical lock directory.
 func renameFreshlyStaleLockDir(lockDir string) (string, bool, error) {
+	return renameFreshlyStaleLockDirObserved(lockDir, nil)
+}
+
+func renameFreshlyStaleLockDirObserved(lockDir string, observer func(staleLockGuardStage)) (string, bool, error) {
 	inspected, stale := freshlyInspectStaleLockDir(lockDir)
 	if !stale {
 		return "", false, nil
 	}
+	if observer != nil {
+		observer(staleLockGuardStageBeforeRename)
+	}
 
-	// Detect a canonical-directory replacement during metadata inspection.
-	// Stale breakers are serialized by the guard; this final identity check
-	// also declines mutation if an ordinary owner changed the path meanwhile.
+	// Revalidate after the pre-rename stage. Tests pause at that exact stage to
+	// install a fresh canonical owner; the only safe response is to decline the
+	// rename when the directory identity changed after stale classification.
 	current, err := os.Lstat(lockDir)
 	if err != nil || !current.IsDir() || !os.SameFile(inspected, current) {
 		return "", false, nil
@@ -329,8 +349,8 @@ func acquireStaleLockTransitionGuard(lockDir string, wait time.Duration) (*stale
 }
 
 func acquireStaleLockTransitionGuardObserved(lockDir string, wait time.Duration, observer func(staleLockGuardStage)) (*staleLockTransitionGuard, error) {
-	if wait <= 0 {
-		wait = 10 * time.Second
+	if wait < 0 {
+		wait = 0
 	}
 	deadline := time.Now().Add(wait)
 	for {

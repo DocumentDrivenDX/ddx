@@ -28,13 +28,8 @@ const (
 )
 
 type staleBreakResult struct {
-	Broke       bool   `json:"broke"`
-	FirstBroke  bool   `json:"first_broke,omitempty"`
-	SecondBroke bool   `json:"second_broke,omitempty"`
-	PID         string `json:"pid,omitempty"`
-	AcquiredAt  string `json:"acquired_at,omitempty"`
-	OwnerToken  string `json:"owner_token,omitempty"`
-	Error       string `json:"error,omitempty"`
+	Broke bool   `json:"broke"`
+	Error string `json:"error,omitempty"`
 }
 
 func TestStaleLockBreakSingleWinner(t *testing.T) {
@@ -86,34 +81,44 @@ func TestStaleLockBreakLoserNeverDeletesWinner(t *testing.T) {
 
 	store, projectDir := newStaleBreakFixture(t)
 	writeStaleCollectionLock(t, store.LockDir, os.Getpid(), time.Now().Add(-3*time.Hour))
-	coordDir := filepath.Join(projectDir, "delayed-observer")
+	coordDir := filepath.Join(projectDir, "pre-rename-replacement")
 	require.NoError(t, os.MkdirAll(coordDir, 0o755))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	winner := spawnStaleBreakHelper(ctx, "TestStaleLockBreakLoserNeverDeletesWinner", "barrier-winner", "winner", store.Dir, store.LockDir, coordDir)
-	loser := spawnStaleBreakHelper(ctx, "TestStaleLockBreakLoserNeverDeletesWinner", "barrier-loser", "loser", store.Dir, store.LockDir, coordDir)
-	require.NoError(t, winner.Start())
-	require.NoError(t, loser.Start())
-	defer killStaleBreakHelpers([]*exec.Cmd{winner, loser})
+	contender := spawnStaleBreakHelper(ctx, "TestStaleLockBreakLoserNeverDeletesWinner", "pre-rename-contender", "contender", store.Dir, store.LockDir, coordDir)
+	require.NoError(t, contender.Start())
+	defer killStaleBreakHelpers([]*exec.Cmd{contender})
+	require.NoError(t, waitForStaleBreakFile(filepath.Join(coordDir, "classified-stale"), 5*time.Second))
 
-	// Waiting for the loser first avoids letting a successful winner block on
-	// its final loser-done barrier while the parent waits on the winner.
-	require.NoError(t, loser.Wait())
-	require.NoError(t, winner.Wait())
-
-	winnerResult := readStaleBreakResult(t, filepath.Join(coordDir, "winner.json"))
-	loserResult := readStaleBreakResult(t, filepath.Join(coordDir, "loser.json"))
-	assert.True(t, winnerResult.Broke)
-	assert.False(t, loserResult.FirstBroke, "contender arriving while guard is owned must not mutate canonical path")
-	assert.False(t, loserResult.SecondBroke, "pre-guard stale observation must not authorize deleting the fresh replacement")
-
-	pidData, err := os.ReadFile(filepath.Join(store.LockDir, "pid"))
+	// The helper is paused while holding the advisory guard, after its fresh
+	// stale classification and at the last internal stage before rename. Model
+	// an ordinary owner replacing the canonical directory in that exact window.
+	displaced := filepath.Join(projectDir, "displaced-stale.lock")
+	require.NoError(t, os.Rename(store.LockDir, displaced))
+	require.NoError(t, os.Mkdir(store.LockDir, 0o755))
+	wantPID := []byte(fmt.Sprintf("%d", os.Getpid()))
+	wantAcquiredAt := []byte(time.Now().UTC().Format(time.RFC3339))
+	wantOwnerToken := []byte(strings.Repeat("a", 64))
+	require.NoError(t, os.WriteFile(filepath.Join(store.LockDir, "pid"), wantPID, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(store.LockDir, "acquired_at"), wantAcquiredAt, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(store.LockDir, collectionLockOwnerTokenFile), wantOwnerToken, 0o600))
+	freshIdentity, err := os.Lstat(store.LockDir)
 	require.NoError(t, err)
-	assert.Equal(t, winnerResult.PID, strings.TrimSpace(string(pidData)))
-	acquiredData, err := os.ReadFile(filepath.Join(store.LockDir, "acquired_at"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(coordDir, "resume"), []byte("resume"), 0o644))
+	require.NoError(t, contender.Wait())
+	result := readStaleBreakResult(t, filepath.Join(coordDir, "contender.json"))
+	assert.False(t, result.Broke, "stale classification of the displaced inode must not authorize renaming its fresh replacement")
+	assert.Empty(t, result.Error)
+
+	afterIdentity, err := os.Lstat(store.LockDir)
 	require.NoError(t, err)
-	assert.Equal(t, winnerResult.AcquiredAt, strings.TrimSpace(string(acquiredData)))
+	assert.True(t, os.SameFile(freshIdentity, afterIdentity), "delayed contender must not replace the fresh canonical inode")
+	assertFileBytesEqual(t, filepath.Join(store.LockDir, "pid"), wantPID)
+	assertFileBytesEqual(t, filepath.Join(store.LockDir, "acquired_at"), wantAcquiredAt)
+	assertFileBytesEqual(t, filepath.Join(store.LockDir, collectionLockOwnerTokenFile), wantOwnerToken)
+	require.NoError(t, os.RemoveAll(displaced))
 	assertNoStaleBreakTombstones(t, store.LockDir)
 }
 
@@ -277,6 +282,67 @@ func TestDirLockLeaseReleaseGuardTimeoutFailsSafe(t *testing.T) {
 	assert.NoDirExists(t, store.LockDir)
 }
 
+func TestAcquireDirLockMetadataFailureJoinsReleaseError(t *testing.T) {
+	store, _ := newStaleBreakFixture(t)
+	metadataErr := errors.New("injected metadata failure")
+	var capturedLease dirLockLease
+	var heldGuard *staleLockTransitionGuard
+
+	started := time.Now()
+	_, err := acquireDirLockWithMetadataWriter(store.Dir, store.LockDir, 0, func(lockDir string, lease dirLockLease) error {
+		capturedLease = lease
+		// Persist only the ownership proof, then hold the transition guard so
+		// the automatic partial-acquisition cleanup deterministically fails.
+		require.NoError(t, os.WriteFile(filepath.Join(lockDir, collectionLockOwnerTokenFile), []byte(lease.ownerToken), 0o600))
+		var acquired bool
+		var guardErr error
+		heldGuard, acquired, guardErr = tryAcquireStaleLockTransitionGuard(lockDir)
+		require.NoError(t, guardErr)
+		require.True(t, acquired)
+		return metadataErr
+	})
+	assert.ErrorIs(t, err, metadataErr)
+	assert.ErrorContains(t, err, "acquire stale-break guard for release")
+	assert.ErrorContains(t, err, "stale-break guard timeout after 0s")
+	assert.Less(t, time.Since(started), 250*time.Millisecond, "zero acquisition budget must not become a 10s cleanup wait")
+	assert.DirExists(t, store.LockDir, "failed guarded cleanup must preserve the canonical partial acquisition")
+
+	require.NoError(t, releaseStaleLockBreakGuard(heldGuard))
+	require.NoError(t, capturedLease.Release())
+	assert.NoDirExists(t, store.LockDir, "the proven owner can clean the partial acquisition once the guard is available")
+}
+
+func TestStoreNonPositiveLockWaitDoesNotExpandReleaseBudget(t *testing.T) {
+	for _, wait := range []time.Duration{0, -time.Second} {
+		t.Run(wait.String(), func(t *testing.T) {
+			store, _ := newStaleBreakFixture(t)
+			store.LockWait = wait
+			var heldGuard *staleLockTransitionGuard
+			var ownerToken string
+
+			started := time.Now()
+			err := store.WithLock(func() error {
+				tokenData, readErr := os.ReadFile(filepath.Join(store.LockDir, collectionLockOwnerTokenFile))
+				require.NoError(t, readErr)
+				ownerToken = strings.TrimSpace(string(tokenData))
+				var acquired bool
+				var guardErr error
+				heldGuard, acquired, guardErr = tryAcquireStaleLockTransitionGuard(store.LockDir)
+				require.NoError(t, guardErr)
+				require.True(t, acquired)
+				return nil
+			})
+			assert.ErrorContains(t, err, "stale-break guard timeout after 0s")
+			assert.Less(t, time.Since(started), 250*time.Millisecond, "release must use the effective immediate acquisition budget")
+			assert.DirExists(t, store.LockDir, "timed-out guarded release must preserve the canonical owner")
+
+			require.NoError(t, releaseStaleLockBreakGuard(heldGuard))
+			require.NoError(t, releaseDirLockObserved(store.LockDir, ownerToken, 0, nil))
+			assert.NoDirExists(t, store.LockDir)
+		})
+	}
+}
+
 func TestCollectionLockCallersJoinGuardedReleaseErrors(t *testing.T) {
 	callbackErr := errors.New("callback failed")
 	tests := []struct {
@@ -332,10 +398,8 @@ func runStaleBreakHelper(t *testing.T) bool {
 	switch os.Getenv(staleBreakModeEnv) {
 	case "single-winner":
 		runSingleWinnerStaleBreakHelper(t)
-	case "barrier-winner":
-		runBarrierWinnerStaleBreakHelper(t)
-	case "barrier-loser":
-		runBarrierLoserStaleBreakHelper(t)
+	case "pre-rename-contender":
+		runPreRenameContenderStaleBreakHelper(t)
 	case "crash-holder":
 		runCrashHolderStaleBreakHelper(t)
 	case "aged-live-holder":
@@ -353,76 +417,19 @@ func runSingleWinnerStaleBreakHelper(t *testing.T) {
 	writeStaleBreakResult(t, filepath.Join(coordDir, role+".json"), staleBreakResult{Broke: mustBreakStaleLockDir(t, lockDir)})
 }
 
-func runBarrierWinnerStaleBreakHelper(t *testing.T) {
-	coordDir, lockDir, _ := staleBreakHelperInputs(t)
-	guard, acquired, err := tryAcquireStaleLockTransitionGuardObserved(lockDir, func(stage staleLockGuardStage) {
-		if stage == staleLockGuardStageAcquired {
-			require.NoError(t, os.WriteFile(filepath.Join(coordDir, "winner-guard-held"), []byte("held"), 0o644))
+func runPreRenameContenderStaleBreakHelper(t *testing.T) {
+	coordDir, lockDir, role := staleBreakHelperInputs(t)
+	broke, err := breakStaleLockDirObserved(lockDir, func(stage staleLockGuardStage) {
+		if stage == staleLockGuardStageBeforeRename {
+			require.NoError(t, os.WriteFile(filepath.Join(coordDir, "classified-stale"), []byte("classified"), 0o644))
+			require.NoError(t, waitForStaleBreakFile(filepath.Join(coordDir, "resume"), 5*time.Second))
 		}
 	})
-	require.NoError(t, err)
-	require.True(t, acquired)
-	require.NoError(t, waitForStaleBreakFile(filepath.Join(coordDir, "loser-attempted"), 5*time.Second))
-
-	tombstone, broke, err := renameFreshlyStaleLockDir(lockDir)
-	require.NoError(t, err)
-	require.True(t, broke)
-	require.True(t, strings.HasSuffix(tombstone, ".lock"), "private tombstone must remain covered by generated lock ignores")
-	require.NoError(t, releaseStaleLockBreakGuard(guard))
-	require.NoError(t, os.RemoveAll(tombstone))
-
-	// This is the ordinary canonical mkdir retry. It deliberately occurs only
-	// after the advisory guard is released.
-	storeDir := os.Getenv(staleBreakStoreDirEnv)
-	require.NotEmpty(t, storeDir)
-	winnerLease, err := acquireDirLock(storeDir, lockDir, time.Second)
-	require.NoError(t, err)
-	winnerPID, err := os.ReadFile(filepath.Join(lockDir, "pid"))
-	require.NoError(t, err)
-	winnerAcquiredAt, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
-	require.NoError(t, err)
-	winnerOwnerToken, err := os.ReadFile(filepath.Join(lockDir, collectionLockOwnerTokenFile))
-	require.NoError(t, err)
-	require.Equal(t, winnerLease.ownerToken, string(winnerOwnerToken))
-	writeStaleBreakResult(t, filepath.Join(coordDir, "winner.json"), staleBreakResult{
-		Broke:      broke,
-		PID:        string(winnerPID),
-		AcquiredAt: string(winnerAcquiredAt),
-		OwnerToken: string(winnerOwnerToken),
-	})
-	require.NoError(t, os.WriteFile(filepath.Join(coordDir, "fresh-installed"), []byte("fresh"), 0o644))
-	require.NoError(t, waitForStaleBreakFile(filepath.Join(coordDir, "loser-done"), 5*time.Second))
-}
-
-func runBarrierLoserStaleBreakHelper(t *testing.T) {
-	coordDir, lockDir, _ := staleBreakHelperInputs(t)
-	require.NoError(t, waitForStaleBreakFile(filepath.Join(coordDir, "winner-guard-held"), 5*time.Second))
-	firstBroke, err := breakStaleLockDirObserved(lockDir, func(stage staleLockGuardStage) {
-		if stage == staleLockGuardStageContended {
-			require.NoError(t, os.WriteFile(filepath.Join(coordDir, "loser-attempted"), []byte("attempted"), 0o644))
-		}
-	})
-	require.NoError(t, err)
-	require.False(t, firstBroke)
-	require.NoError(t, waitForStaleBreakFile(filepath.Join(coordDir, "fresh-installed"), 5*time.Second))
-
-	want := readStaleBreakResult(t, filepath.Join(coordDir, "winner.json"))
-	secondBroke := mustBreakStaleLockDir(t, lockDir)
-	pidData, err := os.ReadFile(filepath.Join(lockDir, "pid"))
-	require.NoError(t, err)
-	acquiredData, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
-	require.NoError(t, err)
-	ownerTokenData, err := os.ReadFile(filepath.Join(lockDir, collectionLockOwnerTokenFile))
-	require.NoError(t, err)
-	require.Equal(t, want.PID, string(pidData))
-	require.Equal(t, want.AcquiredAt, string(acquiredData))
-	require.Equal(t, want.OwnerToken, string(ownerTokenData))
-
-	writeStaleBreakResult(t, filepath.Join(coordDir, "loser.json"), staleBreakResult{
-		FirstBroke:  firstBroke,
-		SecondBroke: secondBroke,
-	})
-	require.NoError(t, os.WriteFile(filepath.Join(coordDir, "loser-done"), []byte("done"), 0o644))
+	result := staleBreakResult{Broke: broke}
+	if err != nil {
+		result.Error = err.Error()
+	}
+	writeStaleBreakResult(t, filepath.Join(coordDir, role+".json"), result)
 }
 
 func runCrashHolderStaleBreakHelper(t *testing.T) {
@@ -567,6 +574,13 @@ func readStaleBreakResult(t *testing.T, path string) staleBreakResult {
 	var result staleBreakResult
 	require.NoError(t, json.Unmarshal(raw, &result))
 	return result
+}
+
+func assertFileBytesEqual(t *testing.T, path string, want []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
 }
 
 func assertNoStaleBreakTombstones(t *testing.T, lockDir string) {
