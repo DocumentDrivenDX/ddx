@@ -106,8 +106,9 @@ func TestWorkersConfigClone(t *testing.T) {
 
 	maxCount := 4
 	src := &WorkersConfig{
-		MaxCount:    &maxCount,
-		DefaultSpec: &WorkerDefaultSpec{Profile: "fast"},
+		MaxCount:              &maxCount,
+		DefaultSpec:           &WorkerDefaultSpec{Profile: "fast"},
+		LoadPressureThreshold: 3.25,
 	}
 
 	dst := src.Clone()
@@ -119,5 +120,8 @@ func TestWorkersConfigClone(t *testing.T) {
 	}
 	if src.DefaultSpec.Profile != "fast" {
 		t.Fatalf("source DefaultSpec.Profile mutated: %q", src.DefaultSpec.Profile)
+	}
+	if dst.LoadPressureThreshold != src.LoadPressureThreshold {
+		t.Fatalf("LoadPressureThreshold not cloned: got %v want %v", dst.LoadPressureThreshold, src.LoadPressureThreshold)
 	}
 }

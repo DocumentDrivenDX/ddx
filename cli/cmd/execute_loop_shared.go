@@ -20,6 +20,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -540,19 +541,23 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		progressLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                         spec.Mode,
-		IdleInterval:                 spec.IdleInterval.Duration,
-		IgnoreCooldown:               spec.IgnoreCooldown,
-		CooldownOverrideReason:       spec.CooldownOverrideReason,
-		Log:                          progressLog,
-		CleanupLog:                   cleanupLog,
-		EventSink:                    loopSink,
-		WorkerID:                     resolveClaimAssignee(),
-		ProjectRoot:                  projectRoot,
-		TrackerSyncEnabled:           workTrackerSyncEnabled(cmd),
-		CleanupRunner:                cleanupRunner,
-		ResourceChecker:              resourceChecker,
-		ResourcePressureChecker:      resourcePressureChecker,
+		Mode:                    spec.Mode,
+		IdleInterval:            spec.IdleInterval.Duration,
+		IgnoreCooldown:          spec.IgnoreCooldown,
+		CooldownOverrideReason:  spec.CooldownOverrideReason,
+		Log:                     progressLog,
+		CleanupLog:              cleanupLog,
+		EventSink:               loopSink,
+		WorkerID:                resolveClaimAssignee(),
+		ProjectRoot:             projectRoot,
+		TrackerSyncEnabled:      workTrackerSyncEnabled(cmd),
+		CleanupRunner:           cleanupRunner,
+		ResourceChecker:         resourceChecker,
+		ResourcePressureChecker: resourcePressureChecker,
+		LoadPressureThreshold:   rcfg.LoadPressureThreshold(),
+		LoadPressureSnapshot: func() workerstatus.LoadPressureSnapshot {
+			return workerstatus.HostLoadPressureSnapshot(rcfg.LoadPressureThreshold())
+		},
 		ServerHealthProbe:            serverHealthProbe,
 		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
 		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,

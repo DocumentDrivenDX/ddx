@@ -23,6 +23,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
 type ExecuteLoopWorkerSpec = executeloop.ExecuteLoopSpec
@@ -1196,11 +1197,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		PreClaimHook:           buildPreClaimHook(projectRoot, landingOps),
 		PreClaimIntakeHook:     intakeHook,
 		RouteResolutionTimeout: executeLoopRouteResolutionTimeout(spec),
-		PreDispatchLintHook:    lintHook,
-		PostAttemptTriageHook:  triageHook,
-		NoReview:               spec.NoReview,
-		ReviewCostCap:          costCap,
-		WakeCh:                 handle.wakeCh,
+		LoadPressureThreshold:  rcfg.LoadPressureThreshold(),
+		LoadPressureSnapshot: func() workerstatus.LoadPressureSnapshot {
+			return workerstatus.HostLoadPressureSnapshot(rcfg.LoadPressureThreshold())
+		},
+		PreDispatchLintHook:   lintHook,
+		PostAttemptTriageHook: triageHook,
+		NoReview:              spec.NoReview,
+		ReviewCostCap:         costCap,
+		WakeCh:                handle.wakeCh,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
