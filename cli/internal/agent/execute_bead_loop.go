@@ -3345,41 +3345,60 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 		}
 	}
-	freshCandidate, staleSkip, refreshErr = w.refreshClaimedCandidateBeforeAttempt(ctx, candidate)
-	if refreshErr != nil {
-		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("Unclaim", assignee, result, err)
+	refreshClaimedBeforeAttempt := func(claimed bead.Bead) (bead.Bead, *executeBeadIterationOutcome, error) {
+		fresh, skip, err := w.refreshClaimedCandidateBeforeAttempt(ctx, claimed)
+		if err != nil {
+			if releaseErr := releaseWorkerClaim(w.Store, claimed.ID, assignee); releaseErr != nil {
+				_ = commitOutcome(ctx, w.Store, claimed.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, releaseErr)
+				})
+				if ctx.Err() != nil {
+					outcome := executeBeadIterationOutcome{Stop: true}
+					return claimed, &outcome, ctx.Err()
+				}
+				outcome := executeBeadIterationOutcome{Stop: true}
+				return claimed, &outcome, releaseErr
+			}
+			outcome := executeBeadIterationOutcome{Stop: true}
+			return claimed, &outcome, err
+		}
+		if skip == nil {
+			return *fresh, nil, nil
+		}
+		if releaseErr := releaseWorkerClaim(w.Store, claimed.ID, assignee); releaseErr != nil {
+			_ = commitOutcome(ctx, w.Store, claimed.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, releaseErr)
 			})
 			if ctx.Err() != nil {
-				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				outcome := executeBeadIterationOutcome{Stop: true}
+				return claimed, &outcome, ctx.Err()
 			}
-			return executeBeadIterationOutcome{Stop: true}, err
+			outcome := executeBeadIterationOutcome{Continue: true}
+			return claimed, &outcome, nil
 		}
-		return executeBeadIterationOutcome{Stop: true}, refreshErr
-	}
-	if staleSkip != nil {
-		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("Unclaim", assignee, result, err)
-			})
-			if ctx.Err() != nil {
-				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
-			}
-			return executeBeadIterationOutcome{Continue: true}, nil
-		}
-		transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
+		transientCandidateSkips[claimed.ID] = staleCandidateSkipReason
 		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before attempt: %s\n", candidate.ID, staleSkip.Detail)
+			_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before attempt: %s\n", claimed.ID, skip.Detail)
 		}
-		emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_attempt")
+		emitStaleCandidateSkip(emit, claimed.ID, skip, fresh, "pre_attempt")
 		if stopAfterNonAttemptSkip() {
 			applyStop(work.StopInput{Once: true})
-			return executeBeadIterationOutcome{Stop: true}, nil
+			outcome := executeBeadIterationOutcome{Stop: true}
+			return claimed, &outcome, nil
 		}
-		return executeBeadIterationOutcome{Continue: true}, nil
+		outcome := executeBeadIterationOutcome{Continue: true}
+		return claimed, &outcome, nil
 	}
-	candidate = *freshCandidate
+
+	// Preserve the original stale-state precedence: a bead closed,
+	// superseded, or made ineligible during readiness is released before git
+	// repair can turn that harmless race into operator attention.
+	refreshedCandidate, refreshOutcome, refreshErr := refreshClaimedBeforeAttempt(candidate)
+	if refreshOutcome != nil {
+		return *refreshOutcome, refreshErr
+	}
+	candidate = refreshedCandidate
+
 	gitRepair = repairer(ctx, runtime.ProjectRoot)
 	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
 		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
@@ -3437,6 +3456,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			"stage":            "attempt",
 		})
 	}
+
+	// This is the final tracker read before an attempt becomes observable.
+	// Keep it after readiness, lint, and git repair so a dependency added by
+	// any of those slow phases cannot slip into dispatch on a stale snapshot.
+	refreshedCandidate, refreshOutcome, refreshErr = refreshClaimedBeforeAttempt(candidate)
+	if refreshOutcome != nil {
+		return *refreshOutcome, refreshErr
+	}
+	candidate = refreshedCandidate
 
 	// Generate a provisional attempt_id for progress events.
 	// The real attempt_id is assigned inside ExecuteBead; we use this
@@ -5106,7 +5134,39 @@ func (w *ExecuteBeadWorker) refreshClaimedCandidateBeforeAttempt(ctx context.Con
 	if skip = candidateSkipFromClaimedState(fresh); skip != nil {
 		return fresh, skip, nil
 	}
+	dependencyWaiting, err := w.claimedCandidateDependencyWaiting(ctx, fresh)
+	if err != nil {
+		return fresh, nil, err
+	}
+	if dependencyWaiting {
+		return fresh, candidateSkipFromFreshState(fresh, "dependency_waiting"), nil
+	}
 	return fresh, nil, nil
+}
+
+// claimedCandidateDependencyWaiting evaluates the dependency graph directly
+// from the fresh claimed bead. ReadyExecution and ReadyExecutionBreakdown are
+// intentionally unsafe here because their lifecycle filtering masks an
+// in-progress bead, which can hide dependency_waiting after claim.
+func (w *ExecuteBeadWorker) claimedCandidateDependencyWaiting(ctx context.Context, fresh *bead.Bead) (bool, error) {
+	if fresh == nil {
+		return false, nil
+	}
+	for _, depID := range fresh.DepIDs() {
+		dependency, err := w.Store.Get(ctx, depID)
+		if err != nil {
+			// A missing dependency cannot satisfy readiness. Other read errors
+			// must reach the existing refresh-error claim-release path.
+			if errors.Is(err, bead.ErrNotFound) || strings.Contains(strings.ToLower(err.Error()), "not found") {
+				return true, nil
+			}
+			return false, err
+		}
+		if dependency == nil || !bead.LifecycleStatusSatisfiesDependency(dependency.Status) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (w *ExecuteBeadWorker) lookupFreshCandidate(ctx context.Context, beadID string) (*bead.Bead, *candidateSkipDecision, error) {
