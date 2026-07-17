@@ -16,10 +16,7 @@ import (
 // TestRecoverGitIndexLock_NoLock returns "not present" cleanly when the
 // lock file does not exist.
 func TestRecoverGitIndexLock_NoLock(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatalf("setup .git: %v", err)
-	}
+	dir := initGitLockTestRepo(t)
 	result, err := recoverGitIndexLock(dir)
 	if err != nil {
 		t.Fatalf("recoverGitIndexLock: %v", err)
@@ -39,13 +36,13 @@ func TestRecoverGitIndexLock_StaleByAge(t *testing.T) {
 	gitlock.StaleAge = 50 * time.Millisecond
 	t.Cleanup(func() { gitlock.StaleAge = prev })
 	prevLsof := gitlock.LsofTimeout
-	gitlock.LsofTimeout = 100 * time.Millisecond
+	// A clean lsof no-match is required evidence for age-based recovery.
+	// Keep this comfortably above normal process-table scan latency so the
+	// test does not accidentally exercise the intentional fail-closed timeout.
+	gitlock.LsofTimeout = 2 * time.Second
 	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatalf("setup .git: %v", err)
-	}
+	dir := initGitLockTestRepo(t)
 	lockPath := filepath.Join(dir, ".git", "index.lock")
 	if err := os.WriteFile(lockPath, nil, 0o644); err != nil {
 		t.Fatalf("create lock: %v", err)
@@ -78,10 +75,7 @@ func TestRecoverGitIndexLock_FreshUnowned(t *testing.T) {
 	gitlock.LsofTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatalf("setup .git: %v", err)
-	}
+	dir := initGitLockTestRepo(t)
 	lockPath := filepath.Join(dir, ".git", "index.lock")
 	if err := os.WriteFile(lockPath, nil, 0o644); err != nil {
 		t.Fatalf("create lock: %v", err)
@@ -110,10 +104,7 @@ func TestRecoverGitIndexLock_DeadOwner(t *testing.T) {
 	gitlock.LsofTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatalf("setup .git: %v", err)
-	}
+	dir := initGitLockTestRepo(t)
 	lockPath := filepath.Join(dir, ".git", "index.lock")
 
 	// Spawn a short-lived process that opens the lock file, then exits.
@@ -138,6 +129,19 @@ func TestRecoverGitIndexLock_DeadOwner(t *testing.T) {
 		t.Fatalf("expected removal, reason=%q owner=%d alive=%v",
 			result.Reason, result.OwnerPID, result.OwnerAlive)
 	}
+}
+
+// initGitLockTestRepo creates a real repository because gitlock resolves the
+// native Git index-lock location through `git rev-parse --git-path`, including
+// linked-worktree indirection. A hand-created .git directory is not a valid
+// input to that contract.
+func initGitLockTestRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := git.Command(context.Background(), dir, "init").Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	return dir
 }
 
 func TestIsGitIndexLockError(t *testing.T) {
