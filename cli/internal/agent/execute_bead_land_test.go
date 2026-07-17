@@ -36,8 +36,16 @@ type landTestRepo struct {
 	baseSHA string // the initial commit on the target branch
 }
 
+const landTestRepoCreationMarkerEnv = "DDX_LANDING_CHAOS_TEST_REPO_MARKER"
+
 func newLandTestRepo(t *testing.T) *landTestRepo {
 	t.Helper()
+	if markerPath := os.Getenv(landTestRepoCreationMarkerEnv); markerPath != "" {
+		if err := os.WriteFile(markerPath, []byte("created\n"), 0o600); err != nil {
+			t.Fatalf("write land test repo creation marker: %v", err)
+		}
+		t.Fatal("land test repository setup reached despite the short-mode guard")
+	}
 	dir := t.TempDir()
 	r := &landTestRepo{t: t, dir: dir, branch: "main"}
 	r.runGit("init", "-b", "main")

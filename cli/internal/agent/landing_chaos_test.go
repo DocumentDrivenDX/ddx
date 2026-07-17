@@ -1,10 +1,16 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -173,6 +179,10 @@ func TestConcurrentLand_OverlappingChanges_OneLandsRestPreserve(t *testing.T) {
 }
 
 func TestConcurrentLand_PreservationRateUnderLoadIsBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip(landingPreservationLoadMatrixSkipDiagnostic)
+	}
+
 	r := newLandTestRepo(t)
 	_ = seedSharedLandFile(t, r, "base shared line\n")
 	ops := RealLandingGitOps{}
@@ -244,4 +254,37 @@ func TestConcurrentLand_PreservationRateUnderLoadIsBounded(t *testing.T) {
 	}
 
 	require.Lessf(t, float64(totalPreserved)/float64(totalAttempts), 0.5, "preservation rate must stay below 50%%")
+}
+
+const landingPreservationLoadMatrixSkipDiagnostic = "dedicated landing preservation load matrix is disabled in short mode"
+
+func TestLandingChaosShortModeSkipsPreservationLoadMatrix(t *testing.T) {
+	markerPath := filepath.Join(t.TempDir(), "land-test-repo-created")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		os.Args[0],
+		"-test.short=true",
+		"-test.v=true",
+		"-test.timeout=25s",
+		"-test.run=^TestConcurrentLand_PreservationRateUnderLoadIsBounded$",
+	)
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, landTestRepoCreationMarkerEnv+"=") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
+	cmd.Env = append(cmd.Env, landTestRepoCreationMarkerEnv+"="+markerPath)
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("short-mode landing chaos subprocess exceeded 30 seconds:\n%s", output)
+	}
+	require.NoErrorf(t, err, "short-mode landing chaos subprocess failed:\n%s", output)
+	require.Contains(t, string(output), "=== RUN   TestConcurrentLand_PreservationRateUnderLoadIsBounded")
+	require.Contains(t, string(output), landingPreservationLoadMatrixSkipDiagnostic)
+	require.Contains(t, string(output), "--- SKIP: TestConcurrentLand_PreservationRateUnderLoadIsBounded")
+	_, err = os.Stat(markerPath)
+	require.ErrorIs(t, err, os.ErrNotExist, "short mode must skip before creating a landing repository fixture")
 }
