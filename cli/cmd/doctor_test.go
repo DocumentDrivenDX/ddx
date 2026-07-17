@@ -82,11 +82,7 @@ func TestDoctorProseChecker_SupportedValeVersion(t *testing.T) {
 func TestDoctorProseChecker_VerboseShowsPathAndVersion(t *testing.T) {
 	valePath := writeFakeVale(t, supportedValeVersion)
 	t.Setenv("PATH", filepath.Dir(valePath))
-	homeDir, err := os.MkdirTemp("", "ddx-home-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
 	factory := NewCommandFactory(t.TempDir())
@@ -126,11 +122,7 @@ func runDoctorForProseCheckerTest(t *testing.T, valeVersion string) (string, err
 		}
 	}
 	t.Setenv("PATH", binDir)
-	homeDir, err := os.MkdirTemp("", "ddx-home-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
 	factory := NewCommandFactory(t.TempDir())
@@ -176,11 +168,7 @@ func TestDoctor_FlagsLegacyDDxSkillSymlinks(t *testing.T) {
 }
 
 func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "ddx-home-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
 	legacyCatalogPath := filepath.Join(homeDir, ddxroot.DirName, "model-catalog.yaml")
