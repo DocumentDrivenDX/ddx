@@ -68,7 +68,7 @@ func newLandTestRepoWithOrigin(t *testing.T) *landTestRepo {
 	r := newLandTestRepo(t)
 
 	bareDir := t.TempDir()
-	cmd := exec.Command("git", "init", "--bare", "-b", "main", bareDir)
+	cmd := fixtureGitCommand(t, "", "init", "--bare", "-b", "main", bareDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %s: %v", string(out), err)
 	}
@@ -80,7 +80,7 @@ func newLandTestRepoWithOrigin(t *testing.T) *landTestRepo {
 
 func (r *landTestRepo) runGit(args ...string) string {
 	r.t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", r.dir}, args...)...)
+	cmd := fixtureGitCommand(r.t, r.dir, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		r.t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), err)
@@ -131,15 +131,15 @@ func (r *landTestRepo) commitOn(baseSHA, path, content, msg string) string {
 	if err := os.WriteFile(filepath.Join(wt, path), []byte(content), 0o644); err != nil {
 		r.t.Fatal(err)
 	}
-	cmd := exec.Command("git", "-C", wt, "add", "-A")
+	cmd := fixtureGitCommand(r.t, wt, "add", "-A")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git add: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
+	cmd = fixtureGitCommand(r.t, wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git commit: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+	cmd = fixtureGitCommand(r.t, wt, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		r.t.Fatalf("git rev-parse HEAD: %v", err)
@@ -175,15 +175,15 @@ func (r *landTestRepo) commitOnFiles(baseSHA, msg string, files map[string]strin
 			r.t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("git", "-C", wt, "add", "-A")
+	cmd := fixtureGitCommand(r.t, wt, "add", "-A")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git add: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
+	cmd = fixtureGitCommand(r.t, wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git commit: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+	cmd = fixtureGitCommand(r.t, wt, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		r.t.Fatalf("git rev-parse HEAD: %v", err)
@@ -210,15 +210,15 @@ func (r *landTestRepo) commitDeleteOn(baseSHA, path, msg string) string {
 	if err := os.Remove(filepath.Join(wt, path)); err != nil {
 		r.t.Fatal(err)
 	}
-	cmd := exec.Command("git", "-C", wt, "add", "-A")
+	cmd := fixtureGitCommand(r.t, wt, "add", "-A")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git add: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
+	cmd = fixtureGitCommand(r.t, wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git commit: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+	cmd = fixtureGitCommand(r.t, wt, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		r.t.Fatalf("git rev-parse HEAD: %v", err)
@@ -273,11 +273,11 @@ func (r *landTestRepo) commitExecuteBeadEvidence(baseSHA string, res *ExecuteBea
 
 	writeExecuteBeadBundle(r.t, wt, res, extraFiles)
 
-	cmd := exec.Command("git", "-C", wt, "add", "--", filepath.FromSlash(res.ExecutionDir))
+	cmd := fixtureGitCommand(r.t, wt, "add", "--", filepath.FromSlash(res.ExecutionDir))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git add evidence: %s: %v", string(out), err)
 	}
-	cmd = exec.Command("git", "-C", wt,
+	cmd = fixtureGitCommand(r.t, wt,
 		"-c", "user.name=ddx-land-coordinator",
 		"-c", "user.email=coordinator@ddx.local",
 		"commit", "--no-verify", "-m", "legacy: execution artifact ["+res.AttemptID[:16]+"]",
@@ -285,7 +285,7 @@ func (r *landTestRepo) commitExecuteBeadEvidence(baseSHA string, res *ExecuteBea
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git commit evidence: %s: %v", string(out), err)
 	}
-	out, err := exec.Command("git", "-C", wt, "rev-parse", "HEAD").Output()
+	out, err := fixtureGitCommand(r.t, wt, "rev-parse", "HEAD").Output()
 	if err != nil {
 		r.t.Fatalf("git rev-parse HEAD: %v", err)
 	}

@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -27,7 +26,7 @@ func TestPreClaim_MultiWorkerParallelClaimUnderTrackerChurn(t *testing.T) {
 	dir := t.TempDir()
 	runGit := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := fixtureGitCommand(t, dir, args...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), err)
 		}
@@ -71,7 +70,7 @@ func TestPreClaim_MultiWorkerParallelClaimUnderTrackerChurn(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				_ = exec.Command("git", "-C", dir, "add", ".ddx/beads.jsonl").Run()
+				_ = fixtureGitCommand(t, dir, "add", ".ddx/beads.jsonl").Run()
 				time.Sleep(2 * time.Millisecond)
 			}
 		}

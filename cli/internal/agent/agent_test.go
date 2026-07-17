@@ -17,6 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testFixtureGitConfigPath is the only global Git configuration file fixture
+// helpers may expose to their subprocesses. It is deliberately separate from
+// HOME/.gitconfig: a helper must not silently fall back to an operator's
+// configuration if TestMain setup changes or a focused test is run differently.
+var testFixtureGitConfigPath string
+
 // TestMain isolates global config and scrubs all GIT_* environment variables
 // so tests cannot inherit operator DDx/Fizeau state or lefthook's parent-repo
 // Git context.
@@ -78,6 +84,13 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "TestMain: write isolated Git identity:", err)
 		os.Exit(1)
 	}
+	fixtureGitConfig := filepath.Join(providerShimRoot, "fixture.gitconfig")
+	if err := os.WriteFile(fixtureGitConfig, []byte("[user]\n\tname = DDx Fixture\n\temail = fixture@ddx-test.example.invalid\n"), 0o600); err != nil {
+		_ = os.RemoveAll(providerShimRoot)
+		fmt.Fprintln(os.Stderr, "TestMain: write isolated fixture Git config:", err)
+		os.Exit(1)
+	}
+	testFixtureGitConfigPath = fixtureGitConfig
 	_ = os.Setenv("HOME", testHome)
 	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(providerShimRoot, "config"))
 	originalLookup := providerShimExecutableLookup
@@ -105,6 +118,7 @@ func TestMain(m *testing.M) {
 		_ = os.Unsetenv("XDG_CONFIG_HOME")
 	}
 	_ = os.RemoveAll(providerShimRoot)
+	testFixtureGitConfigPath = ""
 	os.Exit(code)
 }
 

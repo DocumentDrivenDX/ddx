@@ -487,6 +487,27 @@ func TestPreDispatchCheckpoint_IgnoresWorkerSidecarsWithoutGitignore(t *testing.
 	assert.Contains(t, err.Error(), "feature.txt")
 }
 
+func TestPreDispatchCheckpoint_IgnoresCollectionLockSiblingSidecar(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260717T000003-collection-lock-sidecar"
+
+	// stale collection-lock breaking uses this stable sibling sidecar rather
+	// than the legacy .ddx/beads.lock path. It must remain runtime scratch even
+	// in projects whose .gitignore has not learned the new filename yet.
+	sidecarRel := filepath.Join(ddxroot.DirName, "beads.lock.stale-break.lock")
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, sidecarRel), []byte("advisory lock\n"), 0o600))
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(sidecarRel))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	assert.False(t, committed)
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+}
+
 func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"

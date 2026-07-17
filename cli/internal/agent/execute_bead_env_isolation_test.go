@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
 	"github.com/stretchr/testify/require"
 )
 
@@ -252,4 +253,101 @@ func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree proves the test
+// fixture boundary itself, rather than only ExecuteBead's harness wrapper.
+// The parent process deliberately points Git at a real primary repository;
+// runGitInteg/newScriptHarnessRepo must scrub that selection and make the
+// fixture repair only its own temporary repository.
+func TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree(t *testing.T) {
+	primary := filepath.Join(t.TempDir(), "primary")
+	runGitInteg(t, filepath.Dir(primary), "init", "-b", "main", primary)
+	runGitInteg(t, primary, "config", "user.name", "Primary Fixture Guard")
+	runGitInteg(t, primary, "config", "user.email", "primary-fixture-guard@ddx.test")
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "seed.txt"), []byte("seed\n"), 0o644))
+	runGitInteg(t, primary, "add", "seed.txt")
+	runGitInteg(t, primary, "commit", "-m", "chore: seed primary fixture guard")
+	runGitInteg(t, primary, "config", "extensions.worktreeConfig", "true")
+	runGitInteg(t, primary, "config", "--worktree", "user.name", "Primary Worktree Guard")
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGitInteg(t, primary, "worktree", "add", "-b", "fixture-linked", linked, "HEAD")
+	t.Cleanup(func() { _ = runGitInteg(t, primary, "worktree", "remove", "--force", linked) })
+
+	primaryConfig := filepath.Join(primary, ".git", "config")
+	primaryWorktreeConfig := filepath.Join(primary, ".git", "config.worktree")
+	beforeConfig, err := os.ReadFile(primaryConfig)
+	require.NoError(t, err)
+	beforeWorktreeConfig, err := os.ReadFile(primaryWorktreeConfig)
+	require.NoError(t, err)
+	beforeValues := fixtureConfigValues(t, primary)
+
+	// This is the failure mode observed on the shared checkout: a caller's Git
+	// repository selection survives into an agent fixture. If a fixture helper
+	// ever stops using fixtureGitEnvInteg, its `git config core.bare true` below
+	// targets primary and the byte-identity checks fail.
+	t.Setenv("GIT_DIR", filepath.Join(primary, ".git"))
+	t.Setenv("GIT_WORK_TREE", primary)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(primary, ".git", "index"))
+	runCoreBareRepairFixture(t)
+	runLandFixtureGitMutationPaths(t)
+
+	afterConfig, err := os.ReadFile(primaryConfig)
+	require.NoError(t, err)
+	afterWorktreeConfig, err := os.ReadFile(primaryWorktreeConfig)
+	require.NoError(t, err)
+	require.Equal(t, beforeConfig, afterConfig, "fixture must not rewrite primary .git/config")
+	require.Equal(t, beforeWorktreeConfig, afterWorktreeConfig, "fixture must not rewrite primary .git/config.worktree")
+	require.Equal(t, beforeValues, fixtureConfigValues(t, primary), "fixture must preserve primary core/user config values")
+
+	_, primaryStatusErr := runGitIntegOutput(primary, "status", "--short")
+	require.NoError(t, primaryStatusErr, "primary checkout must remain usable")
+	_, linkedStatusErr := runGitIntegOutput(linked, "status", "--short")
+	require.NoError(t, linkedStatusErr, "linked worktree must remain usable")
+}
+
+func fixtureConfigValues(t *testing.T, repo string) map[string]string {
+	t.Helper()
+	values := make(map[string]string)
+	for _, key := range []string{"core.bare", "core.worktree", "user.name", "user.email"} {
+		out, err := runGitIntegOutput(repo, "config", "--get", key)
+		if err == nil {
+			values[key] = out
+		}
+	}
+	return values
+}
+
+func runCoreBareRepairFixture(t *testing.T) {
+	t.Helper()
+	fixture, _ := newScriptHarnessRepo(t, 0)
+	runGitInteg(t, fixture, "config", "core.bare", "true")
+	require.Equal(t, "true", runGitInteg(t, fixture, "config", "--local", "--get", "core.bare"))
+
+	repair := gitrepohealth.RepairKnownConfigCorruption(context.Background(), fixture)
+	require.True(t, repair.StatusSucceeded, "fixture corruption repair must leave fixture usable: %+v", repair)
+	_, err := runGitIntegOutput(fixture, "status", "--short")
+	require.NoError(t, err, "fixture must observe its own repaired worktree")
+	_, err = runGitIntegOutput(fixture, "config", "--local", "--get", "core.bare")
+	require.Error(t, err, "fixture core.bare must be removed by repair")
+}
+
+// runLandFixtureGitMutationPaths exercises every landTestRepo helper that
+// creates commits in a linked fixture worktree. The hostile parent Git
+// selection is deliberately still installed by the caller.
+func runLandFixtureGitMutationPaths(t *testing.T) {
+	t.Helper()
+	r := newLandTestRepo(t)
+	created := r.commitOnFiles(r.baseSHA, "feat: fixture files", map[string]string{
+		"delete-me.txt": "temporary\n",
+		"keep-me.txt":   "retained\n",
+	})
+	r.commitDeleteOn(created, "delete-me.txt", "test: delete fixture file")
+	r.commitExecuteBeadEvidence(r.baseSHA, &ExecuteBeadResult{
+		AttemptID: "20260717T000000Z",
+		// Use an unignored legacy path: this proof exercises the fixture Git
+		// subprocesses, not the separate evidence-ignore policy.
+		ExecutionDir: "fixture-evidence",
+	}, nil)
 }
