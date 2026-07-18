@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
@@ -28,9 +29,8 @@ type durableAuditBeadReader interface {
 	Get(ctx context.Context, id string) (*bead.Bead, error)
 }
 
-// FinalizeDurableAttemptAudit appends the per-attempt metrics row, when the
-// report carries an attempt_id, and commits any DDx-managed durable audit files
-// that changed during the attempt.
+// FinalizeDurableAttemptAudit appends one per-attempt metrics row. It does not
+// flush Git: the worker owns that once-per-iteration epilogue.
 func FinalizeDurableAttemptAudit(projectRoot string, store durableAuditBeadReader, report ExecuteBeadReport) error {
 	if strings.TrimSpace(projectRoot) == "" {
 		projectRoot = report.ProjectRoot
@@ -43,19 +43,150 @@ func FinalizeDurableAttemptAudit(projectRoot string, store durableAuditBeadReade
 			return fmt.Errorf("append attempt metrics: %w", err)
 		}
 	}
-	if err := CommitDurableAuditOutputs(projectRoot, report.AttemptID); err != nil {
-		return fmt.Errorf("commit durable audit outputs: %w", err)
+	return nil
+}
+
+// DurableAuditAccumulator batches all finalizations observed in one worker
+// iteration. Finalize changes only durable DDx state; Flush performs at most
+// one Git audit commit at the iteration epilogue.
+type DurableAuditAccumulator struct {
+	projectRoot string
+	store       durableAuditBeadReader
+	mu          sync.Mutex
+	pending     bool
+	attemptID   string
+}
+
+func NewDurableAuditAccumulator(projectRoot string, store durableAuditBeadReader) *DurableAuditAccumulator {
+	return &DurableAuditAccumulator{projectRoot: projectRoot, store: store}
+}
+
+func (a *DurableAuditAccumulator) Finalize(report ExecuteBeadReport) error {
+	if a == nil {
+		return nil
+	}
+	projectRoot := a.projectRoot
+	if strings.TrimSpace(projectRoot) == "" {
+		projectRoot = report.ProjectRoot
+	}
+	if err := FinalizeDurableAttemptAudit(projectRoot, a.store, report); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.pending = true
+	if strings.TrimSpace(report.AttemptID) != "" {
+		a.attemptID = report.AttemptID
+	}
+	a.mu.Unlock()
+	return nil
+}
+
+func (a *DurableAuditAccumulator) Flush() error {
+	if a == nil {
+		return nil
+	}
+	a.mu.Lock()
+	if !a.pending {
+		a.mu.Unlock()
+		return nil
+	}
+	attemptID := a.attemptID
+	a.pending = false
+	a.mu.Unlock()
+	if err := CommitDurableAuditOutputs(a.projectRoot, attemptID); err != nil {
+		a.mu.Lock()
+		a.pending = true
+		a.mu.Unlock()
+		return err
 	}
 	return nil
 }
 
 // CommitDurableAuditOutputs stages and commits the DDx-managed durable audit
-// paths when they are dirty. The commit is serialized through the main git lock
-// so concurrent workers cannot interleave tracker and audit commits.
+// paths when they are dirty. The tracker lock only snapshots the managed
+// pathscope; every Git operation runs after that lock is released. In particular,
+// Git add/commit must run after that lock is released:
+// an audit flush can take seconds while a tracker mutation must not be held
+// across the Git/index operation.
 func CommitDurableAuditOutputs(projectRoot, attemptID string) error {
-	return withTrackerLock(projectRoot, "durable_audit", func() error {
-		return commitDurableAuditOutputsLocked(projectRoot, attemptID)
+	snapshot, err := snapshotDurableAuditOutputs(projectRoot)
+	if err != nil {
+		return err
+	}
+	return flushDurableAuditOutputs(snapshot, attemptID)
+}
+
+// durableAuditSnapshot is the ordered set of DDx-managed paths observed in a
+// single tracker-lock mutation window. It deliberately contains no open lock:
+// callers must flush it only after snapshotDurableAuditOutputs returns.
+type durableAuditSnapshot struct {
+	projectRoot string
+	gitDir      string
+	pathspecs   []string
+}
+
+func snapshotDurableAuditOutputs(projectRoot string) (durableAuditSnapshot, error) {
+	var snapshot durableAuditSnapshot
+	err := withTrackerLock(projectRoot, "durable_audit_snapshot", func() error {
+		gitDir, managedPathspecs := ddxStateGitScope(projectRoot, trackerpaths.ManagedPathspecs()...)
+		snapshot = durableAuditSnapshot{
+			projectRoot: projectRoot,
+			gitDir:      gitDir,
+			pathspecs:   append([]string(nil), managedPathspecs...),
+		}
+		return nil
 	})
+	return snapshot, err
+}
+
+// flushDurableAuditOutputs performs one ordered Git flush for one snapshot.
+// It is intentionally outside withTrackerLock; Git's own index/ref locking and
+// the bounded recovery below serialize concurrent writers without extending
+// tracker-lock lifetime across Git I/O.
+func flushDurableAuditOutputs(snapshot durableAuditSnapshot, attemptID string) error {
+	gitDir := snapshot.gitDir
+	out, err := runDurableAuditGit(gitDir, "rev-parse", "--is-inside-work-tree")
+	if err != nil || strings.TrimSpace(string(out)) != "true" {
+		return nil
+	}
+	statusArgs := []string{"status", "--short", "--untracked-files=all", "--ignored", "--"}
+	statusArgs = append(statusArgs, snapshot.pathspecs...)
+	statusOut, err := runDurableAuditGit(gitDir, statusArgs...)
+	if err != nil {
+		return fmt.Errorf("checking durable audit status: %w", err)
+	}
+	dirtyPaths := dirtyDurableAuditPaths(string(statusOut))
+	if len(dirtyPaths) == 0 {
+		return nil
+	}
+
+	addArgs := []string{"add", "-f", "-A", "--"}
+	addArgs = append(addArgs, dirtyPaths...)
+	addOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, addArgs...)
+	if err != nil {
+		return fmt.Errorf("staging durable audit outputs: %s: %w", strings.TrimSpace(string(addOut)), err)
+	}
+
+	cachedArgs := []string{"diff", "--cached", "--"}
+	cachedArgs = append(cachedArgs, dirtyPaths...)
+	if cached, err := runDurableAuditGit(gitDir, cachedArgs...); err == nil && strings.TrimSpace(string(cached)) == "" {
+		return nil
+	}
+
+	commitArgs := []string{"commit", "--no-verify", "--only", "-m", durableAuditCommitMessage(attemptID), "--"}
+	commitArgs = append(commitArgs, dirtyPaths...)
+	commitArgs = ddxStateCommitArgs(snapshot.projectRoot, gitDir, commitArgs...)
+	commitOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, commitArgs...)
+	if err != nil {
+		// Another worker can commit the same snapshot after our status/add but
+		// before our commit. That is a successful grouped flush, not a failed
+		// audit: the next iteration will observe any genuinely still-dirty path.
+		if strings.Contains(string(commitOut), "nothing added to commit") || strings.Contains(string(commitOut), "nothing to commit") {
+			return nil
+		}
+		return fmt.Errorf("committing durable audit outputs: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	return nil
 }
 
 func buildAttemptMetricsRow(store durableAuditBeadReader, report ExecuteBeadReport, finishedAt time.Time) attemptmetrics.AttemptRow {
@@ -88,48 +219,6 @@ func buildAttemptMetricsRow(store durableAuditBeadReader, report ExecuteBeadRepo
 		DurationMS:    int(report.DurationMS),
 		ReviewVerdict: report.ReviewVerdict,
 	}
-}
-
-func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
-	gitDir, managedPathspecs := ddxStateGitScope(projectRoot, trackerpaths.ManagedPathspecs()...)
-
-	out, err := runDurableAuditGit(gitDir, "rev-parse", "--is-inside-work-tree")
-	if err != nil || strings.TrimSpace(string(out)) != "true" {
-		return nil
-	}
-
-	statusArgs := []string{"status", "--short", "--untracked-files=all", "--ignored", "--"}
-	statusArgs = append(statusArgs, managedPathspecs...)
-	statusOut, err := runDurableAuditGit(gitDir, statusArgs...)
-	if err != nil {
-		return fmt.Errorf("checking durable audit status: %w", err)
-	}
-	dirtyPaths := dirtyDurableAuditPaths(string(statusOut))
-	if len(dirtyPaths) == 0 {
-		return nil
-	}
-
-	addArgs := []string{"add", "-f", "-A", "--"}
-	addArgs = append(addArgs, dirtyPaths...)
-	addOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, addArgs...)
-	if err != nil {
-		return fmt.Errorf("staging durable audit outputs: %s: %w", strings.TrimSpace(string(addOut)), err)
-	}
-
-	cachedArgs := []string{"diff", "--cached", "--"}
-	cachedArgs = append(cachedArgs, dirtyPaths...)
-	if cached, err := runDurableAuditGit(gitDir, cachedArgs...); err == nil && strings.TrimSpace(string(cached)) == "" {
-		return nil
-	}
-
-	commitArgs := []string{"commit", "--no-verify", "--only", "-m", durableAuditCommitMessage(attemptID), "--"}
-	commitArgs = append(commitArgs, dirtyPaths...)
-	commitArgs = ddxStateCommitArgs(projectRoot, gitDir, commitArgs...)
-	commitOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, commitArgs...)
-	if err != nil {
-		return fmt.Errorf("committing durable audit outputs: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	return nil
 }
 
 func runDurableAuditGit(gitDir string, args ...string) ([]byte, error) {

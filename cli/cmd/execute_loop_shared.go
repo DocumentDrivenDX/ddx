@@ -540,6 +540,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if jsonOutput {
 		progressLog = io.Discard
 	}
+	finalizeDurableAudit, flushDurableAudit := f.buildAttemptAuditFinalizers(projectRoot, store)
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Mode:                    spec.Mode,
 		IdleInterval:            spec.IdleInterval.Duration,
@@ -577,7 +578,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		NoReview:                     spec.NoReview,
 		TargetBeadID:                 tryTargetBeadID,
 		ReviewCostCap:                costCap,
-		FinalizeDurableAudit:         f.buildAttemptAuditFinalizer(projectRoot, store),
+		FinalizeDurableAudit:         finalizeDurableAudit,
+		FlushDurableAudit:            flushDurableAudit,
 		PostLadderExhaustionHook:     recoveryHook,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
@@ -625,13 +627,12 @@ func writeServerManagedResult(cmd *cobra.Command, projectRoot string, result *ag
 	})
 }
 
-func (f *CommandFactory) buildAttemptAuditFinalizer(projectRoot string, store *bead.Store) func(agent.ExecuteBeadReport) error {
+func (f *CommandFactory) buildAttemptAuditFinalizers(projectRoot string, store *bead.Store) (func(agent.ExecuteBeadReport) error, func() error) {
 	if f.durableAuditFinalizeOverride != nil {
-		return f.durableAuditFinalizeOverride
+		return f.durableAuditFinalizeOverride, nil
 	}
-	return func(report agent.ExecuteBeadReport) error {
-		return agent.FinalizeDurableAttemptAudit(projectRoot, store, report)
-	}
+	accumulator := agent.NewDurableAuditAccumulator(projectRoot, store)
+	return accumulator.Finalize, accumulator.Flush
 }
 
 func worktreeStillLive(meta agent.ExecutionCleanupMetadata, runStates []agent.RunState, now time.Time) bool {

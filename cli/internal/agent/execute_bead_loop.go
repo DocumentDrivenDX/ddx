@@ -198,11 +198,12 @@ type ExecuteBeadLoopRuntime struct {
 	// receive on WakeCh during the idle sleep, never elsewhere.
 	WakeCh <-chan struct{}
 
-	// FinalizeDurableAudit, when non-nil, is called once per finalized attempt
+	// FinalizeDurableAudit, when non-nil, accumulates one finalized attempt
 	// after the loop has finished writing the attempt's durable tracker state.
-	// Errors are terminal for autonomous work: the worker stops so DDx-managed
-	// audit outputs are not left dirty while more beads are claimed.
+	// FlushDurableAudit is called exactly once at every runIteration epilogue.
+	// Splitting the two keeps Git/index work out of all tracker mutation paths.
 	FinalizeDurableAudit func(report ExecuteBeadReport) error
+	FlushDurableAudit    func() error
 	// PostLadderExhaustionHook, when non-nil, is called when a bead's
 	// consecutive_ladder_exhaustions counter reaches the auto-recovery
 	// threshold (>= 2). A nil hook or Attempted=false result falls through to
@@ -1787,6 +1788,53 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	for {
 		outcome, err := w.runIteration(ctx, rcfg, runtime, state)
 		exitReason = state.exitReason
+		// A runIteration may finalize the same report through more than one
+		// terminal path while recording tracker events. Flush the accumulated
+		// durable audit once, here, after the whole iteration has unwound.
+		if runtime.FlushDurableAudit != nil {
+			if flushErr := runtime.FlushDurableAudit(); flushErr != nil {
+				if isTransientGitContention(flushErr) {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "transient git/tracker contention committing durable audit outputs; not stopping (will retry next iteration): %v\n", flushErr)
+					}
+					emit("loop.durable_audit_transient", map[string]any{
+						"reason": "git_tracker_contention",
+						"detail": strings.TrimSpace(flushErr.Error()),
+					})
+					// Even ModeOnce needs one more empty iteration: the accumulator
+					// retains the failed batch and the epilogue retries it there.
+					outcome.Stop = false
+					outcome.Continue = true
+				} else {
+					beadID := ""
+					projectRoot := runtime.ProjectRoot
+					if n := len(result.Results); n > 0 {
+						beadID = result.Results[n-1].BeadID
+						if projectRoot == "" {
+							projectRoot = result.Results[n-1].ProjectRoot
+						}
+					}
+					result.OperatorAttention = &OperatorAttentionStop{
+						Reason:      "durable_audit_commit_failed",
+						BeadID:      beadID,
+						ProjectRoot: projectRoot,
+						DirtyPaths:  append([]string(nil), trackerpaths.ManagedPathspecs()...),
+						Message:     "DDx could not commit durable audit outputs; resolve the git failure before continuing autonomous work.",
+					}
+					state.exitReason = "operator_attention"
+					exitReason = state.exitReason
+					emit("loop.operator_attention", map[string]any{
+						"reason":       result.OperatorAttention.Reason,
+						"bead_id":      beadID,
+						"project_root": projectRoot,
+						"dirty_paths":  result.OperatorAttention.DirtyPaths,
+						"message":      result.OperatorAttention.Message,
+						"detail":       strings.TrimSpace(flushErr.Error()),
+					})
+					return result, nil
+				}
+			}
+		}
 		if err != nil {
 			return result, err
 		}
