@@ -364,6 +364,48 @@ func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 	assert.NotEmpty(t, body["fingerprint"])
 }
 
+func TestExecuteBeadLoop_RepeatedBestEffortReadinessErrorsDoNotStopDrain(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+	beadCount := DefaultPreClaimWarnRepeatThreshold + 1
+	for i := 0; i < beadCount; i++ {
+		beadID := fmt.Sprintf("ddx-best-effort-readiness-%d", i)
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: beadID, Priority: i % 5}))
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev-" + beadID}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	var events bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:                        executeloop.ModeDrain,
+		EventSink:                   &events,
+		NoReview:                    true,
+		PreClaimWarnRepeatThreshold: DefaultPreClaimWarnRepeatThreshold,
+		PreClaimIntakeHook: func(context.Context, string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{}, errors.New("pre-claim intake: readiness route unavailable: no JSON object found")
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, beadCount, result.Attempts)
+	assert.Equal(t, beadCount, result.Successes)
+	assert.Nil(t, result.OperatorAttention)
+	assert.NotEqual(t, "operator_attention", result.ExitReason)
+
+	for i := 0; i < beadCount; i++ {
+		got, getErr := store.Get(context.Background(), fmt.Sprintf("ddx-best-effort-readiness-%d", i))
+		require.NoError(t, getErr)
+		assert.Equal(t, bead.StatusClosed, got.Status)
+	}
+	assert.Equal(t, 1, strings.Count(events.String(), `"type":"loop.operator_attention"`))
+}
+
 func TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))

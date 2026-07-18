@@ -1982,6 +1982,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 		return true
 	}
+	// Best-effort readiness is deliberately fail-open. Repeated failures still
+	// need durable operator attention, but they must not turn an advisory route
+	// outage into a queue-wide stop after otherwise executable beads were claimed.
+	appendBestEffortPreClaimWarn := func(beadID, reason, detail string, at time.Time) {
+		escalated := appendPreClaimIntakeWarning(w.Store, emit, &preClaimWarnState, preClaimWarnThreshold, beadID, assignee, reason, detail, at)
+		if !escalated || runtime.Log == nil {
+			return
+		}
+		_, _ = fmt.Fprintf(runtime.Log, "operator attention (non-terminal): pre-claim warn fingerprint repeated %d times across %d distinct bead IDs\n", preClaimWarnState.Count, len(preClaimWarnState.DistinctBeadIDs))
+	}
 	recordClaimAttempt := func(success bool, beadID string) {
 		if claimSuccessRateWindowSize <= 0 {
 			return
@@ -3052,9 +3062,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				eventBody["code"] = warningCode
 			}
 			emit(eventType, eventBody)
-			if appendPreClaimWarn(candidate.ID, "system_unready", warningDetail, now().UTC()) {
-				return executeBeadIterationOutcome{Stop: true}, nil
-			}
+			appendBestEffortPreClaimWarn(candidate.ID, "system_unready", warningDetail, now().UTC())
 		case intakeOutcome == PreClaimIntakeActionableAtomic:
 			// pass-through
 		case intakeOutcome == PreClaimIntakeActionableButRewritten:
