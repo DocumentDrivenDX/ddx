@@ -227,6 +227,50 @@ func TestDurableAuditFlushesOncePerDrainIteration(t *testing.T) {
 	assert.Equal(t, "chore: update tracker (execute-bead 20260717T000002-drain)", runGitInteg(t, stateRoot, "log", "-1", "--pretty=%s"))
 }
 
+func TestDurableAuditTransientFlushRetriesOnNextRunIteration(t *testing.T) {
+	for name, transientErr := range map[string]error{
+		"tracker_lock": &TrackerLockTimeoutError{Why: "test", LockDir: ".ddx/.git-tracker.lock", OwnerPID: "123"},
+		"index_lock":   fmt.Errorf("fatal: Unable to create '/repo/.git/index.lock': File exists"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			projectRoot := newDurableAuditProject(t)
+			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+			require.NoError(t, store.Init(context.Background()))
+			candidate := &bead.Bead{ID: "ddx-audit-retry-" + name, Title: "audit retry", Priority: 0}
+			require.NoError(t, store.Create(context.Background(), candidate))
+			runGitInteg(t, projectRoot, "add", ".")
+			runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
+			head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+			audit := NewDurableAuditAccumulator(projectRoot, store)
+			var flushes atomic.Int32
+			var events bytes.Buffer
+
+			worker := &ExecuteBeadWorker{Store: store, Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+				return ExecuteBeadReport{BeadID: candidate.ID, AttemptID: "20260717T000005-" + name, Status: ExecuteBeadStatusExecutionFailed, BaseRev: head, ResultRev: head, ProjectRoot: projectRoot}, nil
+			})}
+			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+			result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+				Once:                 true,
+				ProjectRoot:          projectRoot,
+				FinalizeDurableAudit: audit.Finalize,
+				FlushDurableAudit: func() error {
+					if flushes.Add(1) == 1 {
+						return transientErr
+					}
+					return audit.Flush()
+				},
+				EventSink: &events,
+			})
+			require.NoError(t, err)
+			require.Nil(t, result.OperatorAttention)
+			assert.GreaterOrEqual(t, flushes.Load(), int32(2), "pending audit must retry in the next iteration")
+			assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", ".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl"))
+			assert.Contains(t, events.String(), "loop.durable_audit_transient")
+		})
+	}
+}
+
 func TestDurableAuditConcurrentFlushesPreserveAllManagedPaths(t *testing.T) {
 	projectRoot := newDurableAuditProject(t)
 	metricsPath := filepath.Join(ddxroot.JoinProject(projectRoot), "metrics", "attempts.jsonl")
