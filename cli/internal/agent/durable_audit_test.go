@@ -129,16 +129,62 @@ func TestDurableAuditCommitOutsideTrackerLock(t *testing.T) {
 	t.Cleanup(func() { durableAuditGitRunner = origRunner })
 	var commitStarted atomic.Bool
 	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
-		if len(args) > 0 && args[0] == "commit" {
-			commitStarted.Store(true)
+		if len(args) > 0 && (args[0] == "rev-parse" || args[0] == "status" || args[0] == "add" || args[0] == "diff" || args[0] == "commit") {
+			if args[0] == "commit" {
+				commitStarted.Store(true)
+			}
 			_, err := os.Stat(trackerLockPath(projectRoot))
-			require.True(t, os.IsNotExist(err), "Git commit began while tracker lock still existed: %v", err)
+			require.True(t, os.IsNotExist(err), "Git %s began while tracker lock still existed: %v", args[0], err)
 		}
 		return origRunner(ctx, gitDir, args...)
 	}
 
 	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260717T000001-outside-lock"))
 	assert.True(t, commitStarted.Load(), "test must observe the durable audit commit")
+}
+
+func TestDurableAuditFlushesMultipleFinalizationsAtIterationEpilogue(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	require.NoError(t, store.Init(context.Background()))
+	candidate := &bead.Bead{ID: "ddx-audit-epilogue", Title: "audit epilogue", Priority: 0}
+	require.NoError(t, store.Create(context.Background(), candidate))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
+	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	audit := NewDurableAuditAccumulator(projectRoot, store)
+	var commits atomic.Int32
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() { durableAuditGitRunner = origRunner })
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "commit" {
+			commits.Add(1)
+		}
+		return origRunner(ctx, gitDir, args...)
+	}
+
+	worker := &ExecuteBeadWorker{Store: store, Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+		return ExecuteBeadReport{BeadID: candidate.ID, AttemptID: "20260717T000003-first", Status: ExecuteBeadStatusExecutionFailed, BaseRev: head, ResultRev: head, ProjectRoot: projectRoot}, nil
+	})}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:        true,
+		ProjectRoot: projectRoot,
+		FinalizeDurableAudit: func(report ExecuteBeadReport) error {
+			require.NoError(t, audit.Finalize(report))
+			report.AttemptID = "20260717T000003-second"
+			return audit.Finalize(report)
+		},
+		FlushDurableAudit: audit.Flush,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), commits.Load(), "the iteration epilogue must flush both finalizations once")
+	contents, readErr := os.ReadFile(filepath.Join(ddxroot.JoinProject(projectRoot), "metrics", "attempts.jsonl"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(contents), "20260717T000003-first")
+	assert.Contains(t, string(contents), "20260717T000003-second")
 }
 
 func TestDurableAuditFlushesOncePerDrainIteration(t *testing.T) {
@@ -179,6 +225,36 @@ func TestDurableAuditFlushesOncePerDrainIteration(t *testing.T) {
 	assert.Contains(t, string(contents), "20260717T000002-first")
 	assert.Contains(t, string(contents), "20260717T000002-second")
 	assert.Equal(t, "chore: update tracker (execute-bead 20260717T000002-drain)", runGitInteg(t, stateRoot, "log", "-1", "--pretty=%s"))
+}
+
+func TestDurableAuditConcurrentFlushesPreserveAllManagedPaths(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	metricsPath := filepath.Join(ddxroot.JoinProject(projectRoot), "metrics", "attempts.jsonl")
+	attachmentPath := filepath.Join(ddxroot.JoinProject(projectRoot), "attachments", "ddx-concurrent", "events.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(attachmentPath), 0o755))
+	require.NoError(t, os.WriteFile(metricsPath, []byte("{\"attempt\":\"one\"}\n"), 0o644))
+	require.NoError(t, os.WriteFile(attachmentPath, []byte("{\"event\":\"two\"}\n"), 0o644))
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	for _, attemptID := range []string{"20260717T000004-one", "20260717T000004-two"} {
+		go func(id string) {
+			<-start
+			errs <- CommitDurableAuditOutputs(projectRoot, id)
+		}(attemptID)
+	}
+	close(start)
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+
+	assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", ".ddx/metrics/attempts.jsonl", ".ddx/attachments/ddx-concurrent/events.jsonl"))
+	metrics, err := os.ReadFile(metricsPath)
+	require.NoError(t, err)
+	attachments, err := os.ReadFile(attachmentPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(metrics), "one")
+	assert.Contains(t, string(attachments), "two")
 }
 
 func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
@@ -298,6 +374,7 @@ func TestCommitOutcomeDurableMutationUsesAuditCommit(t *testing.T) {
 	runGitInteg(t, projectRoot, "add", ".")
 	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
 	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	audit := NewDurableAuditAccumulator(projectRoot, store)
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -321,7 +398,8 @@ func TestCommitOutcomeDurableMutationUsesAuditCommit(t *testing.T) {
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:                 true,
 		ProjectRoot:          projectRoot,
-		FinalizeDurableAudit: func(report ExecuteBeadReport) error { return FinalizeDurableAttemptAudit(projectRoot, store, report) },
+		FinalizeDurableAudit: audit.Finalize,
+		FlushDurableAudit:    audit.Flush,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Attempts)

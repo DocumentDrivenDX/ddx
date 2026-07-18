@@ -198,11 +198,12 @@ type ExecuteBeadLoopRuntime struct {
 	// receive on WakeCh during the idle sleep, never elsewhere.
 	WakeCh <-chan struct{}
 
-	// FinalizeDurableAudit, when non-nil, is called once per finalized attempt
+	// FinalizeDurableAudit, when non-nil, accumulates one finalized attempt
 	// after the loop has finished writing the attempt's durable tracker state.
-	// Errors are terminal for autonomous work: the worker stops so DDx-managed
-	// audit outputs are not left dirty while more beads are claimed.
+	// FlushDurableAudit is called exactly once at every runIteration epilogue.
+	// Splitting the two keeps Git/index work out of all tracker mutation paths.
 	FinalizeDurableAudit func(report ExecuteBeadReport) error
+	FlushDurableAudit    func() error
 	// PostLadderExhaustionHook, when non-nil, is called when a bead's
 	// consecutive_ladder_exhaustions counter reaches the auto-recovery
 	// threshold (>= 2). A nil hook or Attempted=false result falls through to
@@ -1787,6 +1788,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	for {
 		outcome, err := w.runIteration(ctx, rcfg, runtime, state)
 		exitReason = state.exitReason
+		// A runIteration may finalize the same report through more than one
+		// terminal path while recording tracker events. Flush the accumulated
+		// durable audit once, here, after the whole iteration has unwound.
+		if runtime.FlushDurableAudit != nil {
+			if flushErr := runtime.FlushDurableAudit(); flushErr != nil {
+				return result, fmt.Errorf("commit durable audit outputs: %w", flushErr)
+			}
+		}
 		if err != nil {
 			return result, err
 		}

@@ -459,6 +459,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			Source:      "ddx try",
 		})
 	}
+	finalizeDurableAudit, flushDurableAudit := f.buildAttemptAuditFinalizers(projectRoot, store)
 	result, runErr := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Mode:                    executeloop.ModeOnce,
 		IgnoreCooldown:          forceClaim,
@@ -481,7 +482,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		PreDispatchLintHook:    lintHook,
 		PostAttemptTriageHook:  triageHook,
 		ProseEvidenceHook:      proseHook,
-		FinalizeDurableAudit:   f.buildAttemptAuditFinalizer(projectRoot, store),
+		FinalizeDurableAudit:   finalizeDurableAudit,
+		FlushDurableAudit:      flushDurableAudit,
 		NoReview:               noReview,
 	})
 	if runErr != nil {
