@@ -6,6 +6,11 @@ library:
 known_repos:
     fizeau:
         path: /home/erik/Projects/fizeau
+executions:
+    # Linked worktrees keep their Git index under the primary checkout's
+    # .git/worktrees directory, which sandboxed agents cannot mutate. A local
+    # clone owns its .git directory inside the attempt workspace.
+    attempt_backend: local-clone
 #
 # bead_tracker.backend: axon
 # bead_tracker:
