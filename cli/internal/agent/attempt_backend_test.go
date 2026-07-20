@@ -15,7 +15,7 @@ import (
 )
 
 func TestResolveAttemptBackendDefaultsToLocalClone(t *testing.T) {
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	rcfg := (&config.Config{Version: "1.0", Agent: &config.AgentConfig{}}).Resolve(config.CLIOverrides{})
 	backend, err := ResolveAttemptBackend(rcfg)
 	require.NoError(t, err)
 	require.Equal(t, AttemptBackendLocalClone, backend.Name())
@@ -32,7 +32,7 @@ func TestResolveAttemptBackendExplicitWorktree(t *testing.T) {
 
 func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	rcfg := (&config.Config{Version: "1.0", Agent: &config.AgentConfig{}}).Resolve(config.CLIOverrides{})
 	backend, err := ResolveAttemptBackend(rcfg)
 	require.NoError(t, err)
 	require.Equal(t, AttemptBackendLocalClone, backend.Name())

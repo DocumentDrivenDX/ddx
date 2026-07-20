@@ -96,6 +96,17 @@ func runGitIntegOutput(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// testWorktreeConfig is for fixture-only execute-bead tests that supply a
+// mocked GitOps implementation and a synthetic, non-Git project root. The
+// production default is local-clone; these tests explicitly exercise the
+// linked-worktree mock path instead of accidentally depending on that legacy
+// default.
+func testWorktreeConfig() config.ResolvedConfig {
+	return config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendWorktree,
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Repo setup
 // ---------------------------------------------------------------------------

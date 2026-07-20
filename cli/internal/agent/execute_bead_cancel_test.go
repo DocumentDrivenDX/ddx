@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
@@ -123,7 +122,7 @@ func TestWorker_HonorsCancelMidAttempt(t *testing.T) {
 		cancelStore.request()
 	}()
 
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	rcfg := testWorktreeConfig()
 
 	done := make(chan *ExecuteBeadResult, 1)
 	go func() {
@@ -185,7 +184,7 @@ func TestCancelLatency_UnderSLA(t *testing.T) {
 	cancelStore := &fakeCancelStore{}
 	runner := newBlockingAgentRunner()
 
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	rcfg := testWorktreeConfig()
 
 	startedDispatch := make(chan struct{})
 	done := make(chan *ExecuteBeadResult, 1)
@@ -273,7 +272,7 @@ func TestOperatorCancel_DuringRealClaudeAttempt(t *testing.T) {
 		close(subprocessSawCancel)
 	}()
 
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	rcfg := testWorktreeConfig()
 
 	done := make(chan *ExecuteBeadResult, 1)
 	go func() {

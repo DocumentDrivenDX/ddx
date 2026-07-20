@@ -108,11 +108,12 @@ func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
 //
 // See SD-024 / TD-024 §Test config constructors and §Stage 3.
 type TestBeadConfigOpts struct {
-	Harness  string
-	Model    string
-	Provider string // CLI-only override, no durable home on AgentConfig
-	Effort   string // CLI-only override, no durable home on AgentConfig
-	Mirror   *ExecutionsMirrorConfig
+	Harness        string
+	Model          string
+	Provider       string // CLI-only override, no durable home on AgentConfig
+	Effort         string // CLI-only override, no durable home on AgentConfig
+	AttemptBackend string
+	Mirror         *ExecutionsMirrorConfig
 }
 
 // NewTestConfigForBead returns a *Config that, when Resolve()d with
@@ -121,12 +122,23 @@ type TestBeadConfigOpts struct {
 // Pure CLI-override fields (Harness, Model, Provider, Effort) have no durable home on
 // AgentConfig and must be applied at Resolve time via CLIOverrides.
 func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
+	attemptBackend := opts.AttemptBackend
+	if attemptBackend == "" {
+		// Most legacy execute-bead unit fixtures provide a mocked GitOps and a
+		// synthetic non-Git project root. They must select the mockable linked
+		// worktree backend explicitly rather than inheriting the production
+		// sandbox-safe local-clone default.
+		attemptBackend = "worktree"
+	}
 	cfg := &Config{
 		Version: "1.0",
 		Agent:   &AgentConfig{},
+		Executions: &ExecutionsConfig{
+			AttemptBackend: attemptBackend,
+		},
 	}
 	if opts.Mirror != nil {
-		cfg.Executions = &ExecutionsConfig{Mirror: opts.Mirror}
+		cfg.Executions.Mirror = opts.Mirror
 	}
 	return cfg
 }
