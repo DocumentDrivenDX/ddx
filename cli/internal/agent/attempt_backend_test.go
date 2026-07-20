@@ -14,11 +14,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResolveAttemptBackend_DefaultsToWorktree(t *testing.T) {
+func TestResolveAttemptBackendDefaultsToLocalClone(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
 	backend, err := ResolveAttemptBackend(rcfg)
 	require.NoError(t, err)
+	require.Equal(t, AttemptBackendLocalClone, backend.Name())
+}
+
+func TestResolveAttemptBackendExplicitWorktree(t *testing.T) {
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendWorktree,
+	})
+	backend, err := ResolveAttemptBackend(rcfg)
+	require.NoError(t, err)
 	require.Equal(t, AttemptBackendWorktree, backend.Name())
+}
+
+func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	backend, err := ResolveAttemptBackend(rcfg)
+	require.NoError(t, err)
+	require.Equal(t, AttemptBackendLocalClone, backend.Name())
+
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-int-0001",
+		AttemptID:   "20260720-sandboxed-default",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = backend.Cleanup(context.Background(), ws) })
+
+	gitDir := runGitInteg(t, ws.WorkDir, "rev-parse", "--absolute-git-dir")
+	require.Equal(t, filepath.Join(ws.WorkDir, ".git"), gitDir)
+	require.NotContains(t, gitDir, filepath.Join(projectRoot, ".git", "worktrees"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "sandboxed.txt"), []byte("ok\n"), 0o644))
+	runGitInteg(t, ws.WorkDir, "add", "sandboxed.txt")
+	runGitInteg(t, ws.WorkDir, "commit", "-m", "test: sandboxed default clone commit")
 }
 
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {

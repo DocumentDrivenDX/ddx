@@ -87,7 +87,12 @@ type AttemptWorkspace struct {
 func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
 	name := strings.ToLower(strings.TrimSpace(rcfg.AttemptBackend()))
 	if name == "" {
-		name = AttemptBackendWorktree
+		// A linked worktree stores its gitdir under the primary repository's
+		// .git/worktrees directory. Sandboxed agents commonly receive write
+		// access only to their attempt directory, so they can edit a linked
+		// worktree but cannot create its index.lock. A local clone keeps its
+		// gitdir inside that directory and is therefore the safe default.
+		name = AttemptBackendLocalClone
 	}
 	switch name {
 	case AttemptBackendWorktree, "linked-worktree":
