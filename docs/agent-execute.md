@@ -100,13 +100,15 @@ route decision back into `Execute`.
 ## Cleanup and Resource Exhaustion
 
 `ddx try` owns the isolated workspace lifecycle for one bead attempt. The
-default attempt backend is `worktree`. Select a backend with `--attempt-backend` or
+default attempt backend is `local-clone`. Select a backend with `--attempt-backend` or
 `executions.attempt_backend`:
 
-- **`worktree`** (default): Creates an isolated git worktree. Provides clean
-  isolation for code-edit attempts. Requires disk space for the linked worktree
-  and may not work well with large checkouts or complex submodule structures.
-- **`local-clone`**: Creates a full local clone with local object sharing/hardlinks.
+- **`local-clone`** (default): Creates a full local clone with local object sharing/hardlinks.
+  Its `.git` directory is inside the attempt workspace, so it works when an agent
+  sandbox may write only that workspace.
+- **`worktree`**: Creates an isolated linked git worktree. It requires the agent
+  sandbox to write the primary repository's `.git/worktrees/...` metadata,
+  including `index.lock`; use it only where that access is explicitly allowed.
   Slightly more robust than worktree for systems with filesystem limitations, at the
   cost of additional disk I/O.
 - **`docker-clone`**: Runs a local clone inside a Docker container. Provides

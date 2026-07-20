@@ -350,8 +350,10 @@ type ExecutionsConfig struct {
 	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
 	RetainDays *int                    `yaml:"retain_days,omitempty" json:"retain_days,omitempty"`
 	// AttemptBackend selects the execute-bead attempt backend. Empty uses the
-	// legacy linked-worktree backend. Supported values are owned by the agent
-	// package so new backends can be added without changing queue semantics.
+	// sandbox-safe local-clone backend. Linked worktree remains available only
+	// when the execution sandbox can write the primary repository's Git metadata.
+	// Supported values are owned by the agent package so new backends can be
+	// added without changing queue semantics.
 	AttemptBackend string `yaml:"attempt_backend,omitempty" json:"attempt_backend,omitempty"`
 	// TempWorktreeRoot is the base directory for isolated execute-bead
 	// worktrees. Empty uses the per-user cache directory; legacy

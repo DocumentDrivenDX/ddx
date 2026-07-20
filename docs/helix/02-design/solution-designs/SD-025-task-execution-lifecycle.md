@@ -296,9 +296,11 @@ removes the isolated workspace after merge, preserve, no-changes, no-evidence,
 failed publish, or cooperative interruption finalization.
 
 The attempt workspace backend is selected by `--attempt-backend` or
-`executions.attempt_backend`. The default `worktree` backend preserves the
-legacy linked git worktree behavior. The `local-clone` backend prepares a full
-local clone under the same execution root and imports result commits back into
+`executions.attempt_backend`. The default `local-clone` backend prepares a full
+local clone under the same execution root, with its Git metadata inside the
+attempt workspace, and imports result commits back into the project repository.
+The legacy linked `worktree` backend remains explicit-only because it requires
+the agent sandbox to write primary-repository Git metadata under `.git/worktrees/...`.
 the project repository before landing. The `docker-clone` backend runs that
 clone inside Docker and uses `executions.docker` for image and resource-limit
 configuration.

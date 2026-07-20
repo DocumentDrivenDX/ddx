@@ -844,9 +844,12 @@ immediate DDx-scoped cleanup pass, re-checks, and then either proceeds or
 returns `resource_exhausted` without claiming the bead.
 
 The attempt backend is selected by `--attempt-backend` or
-`executions.attempt_backend`. `worktree` is the default linked git worktree
-backend. `local-clone` creates a full local clone under the same execution root
-and imports result commits back into the project repo before land. `docker-clone`
+`executions.attempt_backend`. `local-clone` is the default sandbox-safe backend:
+it creates a full local clone under the same execution root with Git metadata
+inside the attempt workspace. `worktree` remains an explicit linked-worktree
+option for environments that grant the agent write access to primary-repository
+Git metadata under `.git/worktrees/...`. The `local-clone` backend imports
+result commits back into the project repo before land. `docker-clone`
 uses that clone as the Docker working tree; it requires
 `executions.docker.image` and can set Docker memory, CPU, pids, tmpfs, and
 network limits under `executions.docker`. `in-tree` (opt-in) runs the attempt
