@@ -125,6 +125,14 @@ func (s *promptIngressStubAgent) Execute(ctx context.Context, req agentlib.Servi
 	return ch, nil
 }
 
+func (*promptIngressStubAgent) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (*promptIngressStubAgent) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
+}
+
 func (s *promptIngressStubAgent) TailSessionLog(ctx context.Context, sessionID string) (<-chan agentlib.ServiceEvent, error) {
 	ch := make(chan agentlib.ServiceEvent)
 	close(ch)

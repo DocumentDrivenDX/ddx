@@ -62,6 +62,14 @@ func (s *resolveRouteFailingService) Execute(_ context.Context, req agentlib.Ser
 	return ch, nil
 }
 
+func (*resolveRouteFailingService) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (*resolveRouteFailingService) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
+}
+
 func (s *resolveRouteFailingService) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
 	s.mu.Lock()
 	s.resolveCalled = true

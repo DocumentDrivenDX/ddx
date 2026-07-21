@@ -69,6 +69,14 @@ func (s *workerIntakeServiceStub) Execute(_ context.Context, req agentlib.Servic
 	return ch, nil
 }
 
+func (*workerIntakeServiceStub) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (*workerIntakeServiceStub) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
+}
+
 func (s *workerIntakeServiceStub) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
 	return nil, fmt.Errorf("ResolveRoute should not be called in worker intake tests")
 }
