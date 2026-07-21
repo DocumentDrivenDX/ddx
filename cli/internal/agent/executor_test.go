@@ -68,12 +68,15 @@ sleep 300
 		cmdMu.Lock()
 		cmd = exec.Command(scriptPath)
 		cmdSetProcessGroup(cmd)
+		// Start the command manually (not through executor.ExecuteInDir) so we
+		// can kill the parent process from this test. It must run under cmdMu:
+		// Start writes cmd.Process, which the test goroutine reads below, and
+		// leaving it outside the lock is a data race the -race gate catches.
+		startErr := cmd.Start()
 		cmdMu.Unlock()
 
-		// Start the command manually (not through executor.ExecuteInDir)
-		// so we can kill the parent process from this test.
-		if err := cmd.Start(); err != nil {
-			errCh <- err
+		if startErr != nil {
+			errCh <- startErr
 			return
 		}
 

@@ -40,6 +40,13 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test: spawns ddx work subprocess")
 	}
+	// Build BEFORE overriding HOME. With GOPATH unset (as on GitHub Actions)
+	// the go toolchain derives GOPATH/GOMODCACHE from HOME, so building under
+	// the temp HOME re-downloads the entire module graph into t.TempDir()
+	// (~250s) and leaves 0555 module-cache dirs that make the t.TempDir
+	// RemoveAll cleanup fail with EACCES.
+	binPath := sharedDdxBinary(t)
+
 	testHome := t.TempDir()
 	t.Setenv("HOME", testHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(testHome, ".config"))
@@ -48,7 +55,6 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	// one bead to claim → at least one bead-scoped event flows. We don't
 	// require the bead to succeed; ddx work will emit loop.start +
 	// bead.claimed before any harness invocation.
-	binPath := sharedDdxBinary(t)
 	t.Setenv("DDX_BIN", binPath)
 
 	proj := buildFixtureRepo(t, binPath, "standard")

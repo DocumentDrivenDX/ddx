@@ -159,6 +159,12 @@ library:
     branch: "main"
 agent:
   timeout_ms: 300000
+workers:
+  # Neutralize the production pre-claim host-load backoff (min 5s, max 30s —
+  # internal/agent/execute_bead_loop.go:7936). On a loaded CI runner it exceeds
+  # this test's 5s Eventually budget, so the worker can never reach Execute in
+  # time and the assertion fails for reasons unrelated to route resolution.
+  load_pressure_threshold: 1000000
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 
