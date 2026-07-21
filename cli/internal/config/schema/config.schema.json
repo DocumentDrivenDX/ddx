@@ -509,7 +509,7 @@
         },
         "attempt_backend": {
           "type": "string",
-          "description": "Workspace/transport backend for execute-bead attempts. Empty defaults to linked worktrees.",
+          "description": "Workspace/transport backend for execute-bead attempts. Empty defaults to sandbox-safe local clones; linked worktrees remain an explicit opt-in.",
           "enum": ["worktree", "local-clone", "docker-clone"]
         },
         "temp_worktree_root": {

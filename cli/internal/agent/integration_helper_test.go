@@ -129,11 +129,11 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 	// Create initial seed file and commit so the repo has a HEAD.
 	seedFile := filepath.Join(root, "seed.txt")
 	require.NoError(t, os.WriteFile(seedFile, []byte("seed\n"), 0644))
-	// Mirror the ignore rule ddx init writes (cmd/init.go:37). Stale
-	// collection-lock recovery leaves a stable advisory sidecar beside the lock
-	// dir (.ddx/beads.lock.stale-break.lock) that is never unlinked
-	// (internal/bead/lock.go:178-183); without this rule it shows up as
-	// untracked dirt and trips clean-worktree invariants.
+	// Mirror the production ignore contract for DDx runtime advisory-lock
+	// sidecars. Store.Init/Create may leave .ddx/beads.lock.stale-break.lock
+	// behind; that is coordination scratch, not parent-worktree dirt. Keep the
+	// rule in the fixture's initial commit so normal status checks retain their
+	// production meaning while still exposing every unignored source change.
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".ddx/*.lock\n"), 0644))
 	runGitInteg(t, root, "add", ".")
 	runGitInteg(t, root, "commit", "-m", "chore: initial seed")

@@ -14,8 +14,9 @@ import (
 // emitted around an execute-bead run's tracker-lock hold surface via the
 // lock-events accessor (lockmetrics.Load reads .ddx/metrics/locks.jsonl, the
 // stream `ddx work`/`ddx run` enable). The sample run is the durable-audit
-// finalize step the execute-bead loop performs, which acquires and releases
-// the tracker lock through the instrumented wrapper.
+// snapshot step the execute-bead loop performs, which acquires and releases
+// the tracker lock through the instrumented wrapper before Git I/O runs
+// outside that lock.
 func TestLockMetrics_VisibleInDdxLogs(t *testing.T) {
 	root := t.TempDir()
 
@@ -23,8 +24,8 @@ func TestLockMetrics_VisibleInDdxLogs(t *testing.T) {
 	lockmetrics.SetSink(lockmetrics.FileSink(root))
 	t.Cleanup(func() { lockmetrics.SetSink(nil) })
 
-	// Sample execute-bead finalize step: acquires and releases the tracker
-	// lock around the durable-audit commit attempt.
+	// Sample execute-bead durable-audit snapshot: acquires and releases the
+	// tracker lock before the later Git stage/commit work.
 	require.NoError(t, agent.CommitDurableAuditOutputs(root, "20260527T-sample"))
 
 	events, err := lockmetrics.Load(root)
@@ -43,7 +44,8 @@ func TestLockMetrics_VisibleInDdxLogs(t *testing.T) {
 			sawRelease = true
 			assert.NotEmpty(t, ev.ReleasedAt, "release event must carry released_at")
 			assert.Equal(t, os.Getpid(), ev.HolderPID)
-			assert.Equal(t, "durable_audit_snapshot", ev.Operation)
+			assert.Equal(t, "durable_audit_snapshot", ev.Operation,
+				"the lock labels the bounded snapshot phase, not the out-of-lock Git flush")
 		}
 	}
 	assert.True(t, sawAcquire, "tracker.lock acquire event must be visible via the accessor")

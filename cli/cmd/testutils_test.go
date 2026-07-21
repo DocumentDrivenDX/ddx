@@ -574,6 +574,12 @@ func (te *TestEnvironment) initGit() {
 	gitName.Dir = te.Dir
 	gitName.Env = cleanEnv
 	require.NoError(te.t, gitName.Run(), "git config user.name should succeed")
+
+	// DDx lock sidecars are runtime coordination state, never source dirt.
+	// Keep them out of fixture status assertions without creating an untracked
+	// .gitignore file that would itself make the fixture dirty.
+	excludePath := filepath.Join(te.Dir, ".git", "info", "exclude")
+	require.NoError(te.t, os.WriteFile(excludePath, []byte(".ddx/*.lock\n"), 0o644))
 }
 
 // CreateConfig creates a config file with the given content
