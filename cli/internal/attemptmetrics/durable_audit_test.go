@@ -35,6 +35,8 @@ func TestAttemptMetricsAppendLeavesNoDirtyTrackedFile(t *testing.T) {
 		ProjectRoot:      projectRoot,
 	}
 	require.NoError(t, agent.FinalizeDurableAttemptAudit(projectRoot, store, report))
+	// Finalize only appends the row; the worker epilogue owns the Git flush.
+	require.NoError(t, agent.CommitDurableAuditOutputs(projectRoot, report.AttemptID))
 
 	stateRoot := ddxroot.Path(context.Background(), projectRoot)
 	status := runGitAttemptMetrics(t, stateRoot, "status", "--short", "--", "metrics/attempts.jsonl")

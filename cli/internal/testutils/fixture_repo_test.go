@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,14 +9,14 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
-func TestFixtureBinaryScratchUsesConfiguredExecutionRoot(t *testing.T) {
-	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
-	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
-	wantScratchRoot := filepath.Dir(configuredRoot)
-	resolvedScratchRoot := config.ExecutionScratchRoot("")
-	if resolvedScratchRoot != wantScratchRoot {
-		t.Fatalf("ExecutionScratchRoot = %q, want %q from DDX_EXEC_WT_DIR", resolvedScratchRoot, wantScratchRoot)
-	}
+// TestFixtureBinaryScratchEscapesTestScopedRoots pins the invariant that
+// replaced the old "uses configured execution root" contract. Binaries built
+// behind a sync.Once outlive the test that happens to build them first, so the
+// scratch dir must not sit under a caller's DDX_EXEC_WT_DIR — that env var is
+// routinely pointed at a t.TempDir() which Go removes at that test's cleanup.
+func TestFixtureBinaryScratchEscapesTestScopedRoots(t *testing.T) {
+	testScopedRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
+	t.Setenv(config.ExecutionWorktreeRootEnv, testScopedRoot)
 
 	patterns := []string{
 		"ddx-fixture-bin-*",
@@ -27,12 +28,13 @@ func TestFixtureBinaryScratchUsesConfiguredExecutionRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("fixtureBinaryScratchDir(%q): %v", pattern, err)
 			}
-			if filepath.Dir(dir) != resolvedScratchRoot {
-				t.Fatalf("scratch dir = %q, want direct child of configured scratch root %q", dir, resolvedScratchRoot)
+			if strings.HasPrefix(dir, filepath.Dir(testScopedRoot)) {
+				t.Fatalf("scratch dir %q must not live under test-scoped root %q", dir, filepath.Dir(testScopedRoot))
 			}
 			if !strings.HasPrefix(filepath.Base(dir), strings.TrimSuffix(pattern, "*")) {
 				t.Fatalf("scratch base = %q, want pattern %q", filepath.Base(dir), pattern)
 			}
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		})
 	}
 }

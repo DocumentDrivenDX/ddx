@@ -328,7 +328,7 @@ func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {
 			{
 				Type: "final",
 				Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
-				Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done","cost_usd":0.003,"usage":{"input_tokens":200,"output_tokens":500,"cache_read_tokens":800,"total_tokens":1500}}`),
+				Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done","cost_usd":0.003,"cost_source":"reported","usage":{"input_tokens":200,"output_tokens":500,"cache_read_tokens":800,"total_tokens":1500}}`),
 			},
 		},
 	}

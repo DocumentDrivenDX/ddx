@@ -18,7 +18,11 @@ func resolvedRoleCapsForTest(role string, maxPromptBytes int) config.ResolvedCon
 				role: {MaxPromptBytes: &maxPromptBytes},
 			},
 		},
-	}).Resolve(config.CLIOverrides{})
+		// Mocked GitOps over a synthetic non-Git project root, so the mockable
+		// linked-worktree backend must be selected explicitly rather than
+		// inheriting the sandbox-safe local-clone default, which shells out to
+		// a real git clone (attempt_backend.go:87-96).
+	}).Resolve(config.CLIOverrides{AttemptBackend: AttemptBackendWorktree})
 }
 
 func TestImplementerAndLifecycleUseRoleEvidenceCaps(t *testing.T) {

@@ -171,12 +171,14 @@ func runInterruptedAttemptInGitRepo(t *testing.T, trackDirtyRunState bool) inter
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	// Finalize appends the row; Flush owns the Git epilogue. Production wires
+	// both (cmd/execute_loop_shared.go:629); the fixture must too.
+	accumulator := NewDurableAuditAccumulator(projectRoot, store)
 	result, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{
-		Once:        true,
-		ProjectRoot: projectRoot,
-		FinalizeDurableAudit: func(report ExecuteBeadReport) error {
-			return FinalizeDurableAttemptAudit(projectRoot, store, report)
-		},
+		Once:                 true,
+		ProjectRoot:          projectRoot,
+		FinalizeDurableAudit: accumulator.Finalize,
+		FlushDurableAudit:    accumulator.Flush,
 	})
 
 	return interruptedAttemptGitRun{

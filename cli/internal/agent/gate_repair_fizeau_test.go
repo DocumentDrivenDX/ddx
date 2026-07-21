@@ -112,9 +112,9 @@ func TestGateFailureUsesFreshFizeauExecuteAtSamePower(t *testing.T) {
 	service := newGateRepairRecordingService()
 	service.finalData = func(call int) []byte {
 		if call == 1 {
-			return []byte(`{"status":"success","final_text":"implemented","cost_usd":0.25}`)
+			return []byte(`{"status":"success","final_text":"implemented","cost_usd":0.25,"cost_source":"reported"}`)
 		}
-		return []byte(`{"status":"success","final_text":"repaired","cost_usd":0.5}`)
+		return []byte(`{"status":"success","final_text":"repaired","cost_usd":0.5,"cost_source":"reported"}`)
 	}
 	service.onExecute = func(req agentlib.ServiceExecuteRequest) {
 		if strings.Contains(req.Prompt, "Repair bead") {

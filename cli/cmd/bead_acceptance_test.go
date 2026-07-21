@@ -335,11 +335,7 @@ git:
 	_, ok := bead["closing_commit_sha"]
 	assert.False(t, ok)
 
-	statusCmd := exec.Command("git", "status", "--short")
-	statusCmd.Dir = env.Dir
-	statusOut, err := statusCmd.CombinedOutput()
-	require.NoError(t, err)
-	assert.Empty(t, strings.TrimSpace(string(statusOut)))
+	assert.Empty(t, gitStatusShort(t, env.Dir))
 }
 
 func TestBeadCommandsCloseOmitsMetadataOnlyReviewBeadClosingCommitSha(t *testing.T) {
@@ -905,6 +901,13 @@ func gitShortHead(t *testing.T, dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// gitStatusShort reports worktree dirt, excluding DDx runtime lock sidecars.
+// Stale collection-lock recovery keeps a stable advisory sidecar beside the
+// lock dir (e.g. .ddx/beads.lock.stale-break.lock) whose inode is never
+// unlinked (internal/bead/lock.go:178-183). Real projects ignore it via the
+// `.ddx/*.lock` rule ddx init writes (cmd/init.go:37); these fixtures build a
+// bare git repo, so filter it the same way the pre-dispatch checkpoint does
+// (internal/agent/predispatch_dirty.go:489).
 func gitStatusShort(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -912,7 +915,22 @@ func gitStatusShort(t *testing.T, dir string) string {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git status should succeed: %s", string(out))
-	return strings.TrimSpace(string(out))
+
+	var kept []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		path := line
+		if len(line) > 2 {
+			path = strings.TrimSpace(line[2:])
+		}
+		if strings.HasPrefix(path, ".ddx/beads.lock.") && strings.HasSuffix(path, ".lock") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
 
 func gitShowFile(t *testing.T, dir, ref, path string) string {

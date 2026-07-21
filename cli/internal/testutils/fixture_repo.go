@@ -170,10 +170,21 @@ func BuildDDxFizeauTestSeamBinary(t *testing.T) string {
 }
 
 // fixtureBinaryScratchDir creates process-lifetime scratch for binaries shared
-// by tests. An empty project root intentionally selects the configured global
-// execution scratch root without coupling the binary to any one fixture repo.
+// by tests. It deliberately does NOT resolve the configured execution scratch
+// root: tests routinely point DDX_EXEC_WT_DIR at their own t.TempDir(), so the
+// sync.Once-cached binary would land under the first caller's temp dir and be
+// deleted at that test's cleanup, leaving every later caller with a dangling
+// path. The user cache dir outlives any single test while still keeping the
+// binary off raw os.TempDir().
 func fixtureBinaryScratchDir(pattern string) (string, error) {
-	return config.MkdirExecutionScratch("", pattern)
+	base := config.LegacyExecutionTempRoot()
+	if cacheDir, err := os.UserCacheDir(); err == nil && strings.TrimSpace(cacheDir) != "" {
+		base = filepath.Join(cacheDir, "ddx", "fixture-bin")
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(base, pattern)
 }
 
 // cliDir walks up from the test's working directory to the directory that

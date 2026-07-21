@@ -1251,22 +1251,14 @@ func runningManagedWorkers(t *testing.T, m *WorkerManager, projectRoot string) [
 
 func stopProjectWorkers(t *testing.T, m *WorkerManager, projectRoot string) {
 	t.Helper()
+	_ = projectRoot
 
-	recs, err := m.List()
-	if err != nil {
-		return
-	}
-	for _, rec := range recs {
-		if rec.Kind != "work" || rec.ProjectRoot != projectRoot {
-			continue
-		}
-		if rec.State != "running" && rec.State != "stopping" {
-			continue
-		}
-		_ = m.Stop(rec.ID)
-	}
-
-	require.Eventually(t, func() bool {
-		return runningManagedWorkerCount(t, m, projectRoot) == 0
-	}, 2*time.Second, 20*time.Millisecond)
+	// Shutdown stops every live worker AND waits (waitForStoppedRecord) for each
+	// runWorker goroutine to persist its terminal record, so t.TempDir cleanup
+	// cannot race a late status.json write. Waiting on
+	// runningManagedWorkerCount()==0 is not sufficient: Stop() flips the record
+	// to "stopping" immediately, satisfying that predicate while the goroutine
+	// is still finalizing — which surfaces as
+	// "TempDir RemoveAll cleanup: directory not empty" under load.
+	require.NoError(t, m.Shutdown())
 }

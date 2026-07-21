@@ -679,6 +679,17 @@ func (m *WorkerManager) waitManagedWorkerExit(cmd *exec.Cmd, id, dir string, han
 	if record.State == "stopped" || record.State == "reaped" {
 		preservedState = record.State
 	}
+	if preservedState == "" {
+		// A handle-less stop (stopStaleDiskEntry / the supervisor stale sweep)
+		// records the terminal label on disk only — the in-memory handle still
+		// says "running". Honour it so a SIGKILL-induced wait error does not
+		// relabel an operator stop as "failed". Without this the outcome
+		// depends on whether the child died inside the 250ms grace.
+		if onDisk, derr := m.readRecord(dir); derr == nil &&
+			(onDisk.State == "stopped" || onDisk.State == "reaped") {
+			preservedState = onDisk.State
+		}
+	}
 	record.FinishedAt = now
 	record.Substate = ""
 	if eventSink != nil {
