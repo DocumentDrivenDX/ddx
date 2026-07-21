@@ -472,10 +472,10 @@ func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) e
 		probe := internalgit.Command(context.Background(), dir, "ls-files", "--error-unmatch", "--", f)
 		if probe.Run() == nil {
 			headHash := blobAt("HEAD", f)
-			switch {
-			case wtHash == headHash:
+			switch wtHash {
+			case headHash:
 				// Already current — nothing to do.
-			case wtHash == fromHash:
+			case fromHash:
 				// Stale (including absent-in-both) — safe to materialize.
 				indexFiles = append(indexFiles, f)
 			default:

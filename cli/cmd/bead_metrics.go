@@ -124,11 +124,9 @@ execution evidence.`,
 			}
 
 			titleByID := map[string]string{}
-			if store := f.beadStore(); store != nil {
-				if all, err := store.List("", "", nil); err == nil {
-					for _, b := range all {
-						titleByID[b.ID] = b.Title
-					}
+			if all, err := f.beadStore().List("", "", nil); err == nil {
+				for _, b := range all {
+					titleByID[b.ID] = b.Title
 				}
 			}
 
