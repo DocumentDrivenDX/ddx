@@ -47,6 +47,10 @@ func writeReplayManifest(t *testing.T, dir, attemptID, beadID, baseRev, harness,
 	t.Helper()
 	execDir := filepath.Join(dir, ddxroot.DirName, "executions", attemptID)
 	require.NoError(t, os.MkdirAll(execDir, 0o755))
+	// Replay fixtures provide fake GitOps against a synthetic non-Git project
+	// root. Make their legacy linked-worktree dependency explicit instead of
+	// inheriting the production sandbox-safe local-clone default.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ddxroot.DirName, "config.yaml"), []byte("version: \"1.0\"\nexecutions:\n  attempt_backend: worktree\n"), 0o644))
 
 	// Write prompt.md.
 	require.NoError(t, os.WriteFile(filepath.Join(execDir, "prompt.md"), []byte(promptContent), 0o644))

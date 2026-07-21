@@ -105,7 +105,13 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	// Confirm we start clean.
+	// Store.Init/Create leaves a collection-lock stale-break sidecar behind.
+	// The fixture must mirror the production .gitignore so that runtime
+	// coordination scratch does not make an otherwise clean parent look dirty.
+	sidecar := filepath.Join(projectRoot, ddxroot.DirName, "beads.lock.stale-break.lock")
+	require.FileExists(t, sidecar, "fixture must exercise the runtime lock sidecar")
+
+	// Confirm we start clean despite the documented ignored sidecar.
 	status := runGitInteg(t, projectRoot, "status", "--porcelain")
 	require.Empty(t, status, "test setup invariant: parent must be clean")
 
@@ -133,6 +139,19 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 		assert.NotContains(t, log, "checkpoint pre-execute-bead",
 			"clean parent tree must not produce a checkpoint commit")
 	}
+}
+
+func TestExecuteBead_CleanParentTree_StillRejectsUnignoredSourceDirt(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+
+	// The same fixture contains the intentional ignored sidecar, but an
+	// ordinary source file must remain visible to the clean-parent assertion.
+	writeCheckpointTestFile(t, projectRoot, "real-source-change.go", "package changed\n")
+	status := runGitInteg(t, projectRoot, "status", "--porcelain")
+	assert.Contains(t, status, "?? real-source-change.go",
+		"an unignored source change must make the parent tree non-clean")
+	assert.NotContains(t, status, "beads.lock.stale-break.lock",
+		"only the documented runtime sidecar is ignored")
 }
 
 func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {

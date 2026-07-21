@@ -123,20 +123,12 @@ func runInterruptedAttemptInGitRepo(t *testing.T, trackDirtyRunState bool) inter
 	runStateRootRel := filepath.ToSlash(filepath.Join(ddxroot.DirName, RunStateFileName))
 	runStateAttemptRel := filepath.ToSlash(filepath.Join(ddxroot.DirName, RunStateDirName, attemptID+".json"))
 
-	if trackDirtyRunState {
-		require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName, RunStateDirName), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectRoot, filepath.FromSlash(runStateRootRel)), []byte(`{"attempt_id":"seed"}`+"\n"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(projectRoot, filepath.FromSlash(runStateAttemptRel)), []byte(`{"attempt_id":"seed"}`+"\n"), 0o644))
-	}
-
 	runGitInteg(t, projectRoot, "add", ".")
-	if trackDirtyRunState {
-		runGitInteg(t, projectRoot, "add", "-f", runStateRootRel, runStateAttemptRel)
-	}
 	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed interrupted attempt cleanup")
 	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
 	if trackDirtyRunState {
+		require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName, RunStateDirName), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(projectRoot, filepath.FromSlash(runStateRootRel)), []byte(`{"attempt_id":"dirty-root"}`+"\n"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(projectRoot, filepath.FromSlash(runStateAttemptRel)), []byte(`{"attempt_id":"dirty-attempt"}`+"\n"), 0o644))
 	}
@@ -171,12 +163,12 @@ func runInterruptedAttemptInGitRepo(t *testing.T, trackDirtyRunState bool) inter
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	audit := NewDurableAuditAccumulator(projectRoot, store)
 	result, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{
-		Once:        true,
-		ProjectRoot: projectRoot,
-		FinalizeDurableAudit: func(report ExecuteBeadReport) error {
-			return FinalizeDurableAttemptAudit(projectRoot, store, report)
-		},
+		Once:                 true,
+		ProjectRoot:          projectRoot,
+		FinalizeDurableAudit: audit.Finalize,
+		FlushDurableAudit:    audit.Flush,
 	})
 
 	return interruptedAttemptGitRun{
