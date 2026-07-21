@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -35,6 +36,7 @@ func TestExecuteBeadRoutingEvidencePersisted(t *testing.T) {
 		ResolvedBaseURL: "http://test.example.com/v1",
 	}}
 	f := newExecuteBeadFactory(t, git, runner)
+	configureSyntheticRoutingWorktreeBackend(t, f.WorkingDir)
 
 	// Drive the full command via cobra Command.Execute — not by calling internal
 	// functions directly. This exercises the CLI flag → ExecuteBeadOptions path.
@@ -92,6 +94,7 @@ func TestExecuteBeadRoutingEvidenceProviderFallsBackToHarness(t *testing.T) {
 		RouteReason: "first-available",
 	}}
 	f := newExecuteBeadFactory(t, git, runner)
+	configureSyntheticRoutingWorktreeBackend(t, f.WorkingDir)
 
 	res := runExecuteBead(t, f, git, "my-bead")
 	require.Equal(t, "merged", res.Outcome)
@@ -129,6 +132,7 @@ func TestExecuteBeadRoutingEvidenceNoEvidence(t *testing.T) {
 		RouteReason: "direct-override",
 	}}
 	f := newExecuteBeadFactory(t, git, runner)
+	configureSyntheticRoutingWorktreeBackend(t, f.WorkingDir)
 
 	res := runExecuteBead(t, f, git, "my-bead")
 	require.Equal(t, "no-evidence", res.Outcome)
@@ -147,4 +151,15 @@ func TestExecuteBeadRoutingEvidenceNoEvidence(t *testing.T) {
 	assert.Equal(t, "no-change-provider", body.ResolvedProvider)
 	assert.Equal(t, "no-change-model", body.ResolvedModel)
 	assert.Equal(t, "direct-override", body.RouteReason)
+}
+
+// configureSyntheticRoutingWorktreeBackend makes this test fixture's legacy
+// linked-worktree dependency explicit. These routing tests substitute GitOps
+// with fakeExecuteBeadGit and therefore intentionally use a temp directory
+// that is not a Git repository; inheriting the production local-clone default
+// would make the test exercise clone setup rather than routing persistence.
+func configureSyntheticRoutingWorktreeBackend(t *testing.T, projectRoot string) {
+	t.Helper()
+	configPath := filepath.Join(projectRoot, ddxroot.DirName, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("version: \"1.0\"\nexecutions:\n  attempt_backend: worktree\n"), 0o644))
 }
