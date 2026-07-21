@@ -73,6 +73,14 @@ func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.Servi
 	return ch, nil
 }
 
+func (*passthroughTestService) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (*passthroughTestService) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
+}
+
 func (s *passthroughTestService) ListHarnesses(ctx context.Context) ([]agentlib.HarnessInfo, error) {
 	s.listHarnessesCalled = true
 	if s.harnessInfos != nil {

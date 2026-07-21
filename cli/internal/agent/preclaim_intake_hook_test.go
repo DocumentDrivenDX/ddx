@@ -58,6 +58,14 @@ func (s *preClaimIntakeHookServiceStub) Execute(_ context.Context, req agentlib.
 	return ch, nil
 }
 
+func (*preClaimIntakeHookServiceStub) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (*preClaimIntakeHookServiceStub) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
+}
+
 func (s *preClaimIntakeHookServiceStub) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
 	return nil, fmt.Errorf("ResolveRoute should not be called in intake hook tests")
 }

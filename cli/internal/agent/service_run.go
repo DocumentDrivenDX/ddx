@@ -341,8 +341,8 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 				result.Tokens = *final.Usage.TotalTokens
 			}
 		}
-		if final.CostUSD > 0 {
-			result.CostUSD = final.CostUSD
+		if final.CostUSD != nil && *final.CostUSD > 0 {
+			result.CostUSD = *final.CostUSD
 		}
 		result.ExitCode = final.ExitCode
 		result.Error = final.Error

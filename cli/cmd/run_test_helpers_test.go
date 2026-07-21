@@ -32,6 +32,14 @@ func (s stubAgentService) Execute(_ context.Context, req agentlib.ServiceExecute
 	return ch, nil
 }
 
+func (stubAgentService) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (stubAgentService) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
+}
+
 func (s stubAgentService) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
 	return nil, fmt.Errorf("routinglint: ResolveRoute called in execution path — violates CONTRACT-003 / ddx-da19756a")
 }
@@ -131,6 +139,14 @@ func (s *executeCapturingStub) Execute(ctx context.Context, req agentlib.Service
 	ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
 	close(ch)
 	return ch, nil
+}
+
+func (*executeCapturingStub) Continue(context.Context, agentlib.ServiceContinuationRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, agentlib.ErrContinuationUnsupported
+}
+
+func (*executeCapturingStub) PreparePortableRuntime(context.Context, agentlib.PortableRuntimeRequest) (*agentlib.PortableRuntimeBundle, error) {
+	return nil, agentlib.ErrPortableRuntimeClosureIncomplete
 }
 
 func (s *executeCapturingStub) ResolveRoute(_ context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
