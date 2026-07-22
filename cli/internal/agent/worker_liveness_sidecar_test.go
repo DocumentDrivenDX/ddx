@@ -64,8 +64,18 @@ func TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome(t *testing.T)
 		// interval, 80ms of wall-clock gives ~16 ticks; we only require 3
 		// distinct timestamps to confirm "every tick" advances last_activity_at
 		// without making the test flaky on slow CI.
+		//
+		// Under a full-suite race run the detector plus CPU contention stretch
+		// the effective heartbeat period well past 5ms, so widen the observation
+		// window rather than lowering the required tick count: the assertion
+		// ("every tick advances last_activity_at") stays intact, and the loop
+		// still exits as soon as 3 distinct timestamps are seen.
+		observationWindow := 500 * time.Millisecond
+		if raceEnabled {
+			observationWindow = 10 * time.Second
+		}
 		seen := map[time.Time]struct{}{}
-		deadline := time.Now().Add(500 * time.Millisecond)
+		deadline := time.Now().Add(observationWindow)
 		for time.Now().Before(deadline) && len(seen) < 3 {
 			rec, rerr := workerstatus.ReadLiveness(projectRoot, sessionID)
 			if rerr == nil && !rec.LastActivityAt.IsZero() {

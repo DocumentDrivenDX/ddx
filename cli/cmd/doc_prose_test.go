@@ -36,6 +36,8 @@ library:
     url: file:///tmp/ddx-library
     branch: master
 persona_bindings: {}
+prose:
+  runner: embedded
 `)
 	env.CreateFile("docs/helix/guide.md", "# Guide\n\nThis is robust and comprehensive.\n")
 
@@ -62,6 +64,7 @@ library:
     branch: master
 persona_bindings: {}
 prose:
+  runner: embedded
   mode: planning
 `)
 	env.CreateFile("docs/helix/roadmap.md", `# Planning Notes
@@ -99,6 +102,7 @@ library:
     branch: master
 persona_bindings: {}
 prose:
+  runner: embedded
   vocabulary:
     accept:
       - Quartz
@@ -133,6 +137,7 @@ library:
     branch: master
 persona_bindings: {}
 prose:
+  runner: embedded
   policy: blocking
 `)
 	env.CreateFile("docs/helix/blocking.md", "# Guide\n\nThis is robust and comprehensive.\n")

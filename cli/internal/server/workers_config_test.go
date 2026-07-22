@@ -105,7 +105,10 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dispatch under cap: %v", err)
 	}
-	defer func() { _ = m.Stop(result.ID) }()
+	// Shutdown (not Stop) so the worker goroutine has persisted its terminal
+	// record before t.TempDir cleanup runs; Stop returns while it is still
+	// finalizing and races the RemoveAll.
+	defer func() { _ = m.Shutdown() }()
 
 	// Also verify default_spec propagated: profile=cheap, effort=low.
 	rec, err := m.Show(result.ID)

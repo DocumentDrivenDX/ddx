@@ -41,6 +41,22 @@ func TestReplayOverridesAreOpaqueAndPreserveExplicitConstraints(t *testing.T) {
 	assert.Equal(t, 7, explicit.MinPower())
 }
 
+// writeReplayWorktreeConfig pins the attempt backend to the mockable linked
+// worktree. These fixtures inject a fake GitOps over a synthetic non-Git
+// project root, so they cannot use the sandbox-safe local-clone default
+// (internal/agent/attempt_backend.go:87-96), which shells out to a real git
+// clone. `bead replay` exposes no --attempt-backend flag, so this has to be
+// seeded on disk.
+func writeReplayWorktreeConfig(t *testing.T, dir string) {
+	t.Helper()
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+executions:
+  attempt_backend: worktree
+`), 0o644))
+}
+
 // writeReplayManifest writes a minimal manifest.json and prompt.md to
 // .ddx/executions/<attemptID>/ under dir.
 func writeReplayManifest(t *testing.T, dir, attemptID, beadID, baseRev, harness, model, promptContent string) {
@@ -110,6 +126,7 @@ func TestReplay_OverridesAppliedToDispatch(t *testing.T) {
 	attemptID := "20260501T130000-ccdd3344"
 	beadID := "my-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "base-sha", "claude", "sonnet", "original prompt")
+	writeReplayWorktreeConfig(t, dir)
 
 	// Seed bead tracker.
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
@@ -177,6 +194,7 @@ func TestReplay_DoesNotCountTowardBeadAttemptHistory(t *testing.T) {
 	attemptID := "20260501T140000-eeff5566"
 	beadID := "hist-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha1", "claude", "sonnet", "test prompt")
+	writeReplayWorktreeConfig(t, dir)
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
@@ -219,6 +237,7 @@ func TestReplay_AppendsMetricsRowWithReplayOf(t *testing.T) {
 	attemptID := "20260501T150000-aabbccdd"
 	beadID := "metrics-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha2", "claude", "sonnet", "metrics test")
+	writeReplayWorktreeConfig(t, dir)
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
@@ -276,6 +295,7 @@ func TestReplay_PrintsComparison(t *testing.T) {
 	attemptID := "20260501T160000-11223344"
 	beadID := "compare-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha3", "claude", "sonnet", "compare test")
+	writeReplayWorktreeConfig(t, dir)
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
@@ -327,6 +347,7 @@ func TestReplayBench_MultipleVariantsInParallel(t *testing.T) {
 	beadID := "bench-bead"
 	attemptID := "20260501T170000-deadbeef"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha4", "claude", "sonnet", "bench prompt")
+	writeReplayWorktreeConfig(t, dir)
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))

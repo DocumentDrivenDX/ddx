@@ -221,7 +221,14 @@ func assertPreserveRef(t *testing.T, ref, beadID, baseRev string) {
 func runExecuteBead(t *testing.T, f *CommandFactory, git *fakeExecuteBeadGit, beadID string, extraArgs ...string) agent.ExecuteBeadResult {
 	t.Helper()
 
-	rcfg, err := config.LoadAndResolve(f.WorkingDir, config.CLIOverrides{})
+	// These fixtures inject a mocked GitOps over a synthetic non-Git project
+	// root, so they must select the mockable linked-worktree backend
+	// explicitly rather than inherit the sandbox-safe local-clone default
+	// (internal/agent/attempt_backend.go:87-96), which shells out to a real
+	// git clone and bypasses the fake.
+	rcfg, err := config.LoadAndResolve(f.WorkingDir, config.CLIOverrides{
+		AttemptBackend: agent.AttemptBackendWorktree,
+	})
 	require.NoError(t, err)
 
 	runner := f.AgentRunnerOverride

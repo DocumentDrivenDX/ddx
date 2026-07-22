@@ -100,8 +100,12 @@ func TestRecoverGitIndexLock_DeadOwner(t *testing.T) {
 	if _, err := exec.LookPath("lsof"); err != nil {
 		t.Skip("lsof not available on PATH")
 	}
+	// This test asserts the probe reaches a positive outcome, so it must not
+	// race host lsof latency — querying a file no process holds costs 1.5s+ on
+	// WSL2 and can exceed even the 2s production default. Only tests asserting
+	// non-removal may shorten this.
 	prevLsof := gitlock.LsofTimeout
-	gitlock.LsofTimeout = 100 * time.Millisecond
+	gitlock.LsofTimeout = 10 * time.Second
 	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
 	dir := initGitLockTestRepo(t)

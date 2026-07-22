@@ -315,7 +315,16 @@ func TestTryPropagatesRouteResolutionTimeout(t *testing.T) {
 		var exitErr *ExitError
 		require.ErrorAs(t, err, &exitErr, "unexpected try error: %v output=%q", err, out)
 	}
-	assert.Less(t, time.Since(started), 2*time.Second, "try must apply the requested route-stage deadline")
+	// The elapsed budget mostly covers command setup around the 25ms route
+	// stage. Race-detector overhead plus CPU contention inflate that setup well
+	// past the idle-host budget, so widen it under race while keeping a hard
+	// ceiling far below DefaultRouteResolutionTimeout (60s) — an ignored
+	// deadline still fails.
+	routeDeadlineBudget := 2 * time.Second
+	if raceEnabled {
+		routeDeadlineBudget = 20 * time.Second
+	}
+	assert.Less(t, time.Since(started), routeDeadlineBudget, "try must apply the requested route-stage deadline")
 
 	events, eventsErr := bead.NewStore(ddxroot.JoinProject(dir)).Events("ddx-try-route-timeout")
 	require.NoError(t, eventsErr)

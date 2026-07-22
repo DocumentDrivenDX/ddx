@@ -128,13 +128,13 @@ deps:
 # Run tests
 test: copy-skills go-discovery-verify
 	@echo "Running tests..."
-	go test -v ./...
+	go test -v -timeout 30m ./...
 
 # Run full test suite with race detector and coverage (mirrors CI; opt-in for local pre-push verification)
 test-full: copy-skills
 	@echo "Running full test suite (race + coverage)..."
 	for var in $$(git rev-parse --local-env-vars 2>/dev/null); do unset "$$var"; done; \
-	CGO_ENABLED=1 go test -race -cover ./...
+	CGO_ENABLED=1 go test -race -cover -timeout 30m ./...
 
 # Run the GraphQL perf harness (ddx-9ce6842a). Seeds a 10 × 500 bead fixture
 # and records baseline numbers under docs/helix/06-iterate/perf/. Override
@@ -157,7 +157,7 @@ COVERAGE_PROFILE ?= coverage.out
 COVERAGE_BASELINE ?= coverage-baseline.yml
 coverage-ratchet: copy-skills
 	@echo "Running coverage ratchet (go test -coverprofile=$(COVERAGE_PROFILE))..."
-	@go test -coverprofile=$(COVERAGE_PROFILE) ./...
+	@go test -coverprofile=$(COVERAGE_PROFILE) -timeout 30m ./...
 	@go run ./tools/coverage-ratchet -profile $(COVERAGE_PROFILE) -baseline $(COVERAGE_BASELINE)
 
 # Run perf tests (excluded from default `make test`; use this target or CI perf job)

@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -106,6 +107,14 @@ func (s *fizeauTestSeamService) Execute(ctx context.Context, req agentlib.Servic
 		return nil, err
 	}
 
+	// Each `ddx try` drives Execute twice (pre-claim intake probe, then bead
+	// execution). Tripwires armed by the previous Execute must not be visible
+	// to the next Execute's Fizeau construction or route resolution, which
+	// legitimately inventory subprocess harnesses off PATH.
+	if err := disarmFizeauProviderTripwires(plan); err != nil {
+		return nil, err
+	}
+
 	var callIndex atomic.Int64
 	tripwiresReady := make(chan struct{})
 	fake := &agentlib.FakeProvider{
@@ -183,6 +192,24 @@ func (s *fizeauTestSeamService) Execute(ctx context.Context, req agentlib.Servic
 	return events, nil
 }
 
+// disarmFizeauProviderTripwires removes any tripwires left in the restricted
+// PATH by a previous Execute, restoring the git/sh-only PATH that Fizeau's
+// route resolution expects. Each Execute re-arms after its own drain.
+func disarmFizeauProviderTripwires(plan fizeauTestPlan) error {
+	if strings.TrimSpace(plan.TripwireBinDir) == "" || strings.TrimSpace(fizeauTestSeamToolsDir) == "" {
+		return nil
+	}
+	for _, name := range append(append([]string(nil), plan.TripwireNames...), plan.TripwireSentinel) {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		if err := os.Remove(filepath.Join(fizeauTestSeamToolsDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("disarm Fizeau provider tripwire %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // installFizeauProviderTripwires links the test's poison binaries into the
 // already-restricted PATH after Fizeau has synchronously resolved the route.
 // A sentinel is then executed through the same PATH and observer, proving the
@@ -201,7 +228,10 @@ func installFizeauProviderTripwires(plan fizeauTestPlan) error {
 		}
 		source := filepath.Join(plan.TripwireBinDir, name)
 		dest := filepath.Join(destDir, name)
-		if err := os.Symlink(source, dest); err != nil {
+		// One `ddx try` now drives both the pre-claim readiness probe and the
+		// bead execution through Execute, so the installer runs more than once
+		// per attempt and must be idempotent.
+		if err := os.Symlink(source, dest); err != nil && !errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("install Fizeau provider tripwire %s: %w", name, err)
 		}
 	}

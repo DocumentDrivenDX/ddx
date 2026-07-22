@@ -447,7 +447,11 @@ ci:
       <<: *go_checks
       name: "Full Go test suite"
       root: "cli/"
-      run: 'go test -race -cover ./...'
+      # -timeout 30m: Go's default is 10m PER PACKAGE, which cmd and
+      # internal/agent already exceed on CI hardware. A kill truncates the
+      # package mid-run, so CI reports failure and silently skips the
+      # remaining tests (cmd coverage fell to 33% vs 68% locally).
+      run: 'go test -race -cover -timeout 30m ./...'
 
     bead-schema:
       <<: *go_checks

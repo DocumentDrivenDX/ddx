@@ -84,7 +84,7 @@ jobs:
         export XDG_DATA_HOME="$(mktemp -d)"
 
         cd cli
-        go test ./... -count=1
+        go test ./... -count=1 -timeout 30m
 
         ./build/ddx server --addr 127.0.0.1 --port 17743 --tsnet=false > ../ddx-state-guard-server.log 2>&1 &
         server_pid=$!
@@ -263,7 +263,7 @@ jobs:
         cache-dependency-path: cli/go.sum
 
     - name: Run tests with JSON output
-      run: go test -json -race -cover ./... 2>&1 | tee ../test-output.json || true
+      run: go test -json -race -cover -timeout 30m ./... 2>&1 | tee ../test-output.json || true
 
     - name: Generate timing summary
       if: always()

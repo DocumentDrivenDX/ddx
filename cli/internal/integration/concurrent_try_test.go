@@ -142,6 +142,15 @@ func spawnTry(bin, proj, beadID string, env []string, extraFlags ...string) (*ex
 	return cmd, buf
 }
 
+// isLandCoordinationRetryOutput reports whether a `ddx try` subprocess exited
+// non-zero solely because the land stage lost a compare-and-swap on the shared
+// target branch to a sibling worker (status: land_retry). The attempt's work is
+// preserved on a refs/ddx/iterations/... ref and the bead stays claimable, so
+// under deliberate concurrency this is expected coordination, not a failure.
+func isLandCoordinationRetryOutput(output string) bool {
+	return strings.Contains(output, "status: "+agent.ExecuteBeadStatusLandRetry)
+}
+
 // cloneAttemptDirs returns the paths of any lingering .execute-bead-clone-*
 // directories under the subprocess's cache area (HOME/.cache/ddx/exec-wt/).
 // A subprocess that exits cleanly should remove these; they are only present
@@ -270,9 +279,17 @@ func TestIntegration_ConcurrentTryDistinctBeads_LocalClone(t *testing.T) {
 	// All 4 subprocesses must have exited (code 0=success, 1=preserved, 2=other).
 	// We accept both 0 and 1 because a concurrent land race can preserve a
 	// result (another worker on a shared fixture may have advanced the branch).
-	// Code 2 (unexpected failure) is always an error.
+	//
+	// The same shared-branch contention also surfaces as the retryable
+	// land_retry status: the `git update-ref` compare-and-swap on the target
+	// branch loses to a sibling worker that advanced it mid-merge. `ddx try` is
+	// single-shot, so it reports that with exit code 2 even though the work is
+	// preserved on a refs/ddx/iterations/... ref and the bead stays claimable.
+	// That belongs with codes 0 and 1, not with genuine execution failures;
+	// race-detector overhead makes contention heavy enough to hit it regularly.
+	// Every other exit-code-2 failure is still an error.
 	for i, r := range results {
-		if r.code == 2 {
+		if r.code == 2 && !isLandCoordinationRetryOutput(r.output) {
 			t.Errorf("worker %d (bead %s) exited with code 2 (unexpected failure):\n%s", i, r.beadID, r.output)
 		}
 	}

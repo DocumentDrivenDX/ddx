@@ -1204,9 +1204,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			"prompt_sha":  artifacts.PromptSHA,
 		},
 		SessionLogDirOverride: embeddedStateDir,
-		Role:                  config.EvidenceRoleImplementer,
-		CorrelationID:         beadID + ":" + attemptID,
-		Env:                   gitIsolationEnv,
+		// The implementation pass runs in an isolated attempt worktree and must
+		// be able to write and commit without an approval loop. When the project
+		// pins agent.permissions we honour it unchanged (ddx-642a9f26: the
+		// sealed config wins); only an unset value falls back to unrestricted,
+		// because the native fiz harness maps "" to its read-only toolset and
+		// the attempt would produce no evidence at all.
+		PermissionsOverride: implementerPermissions(rcfg.Permissions()),
+		Role:                config.EvidenceRoleImplementer,
+		CorrelationID:       beadID + ":" + attemptID,
+		Env:                 gitIsolationEnv,
 		OnRouteResolved: func(harness, provider, model string) {
 			providerGuard.UpdateRoute(harness, provider, model)
 			if baseOnRouteResolved != nil {
@@ -2953,4 +2960,15 @@ func WriteExecuteBeadResultArtifact(projectRoot string, res *ExecuteBeadResult) 
 		path = filepath.Join(projectRoot, path)
 	}
 	return writeArtifactJSON(path, res)
+}
+
+// implementerPermissions resolves the permission mode for the execute-bead
+// implementation dispatch. An explicit project setting is always honoured; an
+// unset value defaults to unrestricted so the attempt can write and commit in
+// its isolated worktree instead of inheriting the harness read-only default.
+func implementerPermissions(sealed string) string {
+	if strings.TrimSpace(sealed) != "" {
+		return ""
+	}
+	return "unrestricted"
 }

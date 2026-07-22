@@ -392,7 +392,7 @@ func TestExecuteOnService_IgnoresToolCallTranscriptProjection(t *testing.T) {
 		executeEvents: []agentlib.ServiceEvent{
 			{Type: "tool_call", Data: []byte(`{"id":"call-1","name":"Read","input":{"path":"README.md"}}`)},
 			{Type: "tool_result", Data: []byte(`{"id":"call-1","output":"ok","duration_ms":1}`)},
-			{Type: "final", Data: []byte(`{"status":"success","exit_code":0,"final_text":"done","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3},"cost_usd":0.25}`)},
+			{Type: "final", Data: []byte(`{"status":"success","exit_code":0,"final_text":"done","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3},"cost_usd":0.25,"cost_source":"reported"}`)},
 		},
 	}
 	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
@@ -605,6 +605,7 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 		"final_text":       "final answer",
 		"usage":            map[string]any{"input_tokens": 11, "output_tokens": 22, "total_tokens": 33},
 		"cost_usd":         0.25,
+		"cost_source":      "reported",
 		"session_log_path": "/tmp/session.jsonl",
 		"routing_actual": map[string]any{
 			"harness":  "fiz",
