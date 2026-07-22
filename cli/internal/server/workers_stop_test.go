@@ -460,6 +460,35 @@ func TestManagedWorkerStopSkipsExternalReportedWorkers(t *testing.T) {
 	require.Len(t, events, 1, "managed worker stop should emit one bead.stopped event")
 }
 
+func TestTestProcessAlive_ReportsZombieAsGone(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("/proc zombie detection is Linux-specific")
+	}
+
+	cmd := exec.Command("sleep", "600")
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+
+	require.NoError(t, cmd.Process.Kill())
+	require.Eventually(t, func() bool {
+		if err := syscall.Kill(pid, 0); err != nil {
+			return false
+		}
+		return !testProcessAlive(pid)
+	}, 3*time.Second, 25*time.Millisecond, "killed child should become an unreaped zombie before Wait")
+
+	assert.False(t, testProcessAlive(pid), "unreaped zombie must be treated as gone")
+
+	_, err := cmd.Process.Wait()
+	require.NoError(t, err)
+	assert.ErrorIs(t, syscall.Kill(pid, 0), syscall.ESRCH)
+	assert.False(t, testProcessAlive(pid), "reaped child must still be treated as gone")
+}
+
 func startProcessGroup(t *testing.T, cmd *exec.Cmd) int {
 	t.Helper()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -550,7 +579,31 @@ func testProcessAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	return syscall.Kill(pid, 0) == nil
+	if err := syscall.Kill(pid, 0); err != nil {
+		return false
+	}
+	state, ok := testProcessState(pid)
+	return !ok || state != "Z"
+}
+
+func testProcessState(pid int) (string, bool) {
+	if pid <= 0 {
+		return "", false
+	}
+	statPath := filepath.Join("/proc", strconv.Itoa(pid), "stat")
+	data, err := os.ReadFile(statPath)
+	if err != nil {
+		return "", false
+	}
+	closeIdx := strings.LastIndex(string(data), ")")
+	if closeIdx < 0 {
+		return "", false
+	}
+	fields := strings.Fields(string(data)[closeIdx+1:])
+	if len(fields) == 0 {
+		return "", false
+	}
+	return fields[0], true
 }
 
 func waitForProcessGone(t *testing.T, pid int) {
@@ -562,5 +615,9 @@ func waitForProcessGone(t *testing.T, pid int) {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Fatalf("process pid %d still alive after cleanup", pid)
+	state, ok := testProcessState(pid)
+	if !ok {
+		state = "unknown"
+	}
+	t.Fatalf("process pid %d still alive after cleanup (state=%s)", pid, state)
 }
