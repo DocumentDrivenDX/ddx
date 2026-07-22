@@ -147,12 +147,12 @@ func assertProcessGone(t *testing.T, pid int) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if !signalProcessAlive(pid) {
+		if processDeadOrZombie(pid) {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Fatalf("process pid %d still alive after cleanup", pid)
+	t.Fatalf("process pid %d still alive after cleanup (proc state=%s)", pid, processDeadOrZombieStatus(pid))
 }
 
 func readProcessCleanupReport(t *testing.T, projectRoot string) attemptProcessCleanupReport {

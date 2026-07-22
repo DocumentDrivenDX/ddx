@@ -128,7 +128,10 @@ func TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps(t *testi
 
 	shellPID := readPIDFile(t, shellPIDFile)
 	childPID := readPIDFile(t, childPIDFile)
+	var shellState, childState string
 	require.Eventually(t, func() bool {
-		return !processExists(shellPID) && !processExists(childPID)
-	}, time.Second, 20*time.Millisecond)
+		shellState = processDeadOrZombieStatus(shellPID)
+		childState = processDeadOrZombieStatus(childPID)
+		return processDeadOrZombie(shellPID) && processDeadOrZombie(childPID)
+	}, time.Second, 20*time.Millisecond, "shell proc state=%s child proc state=%s", procStateSnapshot{&shellState}, procStateSnapshot{&childState})
 }

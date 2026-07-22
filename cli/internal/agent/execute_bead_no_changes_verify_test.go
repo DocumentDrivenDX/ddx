@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -106,9 +105,12 @@ func TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup(t *testing.T) 
 
 	shellPID := readPIDFile(t, shellPIDFile)
 	childPID := readPIDFile(t, childPIDFile)
+	var shellState, childState string
 	require.Eventually(t, func() bool {
-		return !processExists(shellPID) && !processExists(childPID)
-	}, time.Second, 20*time.Millisecond)
+		shellState = processDeadOrZombieStatus(shellPID)
+		childState = processDeadOrZombieStatus(childPID)
+		return processDeadOrZombie(shellPID) && processDeadOrZombie(childPID)
+	}, time.Second, 20*time.Millisecond, "shell proc state=%s child proc state=%s", procStateSnapshot{&shellState}, procStateSnapshot{&childState})
 }
 
 func TestDefaultVerificationCommandRunnerAllowsConfiguredLongGate(t *testing.T) {
@@ -146,9 +148,4 @@ func readPIDFile(t *testing.T, path string) int {
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	require.NoError(t, err)
 	return pid
-}
-
-func processExists(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
 }

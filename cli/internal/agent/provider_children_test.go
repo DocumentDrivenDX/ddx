@@ -461,11 +461,11 @@ func TestWork_NonRouteProviderPidNotProcessGroupLeaderIsReaped(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) && signalProcessAlive(codexPID) {
+	for time.Now().Before(deadline) && !processDeadOrZombie(codexPID) {
 		time.Sleep(50 * time.Millisecond)
 	}
-	if signalProcessAlive(codexPID) {
-		t.Fatalf("non-route provider child %d must actually be killed within 10s, not merely labeled", codexPID)
+	if !processDeadOrZombie(codexPID) {
+		t.Fatalf("non-route provider child %d must actually be killed within 10s, not merely labeled (proc state=%s)", codexPID, processDeadOrZombieStatus(codexPID))
 	}
 }
 

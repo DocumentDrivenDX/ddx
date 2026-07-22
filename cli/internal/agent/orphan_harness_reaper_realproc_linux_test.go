@@ -133,8 +133,11 @@ func TestWorkStartupReaper_KillsWorkspaceScopedOrphanHarness(t *testing.T) {
 	require.Equal(t, []string{beadID}, store.released)
 
 	grp.reapAsync()
-	require.Eventually(t, func() bool { return !processAlive(grp.leaderPID) },
-		3*time.Second, 20*time.Millisecond, "orphaned harness process group should be gone")
+	var leaderState string
+	require.Eventually(t, func() bool {
+		leaderState = processDeadOrZombieStatus(grp.leaderPID)
+		return processDeadOrZombie(grp.leaderPID)
+	}, 3*time.Second, 20*time.Millisecond, "orphaned harness process group should be gone (proc state=%s)", procStateSnapshot{&leaderState})
 }
 
 // TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup plants an orphaned
@@ -177,9 +180,12 @@ func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
 	require.Equal(t, 1, reaped)
 
 	grp.reapAsync()
+	var leaderState, grandState string
 	require.Eventually(t, func() bool {
-		return !processAlive(grp.leaderPID) && !processAlive(grp.grandchildPID)
-	}, 3*time.Second, 20*time.Millisecond, "both harness child and grandchild should be reaped")
+		leaderState = processDeadOrZombieStatus(grp.leaderPID)
+		grandState = processDeadOrZombieStatus(grp.grandchildPID)
+		return processDeadOrZombie(grp.leaderPID) && processDeadOrZombie(grp.grandchildPID)
+	}, 3*time.Second, 20*time.Millisecond, "both harness child and grandchild should be reaped (leader state=%s grandchild state=%s)", procStateSnapshot{&leaderState}, procStateSnapshot{&grandState})
 }
 
 // TestWorkStartupReaper_DoesNotKillLiveOwnedHarness plants a live-owned harness
@@ -224,10 +230,16 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 	assert.Empty(t, store.events[liveBead], "live-owned harness must not be reaped")
 
 	orphan.reapAsync()
-	require.Eventually(t, func() bool { return !processAlive(orphan.leaderPID) },
-		3*time.Second, 20*time.Millisecond, "orphan must be reaped")
-	require.Never(t, func() bool { return !processAlive(live.leaderPID) },
-		300*time.Millisecond, 30*time.Millisecond, "live-owned harness must stay alive")
+	var orphanState string
+	require.Eventually(t, func() bool {
+		orphanState = processDeadOrZombieStatus(orphan.leaderPID)
+		return processDeadOrZombie(orphan.leaderPID)
+	}, 3*time.Second, 20*time.Millisecond, "orphan must be reaped (proc state=%s)", procStateSnapshot{&orphanState})
+	var liveState string
+	require.Never(t, func() bool {
+		liveState = processDeadOrZombieStatus(live.leaderPID)
+		return processDeadOrZombie(live.leaderPID)
+	}, 300*time.Millisecond, 30*time.Millisecond, "live-owned harness must stay alive (proc state=%s)", procStateSnapshot{&liveState})
 }
 
 // TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness plants an orphan tied
@@ -275,10 +287,16 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 	assert.Empty(t, store.events[otherBead], "other-workspace harness must not be reaped")
 
 	projProc.reapAsync()
-	require.Eventually(t, func() bool { return !processAlive(projProc.leaderPID) },
-		3*time.Second, 20*time.Millisecond, "this project's orphan must be reaped")
-	require.Never(t, func() bool { return !processAlive(otherProc.leaderPID) },
-		300*time.Millisecond, 30*time.Millisecond, "other-workspace harness must stay alive")
+	var projState string
+	require.Eventually(t, func() bool {
+		projState = processDeadOrZombieStatus(projProc.leaderPID)
+		return processDeadOrZombie(projProc.leaderPID)
+	}, 3*time.Second, 20*time.Millisecond, "this project's orphan must be reaped (proc state=%s)", procStateSnapshot{&projState})
+	var otherState string
+	require.Never(t, func() bool {
+		otherState = processDeadOrZombieStatus(otherProc.leaderPID)
+		return processDeadOrZombie(otherProc.leaderPID)
+	}, 300*time.Millisecond, 30*time.Millisecond, "other-workspace harness must stay alive (proc state=%s)", procStateSnapshot{&otherState})
 }
 
 // TestWorkStartupReaper_RecordsOperatorAttention verifies cleanup emits durable
