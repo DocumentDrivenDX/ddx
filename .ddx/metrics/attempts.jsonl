@@ -3534,3 +3534,4 @@
 {"schema_version":1,"attempt_id":"20260722T214455-eed3e516","bead_id":"ddx-69591a68","session_id":"eb-5f55b402","ts_start":"2026-07-22T21:45:13Z","ts_end":"2026-07-22T21:48:06Z","outcome":"execution_failed","exit_code":0,"duration_ms":173603}
 {"schema_version":1,"attempt_id":"20260722T215755-008df99f","bead_id":"ddx-69591a68","session_id":"eb-3ad24f5f","ts_start":"2026-07-22T21:58:13Z","ts_end":"2026-07-22T22:01:06Z","outcome":"execution_failed","exit_code":0,"duration_ms":172497}
 {"schema_version":1,"attempt_id":"20260722T221036-9f44c069","bead_id":"ddx-69591a68","session_id":"eb-ae848066","ts_start":"2026-07-22T22:10:54Z","ts_end":"2026-07-22T22:13:32Z","outcome":"execution_failed","exit_code":0,"duration_ms":157087}
+{"schema_version":1,"attempt_id":"20260722T222628-d661bcf2","bead_id":"ddx-074a82c2","session_id":"eb-90a7ed43","ts_start":"2026-07-22T22:26:59Z","ts_end":"2026-07-22T22:47:12Z","outcome":"execution_failed","exit_code":0,"duration_ms":1213094}
