@@ -33,14 +33,6 @@ func executorReadPIDFile(t *testing.T, path string) int {
 	return pid
 }
 
-func executorProcessAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil
-}
-
 func executorProcessNotOrphaned(pid int) bool {
 	if pid <= 0 {
 		return true
@@ -96,9 +88,12 @@ func TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessOnParentSIGKILL(t *tes
 	childPID := executorReadPIDFile(t, childPIDFile)
 	grandPID := executorReadPIDFile(t, grandPIDFile)
 
+	var childState, grandState string
 	require.Eventually(t, func() bool {
-		return !executorProcessAlive(childPID) && !executorProcessAlive(grandPID)
-	}, 5*time.Second, 25*time.Millisecond, "parent-death cleanup must reap the harness tree")
+		childState = processDeadOrZombieStatus(childPID)
+		grandState = processDeadOrZombieStatus(grandPID)
+		return processDeadOrZombie(childPID) && processDeadOrZombie(grandPID)
+	}, 5*time.Second, 25*time.Millisecond, "parent-death cleanup must reap the harness tree (child state=%s grandchild state=%s)", procStateSnapshot{&childState}, procStateSnapshot{&grandState})
 
 	require.Eventually(t, func() bool {
 		return executorProcessNotOrphaned(grandPID)
@@ -178,7 +173,10 @@ wait
 
 	childPID := executorReadPIDFile(t, childPIDFile)
 	grandPID := executorReadPIDFile(t, grandPIDFile)
+	var childState, grandState string
 	require.Eventually(t, func() bool {
-		return !executorProcessAlive(childPID) && !executorProcessAlive(grandPID)
-	}, 5*time.Second, 25*time.Millisecond, "graceful cancellation must kill the entire harness tree")
+		childState = processDeadOrZombieStatus(childPID)
+		grandState = processDeadOrZombieStatus(grandPID)
+		return processDeadOrZombie(childPID) && processDeadOrZombie(grandPID)
+	}, 5*time.Second, 25*time.Millisecond, "graceful cancellation must kill the entire harness tree (child state=%s grandchild state=%s)", procStateSnapshot{&childState}, procStateSnapshot{&grandState})
 }

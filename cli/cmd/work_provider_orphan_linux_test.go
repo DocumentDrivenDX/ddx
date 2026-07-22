@@ -4,7 +4,6 @@ package cmd
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -156,21 +155,17 @@ func TestWork_WatchKillingWorkerReapsProviderChildWithin5s(t *testing.T) {
 	stubPID := readProviderOrphanPID(t, pidFile)
 
 	// Sanity: the stub must be alive before we SIGKILL the worker.
-	require.NoError(t, syscall.Kill(stubPID, 0), "stub codex must be alive prior to worker kill")
+	require.False(t, processDeadOrZombie(stubPID), "stub codex must be alive prior to worker kill (proc state=%s)", processDeadOrZombieStatus(stubPID))
 
 	// SIGKILL the worker. Pdeathsig must propagate to the stub within
 	// the bead's 5s window. We allow some slop on the polling.
 	require.NoError(t, syscall.Kill(workerCmd.Process.Pid, syscall.SIGKILL))
 
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		err := syscall.Kill(stubPID, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return // success: kernel reaped the stub
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("stub codex pid=%d still alive 5s after worker SIGKILL; orphan reaper would have to clean it up", stubPID)
+	var stubState string
+	require.Eventually(t, func() bool {
+		stubState = processDeadOrZombieStatus(stubPID)
+		return processDeadOrZombie(stubPID)
+	}, 5*time.Second, 25*time.Millisecond, "stub codex pid=%d still present 5s after worker SIGKILL; proc state=%s", stubPID, procStateSnapshot{&stubState})
 }
 
 func readProviderOrphanPID(t *testing.T, path string) int {
@@ -249,7 +244,7 @@ func TestProviderLaunchTimeoutDoesNotSignalWorkerProcessGroup(t *testing.T) {
 	})
 
 	providerPID := waitForProcessGroupTestPidFile(t, pidFile)
-	require.NoError(t, syscall.Kill(providerPID, 0), "provider stub must be alive before the simulated timeout")
+	require.False(t, processDeadOrZombie(providerPID), "provider stub must be alive before the simulated timeout (proc state=%s)", processDeadOrZombieStatus(providerPID))
 
 	providerPGID, err := syscall.Getpgid(providerPID)
 	require.NoError(t, err)
@@ -261,11 +256,13 @@ func TestProviderLaunchTimeoutDoesNotSignalWorkerProcessGroup(t *testing.T) {
 	// does for a Cmd it owns.
 	require.NoError(t, syscall.Kill(-providerPGID, syscall.SIGTERM))
 
+	var providerState string
 	require.Eventually(t, func() bool {
-		return errors.Is(syscall.Kill(providerPID, 0), syscall.ESRCH)
-	}, 5*time.Second, 50*time.Millisecond, "provider stub must be terminated by the group-scoped timeout kill")
+		providerState = processDeadOrZombieStatus(providerPID)
+		return processDeadOrZombie(providerPID)
+	}, 5*time.Second, 50*time.Millisecond, "provider stub must be terminated by the group-scoped timeout kill (proc state=%s)", procStateSnapshot{&providerState})
 
-	require.NoError(t, syscall.Kill(workerCmd.Process.Pid, 0), "worker process must remain alive after the provider-only timeout kill")
+	require.False(t, processDeadOrZombie(workerCmd.Process.Pid), "worker process must remain alive after the provider-only timeout kill (proc state=%s)", processDeadOrZombieStatus(workerCmd.Process.Pid))
 }
 
 // TestProviderLaunchTimeoutReapsProviderOnly proves that a timeout cleanup
@@ -311,9 +308,9 @@ func TestProviderLaunchTimeoutReapsProviderOnly(t *testing.T) {
 	descendantPID := waitForProcessGroupTestPidFile(t, descendantPidFile)
 	unrelatedPID := waitForProcessGroupTestPidFile(t, unrelatedPidFile)
 
-	require.NoError(t, syscall.Kill(providerPID, 0), "provider stub must be alive before the simulated timeout")
-	require.NoError(t, syscall.Kill(descendantPID, 0), "provider descendant must be alive before the simulated timeout")
-	require.NoError(t, syscall.Kill(unrelatedPID, 0), "unrelated worker-group process must be alive before the simulated timeout")
+	require.False(t, processDeadOrZombie(providerPID), "provider stub must be alive before the simulated timeout (proc state=%s)", processDeadOrZombieStatus(providerPID))
+	require.False(t, processDeadOrZombie(descendantPID), "provider descendant must be alive before the simulated timeout (proc state=%s)", processDeadOrZombieStatus(descendantPID))
+	require.False(t, processDeadOrZombie(unrelatedPID), "unrelated worker-group process must be alive before the simulated timeout (proc state=%s)", processDeadOrZombieStatus(unrelatedPID))
 
 	providerPGID, err := syscall.Getpgid(providerPID)
 	require.NoError(t, err)
@@ -331,13 +328,15 @@ func TestProviderLaunchTimeoutReapsProviderOnly(t *testing.T) {
 	// provider's process group.
 	require.NoError(t, syscall.Kill(-providerPGID, syscall.SIGKILL))
 
+	var providerState, descendantState string
 	require.Eventually(t, func() bool {
-		return errors.Is(syscall.Kill(providerPID, 0), syscall.ESRCH) &&
-			errors.Is(syscall.Kill(descendantPID, 0), syscall.ESRCH)
-	}, 5*time.Second, 50*time.Millisecond, "provider and its descendant must be reaped by the group-scoped timeout kill")
+		providerState = processDeadOrZombieStatus(providerPID)
+		descendantState = processDeadOrZombieStatus(descendantPID)
+		return processDeadOrZombie(providerPID) && processDeadOrZombie(descendantPID)
+	}, 5*time.Second, 50*time.Millisecond, "provider and its descendant must be reaped by the group-scoped timeout kill (provider state=%s descendant state=%s)", procStateSnapshot{&providerState}, procStateSnapshot{&descendantState})
 
-	require.NoError(t, syscall.Kill(unrelatedPID, 0), "unrelated process in the parent group must survive the provider-only timeout kill")
-	require.NoError(t, syscall.Kill(workerCmd.Process.Pid, 0), "worker process must remain alive after the provider-only timeout kill")
+	require.False(t, processDeadOrZombie(unrelatedPID), "unrelated process in the parent group must survive the provider-only timeout kill (proc state=%s)", processDeadOrZombieStatus(unrelatedPID))
+	require.False(t, processDeadOrZombie(workerCmd.Process.Pid), "worker process must remain alive after the provider-only timeout kill (proc state=%s)", processDeadOrZombieStatus(workerCmd.Process.Pid))
 }
 
 // TestShimProbeHelperProcess is not a real test. It is re-executed as a
@@ -446,7 +445,7 @@ func TestProviderLaunchExecsProviderInDedicatedProcessGroup(t *testing.T) {
 	})
 
 	providerPID := waitForProcessGroupTestPidFile(t, pidFile)
-	require.NoError(t, syscall.Kill(providerPID, 0), "provider process must be alive after the shim chain execs")
+	require.False(t, processDeadOrZombie(providerPID), "provider process must be alive after the shim chain execs (proc state=%s)", processDeadOrZombieStatus(providerPID))
 
 	providerPGID, err := syscall.Getpgid(providerPID)
 	require.NoError(t, err)
