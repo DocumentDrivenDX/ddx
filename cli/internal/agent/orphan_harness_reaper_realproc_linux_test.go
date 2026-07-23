@@ -265,20 +265,18 @@ func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
 	worktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+beadID+"-20260602T170011-deadbeef")
 	require.NoError(t, os.MkdirAll(worktree, 0o755))
 
-	grp := spawnRealOrphanGroup(t)
+	leaderPID := launchRealOrphanHarness(t, worktree, fmt.Sprintf("/bin/sleep %d", 600))
+	require.True(t, processAlive(leaderPID), "leader must start alive")
 	store := &fakeOrphanHarnessLeaseStore{
 		leases: map[string]bead.ClaimLeaseRecord{
-			beadID: {BeadID: beadID, PID: deadPID(t)},
+			beadID: {BeadID: beadID, PID: staleLeaseOwnerPID()},
 		},
 	}
-	scanner := fakeOrphanHarnessScanner{
-		processes: []orphanHarnessProcess{{
-			PID:     grp.leaderPID,
-			PPID:    1,
-			Command: "claude --print -p --output-format stream-json " + worktree,
-			Cwd:     worktree,
-		}},
-	}
+	scanner := realOrphanHarnessScanner(leaderPID)
+	proc := waitForOrphanHarnessProcess(t, scanner, leaderPID)
+	require.Equal(t, leaderPID, proc.PID)
+	require.Equal(t, 1, proc.PPID)
+	require.Equal(t, worktree, proc.Cwd)
 
 	reaped, err := reapOrphanedHarnessChildren(
 		context.Background(), projectRoot, scanner, store, store, store,
@@ -288,11 +286,10 @@ func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
 	require.Equal(t, 1, reaped)
 	require.Equal(t, []string{beadID}, store.released)
 
-	grp.reapAsync()
 	var leaderState string
 	require.Eventually(t, func() bool {
-		leaderState = processDeadOrZombieStatus(grp.leaderPID)
-		return processDeadOrZombie(grp.leaderPID)
+		leaderState = processDeadOrZombieStatus(leaderPID)
+		return processDeadOrZombie(leaderPID)
 	}, 3*time.Second, 20*time.Millisecond, "orphaned harness process group should be gone (proc state=%s)", procStateSnapshot{&leaderState})
 }
 
@@ -308,24 +305,21 @@ func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
 	beadID := "ddx-deadbeef"
 	worktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+beadID+"-20260602T170011-deadbeef")
 	require.NoError(t, os.MkdirAll(worktree, 0o755))
-	grp := spawnRealOrphanGroupWithGrandchild(t)
-	require.Greater(t, grp.grandchildPID, 0)
-	require.True(t, processAlive(grp.leaderPID), "leader must start alive")
-	require.True(t, processAlive(grp.grandchildPID), "grandchild must start alive")
+	leaderPID, grandchildPID := launchRealOrphanHarnessWithGrandchild(t, worktree)
+	require.Greater(t, grandchildPID, 0)
+	require.True(t, processAlive(leaderPID), "leader must start alive")
+	require.True(t, processAlive(grandchildPID), "grandchild must start alive")
 
 	store := &fakeOrphanHarnessLeaseStore{
 		leases: map[string]bead.ClaimLeaseRecord{
-			beadID: {BeadID: beadID, PID: deadPID(t)},
+			beadID: {BeadID: beadID, PID: staleLeaseOwnerPID()},
 		},
 	}
-	scanner := fakeOrphanHarnessScanner{
-		processes: []orphanHarnessProcess{{
-			PID:     grp.leaderPID,
-			PPID:    1,
-			Command: "codex exec --json -C " + worktree,
-			Cwd:     worktree,
-		}},
-	}
+	scanner := realOrphanHarnessScanner(leaderPID)
+	proc := waitForOrphanHarnessProcess(t, scanner, leaderPID)
+	require.Equal(t, leaderPID, proc.PID)
+	require.Equal(t, 1, proc.PPID)
+	require.Equal(t, worktree, proc.Cwd)
 
 	reaped, err := reapOrphanedHarnessChildren(
 		context.Background(), projectRoot, scanner, store, store, store,
@@ -334,12 +328,11 @@ func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, reaped)
 
-	grp.reapAsync()
 	var leaderState, grandState string
 	require.Eventually(t, func() bool {
-		leaderState = processDeadOrZombieStatus(grp.leaderPID)
-		grandState = processDeadOrZombieStatus(grp.grandchildPID)
-		return processDeadOrZombie(grp.leaderPID) && processDeadOrZombie(grp.grandchildPID)
+		leaderState = processDeadOrZombieStatus(leaderPID)
+		grandState = processDeadOrZombieStatus(grandchildPID)
+		return processDeadOrZombie(leaderPID) && processDeadOrZombie(grandchildPID)
 	}, 3*time.Second, 20*time.Millisecond, "both harness child and grandchild should be reaped (leader state=%s grandchild state=%s)", procStateSnapshot{&leaderState}, procStateSnapshot{&grandState})
 }
 
@@ -359,22 +352,20 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 	require.NoError(t, os.MkdirAll(orphanWt, 0o755))
 	require.NoError(t, os.MkdirAll(liveWt, 0o755))
 
-	orphan := spawnRealOrphanGroup(t)
-	live := spawnRealOrphanGroup(t)
+	orphanPID := launchRealOrphanHarness(t, orphanWt, fmt.Sprintf("/bin/sleep %d", 600))
+	livePID := launchRealOrphanHarness(t, liveWt, fmt.Sprintf("/bin/sleep %d", 600))
+	require.True(t, processAlive(orphanPID), "orphan harness must start alive")
+	require.True(t, processAlive(livePID), "live-owned harness must start alive")
 
 	store := &fakeOrphanHarnessLeaseStore{
 		leases: map[string]bead.ClaimLeaseRecord{
-			orphanBead: {BeadID: orphanBead, PID: deadPID(t)},
+			orphanBead: {BeadID: orphanBead, PID: staleLeaseOwnerPID()},
 			liveBead:   {BeadID: liveBead, PID: os.Getpid()},
 		},
 	}
-	scanner := fakeOrphanHarnessScanner{
-		processes: []orphanHarnessProcess{
-			{PID: orphan.leaderPID, PPID: 1, Command: "claude exec -C " + orphanWt, Cwd: orphanWt},
-			{PID: live.leaderPID, PPID: 1, Command: "claude --print -p --verbose --output-format stream-json", Cwd: liveWt},
-			{PID: 5353, PPID: 1, Command: "bash -lc echo unrelated", Cwd: tempRoot},
-		},
-	}
+	scanner := realOrphanHarnessScanner(orphanPID, livePID)
+	require.Equal(t, orphanPID, waitForOrphanHarnessProcess(t, scanner, orphanPID).PID)
+	require.Equal(t, livePID, waitForOrphanHarnessProcess(t, scanner, livePID).PID)
 
 	reaped, err := reapOrphanedHarnessChildren(
 		context.Background(), projectRoot, scanner, store, store, store,
@@ -385,16 +376,15 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 	require.Equal(t, []string{orphanBead}, store.released)
 	assert.Empty(t, store.events[liveBead], "live-owned harness must not be reaped")
 
-	orphan.reapAsync()
 	var orphanState string
 	require.Eventually(t, func() bool {
-		orphanState = processDeadOrZombieStatus(orphan.leaderPID)
-		return processDeadOrZombie(orphan.leaderPID)
+		orphanState = processDeadOrZombieStatus(orphanPID)
+		return processDeadOrZombie(orphanPID)
 	}, 3*time.Second, 20*time.Millisecond, "orphan must be reaped (proc state=%s)", procStateSnapshot{&orphanState})
 	var liveState string
 	require.Never(t, func() bool {
-		liveState = processDeadOrZombieStatus(live.leaderPID)
-		return processDeadOrZombie(live.leaderPID)
+		liveState = processDeadOrZombieStatus(livePID)
+		return processDeadOrZombie(livePID)
 	}, 300*time.Millisecond, 30*time.Millisecond, "live-owned harness must stay alive (proc state=%s)", procStateSnapshot{&liveState})
 }
 
@@ -417,21 +407,20 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 	require.NoError(t, os.MkdirAll(projWt, 0o755))
 	require.NoError(t, os.MkdirAll(otherWt, 0o755))
 
-	projProc := spawnRealOrphanGroup(t)
-	otherProc := spawnRealOrphanGroup(t)
+	projPID := launchRealOrphanHarness(t, projWt, fmt.Sprintf("/bin/sleep %d", 600))
+	otherPID := launchRealOrphanHarness(t, otherWt, fmt.Sprintf("/bin/sleep %d", 600))
+	require.True(t, processAlive(projPID), "project harness must start alive")
+	require.True(t, processAlive(otherPID), "other-project harness must start alive")
 
 	store := &fakeOrphanHarnessLeaseStore{
 		leases: map[string]bead.ClaimLeaseRecord{
-			projBead:  {BeadID: projBead, PID: deadPID(t)},
-			otherBead: {BeadID: otherBead, PID: deadPID(t)},
+			projBead:  {BeadID: projBead, PID: staleLeaseOwnerPID()},
+			otherBead: {BeadID: otherBead, PID: staleLeaseOwnerPID()},
 		},
 	}
-	scanner := fakeOrphanHarnessScanner{
-		processes: []orphanHarnessProcess{
-			{PID: projProc.leaderPID, PPID: 1, Command: "claude exec -C " + projWt, Cwd: projWt},
-			{PID: otherProc.leaderPID, PPID: 1, Command: "codex exec -C " + otherWt, Cwd: otherWt},
-		},
-	}
+	scanner := realOrphanHarnessScanner(projPID, otherPID)
+	require.Equal(t, projPID, waitForOrphanHarnessProcess(t, scanner, projPID).PID)
+	require.Equal(t, otherPID, waitForOrphanHarnessProcess(t, scanner, otherPID).PID)
 	reaped, err := reapOrphanedHarnessChildren(
 		context.Background(), projectRoot, scanner, store, store, store,
 		"worker-a", &bytes.Buffer{}, nil, realKillGroup,
@@ -441,16 +430,15 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 	require.Equal(t, []string{projBead}, store.released)
 	assert.Empty(t, store.events[otherBead], "other-workspace harness must not be reaped")
 
-	projProc.reapAsync()
 	var projState string
 	require.Eventually(t, func() bool {
-		projState = processDeadOrZombieStatus(projProc.leaderPID)
-		return processDeadOrZombie(projProc.leaderPID)
+		projState = processDeadOrZombieStatus(projPID)
+		return processDeadOrZombie(projPID)
 	}, 3*time.Second, 20*time.Millisecond, "this project's orphan must be reaped (proc state=%s)", procStateSnapshot{&projState})
 	var otherState string
 	require.Never(t, func() bool {
-		otherState = processDeadOrZombieStatus(otherProc.leaderPID)
-		return processDeadOrZombie(otherProc.leaderPID)
+		otherState = processDeadOrZombieStatus(otherPID)
+		return processDeadOrZombie(otherPID)
 	}, 300*time.Millisecond, 30*time.Millisecond, "other-workspace harness must stay alive (proc state=%s)", procStateSnapshot{&otherState})
 }
 
@@ -467,21 +455,15 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 	worktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+beadID+"-20260602T170011-deadbeef")
 	require.NoError(t, os.MkdirAll(worktree, 0o755))
 
-	grp := spawnRealOrphanGroup(t)
+	leaderPID := launchRealOrphanHarness(t, worktree, fmt.Sprintf("/bin/sleep %d", 600))
 	ownerPID := staleLeaseOwnerPID()
 	store := &fakeOrphanHarnessLeaseStore{
 		leases: map[string]bead.ClaimLeaseRecord{
 			beadID: {BeadID: beadID, PID: ownerPID},
 		},
 	}
-	scanner := fakeOrphanHarnessScanner{
-		processes: []orphanHarnessProcess{{
-			PID:     grp.leaderPID,
-			PPID:    1,
-			Command: "claude --print -p " + worktree,
-			Cwd:     worktree,
-		}},
-	}
+	scanner := realOrphanHarnessScanner(leaderPID)
+	require.Equal(t, leaderPID, waitForOrphanHarnessProcess(t, scanner, leaderPID).PID)
 
 	var emitted []map[string]any
 	reaped, err := reapOrphanedHarnessChildren(
@@ -511,5 +493,9 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 	require.NotEmpty(t, emitted, "operator-attention telemetry must be emitted")
 	assert.Equal(t, "orphaned_harness_child", emitted[0]["reason"])
 	assert.Equal(t, beadID, emitted[0]["bead_id"])
-	grp.reapAsync()
+	var leaderState string
+	require.Eventually(t, func() bool {
+		leaderState = processDeadOrZombieStatus(leaderPID)
+		return processDeadOrZombie(leaderPID)
+	}, 3*time.Second, 20*time.Millisecond, "orphaned harness must be reaped (proc state=%s)", procStateSnapshot{&leaderState})
 }
