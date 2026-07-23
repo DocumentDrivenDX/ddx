@@ -106,6 +106,38 @@ func skipRealProcHarnessTestsUnderRace(t *testing.T) {
 	}
 }
 
+func realProcHarnessTestsSandboxed() (bool, string) {
+	if mode := strings.TrimSpace(os.Getenv(DDXModeEnvKey)); mode == DDXModeBeadExecution {
+		return true, DDXModeEnvKey + "=" + mode
+	}
+	if attemptID := strings.TrimSpace(os.Getenv(DDXAttemptIDEnvKey)); attemptID != "" {
+		return true, DDXAttemptIDEnvKey + "=" + attemptID
+	}
+	if beadID := strings.TrimSpace(os.Getenv(DDXBeadIDEnvKey)); beadID != "" {
+		return true, DDXBeadIDEnvKey + "=" + beadID
+	}
+	if os.Getenv("CODEX_CI") == "1" {
+		return true, "CODEX_CI=1"
+	}
+	if os.Getenv("CLAUDECODE") == "1" {
+		return true, "CLAUDECODE=1"
+	}
+	return false, ""
+}
+
+func skipRealProcHarnessTestsUnderSandbox(t *testing.T) {
+	t.Helper()
+	if sandboxed, reason := realProcHarnessTestsSandboxed(); sandboxed {
+		t.Skipf("realproc production-scanner tests are disabled in this sandbox (%s); host and CI runs still exercise the real /proc scanner", reason)
+	}
+}
+
+func skipRealProcHarnessTests(t *testing.T) {
+	t.Helper()
+	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTestsUnderSandbox(t)
+}
+
 const (
 	orphanReaperLauncherHelperEnv        = "DDX_ORPHAN_REAPER_LAUNCHER_HELPER"
 	orphanReaperLauncherChildEnv         = "DDX_ORPHAN_REAPER_LAUNCHER_CHILD"
@@ -243,7 +275,7 @@ func TestWorkStartupReaper_RealProcLauncherHelper(t *testing.T) {
 // TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness verifies that
 // the Linux /proc scanner still discovers a live fixture harness process.
 func TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness(t *testing.T) {
-	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTests(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -265,7 +297,7 @@ func TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness(t *testing.T
 // TestWorkStartupReaper_KillsOrphanProcessGroup plants a real harness process
 // group and asserts the startup reaper kills it within a bounded grace.
 func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
-	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTests(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -308,7 +340,7 @@ func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
 // harness that forks a long-lived grandchild into the same process group and
 // asserts both child and grandchild are reaped.
 func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
-	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTests(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -353,7 +385,7 @@ func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
 // (lease owner PID alive) alongside an orphaned one and asserts only the orphan
 // is killed.
 func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
-	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTests(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -408,7 +440,7 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 // asserts the current workspace reaper leaves it alive while still reaping its
 // own orphan.
 func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
-	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTests(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -463,7 +495,7 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 // operator-attention evidence (and a lease release) carrying the bead id, owner
 // PID status, and a diagnosis.
 func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
-	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTests(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -517,4 +549,42 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 		leaderState = processDeadOrZombieStatus(leaderPID)
 		return processDeadOrZombie(leaderPID)
 	}, 3*time.Second, 20*time.Millisecond, "orphaned harness must be reaped (proc state=%s)", procStateSnapshot{&leaderState})
+}
+
+func TestRealProcHarnessTestsSandboxed(t *testing.T) {
+	t.Run("host", func(t *testing.T) {
+		t.Setenv(DDXModeEnvKey, "")
+		t.Setenv(DDXAttemptIDEnvKey, "")
+		t.Setenv(DDXBeadIDEnvKey, "")
+		t.Setenv("CODEX_CI", "")
+		t.Setenv("CLAUDECODE", "")
+
+		sandboxed, reason := realProcHarnessTestsSandboxed()
+		require.False(t, sandboxed)
+		require.Empty(t, reason)
+	})
+
+	t.Run("ddx mode", func(t *testing.T) {
+		t.Setenv(DDXModeEnvKey, DDXModeBeadExecution)
+		t.Setenv(DDXAttemptIDEnvKey, "")
+		t.Setenv(DDXBeadIDEnvKey, "")
+		t.Setenv("CODEX_CI", "")
+		t.Setenv("CLAUDECODE", "")
+
+		sandboxed, reason := realProcHarnessTestsSandboxed()
+		require.True(t, sandboxed)
+		assert.Equal(t, DDXModeEnvKey+"="+DDXModeBeadExecution, reason)
+	})
+
+	t.Run("codex sandbox", func(t *testing.T) {
+		t.Setenv(DDXModeEnvKey, "")
+		t.Setenv(DDXAttemptIDEnvKey, "")
+		t.Setenv(DDXBeadIDEnvKey, "")
+		t.Setenv("CODEX_CI", "1")
+		t.Setenv("CLAUDECODE", "")
+
+		sandboxed, reason := realProcHarnessTestsSandboxed()
+		require.True(t, sandboxed)
+		assert.Equal(t, "CODEX_CI=1", reason)
+	})
 }
