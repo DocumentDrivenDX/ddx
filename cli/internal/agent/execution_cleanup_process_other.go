@@ -13,7 +13,3 @@ func newExecutionCleanupAttemptProcessScannerImpl() executionCleanupAttemptProce
 func (executionCleanupAttemptProcessUnavailableScanner) Scan(context.Context) ([]executionCleanupAttemptProcess, error) {
 	return nil, errExecutionCleanupAttemptProcessUnavailable
 }
-
-func newExecutionCleanupAttemptProcessKiller() executionCleanupAttemptProcessKiller {
-	return executionCleanupAttemptProcessKillerFunc(func(int) error { return nil })
-}
