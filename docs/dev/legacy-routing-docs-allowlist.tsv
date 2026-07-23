@@ -63,3 +63,6 @@ website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx run	removed webs
 website/content/docs/cli/commands/ddx_agent_execute-bead.md	## legacy agent execute-bead	removed website command page title
 website/content/docs/cli/commands/ddx_agent_work.md	## legacy agent work	removed website command page title
 website/content/docs/cli/commands/ddx_agent_run.md	## legacy agent run	removed website command page title
+website/content/docs/cli/commands/ddx_work.md	treats --harness, --provider, --model, and --profile as opaque	explicit boundary: passthrough constraints doc generated from ddx work Long help; Fizeau owns routing
+docs/helix/02-design/agent-endpoints-unified-view.md	call `ResolveRoute` to predict what a future request might use	explicit boundary: documents what consumers must NOT do; ResolveRoute is not an execution surface
+docs/helix/02-design/agent-endpoints-unified-view.md	The narrow inventory interfaces intentionally omit `ResolveRoute`	explicit boundary: inventory interfaces exclude route resolution by design

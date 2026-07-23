@@ -168,7 +168,7 @@ jobs:
     - name: Run tests
       working-directory: cli
       run: |
-        go test -v -timeout 30m ./...
+        go test -race -v -timeout 30m ./...
         echo "✅ All tests passed - release validated"
 
   # Build binaries for all platforms
@@ -177,7 +177,7 @@ jobs:
     needs: [prepare, frontend, test]
     strategy:
       matrix:
-        # Fizeau v0.14.32 does not currently cross-compile for Windows
+        # Fizeau v0.15.2 still does not cross-compile for Windows
         # (github.com/easel/fizeau/internal/discoverycache uses syscall.Kill).
         include:
           - goos: linux
