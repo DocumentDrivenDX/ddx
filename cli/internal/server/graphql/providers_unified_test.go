@@ -448,6 +448,9 @@ func TestProviderStatusesPerfFixture(t *testing.T) {
 	if testing.Short() {
 		t.Skip("perf fixture skipped in -short")
 	}
+	if raceEnabled {
+		t.Skip("latency budget not meaningful under race detector")
+	}
 	workDir := t.TempDir()
 	// Seed 5 endpoints + 2 harnesses; 1,200 session rows distributed across them.
 	writeProviderStatusPerfConfig(t, workDir)
