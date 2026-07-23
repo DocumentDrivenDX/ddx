@@ -324,6 +324,99 @@ func TestCreateAndGet(t *testing.T) {
 	assert.Equal(t, b.IssueType, got.IssueType)
 }
 
+func TestBeadStore_ConcurrentCreateDoesNotLoseRows(t *testing.T) {
+	s := newTestStore(t)
+
+	const n = 64
+	start := make(chan struct{})
+	errCh := make(chan error, n)
+	wantIDs := make(map[string]struct{}, n)
+
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("ddx-create-%03d", i)
+		wantIDs[id] = struct{}{}
+		go func(i int, id string) {
+			<-start
+			errCh <- s.Create(testCtx(), &Bead{
+				ID:    id,
+				Title: fmt.Sprintf("concurrent create %03d", i),
+			})
+		}(i, id)
+	}
+
+	close(start)
+	for i := 0; i < n; i++ {
+		require.NoError(t, <-errCh)
+	}
+
+	got, err := s.ReadAll(testCtx())
+	require.NoError(t, err)
+	require.Len(t, got, n)
+	for _, b := range got {
+		delete(wantIDs, b.ID)
+	}
+	assert.Empty(t, wantIDs, "all concurrently-created rows must be present")
+}
+
+func TestBeadStore_MutationRereadsUnderLock(t *testing.T) {
+	now := time.Now().UTC()
+	backend := &mutationOrderBackend{
+		beads: []Bead{{
+			ID:        "ddx-reread-1",
+			Title:     "original",
+			IssueType: DefaultType,
+			Status:    StatusOpen,
+			Priority:  1,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}},
+	}
+	s := &Store{backend: backend}
+
+	require.NoError(t, s.Update(testCtx(), "ddx-reread-1", func(b *Bead) {
+		b.Title = "updated"
+	}))
+
+	assert.True(t, backend.readSawLock.Load(), "mutation must read the corpus after acquiring the collection lock")
+	assert.True(t, backend.writeSawLock.Load(), "mutation must write the corpus while holding the collection lock")
+	require.Len(t, backend.written, 1)
+	assert.Equal(t, "updated", backend.written[0].Title)
+}
+
+type mutationOrderBackend struct {
+	locked       atomic.Bool
+	readSawLock  atomic.Bool
+	writeSawLock atomic.Bool
+
+	mu      sync.Mutex
+	beads   []Bead
+	written []Bead
+}
+
+func (b *mutationOrderBackend) Init() error { return nil }
+
+func (b *mutationOrderBackend) ReadAll() ([]Bead, error) {
+	b.readSawLock.Store(b.locked.Load())
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]Bead(nil), b.beads...), nil
+}
+
+func (b *mutationOrderBackend) WriteAll(beads []Bead) error {
+	b.writeSawLock.Store(b.locked.Load())
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.written = append([]Bead(nil), beads...)
+	b.beads = append([]Bead(nil), beads...)
+	return nil
+}
+
+func (b *mutationOrderBackend) WithLock(fn func() error) error {
+	b.locked.Store(true)
+	defer b.locked.Store(false)
+	return fn()
+}
+
 func TestStoreReadAllHonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)

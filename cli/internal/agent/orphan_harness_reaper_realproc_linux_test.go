@@ -106,6 +106,20 @@ func skipRealProcHarnessTestsUnderRace(t *testing.T) {
 	}
 }
 
+func realProcHarnessTestsSandboxed() (bool, string) {
+	if mode := strings.TrimSpace(os.Getenv(DDXModeEnvKey)); mode == DDXModeBeadExecution {
+		return true, DDXModeEnvKey + "=" + mode
+	}
+	return false, ""
+}
+
+func skipRealProcHarnessTestsUnderSandbox(t *testing.T) {
+	t.Helper()
+	if sandboxed, reason := realProcHarnessTestsSandboxed(); sandboxed {
+		t.Skipf("realproc production-scanner tests are disabled in this sandbox (%s); host and CI runs still exercise the real /proc scanner", reason)
+	}
+}
+
 const (
 	orphanReaperLauncherHelperEnv        = "DDX_ORPHAN_REAPER_LAUNCHER_HELPER"
 	orphanReaperLauncherChildEnv         = "DDX_ORPHAN_REAPER_LAUNCHER_CHILD"
@@ -126,28 +140,19 @@ func launchRealOrphanHarnessWithEnv(t *testing.T, worktree, script string, extra
 	childPath := filepath.Join(childDir, "claude")
 	require.NoError(t, os.Symlink("/bin/sh", childPath))
 
-	pidFile := filepath.Join(t.TempDir(), "leader.pid")
-	helper := exec.Command(os.Args[0], "-test.run=^TestWorkStartupReaper_RealProcLauncherHelper$")
-	helper.Env = append(os.Environ(),
-		orphanReaperLauncherHelperEnv+"=1",
-		orphanReaperLauncherChildEnv+"="+childPath,
-		orphanReaperLauncherWorktreeEnv+"="+worktree,
-		orphanReaperLauncherScriptEnv+"="+script,
-		orphanReaperLauncherPIDEnv+"="+pidFile,
-	)
+	cmd := exec.Command(childPath, "-c", script)
+	cmd.Dir = worktree
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = os.Environ()
 	for key, value := range extraEnv {
-		helper.Env = append(helper.Env, key+"="+value)
+		cmd.Env = append(cmd.Env, key+"="+value)
 	}
-	require.NoError(t, helper.Start())
-	require.NoError(t, helper.Wait())
-
-	data, err := os.ReadFile(pidFile)
-	require.NoError(t, err)
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
 
 	t.Cleanup(func() {
 		_ = killProcessGroup(pid)
+		_ = cmd.Wait()
 	})
 	return pid
 }
@@ -161,8 +166,12 @@ func launchRealOrphanHarnessWithGrandchild(t *testing.T, worktree string) (int, 
 		orphanReaperLauncherGrandchildPIDEnv: grandchildPIDFile,
 	})
 
-	data, err := os.ReadFile(grandchildPIDFile)
-	require.NoError(t, err)
+	var data []byte
+	require.Eventually(t, func() bool {
+		var err error
+		data, err = os.ReadFile(grandchildPIDFile)
+		return err == nil && strings.TrimSpace(string(data)) != ""
+	}, 3*time.Second, 10*time.Millisecond)
 	grandchildPID, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	require.NoError(t, err)
 	return leaderPID, grandchildPID
@@ -266,6 +275,7 @@ func TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness(t *testing.T
 // group and asserts the startup reaper kills it within a bounded grace.
 func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
 	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTestsUnderSandbox(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -464,6 +474,7 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 // PID status, and a diagnosis.
 func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 	skipRealProcHarnessTestsUnderRace(t)
+	skipRealProcHarnessTestsUnderSandbox(t)
 
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
@@ -517,4 +528,31 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 		leaderState = processDeadOrZombieStatus(leaderPID)
 		return processDeadOrZombie(leaderPID)
 	}, 3*time.Second, 20*time.Millisecond, "orphaned harness must be reaped (proc state=%s)", procStateSnapshot{&leaderState})
+}
+
+func TestRealProcHarnessTestsSandboxed(t *testing.T) {
+	t.Run("host", func(t *testing.T) {
+		t.Setenv(DDXModeEnvKey, "")
+
+		sandboxed, reason := realProcHarnessTestsSandboxed()
+		require.False(t, sandboxed)
+		require.Empty(t, reason)
+	})
+
+	t.Run("bead execution", func(t *testing.T) {
+		t.Setenv(DDXModeEnvKey, DDXModeBeadExecution)
+
+		sandboxed, reason := realProcHarnessTestsSandboxed()
+		require.True(t, sandboxed)
+		assert.Equal(t, DDXModeEnvKey+"="+DDXModeBeadExecution, reason)
+	})
+
+	t.Run("codex ci only", func(t *testing.T) {
+		t.Setenv(DDXModeEnvKey, "")
+		t.Setenv("CODEX_CI", "1")
+
+		sandboxed, reason := realProcHarnessTestsSandboxed()
+		require.False(t, sandboxed)
+		require.Empty(t, reason)
+	})
 }
