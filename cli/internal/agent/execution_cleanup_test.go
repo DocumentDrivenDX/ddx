@@ -1016,15 +1016,24 @@ func TestExecutionCleanup_DoesNotSynthesizeOwnershipForHostGlobalMetadataLessScr
 }
 
 func TestExecutionCleanupManager_ReclaimsStaleDDXHomeScratch(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
 	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
-	projectRoot := setupExecutionCleanupProjectRoot(t)
-	tempRoot := t.TempDir()
-	scratchRoot := t.TempDir()
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	scratchRoot := ddxroot.JoinProject(projectRoot, "scratch")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	require.NoError(t, os.MkdirAll(scratchRoot, 0o755))
 
 	staleHome := filepath.Join(scratchRoot, "ddx-home-2540911535")
 	staleFixtureBin := filepath.Join(scratchRoot, "ddx-fixture-bin-1a2b3c4d")
 	liveHome := filepath.Join(scratchRoot, "ddx-home-5670577261")
 	nonDDXPath := filepath.Join(scratchRoot, "plain-old-dir")
+	unownedHostHome := filepath.Join(os.TempDir(), "ddx-home-unowned-host-global")
 
 	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(staleHome, "go", "pkg", "mod", "cache"), map[string]string{
 		"entry.txt": strings.Repeat("x", 32),
@@ -1038,17 +1047,24 @@ func TestExecutionCleanupManager_ReclaimsStaleDDXHomeScratch(t *testing.T) {
 	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(liveHome, "go", "pkg", "mod", "cache"), map[string]string{
 		"entry.txt": "fresh\n",
 	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(unownedHostHome, "go", "pkg", "mod", "cache"), map[string]string{
+		"entry.txt": "unowned\n",
+	})
 	require.NoError(t, os.MkdirAll(nonDDXPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(nonDDXPath, "keep.txt"), []byte("keep\n"), 0o644))
 
+	require.True(t, isPathWithin(staleHome, scratchRoot), "metadata-less reclaimed ddx-home fixture must stay inside project-private scratch")
+	require.True(t, isPathWithin(staleFixtureBin, scratchRoot), "metadata-less reclaimed fixture-bin must stay inside project-private scratch")
+	require.False(t, isPathWithin(unownedHostHome, scratchRoot), "host-global control must not rely on the private scratch boundary")
 	old := now.Add(-48 * time.Hour)
 	require.NoError(t, os.Chtimes(staleHome, old, old))
 	require.NoError(t, os.Chtimes(staleFixtureBin, old, old))
 	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
+	require.NoError(t, os.Chtimes(unownedHostHome, old, old))
 	// liveHome is fresh (created just now), so it stays under the scratch min age.
 
-	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
-	mgr.ScratchRoots = []string{scratchRoot}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot)
+	mgr.ScratchRoots = []string{scratchRoot, os.TempDir()}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
 
@@ -1059,43 +1075,73 @@ func TestExecutionCleanupManager_ReclaimsStaleDDXHomeScratch(t *testing.T) {
 	assert.NoDirExists(t, staleFixtureBin)
 	assert.DirExists(t, liveHome)
 	assert.DirExists(t, nonDDXPath)
+	assert.DirExists(t, unownedHostHome)
+	assert.Equal(t, 4, summary.ScannedScratchDirs)
 	assert.Equal(t, int64(2), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(1), summary.PreservedActiveScratchDirs)
+	assert.Equal(t, 1, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.Equal(t, 2, countObservationClass(summary.Observations, "removed_scratch_dir"))
 }
 
 func TestExecutionCleanupSummary_ReportsScratchReclaimedInodes(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
 	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
-	projectRoot := setupExecutionCleanupProjectRoot(t)
-	tempRoot := t.TempDir()
-	scratchRoot := t.TempDir()
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	scratchRoot := ddxroot.JoinProject(projectRoot, "scratch")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	require.NoError(t, os.MkdirAll(scratchRoot, 0o755))
 
 	staleHome := filepath.Join(scratchRoot, "ddx-home-9998887770")
-	staleFixtureBin := filepath.Join(scratchRoot, "ddx-fixture-bin-deadbeef")
+	staleFixtureBin := filepath.Join(os.TempDir(), "ddx-fixture-bin-deadbeef")
+	unownedHostHome := filepath.Join(os.TempDir(), "ddx-home-unowned-inode-control")
 
 	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(staleHome, "go", "pkg", "mod"), map[string]string{
 		"a.txt": strings.Repeat("a", 64),
 		"b.txt": strings.Repeat("b", 64),
 	})
-	writeExecutionCleanupCandidateWithoutMetadata(t, staleFixtureBin, map[string]string{
+	writeExecutionCleanupCandidate(t, staleFixtureBin, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: staleFixtureBin,
+	}, map[string]string{
 		"ddx": strings.Repeat("c", 128),
 	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, unownedHostHome, map[string]string{
+		"cache.txt": strings.Repeat("d", 128),
+	})
+	require.True(t, isPathWithin(staleHome, scratchRoot), "metadata-less reclaimed ddx-home fixture must stay inside project-private scratch")
+	require.FileExists(t, filepath.Join(staleFixtureBin, ExecutionCleanupMetadataFileName), "host-global reclaimed fixture must be metadata-marked")
+	require.False(t, isPathWithin(unownedHostHome, scratchRoot), "host-global control must not rely on the private scratch boundary")
 	old := now.Add(-48 * time.Hour)
 	require.NoError(t, os.Chtimes(staleHome, old, old))
 	require.NoError(t, os.Chtimes(staleFixtureBin, old, old))
+	require.NoError(t, os.Chtimes(unownedHostHome, old, old))
 
-	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
-	mgr.ScratchRoots = []string{scratchRoot}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot)
+	mgr.ScratchRoots = []string{scratchRoot, os.TempDir()}
 	mgr.ScratchMinAge = time.Hour
 	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
 
-	assert.Equal(t, int64(2), summary.RemovedScratchDirs, "removed path count for stale ddx-home-*/ddx-fixture-bin-* scratch trees")
+	assert.NoDirExists(t, staleHome)
+	assert.NoDirExists(t, staleFixtureBin)
+	assert.DirExists(t, unownedHostHome)
+	assert.Equal(t, 3, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(2), summary.RemovedScratchDirs, "removed path count for project-private ddx-home-* and metadata-marked ddx-fixture-bin-* scratch trees")
+	assert.Equal(t, 1, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
 	assert.Greater(t, summary.ScratchBytesReclaimed, int64(0))
 	assert.Greater(t, summary.ScratchInodesReclaimed, int64(0))
 
 	removedObservations := 0
 	var totalObservedInodes int64
+	removedPaths := map[string]bool{}
 	for _, obs := range summary.Observations {
 		if obs.Class != "removed_scratch_dir" {
 			continue
@@ -1103,11 +1149,13 @@ func TestExecutionCleanupSummary_ReportsScratchReclaimedInodes(t *testing.T) {
 		if obs.Path != staleHome && obs.Path != staleFixtureBin {
 			continue
 		}
+		removedPaths[obs.Path] = true
 		removedObservations++
 		assert.Greater(t, obs.Inodes, int64(0), "observation for %s must report reclaimed inode count", obs.Path)
 		assert.Greater(t, obs.Bytes, int64(0), "observation for %s must report reclaimed byte count", obs.Path)
 		totalObservedInodes += obs.Inodes
 	}
+	assert.Equal(t, map[string]bool{staleHome: true, staleFixtureBin: true}, removedPaths)
 	assert.Equal(t, 2, removedObservations)
 	assert.Equal(t, summary.ScratchInodesReclaimed, totalObservedInodes)
 }
