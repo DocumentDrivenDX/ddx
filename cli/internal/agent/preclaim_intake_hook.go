@@ -50,6 +50,25 @@ type preClaimIntakePromptRewrite struct {
 	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
+func (r *preClaimIntakePromptRewrite) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Description   string          `json:"description,omitempty"`
+		Acceptance    json.RawMessage `json:"acceptance,omitempty"`
+		ChangedFields []string        `json:"changed_fields,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	acceptance, err := decodeReadinessAcceptanceText(raw.Acceptance, "rewrite.acceptance")
+	if err != nil {
+		return err
+	}
+	r.Description = strings.TrimSpace(raw.Description)
+	r.Acceptance = acceptance
+	r.ChangedFields = raw.ChangedFields
+	return nil
+}
+
 // preClaimReadinessPromptResult is the canonical readiness JSON schema returned
 // by skills that use the FEAT-010/ADR-023 outcome vocabulary.
 type preClaimReadinessPromptResult struct {
@@ -254,6 +273,33 @@ func decodeReadinessStringListField(data []byte, fieldName string, splitLines bo
 
 func decodeReadinessAcceptanceList(data []byte, fieldName string) ([]string, error) {
 	return decodeReadinessStringListField(data, fieldName, true)
+}
+
+func decodeReadinessAcceptanceText(data []byte, fieldName string) (string, error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return "", nil
+	}
+	switch trimmed[0] {
+	case '[':
+		var items []string
+		if err := json.Unmarshal(data, &items); err != nil {
+			return "", fmt.Errorf("%s must be a string or string array: %w", fieldName, err)
+		}
+		items = normalizeReadinessStringList(items)
+		if len(items) == 0 {
+			return "", nil
+		}
+		return strings.Join(items, "\n"), nil
+	case '"':
+		var item string
+		if err := json.Unmarshal(data, &item); err != nil {
+			return "", fmt.Errorf("%s must be a string or string array: %w", fieldName, err)
+		}
+		return strings.TrimSpace(item), nil
+	default:
+		return "", fmt.Errorf("%s must be a string or string array", fieldName)
+	}
 }
 
 type preClaimReadinessSuggestedChild struct {
