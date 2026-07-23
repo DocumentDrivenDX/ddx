@@ -45,6 +45,8 @@ var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-fixture-bin-",
 }
 
+const executionCleanupUnownedScratchObservationClass = "preserved_unowned_scratch_dir"
+
 // ExecutionCleanupLiveness records the refreshable liveness signal attached to
 // a temp execution directory.
 type ExecutionCleanupLiveness struct {
@@ -674,6 +676,14 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 					})
 					continue
 				}
+				if trustReason := m.trustedScratchRootReason(root); trustReason != "" {
+					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+						Path:    path,
+						Class:   executionCleanupUnownedScratchObservationClass,
+						Message: fmt.Sprintf("missing cleanup metadata under %s; preserving", trustReason),
+					})
+					continue
+				}
 				meta = ExecutionCleanupMetadata{
 					ProjectRoot:  m.ProjectRoot,
 					WorktreePath: path,
@@ -866,6 +876,17 @@ func (m *ExecutionCleanupManager) scratchMinAge() time.Duration {
 		return m.ScratchMinAge
 	}
 	return defaultExecutionCleanupScratchMinAge
+}
+
+func (m *ExecutionCleanupManager) trustedScratchRootReason(root string) string {
+	switch {
+	case sameCleanPath(root, os.TempDir()):
+		return "host-global scratch root"
+	case sameCleanPath(root, config.LegacyExecutionTempRoot()):
+		return "legacy process-temp root"
+	default:
+		return ""
+	}
 }
 
 func cleanUniquePaths(paths []string) []string {

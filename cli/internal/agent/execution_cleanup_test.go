@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
@@ -828,6 +830,96 @@ func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {
 	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
 	assert.Equal(t, int64(2), summary.PreservedActiveScratchDirs)
 	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_scratch_dir"))
+}
+
+func TestExecutionCleanup_PreservesMetadataLessHostGlobalScratch(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
+	now := time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	unownedRoot, err := os.MkdirTemp(os.TempDir(), "ddx-home-")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(unownedRoot)
+	})
+	for i := 0; i < 16; i++ {
+		nestedDir := filepath.Join(unownedRoot, "go", "pkg", "mod", fmt.Sprintf("level-%02d", i))
+		writeExecutionCleanupCandidateWithoutMetadata(t, nestedDir, map[string]string{
+			fmt.Sprintf("payload-%02d.txt", i): strings.Repeat("x", 64),
+		})
+	}
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(unownedRoot, old, old))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.ScratchRoots = []string{os.TempDir()}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, unownedRoot)
+	assert.FileExists(t, filepath.Join(unownedRoot, "go", "pkg", "mod", "level-00", "payload-00.txt"))
+	assert.Equal(t, 1, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(0), summary.PreservedActiveScratchDirs)
+	assert.Equal(t, int64(0), summary.ScratchBytesReclaimed)
+	assert.Equal(t, int64(0), summary.ScratchInodesReclaimed)
+	assert.Equal(t, 1, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.True(t, hasObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+}
+
+func TestExecutionCleanup_DoesNotSynthesizeOwnershipForHostGlobalMetadataLessScratch(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
+	now := time.Date(2026, 7, 23, 12, 30, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	legacyRoot := config.LegacyExecutionTempRoot()
+	require.NoError(t, os.MkdirAll(legacyRoot, 0o755))
+	t.Cleanup(func() {
+		_ = os.RemoveAll(legacyRoot)
+	})
+
+	unownedRoot, err := os.MkdirTemp(legacyRoot, "ddx-home-")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(unownedRoot)
+	})
+	writeExecutionCleanupCandidateWithoutMetadata(t, filepath.Join(unownedRoot, "cache"), map[string]string{
+		"payload.txt": strings.Repeat("y", 32),
+	})
+	old := now.Add(-72 * time.Hour)
+	require.NoError(t, os.Chtimes(unownedRoot, old, old))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, legacyRoot)
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, unownedRoot)
+	assert.FileExists(t, filepath.Join(unownedRoot, "cache", "payload.txt"))
+	assert.Equal(t, 1, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(0), summary.PreservedActiveScratchDirs)
+	assert.Equal(t, int64(0), summary.ScratchBytesReclaimed)
+	assert.Equal(t, int64(0), summary.ScratchInodesReclaimed)
+	assert.Equal(t, 1, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.True(t, hasObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
 }
 
 func TestExecutionCleanupManager_ReclaimsStaleDDXHomeScratch(t *testing.T) {
