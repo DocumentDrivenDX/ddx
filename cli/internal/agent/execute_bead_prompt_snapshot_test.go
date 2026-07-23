@@ -36,9 +36,20 @@ func assertPromptSnapshot(t *testing.T, name string, got string) {
 	}
 }
 
-// TestPrompts_HarnessNeutral_ByteIdentical is the byte-for-byte snapshot gate
-// for the single execute-bead instruction block. The legacy snapshot filename
-// is retained to avoid obscuring the substantive prompt change with a rename.
-func TestPrompts_HarnessNeutral_ByteIdentical(t *testing.T) {
+// TestPrompts_ClaudeVariant_ByteIdentical is the byte-for-byte snapshot gate
+// for the execute-bead instruction block used by Claude-style harnesses.
+func TestPrompts_ClaudeVariant_ByteIdentical(t *testing.T) {
 	assertPromptSnapshot(t, "claude", executeBeadInstructionsText)
+}
+
+// TestPrompts_AgentVariant_ByteIdentical is the byte-for-byte snapshot gate
+// for the execute-bead instruction block used by Agent-style harnesses.
+func TestPrompts_AgentVariant_ByteIdentical(t *testing.T) {
+	assertPromptSnapshot(t, "agent", executeBeadInstructionsText)
+}
+
+// TestPrompts_HarnessNeutral_ByteIdentical is retained as a compatibility
+// alias for older snapshot tooling and now delegates to the Claude variant.
+func TestPrompts_HarnessNeutral_ByteIdentical(t *testing.T) {
+	TestPrompts_ClaudeVariant_ByteIdentical(t)
 }
