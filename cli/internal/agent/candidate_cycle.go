@@ -259,6 +259,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 
 	repairCycles := 0
 	reviewRetryCount := 0
+	candidatePrepared := false
 	cycleTrace := append([]ExecutionCycleTrace(nil), candidate.Report.CycleTrace...)
 	recordCycle := func(report *ExecuteBeadReport, review *CandidateReviewResult, finalDecision string) {
 		entry := executionCycleTraceFor(candidate, review, finalDecision)
@@ -289,124 +290,128 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		return AttemptCycleResult{Report: report}, fmt.Errorf("%s cycle %d: %w", prefix, candidate.CycleIndex, failure)
 	}
 	for {
-		// Validate every candidate revision, including append-only repair output,
-		// before any project-root ref, event, check, review, or landing side
-		// effect makes that revision durable or externally visible.
-		if c.ValidateCandidate != nil {
-			if validateErr := c.ValidateCandidate(candidate); validateErr != nil {
-				return failCandidate("validating candidate", validateErr, FailureModeAttemptIntegrity)
-			}
-		}
-		// Clone backends import the validated object through a short-lived ref.
-		// Linked and in-tree backends no-op. No project candidate ref is created
-		// until import succeeds.
-		if c.ImportCandidate != nil {
-			if importErr := c.ImportCandidate(candidate); importErr != nil {
-				if c.ReleaseCandidateImport != nil {
-					importErr = errors.Join(importErr, c.ReleaseCandidateImport(candidate))
+		if !candidatePrepared {
+			// Validate every candidate revision, including append-only repair output,
+			// before any project-root ref, event, check, review, or landing side
+			// effect makes that revision durable or externally visible.
+			if c.ValidateCandidate != nil {
+				if validateErr := c.ValidateCandidate(candidate); validateErr != nil {
+					return failCandidate("validating candidate", validateErr, FailureModeAttemptIntegrity)
 				}
-				return failCandidate("importing candidate", importErr, FailureModeLandRetry)
 			}
-		}
-		c.recordCandidateCycleState(candidate, CandidateCycleState{
-			Active:       true,
-			Phase:        "candidate",
-			CandidateRev: candidate.Report.ResultRev,
-			CycleIndex:   candidate.CycleIndex,
-		})
-		if pinErr := c.pinCandidateRef(beadID, &candidate); pinErr != nil {
-			if c.ReleaseCandidateImport != nil {
-				pinErr = errors.Join(pinErr, c.ReleaseCandidateImport(candidate))
+			// Clone backends import the validated object through a short-lived ref.
+			// Linked and in-tree backends no-op. No project candidate ref is created
+			// until import succeeds.
+			if c.ImportCandidate != nil {
+				if importErr := c.ImportCandidate(candidate); importErr != nil {
+					if c.ReleaseCandidateImport != nil {
+						importErr = errors.Join(importErr, c.ReleaseCandidateImport(candidate))
+					}
+					return failCandidate("importing candidate", importErr, FailureModeLandRetry)
+				}
 			}
-			return failCandidate("pinning candidate", pinErr, FailureModeLandRetry)
-		}
-		pinnedRefs = appendUniqueString(pinnedRefs, candidate.Report.CandidateRef)
-		if c.ReleaseCandidateImport != nil {
-			if releaseErr := c.ReleaseCandidateImport(candidate); releaseErr != nil {
-				return failCandidate("releasing candidate import", releaseErr, FailureModeLandRetry)
-			}
-		}
-		c.recordCandidateCycleState(candidate, CandidateCycleState{
-			Active:       true,
-			Phase:        "candidate_pinned",
-			CandidateRef: candidate.Report.CandidateRef,
-			CandidateRev: candidate.Report.ResultRev,
-			CycleIndex:   candidate.CycleIndex,
-		})
-
-		if c.Checks != nil {
 			c.recordCandidateCycleState(candidate, CandidateCycleState{
 				Active:       true,
-				Phase:        "checks",
+				Phase:        "candidate",
+				CandidateRev: candidate.Report.ResultRev,
+				CycleIndex:   candidate.CycleIndex,
+			})
+			if pinErr := c.pinCandidateRef(beadID, &candidate); pinErr != nil {
+				if c.ReleaseCandidateImport != nil {
+					pinErr = errors.Join(pinErr, c.ReleaseCandidateImport(candidate))
+				}
+				return failCandidate("pinning candidate", pinErr, FailureModeLandRetry)
+			}
+			pinnedRefs = appendUniqueString(pinnedRefs, candidate.Report.CandidateRef)
+			if c.ReleaseCandidateImport != nil {
+				if releaseErr := c.ReleaseCandidateImport(candidate); releaseErr != nil {
+					return failCandidate("releasing candidate import", releaseErr, FailureModeLandRetry)
+				}
+			}
+			c.recordCandidateCycleState(candidate, CandidateCycleState{
+				Active:       true,
+				Phase:        "candidate_pinned",
 				CandidateRef: candidate.Report.CandidateRef,
 				CandidateRev: candidate.Report.ResultRev,
 				CycleIndex:   candidate.CycleIndex,
 			})
-			checksResult, checksErr := c.Checks.RunChecks(ctx, c.ProjectRoot, candidate)
-			if checksErr != nil {
-				checksResult.Detail = checksErr.Error()
-			}
-			if checksErr != nil || !checksResult.Passed {
-				report := candidate.Report
-				if checksErr != nil {
-					report.Status = ExecuteBeadStatusExecutionFailed
-				} else {
-					report.Status = ExecuteBeadStatusPostRunCheckFailed
-				}
-				report.OutcomeReason = candidateChecksFailedEventKind
-				report.Detail = candidateChecksFailedDetail(checksResult.Detail)
-				if checksErr != nil && report.Error == "" {
-					report.Error = checksErr.Error()
-				}
-				c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
-				// A check-runner error is infrastructure/setup failure, not a
-				// candidate defect an implementer can safely repair.
-				if checksErr != nil || c.Repair == nil {
-					recordCycle(&report, nil, report.Status)
-					return AttemptCycleResult{Report: report}, nil
-				}
-				if repairCycles >= c.maxRepairCycles() {
-					report.Status = ExecuteBeadStatusRepairCycleExhausted
-					report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
-					report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
-					recordCycle(&report, nil, report.Status)
-					return AttemptCycleResult{Report: report}, nil
-				}
-				recordCycle(&candidate.Report, nil, ExecuteBeadStatusPostRunCheckFailed)
-				prompt, promptErr := c.buildRepairPrompt(beadID, candidate, CandidateReviewResult{}, repairCycles+1, checksResult.Detail)
-				if promptErr != nil {
-					report.Status = ExecuteBeadStatusExecutionFailed
-					report.Detail = "pre-land repair prompt: " + promptErr.Error()
-					report.Error = promptErr.Error()
-					recordCycle(&report, nil, report.Status)
-					return AttemptCycleResult{Report: report}, nil
-				}
-				c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, candidateChecksFailedEventKind)
+
+			if c.Checks != nil {
 				c.recordCandidateCycleState(candidate, CandidateCycleState{
 					Active:       true,
-					Phase:        "repair",
+					Phase:        "checks",
 					CandidateRef: candidate.Report.CandidateRef,
 					CandidateRev: candidate.Report.ResultRev,
 					CycleIndex:   candidate.CycleIndex,
-					RepairActive: true,
 				})
-				repaired, repairErr := c.Repair.Repair(ctx, candidate, prompt)
-				if repairErr != nil {
-					report.Status = ExecuteBeadStatusExecutionFailed
-					report.Detail = "pre-land repair: " + repairErr.Error()
-					report.Error = repairErr.Error()
-					recordCycle(&report, nil, report.Status)
-					return AttemptCycleResult{Report: report}, nil
+				checksResult, checksErr := c.Checks.RunChecks(ctx, c.ProjectRoot, candidate)
+				if checksErr != nil {
+					checksResult.Detail = checksErr.Error()
 				}
-				repairCycles++
-				candidate = normalizeRepairedCandidate(candidate, repaired)
-				if candidate.Report.Status != ExecuteBeadStatusSuccess {
-					recordCycle(&candidate.Report, nil, candidate.Report.Status)
-					return AttemptCycleResult{Report: candidate.Report}, nil
+				if checksErr != nil || !checksResult.Passed {
+					report := candidate.Report
+					if checksErr != nil {
+						report.Status = ExecuteBeadStatusExecutionFailed
+					} else {
+						report.Status = ExecuteBeadStatusPostRunCheckFailed
+					}
+					report.OutcomeReason = candidateChecksFailedEventKind
+					report.Detail = candidateChecksFailedDetail(checksResult.Detail)
+					if checksErr != nil && report.Error == "" {
+						report.Error = checksErr.Error()
+					}
+					c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
+					// A check-runner error is infrastructure/setup failure, not a
+					// candidate defect an implementer can safely repair.
+					if checksErr != nil || c.Repair == nil {
+						recordCycle(&report, nil, report.Status)
+						return AttemptCycleResult{Report: report}, nil
+					}
+					if repairCycles >= c.maxRepairCycles() {
+						report.Status = ExecuteBeadStatusRepairCycleExhausted
+						report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
+						report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+						recordCycle(&report, nil, report.Status)
+						return AttemptCycleResult{Report: report}, nil
+					}
+					recordCycle(&candidate.Report, nil, ExecuteBeadStatusPostRunCheckFailed)
+					prompt, promptErr := c.buildRepairPrompt(beadID, candidate, CandidateReviewResult{}, repairCycles+1, checksResult.Detail)
+					if promptErr != nil {
+						report.Status = ExecuteBeadStatusExecutionFailed
+						report.Detail = "pre-land repair prompt: " + promptErr.Error()
+						report.Error = promptErr.Error()
+						recordCycle(&report, nil, report.Status)
+						return AttemptCycleResult{Report: report}, nil
+					}
+					c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, candidateChecksFailedEventKind)
+					c.recordCandidateCycleState(candidate, CandidateCycleState{
+						Active:       true,
+						Phase:        "repair",
+						CandidateRef: candidate.Report.CandidateRef,
+						CandidateRev: candidate.Report.ResultRev,
+						CycleIndex:   candidate.CycleIndex,
+						RepairActive: true,
+					})
+					repaired, repairErr := c.Repair.Repair(ctx, candidate, prompt)
+					if repairErr != nil {
+						report.Status = ExecuteBeadStatusExecutionFailed
+						report.Detail = "pre-land repair: " + repairErr.Error()
+						report.Error = repairErr.Error()
+						recordCycle(&report, nil, report.Status)
+						return AttemptCycleResult{Report: report}, nil
+					}
+					repairCycles++
+					candidate = normalizeRepairedCandidate(candidate, repaired)
+					if candidate.Report.Status != ExecuteBeadStatusSuccess {
+						recordCycle(&candidate.Report, nil, candidate.Report.Status)
+						return AttemptCycleResult{Report: candidate.Report}, nil
+					}
+					cycleReview = nil
+					candidatePrepared = false
+					continue
 				}
-				cycleReview = nil
-				continue
 			}
+			candidatePrepared = true
 		}
 
 		if c.NoReview || c.Reviewer == nil {
@@ -520,6 +525,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				recordCycle(&candidate.Report, cycleReview, candidate.Report.Status)
 				return AttemptCycleResult{Report: candidate.Report}, nil
 			}
+			candidatePrepared = false
 			continue
 		default:
 			report := candidate.Report
