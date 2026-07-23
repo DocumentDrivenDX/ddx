@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -96,10 +97,165 @@ func spawnRealOrphanGroupWithGrandchild(t *testing.T) *realProcGroup {
 
 func realKillGroup(pid int) error { return killProcessGroup(pid) }
 
-// TestWorkStartupReaper_KillsWorkspaceScopedOrphanHarness plants a real harness
-// process group whose recorded owner PID is gone and asserts the startup reaper
-// kills the group within a bounded grace.
-func TestWorkStartupReaper_KillsWorkspaceScopedOrphanHarness(t *testing.T) {
+func staleLeaseOwnerPID() int { return 1 << 30 }
+
+const (
+	orphanReaperLauncherHelperEnv        = "DDX_ORPHAN_REAPER_LAUNCHER_HELPER"
+	orphanReaperLauncherChildEnv         = "DDX_ORPHAN_REAPER_LAUNCHER_CHILD"
+	orphanReaperLauncherWorktreeEnv      = "DDX_ORPHAN_REAPER_LAUNCHER_WORKTREE"
+	orphanReaperLauncherScriptEnv        = "DDX_ORPHAN_REAPER_LAUNCHER_SCRIPT"
+	orphanReaperLauncherPIDEnv           = "DDX_ORPHAN_REAPER_LAUNCHER_PID_FILE"
+	orphanReaperLauncherGrandchildPIDEnv = "DDX_ORPHAN_REAPER_LAUNCHER_GRANDCHILD_PID_FILE"
+)
+
+func launchRealOrphanHarness(t *testing.T, worktree, script string) int {
+	return launchRealOrphanHarnessWithEnv(t, worktree, script, nil)
+}
+
+func launchRealOrphanHarnessWithEnv(t *testing.T, worktree, script string, extraEnv map[string]string) int {
+	t.Helper()
+
+	childDir := t.TempDir()
+	childPath := filepath.Join(childDir, "claude")
+	require.NoError(t, os.Symlink("/bin/sh", childPath))
+
+	pidFile := filepath.Join(t.TempDir(), "leader.pid")
+	helper := exec.Command(os.Args[0], "-test.run=^TestWorkStartupReaper_RealProcLauncherHelper$")
+	helper.Env = append(os.Environ(),
+		orphanReaperLauncherHelperEnv+"=1",
+		orphanReaperLauncherChildEnv+"="+childPath,
+		orphanReaperLauncherWorktreeEnv+"="+worktree,
+		orphanReaperLauncherScriptEnv+"="+script,
+		orphanReaperLauncherPIDEnv+"="+pidFile,
+	)
+	for key, value := range extraEnv {
+		helper.Env = append(helper.Env, key+"="+value)
+	}
+	require.NoError(t, helper.Start())
+	require.NoError(t, helper.Wait())
+
+	data, err := os.ReadFile(pidFile)
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = killProcessGroup(pid)
+	})
+	return pid
+}
+
+func launchRealOrphanHarnessWithGrandchild(t *testing.T, worktree string) (int, int) {
+	t.Helper()
+
+	grandchildPIDFile := filepath.Join(t.TempDir(), "grandchild.pid")
+	script := fmt.Sprintf(`sleep 600 & echo $! > "$%s"; wait`, orphanReaperLauncherGrandchildPIDEnv)
+	leaderPID := launchRealOrphanHarnessWithEnv(t, worktree, script, map[string]string{
+		orphanReaperLauncherGrandchildPIDEnv: grandchildPIDFile,
+	})
+
+	data, err := os.ReadFile(grandchildPIDFile)
+	require.NoError(t, err)
+	grandchildPID, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	require.NoError(t, err)
+	return leaderPID, grandchildPID
+}
+
+func waitForOrphanHarnessProcess(t *testing.T, scanner orphanHarnessProcessScanner, pid int) orphanHarnessProcess {
+	t.Helper()
+
+	var found orphanHarnessProcess
+	require.Eventually(t, func() bool {
+		procs, err := scanner.Scan(context.Background())
+		if err != nil {
+			return false
+		}
+		for _, proc := range procs {
+			if proc.PID == pid {
+				found = proc
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 20*time.Millisecond)
+	return found
+}
+
+type orphanHarnessProcessScannerFunc func(context.Context) ([]orphanHarnessProcess, error)
+
+func (f orphanHarnessProcessScannerFunc) Scan(ctx context.Context) ([]orphanHarnessProcess, error) {
+	return f(ctx)
+}
+
+func withForcedOrphanPPIDs(inner orphanHarnessProcessScanner, pids ...int) orphanHarnessProcessScanner {
+	forced := make(map[int]struct{}, len(pids))
+	for _, pid := range pids {
+		forced[pid] = struct{}{}
+	}
+	return orphanHarnessProcessScannerFunc(func(ctx context.Context) ([]orphanHarnessProcess, error) {
+		procs, err := inner.Scan(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := append([]orphanHarnessProcess(nil), procs...)
+		for i := range out {
+			if _, ok := forced[out[i].PID]; ok {
+				out[i].PPID = 1
+			}
+		}
+		return out, nil
+	})
+}
+
+func realOrphanHarnessScanner(pids ...int) orphanHarnessProcessScanner {
+	return withForcedOrphanPPIDs(newOrphanHarnessProcessScanner(), pids...)
+}
+
+// TestWorkStartupReaper_RealProcLauncherHelper is the subprocess entrypoint
+// used by the realproc tests to start a fixture harness process and then exit.
+func TestWorkStartupReaper_RealProcLauncherHelper(t *testing.T) {
+	if os.Getenv(orphanReaperLauncherHelperEnv) != "1" {
+		return
+	}
+
+	childPath := os.Getenv(orphanReaperLauncherChildEnv)
+	worktree := os.Getenv(orphanReaperLauncherWorktreeEnv)
+	script := os.Getenv(orphanReaperLauncherScriptEnv)
+	pidFile := os.Getenv(orphanReaperLauncherPIDEnv)
+	if childPath == "" || worktree == "" || script == "" || pidFile == "" {
+		t.Fatal("launcher helper env vars are required")
+	}
+
+	cmd := exec.Command(childPath, "-c", script)
+	cmd.Dir = worktree
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, cmd.Start())
+	require.NoError(t, os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0o644))
+}
+
+// TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness verifies that
+// the Linux /proc scanner still discovers a live fixture harness process.
+func TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness(t *testing.T) {
+	projectRoot := t.TempDir()
+	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+	t.Setenv(config.ExecutionWorktreeRootEnv, tempRoot)
+
+	beadID := "ddx-deadbeef"
+	worktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+beadID+"-20260602T170011-deadbeef")
+	require.NoError(t, os.MkdirAll(worktree, 0o755))
+
+	leaderPID := launchRealOrphanHarness(t, worktree, fmt.Sprintf("/bin/sleep %d", 600))
+	scanner := newOrphanHarnessProcessScanner()
+	proc := waitForOrphanHarnessProcess(t, scanner, leaderPID)
+	require.Equal(t, leaderPID, proc.PID)
+	require.Equal(t, worktree, proc.Cwd)
+	require.Contains(t, proc.Command, "claude")
+}
+
+// TestWorkStartupReaper_KillsOrphanProcessGroup plants a real harness process
+// group and asserts the startup reaper kills it within a bounded grace.
+func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
@@ -152,7 +308,6 @@ func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
 	beadID := "ddx-deadbeef"
 	worktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+beadID+"-20260602T170011-deadbeef")
 	require.NoError(t, os.MkdirAll(worktree, 0o755))
-
 	grp := spawnRealOrphanGroupWithGrandchild(t)
 	require.Greater(t, grp.grandchildPID, 0)
 	require.True(t, processAlive(grp.leaderPID), "leader must start alive")
@@ -216,7 +371,8 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 	scanner := fakeOrphanHarnessScanner{
 		processes: []orphanHarnessProcess{
 			{PID: orphan.leaderPID, PPID: 1, Command: "claude exec -C " + orphanWt, Cwd: orphanWt},
-			{PID: live.leaderPID, PPID: 1, Command: "claude exec -C " + liveWt, Cwd: liveWt},
+			{PID: live.leaderPID, PPID: 1, Command: "claude --print -p --verbose --output-format stream-json", Cwd: liveWt},
+			{PID: 5353, PPID: 1, Command: "bash -lc echo unrelated", Cwd: tempRoot},
 		},
 	}
 
@@ -276,7 +432,6 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 			{PID: otherProc.leaderPID, PPID: 1, Command: "codex exec -C " + otherWt, Cwd: otherWt},
 		},
 	}
-
 	reaped, err := reapOrphanedHarnessChildren(
 		context.Background(), projectRoot, scanner, store, store, store,
 		"worker-a", &bytes.Buffer{}, nil, realKillGroup,
@@ -313,7 +468,7 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 	require.NoError(t, os.MkdirAll(worktree, 0o755))
 
 	grp := spawnRealOrphanGroup(t)
-	ownerPID := deadPID(t)
+	ownerPID := staleLeaseOwnerPID()
 	store := &fakeOrphanHarnessLeaseStore{
 		leases: map[string]bead.ClaimLeaseRecord{
 			beadID: {BeadID: beadID, PID: ownerPID},
@@ -337,7 +492,6 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, 1, reaped)
-	grp.reapAsync()
 
 	require.Equal(t, []string{beadID}, store.released, "stale lease must be released")
 
@@ -357,4 +511,5 @@ func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
 	require.NotEmpty(t, emitted, "operator-attention telemetry must be emitted")
 	assert.Equal(t, "orphaned_harness_child", emitted[0]["reason"])
 	assert.Equal(t, beadID, emitted[0]["bead_id"])
+	grp.reapAsync()
 }
