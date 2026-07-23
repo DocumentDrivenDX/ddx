@@ -179,7 +179,7 @@ func (s *Store) Inject(ctx context.Context, parent string, payload InjectPayload
 		}
 
 		allBeads = append(allBeads, *newBead)
-		if err := s.WriteAll(allBeads); err != nil {
+		if err := s.writeAllLocked(allBeads); err != nil {
 			return fmt.Errorf("inject: write all: %w", err)
 		}
 
