@@ -2182,8 +2182,13 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 //  7. Never git add -A (worktree may have unrelated WIP)
 //  8. Run git/index mutations sequentially; never parallelize git add/commit
 //  9. Do not commit red code
-// 10. Rerun lefthook run pre-commit after staging when hooks depend on staged files;
-//     pre-staging no-staged-files runs do not count as acceptance evidence
+// 10. Treat the normal git commit pre-commit hook as the single authoritative
+//     staged gate; stage the exact commit set, run git commit normally, and use
+//     that hook's output/exit status as the acceptance evidence. If you already
+//     ran lefthook run pre-commit on the same staged tree and hook inputs, only
+//     reuse it when the fingerprint matches; otherwise rerun after staged-tree
+//     or hook-config changes. Pre-staging no-staged-files runs do not count as
+//     acceptance evidence
 // 11. Do not modify files outside bead scope
 // 12. Never run `ddx init`
 // 13. Keep .ddx/executions/ intact, local, and untracked
@@ -2234,7 +2239,7 @@ const instrNoChangesContract = `
 
 The ` + "`no_changes_rationale.txt`" + ` file under the bead metadata ` + "`bundle`" + ` path must contain one of:
 
-- ` + "`verification_command: <cmd>`" + ` — repo cwd; exit 0 closes, nonzero rejects.
+- ` + "`verification_command: <cmd>`" + ` — exit 0 closes, nonzero rejects.
 - ` + "`status: open`" + ` + ` + "`reason: <retryable>`" + ` — open, smart retry.
 - ` + "`status: proposed`" + ` + ` + "`reason: <operator needed>`" + ` — operator lane.
 - ` + "`status: blocked`" + ` + ` + "`reason: <external blocker>`" + ` — blocked lane.
@@ -2248,7 +2253,7 @@ const instrInvestigationReports = `
 
 ## Reports
 
-Write reports to the metadata ` + "`bundle`" + ` under ` + "`.ddx/executions/`" + `, never ` + "`/tmp`" + ` or elsewhere. Use the named path or ` + "`<short-name>.md`" + `. Bundle files are local-only: never stage or commit them. Commit only requested deliverables outside the bundle.`
+Write reports under the metadata ` + "`bundle`" + ` path in ` + "`.ddx/executions/`" + `, never ` + "`/tmp`" + `. Bundle files are local-only: never stage or commit them. Commit only requested deliverables outside the bundle.`
 
 // instrReviewGate is the shared review-as-gate rule.
 const instrReviewGate = `
@@ -2281,11 +2286,11 @@ const instrLongRunningMatrixGuards = `
 
 ## Long-running matrix/benchmark beads
 
-For expensive commands (benchmarks, load tests, validation > 60s per variant):
+For expensive commands (>60s per variant):
 
-- Write a matrix plan before launching expensive commands: list required configs, output paths, completion criteria.
-- Do not re-run the same long-running command unless: (1) the command fingerprint changed (args/env/config), AND (2) you document why prior output is invalid and what changed.
-- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.`
+- Write a matrix plan: required configs, output paths, completion criteria.
+- Do not re-run the same long-running command unless the command fingerprint changed and you document why prior output is invalid and what changed.
+- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry.`
 
 // executeBeadInstructionsText is the harness-neutral <instructions> body sent
 // for every execute-bead dispatch. Fizeau owns concrete harness selection and
@@ -2297,16 +2302,16 @@ const executeBeadInstructionsText = `You are executing one bead in an isolated D
 
 ## How to work
 
-- Read first. If the bead names files, specs, or prior beads, read them before editing — do not guess.
-- Cross-reference each AC to concrete evidence (test, file, function) before committing. If you cannot point at it, it is not done.
-- Run the project's test and lint commands before committing. **Do not commit red code** — fix failures first.
+- Read first. If the bead names files, specs, or prior beads, read them before editing.
+- Cross-reference each AC to concrete evidence (test, file, function). If you cannot point at it, it is not done.
+- Run tests and lint before committing. **Do not commit red code**.
 - Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + ` (the worktree may have unrelated WIP).
-- If ` + "`lefthook run pre-commit`" + ` depends on staged files, rerun it after staging the exact commit set. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
-- Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `. Stop after the commit.
+- Treat the ` + "`git commit`" + ` hook as the single authoritative staged gate. Stage the exact commit set, run ` + "`git commit`" + ` normally, and use that hook's output/exit status as the acceptance evidence. If you already ran ` + "`lefthook run pre-commit`" + ` on the same staged tree and hook inputs, reuse it only when the fingerprint matches; otherwise rerun. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
+- Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
-- If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit or rationale ⇒ DDx records ` + "`no_evidence_produced`" + `.` +
+- If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
 	instrBeadOverride +
