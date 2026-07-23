@@ -410,7 +410,7 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 	require.Never(t, func() bool {
 		liveState = processDeadOrZombieStatus(livePID)
 		return processDeadOrZombie(livePID)
-	}, 300*time.Millisecond, 30*time.Millisecond, "live-owned harness must stay alive (proc state=%s)", procStateSnapshot{&liveState})
+	}, 100*time.Millisecond, 20*time.Millisecond, "live-owned harness must stay alive (proc state=%s)", procStateSnapshot{&liveState})
 }
 
 // TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness plants an orphan tied
@@ -466,7 +466,7 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 	require.Never(t, func() bool {
 		otherState = processDeadOrZombieStatus(otherPID)
 		return processDeadOrZombie(otherPID)
-	}, 300*time.Millisecond, 30*time.Millisecond, "other-workspace harness must stay alive (proc state=%s)", procStateSnapshot{&otherState})
+	}, 100*time.Millisecond, 20*time.Millisecond, "other-workspace harness must stay alive (proc state=%s)", procStateSnapshot{&otherState})
 }
 
 // TestWorkStartupReaper_RecordsOperatorAttention verifies cleanup emits durable

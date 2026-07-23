@@ -30,7 +30,7 @@ func TestExecuteBeadInstructionsReportsStayLocalAndUncommitted(t *testing.T) {
 			if !strings.Contains(c.text, "/tmp") {
 				t.Fatalf("%s prompt must explicitly forbid writing reports to /tmp", c.name)
 			}
-			if !strings.Contains(c.text, "Bundle files are local-only: never stage or commit them") {
+			if !strings.Contains(c.text, "Keep bundle files local and untracked") && !strings.Contains(c.text, "Bundle files are local-only: never stage or commit them") {
 				t.Fatalf("%s prompt must forbid staging or committing bundle reports", c.name)
 			}
 			if !strings.Contains(c.text, "Commit only requested deliverables outside the bundle") {
