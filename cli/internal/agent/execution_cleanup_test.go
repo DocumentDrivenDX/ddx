@@ -88,6 +88,12 @@ func (p executionCleanupTestProbe) IsLive(meta ExecutionCleanupMetadata, runStat
 	return false, "stale"
 }
 
+type executionCleanupProbeFunc func(ExecutionCleanupMetadata, *RunState, time.Time) (bool, string)
+
+func (f executionCleanupProbeFunc) IsLive(meta ExecutionCleanupMetadata, runState *RunState, now time.Time) (bool, string) {
+	return f(meta, runState, now)
+}
+
 func writeExecutionCleanupCandidate(t *testing.T, dir string, meta ExecutionCleanupMetadata, files map[string]string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(dir, 0o755))
@@ -763,6 +769,93 @@ func TestExecutionCleanup_RemovesStaleDDXScratchDirs(t *testing.T) {
 	assert.Equal(t, int64(0), summary.RemovedUnregisteredTempDirs)
 	assert.Greater(t, summary.ScratchBytesReclaimed, int64(0))
 	assert.Greater(t, summary.ScratchInodesReclaimed, int64(0))
+	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
+}
+
+func TestExecutionCleanup_ReclaimsMetadataMarkedHostGlobalScratch(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
+	now := time.Date(2026, 7, 23, 13, 0, 0, 0, time.UTC)
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	stalePath := filepath.Join(os.TempDir(), "ddx-test-host-global-owned")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: stalePath,
+		Liveness: &ExecutionCleanupLiveness{
+			RefreshedAt: now.Add(-2 * time.Hour),
+			ExpiresAt:   now.Add(-time.Hour),
+		},
+	}, map[string]string{"payload.txt": strings.Repeat("x", 32)})
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(stalePath, old, old))
+
+	probeCalls := 0
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.ScratchRoots = []string{os.TempDir()}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+	mgr.Probe = executionCleanupProbeFunc(func(meta ExecutionCleanupMetadata, runState *RunState, gotNow time.Time) (bool, string) {
+		probeCalls++
+		assert.Equal(t, projectRoot, meta.ProjectRoot)
+		assert.Equal(t, stalePath, meta.WorktreePath)
+		assert.Nil(t, runState)
+		assert.Equal(t, now, gotNow)
+		return false, "stale host-global metadata"
+	})
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, probeCalls)
+	assert.NoDirExists(t, stalePath)
+	assert.Equal(t, 1, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(1), summary.RemovedScratchDirs)
+	assert.Equal(t, 0, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
+}
+
+func TestExecutionCleanup_ReclaimsMetadataLessPrivateScratch(t *testing.T) {
+	now := time.Date(2026, 7, 23, 13, 30, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := ddxroot.JoinProject(projectRoot, "execution-temp")
+	scratchRoot := ddxroot.JoinProject(projectRoot, "scratch")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	stalePath := filepath.Join(scratchRoot, "ddx-test-private-legacy")
+	writeExecutionCleanupCandidateWithoutMetadata(t, stalePath, map[string]string{
+		"payload.txt": strings.Repeat("y", 32),
+	})
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(stalePath, old, old))
+
+	probeCalls := 0
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot)
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+	mgr.Probe = executionCleanupProbeFunc(func(meta ExecutionCleanupMetadata, runState *RunState, gotNow time.Time) (bool, string) {
+		probeCalls++
+		assert.Equal(t, projectRoot, meta.ProjectRoot)
+		assert.Equal(t, stalePath, meta.WorktreePath)
+		assert.Nil(t, runState)
+		assert.Equal(t, now, gotNow)
+		return false, "stale private scratch"
+	})
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, probeCalls)
+	assert.NoDirExists(t, stalePath)
+	assert.Equal(t, 1, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(1), summary.RemovedScratchDirs)
+	assert.Equal(t, 0, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
 	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
 }
 
