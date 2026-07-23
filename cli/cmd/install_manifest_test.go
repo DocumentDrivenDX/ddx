@@ -6,8 +6,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -509,11 +507,7 @@ install:
       target: .agents/skills/
 `)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/gzip")
-		_, _ = w.Write(tarball)
-	}))
-	defer server.Close()
+	withStaticHTTPTransport(t, tarball, "application/gzip", "/archive/refs/tags/v1.0.0.tar.gz")
 
 	oldWd, err := os.Getwd()
 	require.NoError(t, err)
@@ -524,7 +518,7 @@ install:
 		Name:    "sample-plugin",
 		Version: "1.0.0",
 		Type:    registry.PackageTypePlugin,
-		Source:  server.URL,
+		Source:  "https://example.com/sample-plugin",
 	}, workDir)
 	require.Error(t, installErr)
 	assert.Contains(t, installErr.Error(), "missing SKILL.md")
@@ -554,11 +548,7 @@ install:
       target: .agents/skills/
 `)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/gzip")
-		_, _ = w.Write(tarball)
-	}))
-	defer server.Close()
+	withStaticHTTPTransport(t, tarball, "application/gzip", "/archive/refs/tags/v1.0.0.tar.gz")
 
 	oldWd, err := os.Getwd()
 	require.NoError(t, err)
@@ -569,7 +559,7 @@ install:
 		Name:    "sample-plugin",
 		Version: "1.0.0",
 		Type:    registry.PackageTypePlugin,
-		Source:  server.URL,
+		Source:  "https://example.com/sample-plugin",
 	}, workDir)
 	require.NoError(t, installErr)
 	require.NotEmpty(t, entry.Files)

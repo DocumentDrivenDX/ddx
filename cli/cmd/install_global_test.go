@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -450,11 +448,7 @@ func TestInstallGlobal_WritesToGlobalTreeAndAgentLinks(t *testing.T) {
 
 	// Build and serve a valid plugin tarball (no package.yaml — fallback pkg used).
 	tarball := mustBuildValidPluginTarball(t, pluginName+"-1.0.0", skillName)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/gzip")
-		_, _ = w.Write(tarball)
-	}))
-	defer server.Close()
+	withStaticHTTPTransport(t, tarball, "application/gzip", "/archive/refs/tags/v1.0.0.tar.gz")
 
 	globalDir := ddxroot.GlobalDir()
 	require.NoError(t, os.MkdirAll(globalDir, 0o755), "pre-create globalDir so InstallPackage chdir succeeds")
@@ -465,7 +459,7 @@ func TestInstallGlobal_WritesToGlobalTreeAndAgentLinks(t *testing.T) {
 		Name:    pluginName,
 		Version: "1.0.0",
 		Type:    registry.PackageTypePlugin,
-		Source:  server.URL,
+		Source:  "https://example.com/" + pluginName,
 		Install: registry.PackageInstall{
 			Root: &registry.InstallMapping{Source: ".", Target: filepath.Join("plugins", pluginName)},
 			Skills: []registry.InstallMapping{
