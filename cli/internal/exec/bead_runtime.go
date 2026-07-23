@@ -397,7 +397,7 @@ func (s *Store) saveDefinitionBead(def Definition) error {
 		if !replaced {
 			beads = append(beads, current)
 		}
-		return s.DefinitionCollection.WriteAll(beads)
+		return s.DefinitionCollection.WriteAllLocked(beads)
 	})
 }
 
@@ -476,7 +476,7 @@ func (s *Store) saveRunRecord(rec RunRecord) error {
 		if !replaced {
 			beads = append(beads, current)
 		}
-		return s.RunCollection.WriteAll(beads)
+		return s.RunCollection.WriteAllLocked(beads)
 	})
 }
 

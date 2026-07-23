@@ -455,6 +455,15 @@ func (s *Store) WriteAll(beads []Bead) error {
 	})
 }
 
+// WriteAllLocked writes all beads to the configured backend, sorted by ID,
+// WITHOUT acquiring the collection lock. The caller must already hold the
+// lock via Store.WithLock; calling WriteAll instead from inside WithLock
+// re-enters the non-reentrant collection lock and deadlocks until the lock
+// timeout (ddx-2a319f04).
+func (s *Store) WriteAllLocked(beads []Bead) error {
+	return s.writeAllLocked(beads)
+}
+
 func (s *Store) writeAllLocked(beads []Bead) error {
 	sort.Slice(beads, func(i, j int) bool {
 		return beads[i].ID < beads[j].ID

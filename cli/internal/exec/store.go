@@ -48,6 +48,9 @@ type collectionBackend interface {
 	Init(context.Context) error
 	ReadAll(context.Context) ([]bead.Bead, error)
 	WriteAll([]bead.Bead) error
+	// WriteAllLocked writes without re-acquiring the collection lock; callers
+	// must already be inside WithLock (ddx-2a319f04).
+	WriteAllLocked([]bead.Bead) error
 	WithLock(func() error) error
 }
 
