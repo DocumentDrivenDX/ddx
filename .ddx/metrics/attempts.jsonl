@@ -3710,3 +3710,4 @@
 {"schema_version":1,"attempt_id":"20260723T154025-e4bee911","bead_id":"ddx-f7b012d6","session_id":"eb-8c94498a","ts_start":"2026-07-23T15:40:48Z","ts_end":"2026-07-23T15:40:50Z","model":"sonnet-4.6","harness":"claude-tui","outcome":"execution_failed","exit_code":0,"duration_ms":2350}
 {"schema_version":1,"attempt_id":"20260723T143656-13c29e80","bead_id":"ddx-97f09948","session_id":"eb-013026a6","ts_end":"2026-07-23T15:43:49Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260723T121450-32448209","bead_id":"ddx-523a31da","session_id":"eb-d5f11e29","ts_end":"2026-07-23T15:43:55Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
+{"schema_version":1,"attempt_id":"20260723T154852-e9d25354","bead_id":"ddx-7260ef7e","session_id":"eb-35d9a82b","ts_start":"2026-07-23T15:49:10Z","ts_end":"2026-07-23T16:21:49Z","harness":"codex","outcome":"execution_failed","exit_code":0,"duration_ms":1959495}
