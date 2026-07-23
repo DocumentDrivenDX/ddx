@@ -168,7 +168,7 @@ jobs:
     - name: Run tests
       working-directory: cli
       run: |
-        go test -v -timeout 30m ./...
+        go test -race -v -timeout 30m ./...
         echo "✅ All tests passed - release validated"
 
   # Build binaries for all platforms
