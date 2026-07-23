@@ -35,9 +35,7 @@ func TestWorkerProbe_PeriodicHeartbeatRefreshesServerLastEventAt(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	srv := serverpkg.New(":0", projectRoot)
-	ts := httptest.NewServer(srv.Handler())
-	defer ts.Close()
-	serverURL := ts.URL
+	serverHandler := srv.Handler()
 
 	probe := workerprobe.New(workerprobe.Identity{
 		ProjectRoot:  projectRoot,
@@ -51,8 +49,8 @@ func TestWorkerProbe_PeriodicHeartbeatRefreshesServerLastEventAt(t *testing.T) {
 		JitterPct:        0.01,
 		BackoffThreshold: 5,
 		BufferCap:        8,
-		AddrFunc:         func() string { return serverURL },
-		HTTPClient:       &http.Client{Timeout: time.Second},
+		AddrFunc:         func() string { return "http://workerprobe.test" },
+		HTTPClient:       newInProcessHTTPClient(serverHandler),
 		Logger:           io.Discard,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,17 +69,17 @@ func TestWorkerProbe_PeriodicHeartbeatRefreshesServerLastEventAt(t *testing.T) {
 
 	reporter.OnTick(time.Now())
 	require.Eventually(t, func() bool {
-		when, ok := lastEventAt(t, serverURL, workerID)
+		when, ok := lastEventAt(t, serverHandler, workerID)
 		return ok && !when.IsZero()
 	}, 2*time.Second, 10*time.Millisecond, "first heartbeat must reach server before bead.result")
-	first, _ := lastEventAt(t, serverURL, workerID)
+	first, _ := lastEventAt(t, serverHandler, workerID)
 
 	// Wait long enough that a fresh heartbeat advances the timestamp past
 	// the time-quantum the server uses for LastEventAt.
 	time.Sleep(20 * time.Millisecond)
 	reporter.OnTick(time.Now())
 	require.Eventually(t, func() bool {
-		next, ok := lastEventAt(t, serverURL, workerID)
+		next, ok := lastEventAt(t, serverHandler, workerID)
 		return ok && next.After(first)
 	}, 2*time.Second, 10*time.Millisecond, "periodic heartbeat must advance server last_event_at")
 }
@@ -97,11 +95,9 @@ func TestWorkerProbe_ServerUnavailableDoesNotBlockWork(t *testing.T) {
 		t.Skip("integration test")
 	}
 
-	// refusedServer captures a host:port that nothing is listening on.
-	// httptest.NewServer + immediate Close yields a stable refused address.
-	refused := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	refusedURL := refused.URL
-	refused.Close()
+	// Use a fixed loopback port with nothing listening instead of binding a
+	// listener. The probe must fail open on connection refusal.
+	refusedURL := "http://127.0.0.1:1"
 
 	cases := []struct {
 		name     string
@@ -185,21 +181,20 @@ func (s *countingHeartbeatStore) TouchClaimHeartbeat(_ string) error {
 	return nil
 }
 
-func lastEventAt(t *testing.T, baseURL, workerID string) (time.Time, bool) {
+func lastEventAt(t *testing.T, handler http.Handler, workerID string) (time.Time, bool) {
 	t.Helper()
-	resp, err := http.Get(baseURL + "/api/workers")
-	if err != nil {
-		return time.Time{}, false
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
+	req := httptest.NewRequest(http.MethodGet, "/api/workers", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
 		return time.Time{}, false
 	}
 	var views []struct {
 		WorkerID    string    `json:"worker_id"`
 		LastEventAt time.Time `json:"last_event_at"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&views); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&views); err != nil {
 		return time.Time{}, false
 	}
 	for _, v := range views {

@@ -3,7 +3,6 @@ package workerprobe_test
 import (
 	"bufio"
 	"encoding/json"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,8 +67,7 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 
 	// Real server — same constructor, same Handler, same requireTrusted gate.
 	srv := serverpkg.New(":0", proj)
-	ts := httptest.NewServer(srv.Handler())
-	defer ts.Close()
+	ts := startHTTPServerOrSkip(t, srv.Handler())
 
 	// Production discovery path: write server.addr under XDG_DATA_HOME so
 	// the worker subprocess (running with the same XDG_DATA_HOME) finds it

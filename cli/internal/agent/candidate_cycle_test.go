@@ -570,6 +570,102 @@ func TestCandidateCycle_RetriesProviderEmptyReviewThenSucceeds(t *testing.T) {
 	assert.Contains(t, retryEvents[1], "review route harness=claude model=claude-sonnet-4-5 provider=anthropic")
 }
 
+func TestCandidateCycle_ProviderEmptyRetryDoesNotRerunChecks(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	validateCalls := 0
+	importCalls := 0
+	releaseCalls := 0
+	checksCalls := 0
+	reviewCalls := 0
+	reviewRoute := ExecutionCycleRouteFacts{
+		Harness:     "claude",
+		Provider:    "anthropic",
+		Model:       "claude-sonnet-4-5",
+		ActualPower: 71,
+	}
+
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:      beadID,
+					AttemptID:   "attempt-review-retry-003",
+					Status:      ExecuteBeadStatusSuccess,
+					BaseRev:     "base-rev",
+					ResultRev:   "candidate-rev",
+					Harness:     "codex",
+					Provider:    "openai",
+					Model:       "gpt-5",
+					ActualPower: 70,
+				},
+			}, nil
+		}),
+		ValidateCandidate: func(candidate CandidateResult) error {
+			validateCalls++
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			return nil
+		},
+		ImportCandidate: func(candidate CandidateResult) error {
+			importCalls++
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			return nil
+		},
+		ReleaseCandidateImport: func(candidate CandidateResult) error {
+			releaseCalls++
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			return nil
+		},
+		Checks: candidateCheckRunnerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateCheckResult, error) {
+			checksCalls++
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			return CandidateCheckResult{Passed: true, Detail: "checks passed"}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewCalls++
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			if reviewCalls == 1 {
+				return CandidateReviewResult{
+					ReviewerRoute: reviewRoute,
+				}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewProviderEmpty, errors.New("provider returned zero bytes"))
+			}
+			return CandidateReviewResult{
+				Verdict:       "APPROVE",
+				Rationale:     "looks good",
+				ReviewerRoute: reviewRoute,
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		BeadEvents: store,
+	}
+
+	result, err := coord.Run(context.Background(), first.ID)
+	require.NoError(t, err)
+	require.True(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Report.Status)
+	assert.Equal(t, 2, reviewCalls, "the reviewer should retry once after provider_empty")
+	assert.Equal(t, 1, validateCalls, "validation must not rerun for an unchanged candidate revision")
+	assert.Equal(t, 1, importCalls, "import must not rerun for an unchanged candidate revision")
+	assert.Equal(t, 1, releaseCalls, "import release must not rerun for an unchanged candidate revision")
+	assert.Equal(t, 1, checksCalls, "RunChecks must run once for an unchanged candidate revision")
+	assert.Equal(t, 1, result.Report.EscalationCount, "one provider_empty retry should be recorded")
+	require.Len(t, result.Report.CycleTrace, 1)
+	assert.Equal(t, 1, result.Report.CycleTrace[0].EscalationCount, "cycle trace must preserve the retry count")
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var retryEvents []string
+	for _, event := range events {
+		if event.Kind == "review-error" {
+			retryEvents = append(retryEvents, event.Body)
+		}
+	}
+	require.Len(t, retryEvents, 1)
+	assert.Contains(t, retryEvents[0], "attempt_count=1")
+	assert.Contains(t, retryEvents[0], "review route harness=claude model=claude-sonnet-4-5 provider=anthropic")
+}
+
 func TestCandidateCycle_ProviderEmptyExhaustsRetriesParksWithRoute(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	reviewCalls := 0

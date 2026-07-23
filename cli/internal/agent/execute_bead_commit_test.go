@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -314,6 +315,97 @@ func TestSynthesizeCommitMessage_InExecuteBead(t *testing.T) {
 	if !strings.Contains(capturedMsg, ".ddx/executions/") {
 		t.Errorf("commit message missing execution bundle pointer\nmessage:\n%s", capturedMsg)
 	}
+}
+
+// TestExecuteBeadImplementationCommit_RunsPreCommitOnceForUnchangedIndex
+// verifies that ExecuteBeadWithConfig relies on the ordinary implementation
+// commit hook as the single staged gate: one implementation commit advances the
+// worktree history once, and the instrumented pre-commit hook runs exactly once
+// for that unchanged staged tree.
+func TestExecuteBeadImplementationCommit_RunsPreCommitOnceForUnchangedIndex(t *testing.T) {
+	const beadID = "ddx-int-0001"
+
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	baseRev := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	hookCountPath := filepath.Join(projectRoot, ".git", "pre-commit-count")
+	hookPath := filepath.Join(projectRoot, ".git", "hooks", "pre-commit")
+	hookBody := fmt.Sprintf(`#!/bin/sh
+count_file=%q
+count=0
+if [ -f "$count_file" ]; then
+  count=$(cat "$count_file")
+fi
+count=$((count + 1))
+printf '%%s\n' "$count" > "$count_file"
+exit 0
+`, hookCountPath)
+	writeExecutable(t, hookPath, hookBody)
+
+	runner := singleFileAgentRunner{
+		relPath: "hook-check.txt",
+		content: "hook-check\n",
+	}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Model: "test-model",
+	}).Resolve(config.CLIOverrides{
+		Harness:        "test-harness",
+		Model:          "test-model",
+		AttemptBackend: AttemptBackendWorktree,
+	})
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: runner,
+	}, &RealGitOps{})
+	if err != nil {
+		t.Fatalf("ExecuteBeadWithConfig: %v", err)
+	}
+	if res == nil {
+		t.Fatal("nil result")
+	}
+	if res.ResultRev == "" {
+		t.Fatal("result revision was not recorded")
+	}
+	if res.ResultRev == res.BaseRev {
+		t.Fatalf("implementation commit did not advance HEAD: base=%s result=%s", res.BaseRev, res.ResultRev)
+	}
+	if res.ImplementationRev != res.ResultRev {
+		t.Fatalf("implementation_rev = %s, want %s", res.ImplementationRev, res.ResultRev)
+	}
+
+	commitSpan := runGitInteg(t, projectRoot, "rev-list", "--count", baseRev+".."+res.ResultRev)
+	if commitSpan != "1" {
+		t.Fatalf("expected exactly one implementation commit between base and result, got %s (base=%s result=%s)", commitSpan, baseRev, res.ResultRev)
+	}
+
+	gotCount := strings.TrimSpace(string(mustReadFile(t, hookCountPath)))
+	if gotCount != "1" {
+		t.Fatalf("pre-commit hook invoked %s times, want 1", gotCount)
+	}
+}
+
+type singleFileAgentRunner struct {
+	relPath string
+	content string
+}
+
+func (r singleFileAgentRunner) Run(opts RunArgs) (*Result, error) {
+	if opts.WorkDir == "" {
+		return &Result{ExitCode: 1, Error: "missing workdir"}, nil
+	}
+	if err := os.WriteFile(filepath.Join(opts.WorkDir, r.relPath), []byte(r.content), 0o644); err != nil {
+		return &Result{ExitCode: 1, Error: err.Error()}, nil
+	}
+	return &Result{ExitCode: 0}, nil
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return data
 }
 
 // commitMsgCapturingGitOps is a GitOps mock that captures the commit message
