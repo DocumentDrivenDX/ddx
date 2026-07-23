@@ -142,6 +142,7 @@ type CandidateCycleEventBody struct {
 const candidateChecksFailedEventKind = "candidate-checks-failed"
 const candidateReviewClassifiedEventKind = "candidate-review-classified"
 const repairCycleStartedEventKind = "repair-cycle-started"
+const candidateReviewProviderEmptyRetryLimit = 2
 
 // CandidateChecksFailedEventBody is the structured payload of a
 // candidate-checks-failed bead event.
@@ -257,6 +258,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	}
 
 	repairCycles := 0
+	reviewRetryCount := 0
 	cycleTrace := append([]ExecutionCycleTrace(nil), candidate.Report.CycleTrace...)
 	recordCycle := func(report *ExecuteBeadReport, review *CandidateReviewResult, finalDecision string) {
 		entry := executionCycleTraceFor(candidate, review, finalDecision)
@@ -425,7 +427,24 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		reviewResult, reviewErr := c.Reviewer.Review(ctx, c.ProjectRoot, candidate)
 		cycleReview = &reviewResult
 		if reviewErr != nil {
+			if candidateReviewErrorClass(reviewErr) == evidence.OutcomeReviewProviderEmpty {
+				reviewRoute := candidateReviewRouteLabel(reviewResult, candidate)
+				c.appendCandidateReviewRetryEvent(beadID, candidate, reviewRoute, reviewRetryCount+1)
+				if reviewRetryCount < candidateReviewProviderEmptyRetryLimit {
+					reviewRetryCount++
+					continue
+				}
+				report := candidate.Report
+				report.EscalationCount = reviewRetryCount
+				report.Status = ExecuteBeadStatusReviewMalfunction
+				report.Detail = fmt.Sprintf("pre-land review: %s after retries=%d on review route %s", evidence.OutcomeReviewProviderEmpty, reviewRetryCount, reviewRoute)
+				report.Error = reviewErr.Error()
+				recordCycle(&report, cycleReview, report.Status)
+				return AttemptCycleResult{Report: report}, nil
+			}
+
 			report := candidate.Report
+			report.EscalationCount = reviewRetryCount
 			report.Status = ExecuteBeadStatusReviewMalfunction
 			report.Detail = "pre-land review: " + reviewErr.Error()
 			report.ReviewVerdict = strings.TrimSpace(reviewResult.Verdict)
@@ -435,6 +454,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			return AttemptCycleResult{Report: report}, nil
 		}
 
+		candidate.Report.EscalationCount = reviewRetryCount
 		verdict := Verdict(strings.TrimSpace(reviewResult.Verdict))
 		switch verdict {
 		case VerdictApprove:
@@ -528,6 +548,9 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	if landed.CandidateRef == "" && candidate.Report.CandidateRef != "" {
 		landed.CandidateRef = candidate.Report.CandidateRef
 		landed.CycleIndex = candidate.Report.CycleIndex
+	}
+	if landed.EscalationCount == 0 && candidate.Report.EscalationCount != 0 {
+		landed.EscalationCount = candidate.Report.EscalationCount
 	}
 	recordCycle(&landed, cycleReview, landed.Status)
 
@@ -765,6 +788,76 @@ func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID st
 		Summary: strings.TrimSpace(class),
 		Body:    string(body),
 	})
+}
+
+func (c *AttemptCycleCoordinator) appendCandidateReviewRetryEvent(beadID string, candidate CandidateResult, reviewRoute string, attemptCount int) {
+	if c.BeadEvents == nil {
+		return
+	}
+	reason := "review route " + strings.TrimSpace(reviewRoute)
+	actor := strings.TrimSpace(candidate.Report.WorkerID)
+	if actor == "" {
+		actor = "ddx work"
+	}
+	if store, ok := c.BeadEvents.(ExecuteBeadLoopStore); ok {
+		appendReviewGateError(store, beadID, actor, time.Now().UTC(), candidate.Report.ResultRev, evidence.OutcomeReviewProviderEmpty, reason)
+		return
+	}
+	body := ReviewErrorEventBody(evidence.OutcomeReviewProviderEmpty, attemptCount, candidate.Report.ResultRev, reason)
+	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "review-error",
+		Summary:   evidence.OutcomeReviewProviderEmpty,
+		Body:      body,
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func candidateReviewErrorClass(reviewErr error) string {
+	if reviewErr == nil {
+		return ""
+	}
+	errText := reviewErr.Error()
+	switch {
+	case strings.Contains(errText, evidence.OutcomeReviewProviderEmpty):
+		return evidence.OutcomeReviewProviderEmpty
+	case strings.Contains(errText, evidence.OutcomeReviewUnparseable):
+		return evidence.OutcomeReviewUnparseable
+	case strings.Contains(errText, evidence.OutcomeReviewTransport):
+		return evidence.OutcomeReviewTransport
+	default:
+		return ""
+	}
+}
+
+func candidateReviewRouteLabel(review CandidateReviewResult, candidate CandidateResult) string {
+	harness := strings.TrimSpace(review.ReviewerRoute.Harness)
+	if harness == "" {
+		harness = strings.TrimSpace(candidate.Report.Harness)
+	}
+	model := strings.TrimSpace(review.ReviewerRoute.Model)
+	if model == "" {
+		model = strings.TrimSpace(candidate.Report.Model)
+	}
+	provider := strings.TrimSpace(review.ReviewerRoute.Provider)
+	if provider == "" {
+		provider = strings.TrimSpace(candidate.Report.Provider)
+	}
+	parts := make([]string, 0, 3)
+	if harness != "" {
+		parts = append(parts, "harness="+harness)
+	}
+	if model != "" {
+		parts = append(parts, "model="+model)
+	}
+	if provider != "" {
+		parts = append(parts, "provider="+provider)
+	}
+	if len(parts) == 0 {
+		return "unknown"
+	}
+	return strings.Join(parts, " ")
 }
 
 func (c *AttemptCycleCoordinator) appendRepairCycleStartedEvent(beadID string, candidate CandidateResult, repairCycleIndex int, class string) {
