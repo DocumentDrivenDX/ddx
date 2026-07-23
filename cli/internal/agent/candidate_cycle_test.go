@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -496,6 +498,225 @@ func TestPreLandReview_RequestChangesPreventsLand(t *testing.T) {
 			assert.Empty(t, refStore.unpinned, "rejected review candidates must retain their ref")
 		})
 	}
+}
+
+func TestCandidateCycle_RetriesProviderEmptyReviewThenSucceeds(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	reviewCalls := 0
+	reviewRoute := ExecutionCycleRouteFacts{
+		Harness:     "claude",
+		Provider:    "anthropic",
+		Model:       "claude-sonnet-4-5",
+		ActualPower: 71,
+	}
+
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:      beadID,
+					AttemptID:   "attempt-review-retry-001",
+					Status:      ExecuteBeadStatusSuccess,
+					BaseRev:     "base-rev",
+					ResultRev:   "candidate-rev",
+					Harness:     "codex",
+					Provider:    "openai",
+					Model:       "gpt-5",
+					ActualPower: 70,
+				},
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewCalls++
+			if reviewCalls <= 2 {
+				return CandidateReviewResult{
+					ReviewerRoute: reviewRoute,
+				}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewProviderEmpty, errors.New("provider returned zero bytes"))
+			}
+			assert.Equal(t, "candidate-rev", candidate.Report.ResultRev)
+			return CandidateReviewResult{
+				Verdict:       "APPROVE",
+				Rationale:     "looks good",
+				ReviewerRoute: reviewRoute,
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		BeadEvents: store,
+	}
+
+	result, err := coord.Run(context.Background(), first.ID)
+	require.NoError(t, err)
+	require.True(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Report.Status)
+	assert.Equal(t, 3, reviewCalls, "two provider_empty retries plus the successful approval")
+	assert.Equal(t, 2, result.Report.EscalationCount, "report must record the two retry attempts")
+	require.Len(t, result.Report.CycleTrace, 1)
+	assert.Equal(t, 2, result.Report.CycleTrace[0].EscalationCount, "cycle trace must preserve the review retry count")
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var retryEvents []string
+	for _, event := range events {
+		if event.Kind == "review-error" {
+			retryEvents = append(retryEvents, event.Body)
+		}
+	}
+	require.Len(t, retryEvents, 2)
+	assert.Contains(t, retryEvents[0], "attempt_count=1")
+	assert.Contains(t, retryEvents[1], "attempt_count=2")
+	assert.Contains(t, retryEvents[0], "review route harness=claude model=claude-sonnet-4-5 provider=anthropic")
+	assert.Contains(t, retryEvents[1], "review route harness=claude model=claude-sonnet-4-5 provider=anthropic")
+}
+
+func TestCandidateCycle_ProviderEmptyExhaustsRetriesParksWithRoute(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	reviewCalls := 0
+	reviewRoute := ExecutionCycleRouteFacts{
+		Harness:     "claude",
+		Provider:    "anthropic",
+		Model:       "claude-sonnet-4-5",
+		ActualPower: 71,
+	}
+
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:      beadID,
+					AttemptID:   "attempt-review-retry-002",
+					Status:      ExecuteBeadStatusSuccess,
+					BaseRev:     "base-rev",
+					ResultRev:   "candidate-rev",
+					Harness:     "codex",
+					Provider:    "openai",
+					Model:       "gpt-5",
+					ActualPower: 70,
+				},
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, _ CandidateResult) (CandidateReviewResult, error) {
+			reviewCalls++
+			return CandidateReviewResult{
+				ReviewerRoute: reviewRoute,
+			}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewProviderEmpty, errors.New("provider returned zero bytes"))
+		}),
+		BeadEvents: store,
+	}
+
+	result, err := coord.Run(context.Background(), first.ID)
+	require.NoError(t, err)
+	require.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.Report.Status)
+	assert.Equal(t, 3, reviewCalls, "the coordinator must stop after the third provider_empty failure")
+	assert.Equal(t, 2, result.Report.EscalationCount, "the report must carry the retry count")
+	assert.Contains(t, result.Report.Detail, "harness=claude")
+	assert.Contains(t, result.Report.Detail, "model=claude-sonnet-4-5")
+	assert.Contains(t, result.Report.Detail, "retries=2")
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var retryEvents []string
+	for _, event := range events {
+		if event.Kind == "review-error" {
+			retryEvents = append(retryEvents, event.Body)
+		}
+	}
+	require.Len(t, retryEvents, 3)
+	assert.Contains(t, retryEvents[0], "attempt_count=1")
+	assert.Contains(t, retryEvents[1], "attempt_count=2")
+	assert.Contains(t, retryEvents[2], "attempt_count=3")
+	assert.Contains(t, retryEvents[2], "review route harness=claude model=claude-sonnet-4-5 provider=anthropic")
+}
+
+func TestCandidateCycle_GenuineVerdictNotRetried(t *testing.T) {
+	t.Run("request_changes", func(t *testing.T) {
+		_, first, _ := newExecuteLoopTestStore(t)
+		reviewCalls := 0
+		reviewRoute := ExecutionCycleRouteFacts{
+			Harness:     "claude",
+			Provider:    "anthropic",
+			Model:       "claude-sonnet-4-5",
+			ActualPower: 71,
+		}
+
+		coord := &AttemptCycleCoordinator{
+			Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+				return CandidateResult{
+					Report: ExecuteBeadReport{
+						BeadID:    beadID,
+						AttemptID: "attempt-review-verdict-001",
+						Status:    ExecuteBeadStatusSuccess,
+						BaseRev:   "base-rev",
+						ResultRev: "candidate-rev",
+					},
+				}, nil
+			}),
+			Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, _ CandidateResult) (CandidateReviewResult, error) {
+				reviewCalls++
+				return CandidateReviewResult{
+					Verdict:       "REQUEST_CHANGES",
+					Rationale:     "missing coverage",
+					ReviewerRoute: reviewRoute,
+				}, nil
+			}),
+		}
+
+		result, err := coord.Run(context.Background(), first.ID)
+		require.NoError(t, err)
+		require.False(t, result.Landed)
+		assert.Equal(t, 1, reviewCalls)
+		assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.Report.Status)
+		assert.Equal(t, "pre-land review: REQUEST_CHANGES", result.Report.Detail)
+		assert.Equal(t, 0, result.Report.EscalationCount)
+	})
+
+	t.Run("unparseable", func(t *testing.T) {
+		store, first, _ := newExecuteLoopTestStore(t)
+		reviewCalls := 0
+		reviewRoute := ExecutionCycleRouteFacts{
+			Harness:     "claude",
+			Provider:    "anthropic",
+			Model:       "claude-sonnet-4-5",
+			ActualPower: 71,
+		}
+
+		coord := &AttemptCycleCoordinator{
+			Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+				return CandidateResult{
+					Report: ExecuteBeadReport{
+						BeadID:    beadID,
+						AttemptID: "attempt-review-verdict-002",
+						Status:    ExecuteBeadStatusSuccess,
+						BaseRev:   "base-rev",
+						ResultRev: "candidate-rev",
+					},
+				}, nil
+			}),
+			Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, _ CandidateResult) (CandidateReviewResult, error) {
+				reviewCalls++
+				return CandidateReviewResult{
+					ReviewerRoute: reviewRoute,
+				}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewUnparseable, errors.New("structured verdict missing"))
+			}),
+			BeadEvents: store,
+		}
+
+		result, err := coord.Run(context.Background(), first.ID)
+		require.NoError(t, err)
+		require.False(t, result.Landed)
+		assert.Equal(t, 1, reviewCalls)
+		assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.Report.Status)
+		assert.Contains(t, result.Report.Detail, evidence.OutcomeReviewUnparseable)
+		assert.Equal(t, 0, result.Report.EscalationCount)
+
+		events, err := store.Events(first.ID)
+		require.NoError(t, err)
+		for _, event := range events {
+			assert.NotEqual(t, "review-error", event.Kind, "unparseable verdicts are not provider-empty retries")
+		}
+	})
 }
 
 func TestReviewClassification_CandidateCycleEventIncludesCandidateRev(t *testing.T) {
