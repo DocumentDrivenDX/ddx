@@ -316,11 +316,11 @@ func TestTryPropagatesRouteResolutionTimeout(t *testing.T) {
 		require.ErrorAs(t, err, &exitErr, "unexpected try error: %v output=%q", err, out)
 	}
 	// The elapsed budget mostly covers command setup around the 25ms route
-	// stage. Race-detector overhead plus CPU contention inflate that setup well
-	// past the idle-host budget, so widen it under race while keeping a hard
-	// ceiling far below DefaultRouteResolutionTimeout (60s) — an ignored
-	// deadline still fails.
-	routeDeadlineBudget := 2 * time.Second
+	// stage. Shared-host command startup and cleanup can push that path into
+	// the high single-digit seconds even when the route timeout is still being
+	// honored, so keep a hard ceiling that is still far below
+	// DefaultRouteResolutionTimeout (60s) — an ignored deadline still fails.
+	routeDeadlineBudget := 15 * time.Second
 	if raceEnabled {
 		routeDeadlineBudget = 20 * time.Second
 	}
