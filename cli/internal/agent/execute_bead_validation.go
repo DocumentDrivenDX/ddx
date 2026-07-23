@@ -49,7 +49,12 @@ type AttemptIntegrityInput struct {
 	// CodeChanging is true when the attempt produced an implementation commit,
 	// i.e. the bead changed tracked files and the gate/dirty contracts apply.
 	CodeChanging bool
-	GateRuns     []PreCommitGateRun
+	// GateEvidenceRequired says the attempt is expected to surface implementation
+	// gate evidence. When false, DDx-owned tracker/landing/audit commits remain
+	// out of band and the gate check is skipped. The default zero value preserves
+	// existing callers until live gate evidence is wired in.
+	GateEvidenceRequired bool
+	GateRuns             []PreCommitGateRun
 }
 
 // AttemptIntegrityVerdict is the result of ValidateAttemptIntegrity. OK is true
@@ -67,6 +72,7 @@ type AttemptIntegrityVerdict struct {
 const (
 	IntegrityReasonPostCommitMutation = "post_commit_mutation"
 	IntegrityReasonEmptyGateEvidence  = "empty_gate_evidence"
+	IntegrityReasonGateBypass         = "gate_bypass"
 	IntegrityReasonDirtyAfterCommit   = "dirty_after_commit"
 )
 
@@ -151,14 +157,19 @@ func classifyLefthookOutput(output string) string {
 //   - the implementation commit was amended or replaced after the first commit
 //     (post-commit mutation), comparing the first commit event against the final
 //     implementation revision;
-//   - the bead changed code but every observed pre-commit gate run reported no
-//     staged files, so the gate never tested the committed change;
+//   - the caller marks the attempt as requiring staged gate evidence and every
+//     relevant observed run was failed, interrupted, background-only, or
+//     no-staged-files, so the gate never tested the committed change;
+//   - an implementation-side `git commit --no-verify` appears in the evidence
+//     for a required gate-bearing attempt, even if some other gate run was
+//     meaningful;
 //   - the bead changed code but tracked files remained uncommitted after the
 //     implementation commit.
 //
-// Checks that lack evidence (no commit events observed, no gate runs captured)
-// are skipped rather than failed, so the validator never rejects an attempt it
-// could not actually observe.
+// DDx-owned checkpoint, tracker-only, landing, and durable-audit commits are
+// outside implementation-agent evidence. Checks that lack evidence and do not
+// opt into the gate contract are skipped rather than failed, so the validator
+// never rejects an attempt it could not actually observe.
 func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict {
 	if mutated, detail := detectPostCommitMutation(in.CommitEvents, in.ImplementationRev); mutated {
 		return AttemptIntegrityVerdict{
@@ -167,21 +178,35 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict 
 		}
 	}
 
-	if in.CodeChanging && len(in.GateRuns) > 0 {
+	if in.CodeChanging && in.GateEvidenceRequired {
 		sawMeaningful := false
-		sawNoStaged := false
+		sawRelevantGateRun := false
+		sawAnyRun := len(in.GateRuns) > 0
 		for _, run := range in.GateRuns {
-			switch classifyLefthookOutput(run.Output) {
-			case "meaningful":
+			switch classifyAttemptGateRun(run) {
+			case attemptGateRunDdxOwnedOutOfBandCommit:
+				// DDx-owned tracker/landing/durable-audit commits live outside the
+				// implementation-agent evidence contract and do not count as gate
+				// evidence for the attempt.
+				continue
+			case attemptGateRunImplementationNoVerifyCommit:
+				return AttemptIntegrityVerdict{
+					Reason: IntegrityReasonGateBypass,
+					Detail: "DDx validation: an implementation-agent git commit --no-verify bypassed the required staged gate evidence; this is not acceptance evidence. Detected by DDx, not an implementation failure.",
+				}
+			case attemptGateRunMeaningful:
+				sawRelevantGateRun = true
 				sawMeaningful = true
-			case "no_staged_files":
-				sawNoStaged = true
+			case attemptGateRunNoStagedFiles, attemptGateRunUnknown:
+				sawRelevantGateRun = true
 			}
 		}
-		if !sawMeaningful && sawNoStaged {
-			return AttemptIntegrityVerdict{
-				Reason: IntegrityReasonEmptyGateEvidence,
-				Detail: "DDx validation: every pre-commit gate run reported no staged files, so the required pre-commit gate never tested the committed change; this is not acceptance evidence. Detected by DDx, not an implementation failure.",
+		if !sawMeaningful {
+			if !sawAnyRun || sawRelevantGateRun {
+				return AttemptIntegrityVerdict{
+					Reason: IntegrityReasonEmptyGateEvidence,
+					Detail: "DDx validation: every relevant pre-commit gate run reported no staged files, failed, interrupted, or background-only output, so the required pre-commit gate never tested the committed change; this is not acceptance evidence. Detected by DDx, not an implementation failure.",
+				}
 			}
 		}
 	}
@@ -194,6 +219,51 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict 
 	}
 
 	return AttemptIntegrityVerdict{OK: true}
+}
+
+type attemptGateRunClass int
+
+const (
+	attemptGateRunUnknown attemptGateRunClass = iota
+	attemptGateRunMeaningful
+	attemptGateRunNoStagedFiles
+	attemptGateRunImplementationNoVerifyCommit
+	attemptGateRunDdxOwnedOutOfBandCommit
+)
+
+func classifyAttemptGateRun(run PreCommitGateRun) attemptGateRunClass {
+	if isDDXOwnedOutOfBandCommitCommand(run.Command) {
+		return attemptGateRunDdxOwnedOutOfBandCommit
+	}
+	if isNoVerifyCommitCommand(run.Command) {
+		return attemptGateRunImplementationNoVerifyCommit
+	}
+	switch classifyLefthookOutput(run.Output) {
+	case "meaningful":
+		return attemptGateRunMeaningful
+	case "no_staged_files":
+		return attemptGateRunNoStagedFiles
+	default:
+		return attemptGateRunUnknown
+	}
+}
+
+func isNoVerifyCommitCommand(command string) bool {
+	lower := strings.ToLower(strings.TrimSpace(command))
+	return lower != "" && strings.Contains(lower, "commit") && strings.Contains(lower, "--no-verify")
+}
+
+func isDDXOwnedOutOfBandCommitCommand(command string) bool {
+	lower := strings.ToLower(strings.TrimSpace(command))
+	if lower == "" {
+		return false
+	}
+	return containsAny(lower,
+		"chore: update tracker (execute-bead ",
+		"chore: checkpoint local tree before land (",
+		"chore: checkpoint pre-execute-bead ",
+		"legacy: execution artifact [",
+	)
 }
 
 // detectPostCommitMutation reports whether the agent rewrote its implementation
