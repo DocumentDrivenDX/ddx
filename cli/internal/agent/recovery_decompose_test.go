@@ -180,7 +180,6 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.NotEqual(t, projectRoot, gotWorkDir)
 	assert.False(t, isPathWithin(gotWorkDir, projectRoot))
 	assert.Equal(t, "safe", gotPermissions)
-	assert.NotEqual(t, PermissionsReadOnlyReviewer, gotPermissions)
 	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 
 	parent, err := store.Get(context.Background(), b.ID)
@@ -345,7 +344,6 @@ func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.NotEqual(t, projectRoot, gotWorkDir)
 	assert.False(t, isPathWithin(gotWorkDir, projectRoot))
 	assert.Equal(t, "safe", gotPermissions)
-	assert.NotEqual(t, PermissionsReadOnlyReviewer, gotPermissions)
 	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 }
 

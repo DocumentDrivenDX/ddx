@@ -62,3 +62,24 @@ func TestReviewerReadOnlyConstraintPassesThroughWithoutHarnessCatalog(t *testing
 		})
 	}
 }
+
+// TestReviewerPermissionsWithinFizeauVocabulary pins the reviewer permissions
+// constraint to Fizeau v0.15's documented vocabulary (fizeau service.go
+// SupportedPermissions: subset of {"safe", "supervised", "unrestricted"}).
+// A value outside the vocabulary matches no routing candidate, so ResolveRoute
+// rejects every route and each pre-land review dies instantly with
+// provider_empty (ddx-822fb475: "readonly" silently killed all pre-land
+// reviews while implementation dispatches kept succeeding).
+func TestReviewerPermissionsWithinFizeauVocabulary(t *testing.T) {
+	vocabulary := map[string]bool{
+		"safe":         true,
+		"supervised":   true,
+		"unrestricted": true,
+	}
+	if !vocabulary[PermissionsReadOnlyReviewer] {
+		t.Fatalf("PermissionsReadOnlyReviewer %q is outside Fizeau's permission vocabulary [safe supervised unrestricted]; every reviewer dispatch would fail route resolution", PermissionsReadOnlyReviewer)
+	}
+	if rt := BuildReviewExecuteRequest(ImplementerRouting{}); rt.PermissionsOverride != PermissionsReadOnlyReviewer {
+		t.Fatalf("BuildReviewExecuteRequest PermissionsOverride = %q, want %q", rt.PermissionsOverride, PermissionsReadOnlyReviewer)
+	}
+}
