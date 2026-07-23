@@ -76,7 +76,7 @@ func TestExecuteLoop_ClaimsHighestPriorityFirst(t *testing.T) {
 		"fresh worker must claim the P0 bead first; got %v", claimed)
 }
 
-// TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s is the regression test for
+// TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s_UsesHermeticProcessScanner is the regression test for
 // ddx-9d55601f AC #3: with a queue of 2xP0 + 4xP2, two concurrent workers
 // MUST collectively claim both P0 beads before either claims any P2 bead.
 //
@@ -87,9 +87,10 @@ func TestExecuteLoop_ClaimsHighestPriorityFirst(t *testing.T) {
 // WithLock), so the loser's next nextCandidate() call sees the contended
 // P0 as in_progress (filtered out of ReadyExecution) AND the second P0
 // still ready — and must pick that second P0 next.
-func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
+func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s_UsesHermeticProcessScanner(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
+	projectRoot := t.TempDir()
 
 	for _, b := range []*bead.Bead{
 		{ID: "ddx-p0-a", Title: "P0 first", Priority: 0},
@@ -182,6 +183,7 @@ func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
 				w := makeWorker(id)
 				_, err := w.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 					Once:                        true,
+					ProjectRoot:                 projectRoot,
 					OrphanHarnessProcessScanner: newHermeticOrphanHarnessProcessScanner(),
 				})
 				assert.NoError(t, err)

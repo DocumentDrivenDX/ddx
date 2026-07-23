@@ -3457,14 +3457,15 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 	}
 }
 
-// TestExecuteBeadWorkerEndToEndThreeBeadDrain is the integration guard from
+// TestExecuteBeadWorkerEndToEndThreeBeadDrain_UsesHermeticProcessScanner is the integration guard from
 // AC-4: seeds 3 ready beads with outcomes no_changes / success /
 // already_satisfied and asserts all three are processed without premature exit.
 // With the pre-fix loop this test failed because the no_changes result caused
 // Unclaim to be the first store call and the loop exited on any transient path.
-func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
+func TestExecuteBeadWorkerEndToEndThreeBeadDrain_UsesHermeticProcessScanner(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
+	projectRoot := t.TempDir()
 
 	a := &bead.Bead{ID: "ddx-e2e-a", Title: "Bead A — no_changes", Priority: 0}
 	b := &bead.Bead{ID: "ddx-e2e-b", Title: "Bead B — success", Priority: 1}
@@ -3515,7 +3516,10 @@ func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		ProjectRoot:                 projectRoot,
+		OrphanHarnessProcessScanner: newHermeticOrphanHarnessProcessScanner(),
+	})
 	require.NoError(t, err)
 
 	// All three beads must have been attempted.
