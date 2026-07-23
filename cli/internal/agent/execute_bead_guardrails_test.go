@@ -62,6 +62,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 			"Every AC must be satisfied by code",
 		}},
 		{name: "read_first", any: []string{"Read first"}},
+		{name: "validation_gates_sequential", any: []string{"wait for a focused gate to finish and pass before starting the broader gate", "Do not overlap validation processes in one attempt"}},
 		{name: "commit_subject_bead_id", any: []string{"[<bead-id>]"}},
 		{name: "commit_exactly_once", any: []string{"Commit exactly once", "commit exactly once"}},
 		{name: "git_add_specific_paths", any: []string{"git add <specific-paths>"}},
@@ -116,7 +117,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 // TestExecuteBeadInstructionsHarnessNeutral guards against reintroducing
 // concrete-harness prompt selection in DDx.
 func TestExecuteBeadInstructionsHarnessNeutral(t *testing.T) {
-	for _, harness := range []string{"", "claude", "codex", "agent", "fiz", " opaque-harness "} {
+	for _, harness := range []string{"", "claude", "codex", "opencode", "unknown", "agent", "fiz", " opaque-harness "} {
 		if got := renderInstructionsForGuardrails(t, harness, ""); got != executeBeadInstructionsText {
 			t.Errorf("harness %q changed execute-bead instructions", harness)
 		}
@@ -226,7 +227,7 @@ func TestExecuteBeadInstructions_SerializesGitOperations(t *testing.T) {
 		"Run git/index mutations sequentially",
 		"don't parallelize `git add`, `git commit`, or staging/commit commands",
 		"git add <specific-paths>",
-		"Commit exactly once when green",
+		"Commit exactly once",
 	}
 	for _, c := range cases {
 		c := c
@@ -235,6 +236,43 @@ func TestExecuteBeadInstructions_SerializesGitOperations(t *testing.T) {
 			for _, sub := range required {
 				if !strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt missing git-serialization substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteBeadPromptRequiresSequentialValidationCommands(t *testing.T) {
+	cases := []struct {
+		variant string
+		harness string
+	}{
+		{variant: "claude", harness: "claude"},
+		{variant: "codex", harness: "codex"},
+		{variant: "opencode", harness: "opencode"},
+		{variant: "unknown", harness: "unknown"},
+		{variant: "agent", harness: "agent"},
+		{variant: "fiz", harness: "fiz"},
+		{variant: "embedded-empty", harness: ""},
+		{variant: "embedded-opaque", harness: " opaque-harness "},
+	}
+	required := []string{
+		"wait for a focused gate to finish and pass before starting the broader gate",
+		"Do not overlap validation processes in one attempt",
+		"go test",
+		"cargo test",
+		"npm test",
+		"make test",
+		"lefthook",
+		"Parallelism inside one command is fine",
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range required {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing sequential-validation substring %q", c.variant, sub)
 				}
 			}
 		})
@@ -367,16 +405,19 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 }
 
 // TestPromptGuardrails_AllPresent is AC2 for ddx-fcdbc731: enumerates the
-// 22 load-bearing guardrails from the FEAT-022 comment block above the
+// 24 load-bearing guardrails from the FEAT-022 comment block above the
 // instr* constants and asserts each is present in the rendered full prompt
 // for the harness-neutral prompt. Adding or removing a guardrail must update the
 // comment block and this test.
 func TestPromptGuardrails_AllPresent(t *testing.T) {
-	// 21 instruction-level guardrails. Probes are XML-safe (no angle brackets)
+	// 24 instruction-level guardrails. Probes are XML-safe (no angle brackets)
 	// so they can be checked against the full XML-wrapped rendered prompt.
 	instrGuardrails := []struct{ name, probe string }{
 		{"ac_checkbox_anti_handwave", "AC must be"},
 		{"read_first", "Read first"},
+		{"validation_gates_sequential", "wait for a focused gate to finish and pass before starting the broader gate"},
+		{"validation_processes_not_overlapping", "Do not overlap validation processes in one attempt"},
+		{"validation_parallelism_inside_command_ok", "Parallelism inside one command is fine"},
 		{"commit_subject_bead_id", "bead-id"},
 		{"commit_exactly_once", "Commit exactly once"},
 		{"git_add_specific_paths", "specific-paths"},

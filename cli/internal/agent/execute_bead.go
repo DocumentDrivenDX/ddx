@@ -2203,9 +2203,13 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // 20. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
 // 21. Stop after the commit (Agent post-commit runaway guard)
 // 22. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
-// 23. Long-running matrix/benchmark beads (FEAT-010): require explicit matrix
+// 23. Validation gates run sequentially: wait for a focused gate to finish
+//     and pass before starting the broader gate, then wait again before lint
+//     or pre-commit. Do not overlap go test / cargo test / npm test / make test
+//     / lefthook invocations; parallelism inside a single command is fine
+// 24. Long-running matrix/benchmark beads (FEAT-010): require explicit matrix
 //     plan before running expensive commands; document output path and completion criterion
-// 24. Prohibit rerunning identical long-running commands without documenting why
+// 25. Prohibit rerunning identical long-running commands without documenting why
 //     prior output is invalid and what changed before the retry
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
@@ -2216,19 +2220,19 @@ const instrStep0SizeCheck = `
 
 Too big if any holds:
 
-- More than ~6 ACs spanning unrelated subsystems.
+- More than ~6 unrelated ACs.
 - AC mixes design, implementation, integration tests, and docs.
-- Description names multiple feature-sized pieces.
-- More than ~500 lines across ~5+ files in unrelated packages.
+- Description names multiple feature pieces.
+- More than ~500 lines across ~5+ unrelated package files.
 - If the bead description exceeds 8000 bytes, use a split-first pass.
-- Auto-decomposition is capped at depth 2: root beads may split once, children once more; reject third-level splits with an explanation.
+- Auto-decomposition is capped at depth 2: root beads may split once, children once more; reject third-level splits.
 
 If too big, decompose:
 
 1. ` + "`ddx bead create`" + ` for each child (copy parent's labels and spec-id).
 2. ` + "`ddx bead dep add`" + ` only for legitimate child-to-child or sibling/replacement edges; never the parent.
 3. Use ` + "`parent=<parent-id>`" + ` metadata and wire ` + "`parent -> child`" + `.
-4. Write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path with child IDs, then stop.
+4. Write ` + "`no_changes_rationale.txt`" + ` under the ` + "`bundle`" + ` path, then stop.
 
 Decomposition alone is success. Don't mix it with implementation.`
 
@@ -2237,7 +2241,7 @@ const instrNoChangesContract = `
 
 ## no_changes contract
 
-The ` + "`no_changes_rationale.txt`" + ` file under the bead metadata ` + "`bundle`" + ` path must contain one of:
+The ` + "`no_changes_rationale.txt`" + ` file under the ` + "`bundle`" + ` path must contain one of:
 
 - ` + "`verification_command: <cmd>`" + ` — exit 0 closes, nonzero rejects.
 - ` + "`status: open`" + ` + ` + "`reason: <retryable>`" + ` — open, smart retry.
@@ -2253,14 +2257,14 @@ const instrInvestigationReports = `
 
 ## Reports
 
-Write reports under the metadata ` + "`bundle`" + ` path in ` + "`.ddx/executions/`" + `, never ` + "`/tmp`" + `. Bundle files are local-only: never stage or commit them. Commit only requested deliverables outside the bundle.`
+Write reports under the metadata ` + "`bundle`" + ` path in ` + "`.ddx/executions/`" + `, never ` + "`/tmp`" + `. Keep bundle files local and untracked. Commit only requested deliverables outside the bundle.`
 
 // instrReviewGate is the shared review-as-gate rule.
 const instrReviewGate = `
 
 ## Review gate
 
-- The review is a gate, not an escape hatch — meet every AC in this pass.
+- The review is a gate, not an escape hatch.
 - Address every BLOCKING ` + "`<review-findings>`" + ` item; do not declare ` + "`no_changes`" + ` with blocking findings open.`
 
 // instrBeadOverride is the shared mode + bead-overrides-defaults rule.
@@ -2288,8 +2292,8 @@ const instrLongRunningMatrixGuards = `
 
 For expensive commands (>60s per variant):
 
-- Write a matrix plan: required configs, output paths, completion criteria.
-- Do not re-run the same long-running command unless the command fingerprint changed and you document why prior output is invalid and what changed.
+- Write a matrix plan: configs, output paths, completion criteria.
+- Do not re-run the same long-running command unless the fingerprint changed and you document why prior output is invalid and what changed.
 - If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry.`
 
 // executeBeadInstructionsText is the harness-neutral <instructions> body sent
@@ -2303,12 +2307,15 @@ const executeBeadInstructionsText = `You are executing one bead in an isolated D
 ## How to work
 
 - Read first. If the bead names files, specs, or prior beads, read them before editing.
-- Cross-reference each AC to concrete evidence (test, file, function). If you cannot point at it, it is not done.
+- Cross-reference each AC to concrete evidence. If you cannot point at it, it is not done.
 - Run tests and lint before committing. **Do not commit red code**.
+- Run validation gates sequentially: wait for a focused gate to finish and pass before starting the broader gate. Then wait before lint or pre-commit.
+- Do not overlap validation processes in one attempt: ` + "`go test`" + `, ` + "`cargo test`" + `, ` + "`npm test`" + `, ` + "`make test`" + `, and ` + "`lefthook`" + ` run sequentially.
+- Parallelism inside one command is fine.
 - Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
-- Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + ` (the worktree may have unrelated WIP).
-- Treat the ` + "`git commit`" + ` hook as the single authoritative staged gate. Stage the exact commit set, run ` + "`git commit`" + ` normally, and use that hook's output/exit status as the acceptance evidence. If you already ran ` + "`lefthook run pre-commit`" + ` on the same staged tree and hook inputs, reuse it only when the fingerprint matches; otherwise rerun. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
-- Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `.
+- Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + `.
+- Treat the ` + "`git commit`" + ` hook as the single authoritative staged gate. Stage the exact commit set, run ` + "`git commit`" + ` normally, and use that hook's output/exit status as the acceptance evidence. If you already ran ` + "`lefthook run pre-commit`" + ` on the same staged tree and hook inputs, reuse it only when the fingerprint matches. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
+- Commit exactly once; subject ends with ` + "`[<bead-id>]`" + `.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting.` +

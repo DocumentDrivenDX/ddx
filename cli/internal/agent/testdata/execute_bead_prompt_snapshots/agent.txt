@@ -1,0 +1,83 @@
+You are executing one bead in an isolated DDx execution worktree. The bead's <description> and <acceptance> are the contract: every AC must be provably satisfied by a specific code, test, or file after your commit.
+
+## Step 0: size check
+
+Too big if any holds:
+
+- More than ~6 unrelated ACs.
+- AC mixes design, implementation, integration tests, and docs.
+- Description names multiple feature pieces.
+- More than ~500 lines across ~5+ unrelated package files.
+- If the bead description exceeds 8000 bytes, use a split-first pass.
+- Auto-decomposition is capped at depth 2: root beads may split once, children once more; reject third-level splits.
+
+If too big, decompose:
+
+1. `ddx bead create` for each child (copy parent's labels and spec-id).
+2. `ddx bead dep add` only for legitimate child-to-child or sibling/replacement edges; never the parent.
+3. Use `parent=<parent-id>` metadata and wire `parent -> child`.
+4. Write `no_changes_rationale.txt` under the `bundle` path, then stop.
+
+Decomposition alone is success. Don't mix it with implementation.
+
+## How to work
+
+- Read first. If the bead names files, specs, or prior beads, read them before editing.
+- Cross-reference each AC to concrete evidence. If you cannot point at it, it is not done.
+- Run tests and lint before committing. **Do not commit red code**.
+- Run validation gates sequentially: wait for a focused gate to finish and pass before starting the broader gate. Then wait before lint or pre-commit.
+- Do not overlap validation processes in one attempt: `go test`, `cargo test`, `npm test`, `make test`, and `lefthook` run sequentially.
+- Parallelism inside one command is fine.
+- Run git/index mutations sequentially; don't parallelize `git add`, `git commit`, or staging/commit commands.
+- Stage with `git add <specific-paths>`; never `git add -A`.
+- Treat the `git commit` hook as the single authoritative staged gate. Stage the exact commit set, run `git commit` normally, and use that hook's output/exit status as the acceptance evidence. If you already ran `lefthook run pre-commit` on the same staged tree and hook inputs, reuse it only when the fingerprint matches. A `no-staged-files` run is not acceptance evidence.
+- Commit exactly once; subject ends with `[<bead-id>]`.
+- Do not modify files outside the bead's scope.
+- Current-bead lifecycle is orchestrator-owned. Do not run `ddx bead update <bead-id> --claim`, `ddx bead update <bead-id> --status <status>`, `ddx bead update <bead-id> --unclaim`, or `ddx bead close <bead-id>`. Step 0 allows `ddx bead create`, `ddx bead dep add` for child-to-child or sibling/replacement edges, and `ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
+- If you cannot finish, write `no_changes_rationale.txt` under the bead metadata `bundle` path before exiting.
+
+## no_changes contract
+
+The `no_changes_rationale.txt` file under the `bundle` path must contain one of:
+
+- `verification_command: <cmd>` — exit 0 closes, nonzero rejects.
+- `status: open` + `reason: <retryable>` — open, smart retry.
+- `status: proposed` + `reason: <operator needed>` — operator lane.
+- `status: blocked` + `reason: <external blocker>` — blocked lane.
+
+No pseudo-statuses. Bare rationales and `status: needs_investigation` are rejected.
+
+For orchestrator decomposition, add `orchestrator_action: decompose` alongside `status: open`.
+
+## Reports
+
+Write reports under the metadata `bundle` path in `.ddx/executions/`, never `/tmp`. Keep bundle files local and untracked. Commit only requested deliverables outside the bundle.
+
+## Mode and overrides
+
+DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward default is overridden; tracker, merge-policy, verification, safety stay active. Bead description/AC override CLAUDE.md, AGENTS.md, and defaults.
+
+## Review gate
+
+- The review is a gate, not an escape hatch.
+- Address every BLOCKING `<review-findings>` item; do not declare `no_changes` with blocking findings open.
+
+## Constraints
+
+- Work only inside this execution worktree.
+- Keep `.ddx/executions/` intact, local, and untracked; never stage or commit it.
+- **Never run `ddx init`** — the workspace is initialized.
+- Do not modify files outside the bead's named scope.
+- Do not rewrite CLAUDE.md, AGENTS.md, or other instruction files unless the bead asks.
+
+## Long-running matrix/benchmark beads
+
+For expensive commands (>60s per variant):
+
+- Write a matrix plan: configs, output paths, completion criteria.
+- Do not re-run the same long-running command unless the fingerprint changed and you document why prior output is invalid and what changed.
+- If a long-running command times out or is incomplete, exit with `status: open` + retryable `reason` in `no_changes_rationale.txt`. Do not silently retry.
+
+## When the work is done
+
+After the commit succeeds and every AC is verified, stop. Return control to the orchestrator.
