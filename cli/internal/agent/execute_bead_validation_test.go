@@ -63,37 +63,146 @@ func TestValidateAttemptIntegrity_PostCommitMutationRejected(t *testing.T) {
 	}
 }
 
-// TestValidateAttemptIntegrity_EmptyGateEvidenceRejected (AC2) simulates a
-// lefthook run where every hook skips because there are no staged files, and
-// asserts it is not accepted as pre-commit gate evidence for a code-changing
-// bead.
-func TestValidateAttemptIntegrity_EmptyGateEvidenceRejected(t *testing.T) {
+// TestValidateAttemptIntegrity_MissingRequiredGateEvidenceRejected proves
+// that a code-changing attempt subject to the staged-gate contract is rejected
+// when the observed gate evidence is empty, failed, interrupted, background-only,
+// or no-staged-files.
+func TestValidateAttemptIntegrity_MissingRequiredGateEvidenceRejected(t *testing.T) {
 	noStagedOutput := strings.Join([]string{
 		"╭──────────────────────────────────────╮",
 		"│ 🥊 lefthook v1.7.0  hook: pre-commit  │",
 		"╰──────────────────────────────────────╯",
 		"summary: (skip) no files for inspection",
 	}, "\n")
-
-	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
-		BaseRev:           "aaa0000",
-		ImplementationRev: "bbb0000",
-		CommitEvents: []CommitEvent{
-			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+	cases := []struct {
+		name string
+		runs []PreCommitGateRun
+	}{
+		{
+			name: "empty_gate_runs",
+			runs: nil,
 		},
-		CodeChanging: true,
+		{
+			name: "failed",
+			runs: []PreCommitGateRun{
+				{Command: "lefthook run pre-commit", Output: "go-test\nFAIL: hook failed\nsummary: (fail) hook failed"},
+			},
+		},
+		{
+			name: "interrupted",
+			runs: []PreCommitGateRun{
+				{Command: "lefthook run pre-commit", Output: "go-test\ninterrupted by signal\nsummary: (interrupt) hook interrupted"},
+			},
+		},
+		{
+			name: "background_only",
+			runs: []PreCommitGateRun{
+				{Command: "lefthook run pre-commit", Output: "background-only hook output\nsummary: background-only"},
+			},
+		},
+		{
+			name: "no_staged_files",
+			runs: []PreCommitGateRun{
+				{Command: "lefthook run pre-commit", Output: noStagedOutput},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+				BaseRev:              "aaa0000",
+				ImplementationRev:    "bbb0000",
+				CommitEvents:         []CommitEvent{{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"}},
+				CodeChanging:         true,
+				GateEvidenceRequired: true,
+				GateRuns:             tc.runs,
+			})
+			if verdict.OK {
+				t.Fatalf("expected required gate evidence to be rejected for %s", tc.name)
+			}
+			if verdict.Reason != IntegrityReasonEmptyGateEvidence {
+				t.Errorf("expected reason %q, got %q", IntegrityReasonEmptyGateEvidence, verdict.Reason)
+			}
+			if !strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") {
+				t.Errorf("detail should mark the rejection as DDx validation, got %q", verdict.Detail)
+			}
+		})
+	}
+}
+
+// TestValidateAttemptIntegrity_NoVerifyImplementationCommitRejected proves
+// that an implementation-agent `git commit --no-verify` is rejected even if
+// another gate run appears meaningful.
+func TestValidateAttemptIntegrity_NoVerifyImplementationCommitRejected(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:              "aaa0000",
+		ImplementationRev:    "bbb0000",
+		CommitEvents:         []CommitEvent{{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"}},
+		CodeChanging:         true,
+		GateEvidenceRequired: true,
 		GateRuns: []PreCommitGateRun{
-			{Command: "lefthook run pre-commit", Output: noStagedOutput},
+			{Command: "lefthook run pre-commit", Output: "go-test\n✔ go-test (executed in 2.0s)\nsummary: (done in 2.1s)"},
+			{Command: "git commit --no-verify -m fix: bypass staged gate [ddx-test]", Output: "commit: bypassed hooks"},
 		},
 	})
 	if verdict.OK {
-		t.Fatal("expected empty gate evidence to be rejected, got OK")
+		t.Fatal("expected implementation-agent no-verify commit to be rejected, got OK")
 	}
-	if verdict.Reason != IntegrityReasonEmptyGateEvidence {
-		t.Errorf("expected reason %q, got %q", IntegrityReasonEmptyGateEvidence, verdict.Reason)
+	if verdict.Reason != IntegrityReasonGateBypass {
+		t.Errorf("expected reason %q, got %q", IntegrityReasonGateBypass, verdict.Reason)
 	}
-	if !strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") {
-		t.Errorf("detail should mark the rejection as DDx validation, got %q", verdict.Detail)
+	if !strings.Contains(strings.ToLower(verdict.Detail), "no-verify") ||
+		!strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") {
+		t.Errorf("detail should explain the no-verify bypass as DDx validation, got %q", verdict.Detail)
+	}
+}
+
+// TestValidateAttemptIntegrity_AllowsDDXOwnedNoVerifyCommits proves that DDx-
+// owned checkpoint, tracker-only, landing, and durable-audit commits stay
+// outside the implementation-agent evidence contract.
+func TestValidateAttemptIntegrity_AllowsDDXOwnedNoVerifyCommits(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+		output  string
+	}{
+		{
+			name:    "tracker_only",
+			command: "git commit --no-verify --only -m chore: update tracker (execute-bead 20260723T120000) -- .ddx/beads.jsonl",
+			output:  "commit tracker output",
+		},
+		{
+			name:    "landing",
+			command: "git -c user.name=ddx-land-checkpoint -c user.email=land-checkpoint@ddx.local commit --no-verify -m chore: checkpoint local tree before land (operator_cancel) -- main.go",
+			output:  "landing checkpoint output",
+		},
+		{
+			name:    "durable_audit",
+			command: "git commit --no-verify --only -m chore: update tracker (execute-bead 20260723T120001) -- .ddx/metrics/attempts.jsonl",
+			output:  "durable audit output",
+		},
+		{
+			name:    "checkpoint",
+			command: "git -c user.name=ddx-checkpoint -c user.email=checkpoint@ddx.local commit-tree deadbeef -p cafefeed -m chore: checkpoint pre-execute-bead 20260723T120002",
+			output:  "checkpoint output",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+				BaseRev:              "aaa0000",
+				ImplementationRev:    "bbb0000",
+				CommitEvents:         []CommitEvent{{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"}},
+				CodeChanging:         true,
+				GateEvidenceRequired: true,
+				GateRuns: []PreCommitGateRun{
+					{Command: tc.command, Output: tc.output},
+				},
+			})
+			if !verdict.OK {
+				t.Fatalf("expected DDx-owned out-of-band commit command to be allowed, got reason=%q detail=%q", verdict.Reason, verdict.Detail)
+			}
+		})
 	}
 }
 
@@ -107,7 +216,8 @@ func TestValidateAttemptIntegrity_MeaningfulGateRunAccepted(t *testing.T) {
 		CommitEvents: []CommitEvent{
 			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
 		},
-		CodeChanging: true,
+		CodeChanging:         true,
+		GateEvidenceRequired: true,
 		GateRuns: []PreCommitGateRun{
 			{Command: "lefthook run pre-commit", Output: "summary: (skip) no files for inspection"},
 			{Command: "lefthook run pre-commit", Output: "go-test\n✔ go-test (executed in 4.21s)\nsummary: (done in 4.3s)"},
@@ -129,8 +239,9 @@ func TestValidateAttemptIntegrity_CleanAttemptPasses(t *testing.T) {
 			{SHA: "aaa0000000000000000000000000000000000000", Action: "checkout", Subject: "moving from main"},
 			{SHA: "bbb0000000000000000000000000000000000000", Action: "commit", Subject: "implement feature [x]"},
 		},
-		DirtyPaths:   nil,
-		CodeChanging: true,
+		DirtyPaths:           nil,
+		CodeChanging:         true,
+		GateEvidenceRequired: true,
 		GateRuns: []PreCommitGateRun{
 			{Command: "lefthook run pre-commit", Output: "go-test\n✔ go-test (executed in 2.0s)\nsummary: (done in 2.1s)"},
 		},
