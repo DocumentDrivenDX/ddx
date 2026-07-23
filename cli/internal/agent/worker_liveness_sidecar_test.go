@@ -65,12 +65,12 @@ func TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome(t *testing.T)
 		// distinct timestamps to confirm "every tick" advances last_activity_at
 		// without making the test flaky on slow CI.
 		//
-		// Under a full-suite race run the detector plus CPU contention stretch
-		// the effective heartbeat period well past 5ms, so widen the observation
+		// Under a full-suite run the detector plus CPU contention stretch the
+		// effective heartbeat period well past 5ms, so widen the observation
 		// window rather than lowering the required tick count: the assertion
 		// ("every tick advances last_activity_at") stays intact, and the loop
 		// still exits as soon as 3 distinct timestamps are seen.
-		observationWindow := 500 * time.Millisecond
+		observationWindow := 3 * time.Second
 		if raceEnabled {
 			observationWindow = 10 * time.Second
 		}

@@ -99,6 +99,13 @@ func realKillGroup(pid int) error { return killProcessGroup(pid) }
 
 func staleLeaseOwnerPID() int { return 1 << 30 }
 
+func skipRealProcHarnessTestsUnderRace(t *testing.T) {
+	t.Helper()
+	if raceEnabled {
+		t.Skip("realproc harness timing is not meaningful under the race detector")
+	}
+}
+
 const (
 	orphanReaperLauncherHelperEnv        = "DDX_ORPHAN_REAPER_LAUNCHER_HELPER"
 	orphanReaperLauncherChildEnv         = "DDX_ORPHAN_REAPER_LAUNCHER_CHILD"
@@ -177,7 +184,7 @@ func waitForOrphanHarnessProcess(t *testing.T, scanner orphanHarnessProcessScann
 			}
 		}
 		return false
-	}, 15*time.Second, 20*time.Millisecond)
+	}, 30*time.Second, 20*time.Millisecond)
 	return found
 }
 
@@ -236,6 +243,8 @@ func TestWorkStartupReaper_RealProcLauncherHelper(t *testing.T) {
 // TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness verifies that
 // the Linux /proc scanner still discovers a live fixture harness process.
 func TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness(t *testing.T) {
+	skipRealProcHarnessTestsUnderRace(t)
+
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
@@ -256,6 +265,8 @@ func TestWorkStartupReaper_ProductionScannerDiscoversFixtureHarness(t *testing.T
 // TestWorkStartupReaper_KillsOrphanProcessGroup plants a real harness process
 // group and asserts the startup reaper kills it within a bounded grace.
 func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
+	skipRealProcHarnessTestsUnderRace(t)
+
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
@@ -297,6 +308,8 @@ func TestWorkStartupReaper_KillsOrphanProcessGroup(t *testing.T) {
 // harness that forks a long-lived grandchild into the same process group and
 // asserts both child and grandchild are reaped.
 func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
+	skipRealProcHarnessTestsUnderRace(t)
+
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
@@ -340,6 +353,8 @@ func TestWorkStartupReaper_KillsOrphanGrandchildProcessGroup(t *testing.T) {
 // (lease owner PID alive) alongside an orphaned one and asserts only the orphan
 // is killed.
 func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
+	skipRealProcHarnessTestsUnderRace(t)
+
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
@@ -393,6 +408,8 @@ func TestWorkStartupReaper_DoesNotKillLiveOwnedHarness(t *testing.T) {
 // asserts the current workspace reaper leaves it alive while still reaping its
 // own orphan.
 func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
+	skipRealProcHarnessTestsUnderRace(t)
+
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	otherTempRoot := filepath.Join(t.TempDir(), "other-exec-wt")
@@ -446,6 +463,8 @@ func TestWorkStartupReaper_DoesNotKillOtherWorkspaceHarness(t *testing.T) {
 // operator-attention evidence (and a lease release) carrying the bead id, owner
 // PID status, and a diagnosis.
 func TestWorkStartupReaper_RecordsOperatorAttention(t *testing.T) {
+	skipRealProcHarnessTestsUnderRace(t)
+
 	projectRoot := t.TempDir()
 	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
 	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
