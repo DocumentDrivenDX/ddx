@@ -144,7 +144,7 @@ func (s *Store) migrateLifecycle(apply bool, now time.Time) (LifecycleMigrationS
 			}
 		}
 		if len(plans) > 0 {
-			if err := s.WriteAll(beads); err != nil {
+			if err := s.writeAllLocked(beads); err != nil {
 				return err
 			}
 		}
@@ -592,7 +592,7 @@ func (s *Store) ArchiveWithEvents(ctx context.Context, policy ArchivePolicy) (Mi
 		if !dirty {
 			return nil
 		}
-		return s.WriteAll(beads)
+		return s.writeAllLocked(beads)
 	})
 	if err != nil {
 		return stats, fmt.Errorf("bead: archive externalize: %w", err)

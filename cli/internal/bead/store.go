@@ -335,7 +335,7 @@ func (s *Store) repairJSONL() (bool, error) {
 		if err := writeAtomicFile(backupPath, backupData); err != nil {
 			return fmt.Errorf("write backup: %w", err)
 		}
-		if err := s.WriteAll(beads); err != nil {
+		if err := s.writeAllLocked(beads); err != nil {
 			return fmt.Errorf("write repaired file: %w", err)
 		}
 		repaired = true
@@ -445,7 +445,17 @@ func normalizeCollection(name string) string {
 }
 
 // WriteAll writes all beads to the configured backend, sorted by ID.
+//
+// Store mutations that replace the full JSONL corpus must serialize on the
+// collection lock. Callers already inside Store.WithLock should use
+// writeAllLocked to avoid re-entering the lock.
 func (s *Store) WriteAll(beads []Bead) error {
+	return s.WithLock(func() error {
+		return s.writeAllLocked(beads)
+	})
+}
+
+func (s *Store) writeAllLocked(beads []Bead) error {
 	sort.Slice(beads, func(i, j int) bool {
 		return beads[i].ID < beads[j].ID
 	})
@@ -586,7 +596,7 @@ func (s *Store) Create(ctx context.Context, b *Bead) error {
 			}
 		}
 		beads = append(beads, *b)
-		return s.WriteAll(beads)
+		return s.writeAllLocked(beads)
 	})
 }
 
@@ -701,7 +711,7 @@ func (s *Store) updateBead(id string, allowStatusChange bool, mutate func(*Bead)
 		if !found {
 			return fmt.Errorf("bead: not found: %s", id)
 		}
-		return s.WriteAll(beads)
+		return s.writeAllLocked(beads)
 	})
 }
 
@@ -1002,7 +1012,7 @@ func (s *Store) Claim(id, assignee string) error {
 			if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
 				return err
 			}
-			if err := s.WriteAll(beads); err != nil {
+			if err := s.writeAllLocked(beads); err != nil {
 				return err
 			}
 			return s.writeClaimHeartbeat(ClaimLeaseRecord{
@@ -1214,7 +1224,7 @@ func (s *Store) Release(id, assignee, targetStatus string) error {
 			if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
 				return err
 			}
-			if err := s.WriteAll(beads); err != nil {
+			if err := s.writeAllLocked(beads); err != nil {
 				return err
 			}
 			return s.RemoveClaimHeartbeat(id)
@@ -1295,7 +1305,7 @@ func (s *Store) ClearCooldowns(filter func(Bead) bool) (int, error) {
 		if count == 0 {
 			return nil
 		}
-		return s.WriteAll(beads)
+		return s.writeAllLocked(beads)
 	})
 	return count, err
 }
@@ -1648,7 +1658,7 @@ func (s *Store) externalizeEvents(id string) error {
 			if err := s.externalizeEventsInPlace(&beads[i]); err != nil {
 				return err
 			}
-			return s.WriteAll(beads)
+			return s.writeAllLocked(beads)
 		}
 		return nil
 	})
@@ -2200,7 +2210,7 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 		if !found {
 			return fmt.Errorf("bead: not found: %s", id)
 		}
-		if err := s.WriteAll(beads); err != nil {
+		if err := s.writeAllLocked(beads); err != nil {
 			return err
 		}
 		return s.RemoveClaimHeartbeat(id)
@@ -3031,7 +3041,7 @@ func (s *Store) DepAdd(ctx context.Context, id, depID string) error {
 
 		target.AddDep(depID, "blocks")
 		target.UpdatedAt = time.Now().UTC()
-		return s.WriteAll(beads)
+		return s.writeAllLocked(beads)
 	})
 }
 

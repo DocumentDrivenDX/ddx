@@ -306,7 +306,7 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 			}
 		}
 
-		return s.WriteAll(existing)
+		return s.writeAllLocked(existing)
 	})
 	return count, err
 }

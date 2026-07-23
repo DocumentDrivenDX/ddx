@@ -135,7 +135,7 @@ func (s *Store) Archive(ctx context.Context, policy ArchivePolicy) ([]string, er
 			// active. A crash between the two leaves a duplicate in both
 			// collections; merged-view reads in (e) hide that with
 			// active-wins precedence.
-			if werr := archive.WriteAll(archiveBeads); werr != nil {
+			if werr := archive.writeAllLocked(archiveBeads); werr != nil {
 				return fmt.Errorf("bead: write archive: %w", werr)
 			}
 			remaining := make([]Bead, 0, len(activeBeads)-len(toMove))
@@ -146,7 +146,7 @@ func (s *Store) Archive(ctx context.Context, policy ArchivePolicy) ([]string, er
 				}
 				remaining = append(remaining, b)
 			}
-			if werr := s.WriteAll(remaining); werr != nil {
+			if werr := s.writeAllLocked(remaining); werr != nil {
 				return fmt.Errorf("bead: write active: %w", werr)
 			}
 			return nil
