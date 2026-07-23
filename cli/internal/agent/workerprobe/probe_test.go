@@ -6,7 +6,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,8 +13,7 @@ import (
 )
 
 // fakeServer is a minimal stand-in for the worker-ingest endpoints. Tests
-// drive Reachable to flip the server's "presence" without tearing down the
-// httptest.Server.
+// drive Reachable to flip the server's "presence" without a real listener.
 type fakeServer struct {
 	mu        sync.Mutex
 	reachable bool
@@ -100,10 +98,10 @@ func hasSuffix(s, suf string) bool {
 	return len(s) >= len(suf) && s[len(s)-len(suf):] == suf
 }
 
-// startFakeServer returns a running httptest.Server and a function to stop it.
-func startFakeServer(t *testing.T, fs *fakeServer) *httptest.Server {
+// startFakeServer returns an in-process HTTP service and a function to stop it.
+func startFakeServer(t *testing.T, fs *fakeServer) *inProcessHTTPServer {
 	t.Helper()
-	ts := httptest.NewServer(fs.Handler())
+	ts := newInProcessHTTPServer(fs.Handler())
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -138,6 +136,7 @@ func TestWorker_ProbeImmediateFirst(t *testing.T) {
 	ts := startFakeServer(t, fs)
 
 	p := newTestProbe(func() string { return ts.URL })
+	p.cfg.HTTPClient = ts.Client
 	// Set BaseInterval very long so we ONLY observe the immediate first probe.
 	p.cfg.BaseInterval = 10 * time.Second
 	p.cfg.MaxInterval = 10 * time.Second
@@ -167,6 +166,7 @@ func TestWorker_ProbeJitter(t *testing.T) {
 	ts := startFakeServer(t, fs)
 
 	p := newTestProbe(func() string { return ts.URL })
+	p.cfg.HTTPClient = ts.Client
 	const base = 50 * time.Millisecond
 	const pct = 0.20
 	p.cfg.BaseInterval = base
@@ -238,6 +238,7 @@ func TestWorker_BackfillOnReconnect(t *testing.T) {
 		return ""
 	}
 	p := newTestProbe(addrFunc)
+	p.cfg.HTTPClient = ts.Client
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
