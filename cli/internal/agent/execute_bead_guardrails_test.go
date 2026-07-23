@@ -68,7 +68,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "no_git_add_dash_a", any: []string{"never `git add -A`", "never git add -A"}},
 		{name: "sequential_git_operations", any: []string{"Run git/index mutations sequentially", "Do not use parallel tool calls for"}},
 		{name: "no_red_code", any: []string{"Do not commit red code"}},
-		{name: "rerun_staged_pre_commit_gate", any: []string{"rerun it after staging the exact commit set", "no-staged-files", "not acceptance evidence"}},
+		{name: "implementation_commit_single_gate", any: []string{"run `git commit` normally", "hook's output/exit status", "single authoritative staged gate"}},
 		{name: "no_modify_outside_scope", any: []string{"outside the bead's scope", "outside the bead's named scope"}},
 		{name: "never_ddx_init", any: []string{"Never run `ddx init`", "never `ddx init`"}},
 		{name: "executions_intact", any: []string{".ddx/executions/"}},
@@ -241,16 +241,23 @@ func TestExecuteBeadInstructions_SerializesGitOperations(t *testing.T) {
 	}
 }
 
-func TestExecuteBeadInstructions_RequiresStagedPreCommitGate(t *testing.T) {
+func TestExecuteBeadPrompt_UsesImplementationCommitAsSinglePreCommitGate(t *testing.T) {
 	cases := []struct{ variant, harness string }{
 		{"claude", "claude"},
 		{"agent", "agent"},
 	}
 	required := []string{
+		"run `git commit` normally",
+		"hook's output/exit status",
+		"single authoritative staged gate",
+		"Stage the exact commit set",
+		"hook inputs",
 		"lefthook run pre-commit",
-		"rerun it after staging the exact commit set",
 		"no-staged-files",
-		"not acceptance evidence",
+	}
+	forbidden := []string{
+		"rerun it after staging the exact commit set",
+		"Rerun lefthook run pre-commit after staging when hooks depend on staged files",
 	}
 	for _, c := range cases {
 		c := c
@@ -259,6 +266,11 @@ func TestExecuteBeadInstructions_RequiresStagedPreCommitGate(t *testing.T) {
 			for _, sub := range required {
 				if !strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt missing staged pre-commit substring %q", c.variant, sub)
+				}
+			}
+			for _, sub := range forbidden {
+				if strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt unexpectedly still contains deprecated pre-commit substring %q", c.variant, sub)
 				}
 			}
 		})
@@ -280,6 +292,8 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
 		"git add <specific-paths>",
 		"git add -A", // appears as part of "never `git add -A`"
 		"Run git/index mutations sequentially",
+		"run `git commit` normally",
+		"hook's output/exit status",
 		"lefthook run pre-commit",
 		"no_changes_rationale.txt",
 		".ddx/executions/",
@@ -369,7 +383,7 @@ func TestPromptGuardrails_AllPresent(t *testing.T) {
 		{"never_git_add_dash_a", "git add -A"},
 		{"sequential_git_operations", "Run git/index mutations sequentially"},
 		{"no_red_code", "Do not commit red code"},
-		{"rerun_staged_pre_commit_gate", "lefthook run pre-commit"},
+		{"implementation_commit_single_gate", "hook&#39;s output/exit status"},
 		{"no_modify_outside_scope", "outside the bead"},
 		{"never_ddx_init", "ddx init"},
 		{"executions_intact", ".ddx/executions/"},
