@@ -1,12 +1,14 @@
 package agent
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
@@ -208,6 +210,30 @@ func SetTrackerLockMetricsSink(fn func(TrackerLockSample)) func(TrackerLockSampl
 // observes a non-zero retry count without relying on time.Sleep races.
 var trackerLockContendedAttemptHook func(attempt int)
 
+// trackerLockOwnerTokenFile is optional lock metadata. Ordinary acquisition
+// does not require it; tests may install it on a fresh replacement to prove
+// a delayed stale observer cannot alter winner-owned bytes.
+const trackerLockOwnerTokenFile = "owner_token"
+
+type trackerStaleLockGuardStage string
+
+const (
+	trackerStaleGuardStageAttempted    trackerStaleLockGuardStage = "attempted"
+	trackerStaleGuardStageContended    trackerStaleLockGuardStage = "contended"
+	trackerStaleGuardStageAcquired     trackerStaleLockGuardStage = "acquired"
+	trackerStaleGuardStageBeforeRename trackerStaleLockGuardStage = "before-rename"
+)
+
+type trackerStaleLockTransitionGuard struct {
+	file  *os.File
+	mutex *sync.Mutex
+}
+
+var (
+	trackerStaleLockGuardMutexes sync.Map
+	trackerStaleLockTombstoneSeq atomic.Uint64
+)
+
 // withTrackerLockPolicy is the policy-parameterised form of
 // withTrackerLock; exposed at package scope so tests can pin a specific
 // curve. section is the call-site identifier forwarded to TrackerLockSample
@@ -223,6 +249,8 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 	for attempt := 0; ; attempt++ {
 		err := os.Mkdir(lockDir, 0o755)
 		if err == nil {
+			// Metadata publication is outside the stale-break guard: ordinary
+			// acquisition never holds the transition sidecar.
 			_ = os.WriteFile(filepath.Join(lockDir, "pid"),
 				[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
 			_ = os.WriteFile(filepath.Join(lockDir, "acquired_at"),
@@ -242,12 +270,32 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 			return fmt.Errorf("tracker lock stat: %w", statErr)
 		}
 
-		switch {
-		case info.Mode().IsDir():
-			// Real lock directory. Apply existing stale-owner policy.
-			if breakStaleTrackerLock(lockDir) {
+		// Directory and malformed regular-file stale objects share the same
+		// single-winner guarded disposal. Observation made here is not
+		// authoritative; breakStaleTrackerLock reclassifies under the guard.
+		if info.Mode().IsDir() || info.Mode().IsRegular() {
+			broke, breakErr := breakStaleTrackerLock(lockDir)
+			if breakErr != nil {
+				return fmt.Errorf("tracker lock: break stale: %w", breakErr)
+			}
+			if broke {
+				// Guard is released inside break; ordinary Mkdir can retry.
 				continue
 			}
+		}
+
+		// Re-stat after a failed break so guard contention and races resolve
+		// to the current object before the fail-fast/contention decision.
+		info, statErr = os.Lstat(lockDir)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return fmt.Errorf("tracker lock stat: %w", statErr)
+		}
+
+		switch {
+		case info.Mode().IsDir():
 			if attempt >= policy.MaxRetries {
 				return lockTimeoutError(lockDir, "max retries")
 			}
@@ -258,15 +306,25 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 			if hook := trackerLockContendedAttemptHook; hook != nil {
 				hook(attempt)
 			}
+			// Retry sleep is outside the transition guard.
 			time.Sleep(policy.step(attempt))
 
 		case info.Mode().IsRegular():
 			// Malformed: lock path must be a directory, not a regular file.
+			// Over-age files that failed to break (guard contended) stay in the
+			// LockRetryPolicy budget rather than failing fast.
 			if time.Since(info.ModTime()) > trackerLockStaleAge {
-				// Stale regular file: remove with single-path removal and retry immediately.
-				if rmErr := os.Remove(lockDir); rmErr != nil && !os.IsNotExist(rmErr) {
-					return fmt.Errorf("tracker lock: remove malformed stale file %s: %w", lockDir, rmErr)
+				if attempt >= policy.MaxRetries {
+					return lockTimeoutError(lockDir, "max retries")
 				}
+				if policy.MaxElapsed > 0 && time.Since(start) >= policy.MaxElapsed {
+					return lockTimeoutError(lockDir, "max elapsed")
+				}
+				retries++
+				if hook := trackerLockContendedAttemptHook; hook != nil {
+					hook(attempt)
+				}
+				time.Sleep(policy.step(attempt))
 				continue
 			}
 			return fmt.Errorf("tracker lock: malformed lock path %s is a regular file; a lock directory was expected — remove it manually to recover", lockDir)
@@ -279,11 +337,15 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 
 	waitDur := time.Since(start)
 	holdStart := time.Now()
+	// Ordinary owner release is the holder's private cleanup of the directory
+	// it just created. Stale-break paths never RemoveAll the canonical path.
 	defer os.RemoveAll(lockDir)
 	op := section
 	if op == "" {
 		op = "tracker.commit"
 	}
+	// Callbacks and lockmetrics instrumentation run only after ordinary
+	// acquisition and never while holding the stale-break transition guard.
 	fnErr := lockmetrics.InstrumentCapped("tracker.lock", op, lockmetrics.CapConfigFor("tracker.lock"), fn)
 	trackerLockSinkMu.RLock()
 	sink := trackerLockSinkFn
@@ -306,28 +368,216 @@ func lockTimeoutError(lockDir, why string) error {
 	}
 }
 
-// breakStaleTrackerLock removes lockDir if its owner process is dead or the
-// lock is older than trackerLockStaleAge. Returns true if the lock was broken.
-func breakStaleTrackerLock(lockDir string) bool {
-	pidData, err := os.ReadFile(filepath.Join(lockDir, "pid"))
-	if err == nil {
-		pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
-		if err == nil && pid > 0 && pid != os.Getpid() {
-			if !trackerProcessAlive(pid) {
-				os.RemoveAll(lockDir)
-				return true
+// breakStaleTrackerLock serializes stale inspection and canonical-path mutation
+// across processes. The stable advisory guard is intentionally separate from
+// the canonical lock directory: ordinary acquisition, release, retry sleeps,
+// git operations, and private tombstone removal never hold it.
+//
+// Returns true when this contender successfully renamed a freshly reclassified
+// stale object to a contender-unique tombstone and removed that tombstone.
+func breakStaleTrackerLock(lockDir string) (bool, error) {
+	return breakStaleTrackerLockObserved(lockDir, nil)
+}
+
+func breakStaleTrackerLockObserved(lockDir string, observer func(trackerStaleLockGuardStage)) (bool, error) {
+	guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, observer)
+	if err != nil {
+		return false, err
+	}
+	if !acquired {
+		return false, nil
+	}
+
+	// No observation made before taking the guard can authorize this rename.
+	// Re-read and reclassify the current canonical path under the guard, then
+	// rename only that freshly inspected stale object to a unique tombstone.
+	tombstone, broke, renameErr := renameFreshlyStaleTrackerLockObserved(lockDir, observer)
+	guardErr := releaseTrackerStaleLockBreakGuard(guard)
+	if renameErr != nil {
+		return false, errors.Join(renameErr, guardErr)
+	}
+	if guardErr != nil {
+		return broke, guardErr
+	}
+	if !broke {
+		return false, nil
+	}
+	// Remove only the exact tombstone this contender produced. Never remove
+	// the canonical pathname from a stale-break path.
+	if err := os.RemoveAll(tombstone); err != nil {
+		return true, fmt.Errorf("remove stale tracker lock tombstone %s: %w", tombstone, err)
+	}
+	return true, nil
+}
+
+// renameFreshlyStaleTrackerLockObserved must only be called while the caller
+// owns the stable stale-break guard for lockDir. It returns the unique
+// tombstone owned by this transition; callers must never remove the canonical
+// lock path.
+func renameFreshlyStaleTrackerLockObserved(lockDir string, observer func(trackerStaleLockGuardStage)) (string, bool, error) {
+	inspected, stale := freshlyInspectStaleTrackerLock(lockDir)
+	if !stale {
+		return "", false, nil
+	}
+	if observer != nil {
+		observer(trackerStaleGuardStageBeforeRename)
+	}
+
+	// Revalidate after the pre-rename stage. Tests pause here to install a
+	// fresh canonical owner; the only safe response is to decline the rename
+	// when the identity changed after stale classification.
+	current, err := os.Lstat(lockDir)
+	if err != nil || !os.SameFile(inspected, current) {
+		return "", false, nil
+	}
+	// Type must still match the inspected object (directory or regular file).
+	if inspected.IsDir() != current.IsDir() ||
+		inspected.Mode().IsRegular() != current.Mode().IsRegular() {
+		return "", false, nil
+	}
+
+	tombstone := trackerStaleLockTombstonePath(lockDir)
+	if tombstone == "" {
+		return "", false, nil
+	}
+	if err := os.Rename(lockDir, tombstone); err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return tombstone, true, nil
+}
+
+// freshlyInspectStaleTrackerLock evaluates the stale criteria from the
+// canonical path while its caller owns the stale-break guard.
+//
+// For lock directories the criteria intentionally remain ORed: either a valid
+// dead owner PID or a valid over-age acquired_at timestamp is enough. Missing
+// or malformed metadata does not itself authorize removal.
+//
+// For malformed regular files, over-age mtime is the sole stale criterion.
+func freshlyInspectStaleTrackerLock(lockDir string) (os.FileInfo, bool) {
+	inspected, err := os.Lstat(lockDir)
+	if err != nil {
+		return nil, false
+	}
+
+	stale := false
+	switch {
+	case inspected.IsDir():
+		pidData, err := os.ReadFile(filepath.Join(lockDir, "pid"))
+		if err == nil {
+			pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+			if err == nil && pid > 0 && pid != os.Getpid() {
+				if !trackerProcessAlive(pid) {
+					stale = true
+				}
 			}
 		}
-	}
 
-	acquiredData, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
-	if err == nil {
-		acquired, err := time.Parse(time.RFC3339, strings.TrimSpace(string(acquiredData)))
-		if err == nil && time.Since(acquired) > trackerLockStaleAge {
-			os.RemoveAll(lockDir)
-			return true
+		acquiredData, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
+		if err == nil {
+			acquired, err := time.Parse(time.RFC3339, strings.TrimSpace(string(acquiredData)))
+			if err == nil && time.Since(acquired) > trackerLockStaleAge {
+				stale = true
+			}
 		}
+	case inspected.Mode().IsRegular():
+		if time.Since(inspected.ModTime()) > trackerLockStaleAge {
+			stale = true
+		}
+	default:
+		return nil, false
 	}
 
-	return false
+	current, err := os.Lstat(lockDir)
+	if err != nil || !os.SameFile(inspected, current) {
+		return nil, false
+	}
+	if inspected.IsDir() != current.IsDir() ||
+		inspected.Mode().IsRegular() != current.Mode().IsRegular() {
+		return nil, false
+	}
+	return inspected, stale
+}
+
+func trackerStaleLockBreakGuardPath(lockDir string) string {
+	if lockDir == "" {
+		return ""
+	}
+	return lockDir + ".stale-break.lock"
+}
+
+func trackerStaleLockTombstonePath(lockDir string) string {
+	if lockDir == "" {
+		return ""
+	}
+	suffix := fmt.Sprintf("%d-%d-%d", os.Getpid(), time.Now().UnixNano(), trackerStaleLockTombstoneSeq.Add(1))
+	return filepath.Join(filepath.Dir(lockDir), filepath.Base(lockDir)+".tombstone."+suffix+".lock")
+}
+
+func trackerStaleLockGuardMutex(guardPath string) *sync.Mutex {
+	mutex := &sync.Mutex{}
+	actual, _ := trackerStaleLockGuardMutexes.LoadOrStore(guardPath, mutex)
+	return actual.(*sync.Mutex)
+}
+
+func tryAcquireTrackerStaleLockBreakGuard(lockDir string) (*trackerStaleLockTransitionGuard, bool) {
+	guard, acquired, _ := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
+	return guard, acquired
+}
+
+func tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir string, observer func(trackerStaleLockGuardStage)) (*trackerStaleLockTransitionGuard, bool, error) {
+	guardPath := trackerStaleLockBreakGuardPath(lockDir)
+	if guardPath == "" {
+		return nil, false, fmt.Errorf("tracker lock: stale-break guard requires lock directory")
+	}
+	if observer != nil {
+		observer(trackerStaleGuardStageAttempted)
+	}
+	mutex := trackerStaleLockGuardMutex(guardPath)
+	if !mutex.TryLock() {
+		if observer != nil {
+			observer(trackerStaleGuardStageContended)
+		}
+		return nil, false, nil
+	}
+	guard, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		mutex.Unlock()
+		return nil, false, err
+	}
+	locked, err := tryLockTrackerStaleBreakGuardFile(guard)
+	if err != nil {
+		_ = guard.Close()
+		mutex.Unlock()
+		return nil, false, err
+	}
+	if !locked {
+		_ = guard.Close()
+		mutex.Unlock()
+		if observer != nil {
+			observer(trackerStaleGuardStageContended)
+		}
+		return nil, false, nil
+	}
+	if observer != nil {
+		observer(trackerStaleGuardStageAcquired)
+	}
+	return &trackerStaleLockTransitionGuard{file: guard, mutex: mutex}, true, nil
+}
+
+func releaseTrackerStaleLockBreakGuard(guard *trackerStaleLockTransitionGuard) error {
+	if guard == nil {
+		return nil
+	}
+	var err error
+	if guard.file != nil {
+		err = errors.Join(unlockTrackerStaleBreakGuardFile(guard.file), guard.file.Close())
+	}
+	if guard.mutex != nil {
+		guard.mutex.Unlock()
+	}
+	return err
 }
