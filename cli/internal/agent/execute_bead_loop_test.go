@@ -3025,10 +3025,56 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 	})
 }
 
+// executeLoopPrivateRoots holds the per-test fixture tree that
+// newExecuteLoopTestStore pins so config-derived DDx paths cannot fall through
+// to process-global HOME/XDG/cache roots.
+type executeLoopPrivateRoots struct {
+	FixtureRoot string
+	Home        string
+	DataHome    string
+	CacheHome   string
+	ConfigHome  string
+	ExecWTRoot  string
+	StoreDir    string
+}
+
+// pinExecuteLoopPrivateRoots allocates a private fixture and overrides the
+// process-global DDx/config root env vars so helpers that consult HOME,
+// XDG_*, or DDX_EXEC_WT_DIR resolve only under this fixture.
+func pinExecuteLoopPrivateRoots(t *testing.T) executeLoopPrivateRoots {
+	t.Helper()
+
+	fixtureRoot := t.TempDir()
+	roots := executeLoopPrivateRoots{
+		FixtureRoot: fixtureRoot,
+		Home:        filepath.Join(fixtureRoot, "home"),
+		DataHome:    filepath.Join(fixtureRoot, "xdg-data"),
+		CacheHome:   filepath.Join(fixtureRoot, "xdg-cache"),
+		ConfigHome:  filepath.Join(fixtureRoot, "xdg-config"),
+		ExecWTRoot:  filepath.Join(fixtureRoot, "exec-wt"),
+		StoreDir:    filepath.Join(fixtureRoot, "store"),
+	}
+	for _, dir := range []string{roots.Home, roots.DataHome, roots.CacheHome, roots.ConfigHome, roots.ExecWTRoot, roots.StoreDir} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+	}
+
+	// Clear any inherited exec-wt override, then pin to the private root so
+	// config.ExecutionTempRoot / ExecutionScratchRoot cannot resolve to a
+	// host-global cache path for the remainder of this test.
+	t.Setenv(config.ExecutionWorktreeRootEnv, roots.ExecWTRoot)
+	t.Setenv("HOME", roots.Home)
+	t.Setenv("XDG_DATA_HOME", roots.DataHome)
+	t.Setenv("XDG_CACHE_HOME", roots.CacheHome)
+	t.Setenv("XDG_CONFIG_HOME", roots.ConfigHome)
+
+	return roots
+}
+
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 
-	store := bead.NewStore(t.TempDir())
+	roots := pinExecuteLoopPrivateRoots(t)
+	store := bead.NewStore(roots.StoreDir)
 	require.NoError(t, store.Init(context.Background()))
 
 	first := &bead.Bead{ID: "ddx-0001", Title: "First ready", Priority: 0}
@@ -3037,6 +3083,94 @@ func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead)
 	require.NoError(t, store.Create(context.Background(), second))
 
 	return store, first, second
+}
+
+// TestNewExecuteLoopTestStoreUsesPrivateRoots proves the execute-loop store
+// helper pins fixture-local DDx/config roots and does not inherit a
+// process-global HOME/cache path that could enumerate a shared scratch tree.
+func TestNewExecuteLoopTestStoreUsesPrivateRoots(t *testing.T) {
+	sharedHome := t.TempDir()
+	sharedCache := filepath.Join(sharedHome, ".cache", "ddx", "exec-wt")
+	require.NoError(t, os.MkdirAll(sharedCache, 0o755))
+	sharedConfigDir := filepath.Join(sharedHome, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(sharedConfigDir, 0o755))
+	// Host-looking global config that would redirect execution temp onto the
+	// shared cache if the helper failed to pin private roots.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(sharedConfigDir, "config.yaml"),
+		[]byte("version: \"1.0\"\nexecutions:\n  temp_worktree_root: "+sharedCache+"\n"),
+		0o644,
+	))
+
+	// Poison process-global roots the way a host environment would.
+	t.Setenv("HOME", sharedHome)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(sharedHome, ".local", "share"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(sharedHome, ".cache"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(sharedHome, ".config"))
+	t.Setenv(config.ExecutionWorktreeRootEnv, "")
+
+	store, first, second := newExecuteLoopTestStore(t)
+	require.NotNil(t, store)
+	require.NotNil(t, first)
+	require.NotNil(t, second)
+
+	// Store lives under the private fixture, not the poisoned shared home.
+	assertPathOutside(t, store.Dir, sharedHome)
+
+	// Env pins override the poisoned shared roots.
+	require.NotEqual(t, filepath.Clean(sharedHome), filepath.Clean(os.Getenv("HOME")))
+	require.NotEqual(t, filepath.Clean(filepath.Join(sharedHome, ".cache")), filepath.Clean(os.Getenv("XDG_CACHE_HOME")))
+	execWT := os.Getenv(config.ExecutionWorktreeRootEnv)
+	require.NotEmpty(t, execWT)
+	require.NotEqual(t, filepath.Clean(sharedCache), filepath.Clean(execWT))
+	assertPathOutside(t, execWT, sharedHome)
+
+	// Config-derived temp/scratch roots resolve only to the private pin.
+	projectRoot := filepath.Dir(store.Dir)
+	tempRoot := config.ExecutionTempRoot(projectRoot)
+	scratchRoot := config.ExecutionScratchRoot(projectRoot)
+	require.Equal(t, filepath.Clean(execWT), filepath.Clean(tempRoot))
+	assertPathOutside(t, tempRoot, sharedHome)
+	assertPathOutside(t, scratchRoot, sharedHome)
+	// Private pins may live under the process temp dir (t.TempDir does), but
+	// must never be the host temp root itself — that is the shared tree
+	// production cleanup walks when ScratchRoots is unset.
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(tempRoot))
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(scratchRoot))
+}
+
+// assertPathOutside fails when candidate is equal to or nested under root.
+func assertPathOutside(t *testing.T, candidate, root string) {
+	t.Helper()
+	candidate = filepath.Clean(candidate)
+	root = filepath.Clean(root)
+	require.NotEmpty(t, candidate)
+	require.NotEmpty(t, root)
+	require.NotEqual(t, root, candidate, "path %q must not equal root %q", candidate, root)
+	rel, err := filepath.Rel(root, candidate)
+	require.NoError(t, err)
+	require.True(t,
+		rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)),
+		"path %q must not be under root %q (rel=%q)", candidate, root, rel,
+	)
+}
+
+// assertPathUnder fails when candidate is not equal to or nested under root.
+func assertPathUnder(t *testing.T, candidate, root string) {
+	t.Helper()
+	candidate = filepath.Clean(candidate)
+	root = filepath.Clean(root)
+	require.NotEmpty(t, candidate)
+	require.NotEmpty(t, root)
+	if candidate == root {
+		return
+	}
+	rel, err := filepath.Rel(root, candidate)
+	require.NoError(t, err)
+	require.False(t,
+		rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)),
+		"path %q must be under root %q (rel=%q)", candidate, root, rel,
+	)
 }
 
 type staleReadyStore struct {
