@@ -3154,7 +3154,17 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					_, _ = fmt.Fprintf(runtime.Log, "bead readiness requested decomposition; generating split (%s)\n", candidate.ID)
 				}
 				var hookErr error
-				decomp, hookErr = runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
+				decomp, hookErr = runPreclaimDecompositionHookWithResolvingLiveness(
+					ctx,
+					runtime.PostAttemptDecompositionHook,
+					candidate.ID,
+					liveness,
+					harness,
+					model,
+					profile,
+					heartbeatInterval,
+					now,
+				)
 				if hookErr != nil {
 					if err := ctx.Err(); err != nil {
 						applyStop(work.StopInput{ContextErr: err})

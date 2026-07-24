@@ -9,9 +9,10 @@ import (
 type Phase string
 
 const (
-	PhaseQueueing Phase = "queueing"
-	PhaseRunning  Phase = "running"
-	PhaseTerminal Phase = "terminal"
+	PhaseQueueing  Phase = "queueing"
+	PhaseResolving Phase = "resolving"
+	PhaseRunning   Phase = "running"
+	PhaseTerminal  Phase = "terminal"
 )
 
 // Outcome carries the state needed to render the terminal phase/result pair.
