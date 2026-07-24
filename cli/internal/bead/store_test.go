@@ -1472,6 +1472,110 @@ func TestReadyAndBlocked(t *testing.T) {
 	assert.Len(t, blocked, 0)
 }
 
+func TestUnclosedBlockingDeps_ReturnsOpenDepIDs(t *testing.T) {
+	s := newTestStore(t)
+
+	depOpen := &Bead{Title: "Open dep"}
+	depClosed := &Bead{Title: "Closed dep"}
+	target := &Bead{Title: "Target"}
+	require.NoError(t, s.Create(testCtx(), depOpen))
+	require.NoError(t, s.Create(testCtx(), depClosed))
+	require.NoError(t, s.Create(testCtx(), target))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, depOpen.ID))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, depClosed.ID))
+	require.NoError(t, s.Close(testCtx(), depClosed.ID))
+
+	open, err := s.UnclosedBlockingDeps(target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{depOpen.ID}, open)
+
+	// No deps → empty slice.
+	leaf := &Bead{Title: "Leaf"}
+	require.NoError(t, s.Create(testCtx(), leaf))
+	open, err = s.UnclosedBlockingDeps(leaf.ID)
+	require.NoError(t, err)
+	assert.Empty(t, open)
+
+	// All deps closed → empty slice.
+	require.NoError(t, s.Close(testCtx(), depOpen.ID))
+	open, err = s.UnclosedBlockingDeps(target.ID)
+	require.NoError(t, err)
+	assert.Empty(t, open)
+}
+
+func TestClose_RefusesOpenBlocksDep(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{Title: "Prerequisite"}
+	target := &Bead{Title: "Dependent"}
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), target))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, dep.ID))
+
+	err := s.Close(testCtx(), target.ID)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDependencyGateRejected)
+	assert.Contains(t, err.Error(), dep.ID)
+
+	got, getErr := s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusOpen, got.Status, "bead must stay open when dependency gate rejects")
+
+	// Closing is allowed once all blocks-deps are closed.
+	require.NoError(t, s.Close(testCtx(), dep.ID))
+	require.NoError(t, s.Close(testCtx(), target.ID))
+	got, getErr = s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusClosed, got.Status)
+}
+
+func TestCloseWithEvidence_RefusesOpenBlocksDep(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{Title: "Prerequisite"}
+	target := &Bead{Title: "Dependent"}
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), target))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, dep.ID))
+
+	// Supply execution evidence so ClosureGate is not the refusal reason.
+	require.NoError(t, s.AppendEvent(target.ID, BeadEvent{
+		Kind:    "execute-bead",
+		Summary: "success",
+	}))
+	err := s.CloseWithEvidence(target.ID, "session-test", "abc123")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDependencyGateRejected)
+	assert.Contains(t, err.Error(), dep.ID)
+
+	got, getErr := s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusOpen, got.Status, "bead must stay open when dependency gate rejects")
+}
+
+func TestUpdateWithLifecycleStatus_RefusesCloseWithOpenBlocksDep(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{Title: "Prerequisite"}
+	target := &Bead{Title: "Dependent"}
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), target))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, dep.ID))
+
+	err := s.UpdateWithLifecycleStatus(target.ID, StatusClosed, LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "operator status closed",
+		Source:      "test",
+	}, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDependencyGateRejected)
+	assert.Contains(t, err.Error(), dep.ID)
+
+	got, getErr := s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusOpen, got.Status, "bead must stay open when dependency gate rejects")
+}
+
 func TestDepAddValidation(t *testing.T) {
 	s := newTestStore(t)
 

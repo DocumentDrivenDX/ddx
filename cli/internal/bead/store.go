@@ -749,6 +749,11 @@ func (s *Store) SetLifecycleStatus(id string, status string, opts LifecycleTrans
 // UpdateWithLifecycleStatus atomically applies non-status field mutations and
 // a validated lifecycle status transition.
 func (s *Store) UpdateWithLifecycleStatus(id string, status string, opts LifecycleTransitionOptions, mutate func(*Bead) error) error {
+	if status == StatusClosed {
+		if err := s.rejectIfUnclosedBlockingDeps(id); err != nil {
+			return err
+		}
+	}
 	return s.updateBead(id, true, func(b *Bead) error {
 		beforeStatus := b.Status
 		if mutate != nil {
@@ -1607,6 +1612,9 @@ func (s *Store) Close(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("bead: close requires bead id")
 	}
+	if err := s.rejectIfUnclosedBlockingDeps(id); err != nil {
+		return err
+	}
 	// Capture last review verdict before closure for reviewer-accuracy tracking.
 	// If the operator manually closes a BLOCK-reviewed bead, that contradicts
 	// the reviewer's verdict (potential false-positive).
@@ -2068,6 +2076,9 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 }
 
 func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string) error {
+	if err := s.rejectIfUnclosedBlockingDeps(id); err != nil {
+		return err
+	}
 	return s.updateBead(id, true, func(b *Bead) error {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
@@ -2375,6 +2386,50 @@ func unclosedDependencyIDs(b Bead, statusMap map[string]string) []string {
 		}
 	}
 	return unclosed
+}
+
+// UnclosedBlockingDeps returns the sorted IDs of blocking dependencies of id
+// whose status does not satisfy dependents (not closed). Returns an empty
+// slice when every dependency is closed or the bead has no dependencies.
+func (s *Store) UnclosedBlockingDeps(id string) ([]string, error) {
+	if id == "" {
+		return nil, fmt.Errorf("bead: UnclosedBlockingDeps requires bead id")
+	}
+	beads, err := s.ReadAll(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	statusMap := make(map[string]string, len(beads))
+	var target *Bead
+	for i := range beads {
+		statusMap[beads[i].ID] = beads[i].Status
+		if beads[i].ID == id {
+			target = &beads[i]
+		}
+	}
+	if target == nil {
+		return nil, fmt.Errorf("bead: not found: %s", id)
+	}
+	unclosed := unclosedDependencyIDs(*target, statusMap)
+	sort.Strings(unclosed)
+	if unclosed == nil {
+		return []string{}, nil
+	}
+	return unclosed, nil
+}
+
+// rejectIfUnclosedBlockingDeps returns ErrDependencyGateRejected wrapped with
+// the target bead ID and the open dependency IDs when any blocking dependency
+// is still unclosed.
+func (s *Store) rejectIfUnclosedBlockingDeps(id string) error {
+	open, err := s.UnclosedBlockingDeps(id)
+	if err != nil {
+		return err
+	}
+	if len(open) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: bead %s: %s", ErrDependencyGateRejected, id, strings.Join(open, ", "))
 }
 
 // activeRetryCooldown returns the retry-after time and whether the cooldown is
