@@ -158,6 +158,9 @@ func TestEfficacyRowsSparklineTracksHourlySuccessRate(t *testing.T) {
 }
 
 func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
+	if testing.Short() {
+		t.Skip("perf thresholds skipped in -short")
+	}
 	if raceEnabled {
 		t.Skip("perf thresholds are measured without the race detector")
 	}

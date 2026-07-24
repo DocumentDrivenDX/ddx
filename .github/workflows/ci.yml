@@ -90,7 +90,12 @@ jobs:
         export XDG_DATA_HOME="$(mktemp -d)"
 
         cd cli
-        go test ./... -count=1 -timeout 30m
+        # -short: skip latency-budget fixtures (they already skip under -race in
+        # go-test-all; re-running them here without -race on shared GH runners
+        # flakes on p95 budgets and is not what this pollution guard measures).
+        # Correctness is owned by lefthook go-test-all above; this step only
+        # needs ordinary package tests to exercise state-root writes.
+        go test -short ./... -count=1 -timeout 30m
 
         ./build/ddx server --addr 127.0.0.1 --port 17743 --tsnet=false > ../ddx-state-guard-server.log 2>&1 &
         server_pid=$!
