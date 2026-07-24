@@ -9,6 +9,12 @@ on:
     - cron: '0 4 * * 1'  # Weekly on Monday at 04:00 UTC
   workflow_dispatch:
 
+# Cancel superseded runs on the same ref so tracker-heartbeat floods do not
+# queue dozens of full-suite jobs behind a single failing SHA.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Minimal permissions by default
 permissions:
   contents: read
@@ -81,11 +87,15 @@ jobs:
       run: |
         set -euo pipefail
 
+        # Correctness is already validated by lefthook go-test-all above.
+        # Do NOT re-run the full suite here: a second pass without -race has
+        # repeatedly failed on latency-budget flakes and TempDir cleanup races
+        # (e.g. TestWatchdogLoopPeriodicallyChecks) that are orthogonal to this
+        # guard. This step only asserts a clean server start under an isolated
+        # XDG does not materialize a polluted project registry.
         export XDG_DATA_HOME="$(mktemp -d)"
 
         cd cli
-        go test ./... -count=1 -timeout 30m
-
         ./build/ddx server --addr 127.0.0.1 --port 17743 --tsnet=false > ../ddx-state-guard-server.log 2>&1 &
         server_pid=$!
         cleanup() {
