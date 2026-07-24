@@ -9,6 +9,12 @@ on:
     - cron: '0 4 * * 1'  # Weekly on Monday at 04:00 UTC
   workflow_dispatch:
 
+# Cancel superseded runs on the same ref so tracker-heartbeat floods do not
+# queue dozens of full-suite jobs behind a single failing SHA.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Minimal permissions by default
 permissions:
   contents: read
