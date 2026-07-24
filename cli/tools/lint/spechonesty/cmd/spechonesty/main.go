@@ -5,9 +5,9 @@
 // failures, exits non-zero when any such failure is found, and never writes
 // to the docs tree.
 //
-// Sibling parser symbols (verification inventory, waiver policy) remain
-// reachable from main for production RTA without changing the status-gate
-// exit contract.
+// Sibling parser symbols (verification inventory, waiver policy,
+// observation freshness) remain reachable from main for production RTA
+// without changing the status-gate exit contract.
 //
 // Usage:
 //
@@ -52,15 +52,17 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", d.Path, line, d.Kind, d.Message)
 			exitCode = 1
 		}
-		// Keep verification / waiver symbols production-reachable (read-only).
-		// These probes must not change the status-gate exit contract.
+		// Keep verification / waiver / observation-freshness symbols
+		// production-reachable (read-only). These probes must not change
+		// the status-gate exit contract.
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
-// touchSiblingParsers exercises verification and waiver parsers on markdown
-// under root so those package symbols remain reachable from main. Read-only.
+// touchSiblingParsers exercises verification, waiver, and observation-
+// freshness parsers on markdown under root so those package symbols remain
+// reachable from main. Read-only; never changes the status-gate exit path.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -112,4 +114,27 @@ func probeFile(path string) {
 	_ = spechonesty.ApplyWaiverPolicy(spechonesty.StatusComplete, waiver, findings)
 	_ = spechonesty.IsNonCompleteWaiverEligible(spechonesty.StatusProposed)
 	_ = spechonesty.ApplyWaiverPolicy(spechonesty.StatusProposed, waiver, findings)
+
+	// Observation freshness (WB-1 step 4): inject a probe revision so unit
+	// tests stay hermetic and production RTA sees CheckObservationFreshness
+	// (and Observation.IsStructured via its body). No network/git fetch.
+	statusRes, statusErr := spechonesty.ParseDocumentStatus(path)
+	status := spechonesty.StatusComplete
+	if statusErr == nil && statusRes != nil {
+		status = statusRes.Status
+	}
+	obs := spechonesty.Observation{
+		RequirementRef:  "probe",
+		Revision:        "probe-rev",
+		ExitCode:        0,
+		ExitCodePresent: true,
+	}
+	_ = obs.IsStructured()
+	_ = spechonesty.CheckObservationFreshness(spechonesty.FreshnessInput{
+		CurrentRevision: "probe-rev",
+		Status:          status,
+		Path:            path,
+		Rows:            model.Rows,
+		Observations:    []spechonesty.Observation{obs},
+	})
 }
