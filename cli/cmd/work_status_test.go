@@ -105,6 +105,101 @@ func TestWorkStatusAllProjectsShowsExplicitGlobalView(t *testing.T) {
 	assert.Contains(t, projects, projectB)
 }
 
+// TestWorkStatusAllProjectsRetainsLiveWorkerListing is the regression
+// guard for ddx-b0de0d36: after missing-desired-worker diagnostics land
+// in `ddx worker status`, `ddx work status --all-projects` must keep
+// listing every live worker with its own project_root. Desired-state
+// messaging must not replace or dilute those live rows.
+func TestWorkStatusAllProjectsRetainsLiveWorkerListing(t *testing.T) {
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+	projectC := t.TempDir()
+	now := time.Now().UTC()
+
+	// Desired-state file present for project A only — proves work status
+	// does not read desired.json or emit worker-status diagnostics when
+	// listing live processes across projects.
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectA, "workers"), 0o755))
+	require.NoError(t, os.WriteFile(
+		ddxroot.JoinProject(projectA, "workers", "desired.json"),
+		[]byte(`{"project_root":"`+projectA+`","desired_count":3,"updated_at":"2026-01-01T00:00:00Z"}`),
+		0o644,
+	))
+
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         1101,
+			Command:     "ddx work --watch --project " + projectA,
+			ProjectRoot: projectA,
+			StartedAt:   now.Add(-5 * time.Minute),
+			Age:         "5m",
+			AgeSeconds:  300,
+		},
+		{
+			PID:         2202,
+			Command:     "ddx try ddx-bbbbbbbb --project " + projectB,
+			ProjectRoot: projectB,
+			StartedAt:   now.Add(-3 * time.Minute),
+			Age:         "3m",
+			AgeSeconds:  180,
+		},
+		{
+			PID:         3303,
+			Command:     "ddx work --once --project " + projectC,
+			ProjectRoot: projectC,
+			StartedAt:   now.Add(-1 * time.Minute),
+			Age:         "1m",
+			AgeSeconds:  60,
+		},
+	}
+
+	factory := NewCommandFactory(projectA)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	jsonOut, err := executeCommand(root, "work", "status", "--project", projectA, "--all-projects", "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
+	assert.Equal(t, "all-projects", report.Scope)
+	require.Len(t, report.Workers, 3, "all-projects must retain every live worker row; got %s", jsonOut)
+
+	byPID := make(map[int]workerstatus.LiveWorker, len(report.Workers))
+	for _, w := range report.Workers {
+		byPID[w.PID] = w
+		assert.NotEmpty(t, w.ProjectRoot, "every live worker must carry its own project_root")
+	}
+	require.Contains(t, byPID, 1101)
+	require.Contains(t, byPID, 2202)
+	require.Contains(t, byPID, 3303)
+	assert.Equal(t, projectA, byPID[1101].ProjectRoot)
+	assert.Equal(t, projectB, byPID[2202].ProjectRoot)
+	assert.Equal(t, projectC, byPID[3303].ProjectRoot)
+
+	// Desired-state fields/diagnostics belong to `ddx worker status`, not
+	// the live-worker listing.
+	assert.NotContains(t, jsonOut, "desired_count",
+		"work status must not mix desired-state payload into live-worker listing")
+	assert.NotContains(t, jsonOut, "no desired state",
+		"work status must not emit worker-status absent-desired diagnostics")
+
+	// Fresh root: cobra flag state from the --json run must not leak into text.
+	textOut, err := executeCommand(factory.NewRootCommand(), "work", "status", "--project", projectA, "--all-projects")
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "live ddx workers (all projects): 3")
+	assert.Contains(t, textOut, "pid=1101")
+	assert.Contains(t, textOut, "pid=2202")
+	assert.Contains(t, textOut, "pid=3303")
+	assert.Contains(t, textOut, "project="+projectA)
+	assert.Contains(t, textOut, "project="+projectB)
+	assert.Contains(t, textOut, "project="+projectC)
+	assert.NotContains(t, textOut, "no desired state persisted",
+		"all-projects live listing must not surface worker desired-state messaging")
+	assert.NotContains(t, textOut, "desired_count",
+		"all-projects live listing must not surface worker desired-state messaging")
+}
+
 // TestWorkStatusNoLiveWorkersNamesProjectRoot proves the empty state
 // names the resolved project root rather than falling back to silence or
 // to unrelated processes. This is the exact failure surface the bead
