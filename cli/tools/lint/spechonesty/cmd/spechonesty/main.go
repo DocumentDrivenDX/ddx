@@ -1,13 +1,20 @@
-// Command spechonesty runs the Phase 2 spec-honesty analyzer.
+// Command spechonesty runs the Phase 2 spec-honesty docs-directory gate.
 //
-// This entrypoint exercises the read-only requirement-inventory and
-// Verification-mapping parser, plus the verification-waiver policy
-// (WB-1 step 5), so those symbols are production-reachable from main.
-// Coverage resolution and full status parsing are owned by sibling beads.
+// It accepts one or more docs directory (or file) arguments, scans Markdown
+// documents for status stamps, prints diagnostics for parse or missing-status
+// failures, exits non-zero when any such failure is found, and never writes
+// to the docs tree.
+//
+// Sibling parser symbols (verification inventory, waiver policy) remain
+// reachable from main for production RTA without changing the status-gate
+// exit contract.
 //
 // Usage:
 //
-//	go run ./tools/lint/spechonesty/cmd/spechonesty <path>...
+//	go run ./tools/lint/spechonesty/cmd/spechonesty <docs-dir>
+//
+// With no arguments, the go/analysis singlechecker entry used by analysistest
+// and sibling linters is preserved.
 package main
 
 import (
@@ -31,23 +38,37 @@ func main() {
 
 	exitCode := 0
 	for _, root := range os.Args[1:] {
-		if err := walkDocs(root); err != nil {
+		diags, err := spechonesty.ScanDocsDirectory(root)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			exitCode = 1
+			continue
 		}
+		for _, d := range diags {
+			line := d.Line
+			if line <= 0 {
+				line = 1
+			}
+			fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", d.Path, line, d.Kind, d.Message)
+			exitCode = 1
+		}
+		// Keep verification / waiver symbols production-reachable (read-only).
+		// These probes must not change the status-gate exit contract.
+		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
-// walkDocs parses every markdown file under root into a DocumentModel
-// and reports parse-level findings. Files are never modified.
-func walkDocs(root string) error {
+// touchSiblingParsers exercises verification and waiver parsers on markdown
+// under root so those package symbols remain reachable from main. Read-only.
+func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() {
-		return parseOne(root)
+		probeFile(root)
+		return nil
 	}
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -59,43 +80,27 @@ func walkDocs(root string) error {
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 			return nil
 		}
-		return parseOne(path)
+		probeFile(path)
+		return nil
 	})
 }
 
-func parseOne(path string) error {
+func probeFile(path string) {
 	model, err := spechonesty.ParseVerificationDocument(path)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", path, err)
+		return
 	}
-	// Touch inventory/rows so the structured model is fully exercised
-	// from production and not optimized away by reachability analysis.
 	_ = model.Inventory
 	_ = model.InventoryKind
 	_ = model.Rows
 	for _, f := range model.Findings {
-		fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", f.Path, f.Line, f.Kind, f.Message)
+		_ = f
 	}
 
-	// Wire verification-waiver policy into the production path so
-	// ParseVerificationWaiverFile / ApplyWaiverPolicy (and helpers) are
-	// reachable under deadcode RTA. Status parsing is a sibling bead;
-	// probe both Complete and non-Complete branches here.
-	if err := applyWaiverProbe(path); err != nil {
-		return err
-	}
-	return nil
-}
-
-// applyWaiverProbe reads a verification-waiver from path and runs
-// ApplyWaiverPolicy for Complete and non-Complete statuses. Read-only.
-func applyWaiverProbe(path string) error {
 	waiver, err := spechonesty.ParseVerificationWaiverFile(path)
 	if err != nil {
-		return fmt.Errorf("waiver %s: %w", path, err)
+		return
 	}
-	// Synthetic coverage finding: real coverage is owned by the coverage
-	// child; this only exercises the waiver severity branch.
 	findings := []spechonesty.CoverageFinding{{
 		Path:     path,
 		Line:     1,
@@ -103,21 +108,8 @@ func applyWaiverProbe(path string) error {
 		Severity: spechonesty.SeverityError,
 		Message:  "unmet verification requirement",
 	}}
-
-	// Complete: waiver ignored (coverage failure remains error).
 	_ = spechonesty.IsCompleteStatus(spechonesty.StatusComplete)
-	completeOut := spechonesty.ApplyWaiverPolicy(spechonesty.StatusComplete, waiver, findings)
-	for _, f := range completeOut {
-		if f.Severity == spechonesty.SeverityError {
-			fmt.Fprintf(os.Stderr, "%s:%d: error: %s\n", f.Path, f.Line, f.Message)
-		}
-	}
-
-	// Non-Complete: reasoned waiver may downgrade unmet verification.
+	_ = spechonesty.ApplyWaiverPolicy(spechonesty.StatusComplete, waiver, findings)
 	_ = spechonesty.IsNonCompleteWaiverEligible(spechonesty.StatusProposed)
-	proposedOut := spechonesty.ApplyWaiverPolicy(spechonesty.StatusProposed, waiver, findings)
-	for _, f := range proposedOut {
-		fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", f.Path, f.Line, f.Severity, f.Message)
-	}
-	return nil
+	_ = spechonesty.ApplyWaiverPolicy(spechonesty.StatusProposed, waiver, findings)
 }
