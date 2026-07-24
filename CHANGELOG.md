@@ -4,6 +4,21 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: Fizeau v0.16.1 point release
+
+DDx now consumes `github.com/easel/fizeau v0.16.1`.
+
+This refresh fixes the `claude-tui` harness against Claude Code 2.1.218's
+two-choice Bypass Permissions consent screen: the screen now defaults its
+cursor to "No, exit", so the previous single-Enter interstitial handler quit
+Claude before the task was sent, surfacing downstream as a Stop-hook PTY
+closure with zero tokens and no output. The harness now selects "Yes, I
+accept" — only under explicit unrestricted authorization — after verifying
+the highlight moved and the dialog cleared. Startup is also fail-loud instead
+of silently blind-pasting when the consent flow can't be confidently
+resolved, and Fizeau adds a `grok` harness for xAI's Grok Build CLI with
+model discovery, weekly-pool quota tracking, and account evidence.
+
 ### Fixed: stale worker sidecars no longer poison worker listings
 
 Server worker listings now ignore `.ddx/workers/agent-loop-*/status.json`
