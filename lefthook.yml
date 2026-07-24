@@ -146,7 +146,7 @@ pre-commit:
       run: |
         staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.+\.go$' || true)
         [ -z "$staged" ] && exit 0
-        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '^\./tools/lint/evidencelint' || true)
+        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '/testdata/' | grep -v '^\./tools/lint/evidencelint' || true)
         [ -z "$pkgs" ] && exit 0
         out=$(go run ./tools/lint/evidencelint/cmd/evidencelint $pkgs 2>&1) || true
         violations=""
@@ -181,7 +181,7 @@ pre-commit:
       run: |
         staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.+\.go$' || true)
         [ -z "$staged" ] && exit 0
-        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '^\./tools/lint/runtimelint' || true)
+        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '/testdata/' | grep -v '^\./tools/lint/runtimelint' || true)
         [ -z "$pkgs" ] && exit 0
         out=$(go run ./tools/lint/runtimelint/cmd/runtimelint $pkgs 2>&1) || true
         violations=""
@@ -201,6 +201,37 @@ pre-commit:
         - merge
         - rebase
       fail_text: "Forbidden runtime-struct field or legacy *Options type in staged file. Move durable knobs to config.ResolvedConfig and use the *Runtime pair (SD-024 §Stage 4 / TD-024 §Lint rule)."
+
+    # ddx-2a319f04: Store.WriteAll inside WithLock re-enters the non-reentrant
+    # collection lock and deadlocks until LockWait (cascading CI "bead: lock
+    # timeout" failures). Flag nested WriteAll on *bead.Store; use WriteAllLocked.
+    lock-reentry-lint:
+      <<: *go_checks
+      name: "Lock re-entry lint (WriteAll inside WithLock)"
+      glob: "cli/**/*.go"
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.+\.go$' || true)
+        [ -z "$staged" ] && exit 0
+        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '/testdata/' | grep -v '^\./tools/lint/lockreentrylint' || true)
+        [ -z "$pkgs" ] && exit 0
+        out=$(go run ./tools/lint/lockreentrylint/cmd/lockreentrylint $pkgs 2>&1) || true
+        violations=""
+        for f in $staged; do
+          bare="${f#cli/}"
+          m=$(printf '%s\n' "$out" | grep "/$bare:" || true)
+          if [ -n "$m" ]; then
+            violations="$violations$m"$'\n'
+          fi
+        done
+        if [ -n "$violations" ]; then
+          printf '%s' "$violations"
+          exit 1
+        fi
+        exit 0
+      skip:
+        - merge
+        - rebase
+      fail_text: "Store.WriteAll nested inside WithLock re-enters the non-reentrant collection lock. Use WriteAllLocked (ddx-2a319f04)."
 
     # Go tests - targeted testing
     go-test:
@@ -515,6 +546,15 @@ ci:
       name: "Runtime Lint (SD-024 forbidden runtime fields + legacy options) — full tree"
       root: "cli/"
       run: 'go run ./tools/lint/runtimelint/cmd/runtimelint ./...'
+
+    # ddx-2a319f04: full-tree gate for Store.WriteAll nested inside WithLock.
+    # Pre-commit only scans staged packages; this CI gate catches regressions
+    # introduced via interface indirection or unstaged call sites.
+    lock-reentry-lint-all:
+      <<: *go_checks
+      name: "Lock re-entry lint (WriteAll inside WithLock) — full tree"
+      root: "cli/"
+      run: 'go run ./tools/lint/lockreentrylint/cmd/lockreentrylint ./...'
 
     ddxroot-path-audit-all:
       name: "Guard hardcoded DDx state-root callsites — full tree"
