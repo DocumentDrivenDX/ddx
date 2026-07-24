@@ -454,9 +454,27 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 		return err
 	}
 
+	// Stale disk IDs may still represent a live same-machine managed attempt
+	// with a fresh claim/heartbeat (e.g. after restart when the manager
+	// handle is gone and secondary liveness signals are stale). stopStaleDiskEntry
+	// preserves those workers; they must remain counted as active so desired-
+	// count reconciliation does not start a replacement duplicate.
 	for _, id := range staleIDs {
 		if err := s.manager.stopStaleDiskEntry(id); err != nil {
 			return err
+		}
+		dir := filepath.Join(s.manager.rootDir, id)
+		rec, readErr := s.manager.readRecord(dir)
+		if readErr != nil {
+			continue
+		}
+		if rec.State != "running" && rec.State != "stopping" {
+			continue
+		}
+		// Preserved disk-only attempt: occupy a desired slot.
+		active = append(active, rec)
+		if rec.State == "running" {
+			running = append(running, rec)
 		}
 	}
 
