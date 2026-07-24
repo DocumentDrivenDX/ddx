@@ -523,11 +523,6 @@ func trackerStaleLockGuardMutex(guardPath string) *sync.Mutex {
 	return actual.(*sync.Mutex)
 }
 
-func tryAcquireTrackerStaleLockBreakGuard(lockDir string) (*trackerStaleLockTransitionGuard, bool) {
-	guard, acquired, _ := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
-	return guard, acquired
-}
-
 func tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir string, observer func(trackerStaleLockGuardStage)) (*trackerStaleLockTransitionGuard, bool, error) {
 	guardPath := trackerStaleLockBreakGuardPath(lockDir)
 	if guardPath == "" {
