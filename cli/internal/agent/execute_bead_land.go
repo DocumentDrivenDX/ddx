@@ -925,7 +925,8 @@ func checkoutSyncDeferralIgnoredPath(path string) bool {
 		strings.HasPrefix(path, ".ddx/runs/") ||
 		strings.HasPrefix(path, ".ddx/backups/") ||
 		strings.HasPrefix(path, ".ddx/run-state/") ||
-		strings.HasPrefix(path, ".ddx/.git-tracker.lock/") {
+		strings.HasPrefix(path, ".ddx/.git-tracker.lock/") ||
+		(strings.HasPrefix(path, ".ddx/.git-tracker.lock.") && strings.HasSuffix(path, ".lock")) {
 		return true
 	}
 	return path == ".ddx/run-state.json" || path == ExecutionCleanupMetadataFileName

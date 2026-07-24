@@ -482,6 +482,11 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/.git-tracker.lock/"):
 		return true
+	case strings.HasPrefix(path, ".ddx/.git-tracker.lock.") && strings.HasSuffix(path, ".lock"):
+		// Main-git-lock stale-break uses a stable sibling advisory-lock sidecar
+		// (for example .ddx/.git-tracker.lock.stale-break.lock) and contender-
+		// unique tombstones. Runtime coordination only — not parent work.
+		return true
 	case path == ".ddx/beads.lock":
 		return true
 	case strings.HasPrefix(path, ".ddx/beads.lock/"):
