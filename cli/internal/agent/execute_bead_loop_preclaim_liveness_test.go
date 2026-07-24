@@ -17,6 +17,140 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWorkLoop_PreClaimDecompositionPublishesCandidateResolvingState blocks a
+// hermetic decomposition hook and proves the sidecar reports the candidate bead
+// ID, phase=resolving, and a non-zero last_activity_at before any claim or lease
+// exists. Preclaim resolving must not invent an implementation attempt_id or
+// create a claim lease for the candidate (ddx-9205ea9b).
+func TestWorkLoop_PreClaimDecompositionPublishesCandidateResolvingState(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	candidate := &bead.Bead{
+		ID:         "ddx-preclaim-candidate-resolving",
+		Title:      "Expose candidate resolving state",
+		Acceptance: "1. TestWorkLoop_PreClaimDecompositionPublishesCandidateResolvingState\n2. cd cli && go test ./internal/agent/...",
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var execCalls int32
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			t.Error("executor must not run while preclaim candidate resolving is published")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "split for candidate resolving state coverage",
+		Children: []PreClaimDecompositionChild{
+			{
+				Title:       "Child candidate resolving",
+				Description: "PROBLEM\nChild\n\nROOT CAUSE\ncli/internal/agent/preclaim_decomp_liveness.go:1\n",
+				Acceptance:  "1. TestChildCandidateResolving\n2. cd cli && go test ./internal/agent/...",
+			},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. TestWorkLoop_PreClaimDecompositionPublishesCandidateResolvingState", Coverage: "covered by Child candidate resolving AC 1"},
+			{ParentAC: "2. cd cli && go test ./internal/agent/...", Coverage: "covered by Child candidate resolving AC 2"},
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		HeartbeatInterval:     5 * time.Millisecond,
+		MaxDecompositionDepth: 3,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	projectRoot := store.Dir
+	sessionID := "sess-preclaim-candidate-resolving"
+	type runResult struct {
+		attempts int
+		err      error
+	}
+	done := make(chan runResult, 1)
+	go func() {
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			TargetBeadID: candidate.ID,
+			ProjectRoot:  projectRoot,
+			SessionID:    sessionID,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeTooLargeDecomposed,
+					Detail:  "too large; split required",
+				}, nil
+			},
+			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+				close(entered)
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				return decomp, nil
+			},
+		})
+		attempts := 0
+		if result != nil {
+			attempts = result.Attempts
+		}
+		done <- runResult{attempts: attempts, err: err}
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("decomposition hook never entered")
+	}
+
+	// While the hook is blocked (pre-claim), sidecar must expose candidate
+	// resolving state with an initialized last_activity_at.
+	var rec workerstatus.LivenessRecord
+	require.Eventually(t, func() bool {
+		got, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+		if err != nil {
+			return false
+		}
+		if got.CurrentBead != candidate.ID || got.Phase != "resolving" || got.LastActivityAt.IsZero() {
+			return false
+		}
+		rec = got
+		return true
+	}, 2*time.Second, 5*time.Millisecond,
+		"sidecar must publish candidate bead ID, phase=resolving, and non-zero last_activity_at before claim")
+
+	assert.Equal(t, candidate.ID, rec.CurrentBead)
+	assert.Equal(t, "resolving", rec.Phase)
+	assert.False(t, rec.LastActivityAt.IsZero(), "last_activity_at must be initialized for candidate resolving")
+	// Candidate resolving is published without an implementation attempt identity.
+	// The worker may hold a pre-dispatch ownership lease (ClaimWithOptions) so
+	// concurrent workers skip the candidate, but that lease must not surface as
+	// an implementation attempt_id or increment attempt counters.
+	assert.Empty(t, rec.AttemptID, "candidate resolving must not invent an implementation attempt_id")
+
+	got, err := store.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status,
+		"tracked lifecycle must remain open during preclaim resolving (ClaimWithOptions does not promote to in_progress)")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls),
+		"implementation executor must not run during candidate resolving")
+
+	close(release)
+	gotRun := <-done
+	require.NoError(t, gotRun.err)
+	assert.Equal(t, 0, gotRun.attempts,
+		"preclaim decomposition must not increment implementation-attempt counters")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls),
+		"executor must never run for pure candidate resolving decomposition")
+}
+
 // TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata blocks a
 // hermetic decomposition hook and proves the sidecar includes provider-child
 // metadata for the candidate while phase=resolving, excluding processes that
