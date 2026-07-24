@@ -10,4 +10,7 @@ var (
 	ErrNotClaimedByOwner = errors.New("bead: not claimed by requesting owner")
 	ErrUnsupported       = errors.New("bead: operation not supported by this backend")
 	ErrDeprecated        = errors.New("bead: deprecated")
+	// ErrDependencyGateRejected indicates a close was refused because the
+	// bead still has one or more unclosed blocking dependencies.
+	ErrDependencyGateRejected = errors.New("bead: unclosed blocking dependencies")
 )
