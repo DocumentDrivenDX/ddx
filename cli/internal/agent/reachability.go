@@ -60,8 +60,8 @@ func keepAgentSupportReachability() {
 	_ = renderer.FormatLifecycleLine(WorkLogLifecycleLine{Message: "keepalive"})
 
 	// Offline coordination journal (ADR-022) is package-level production API
-	// ahead of try/work wiring; keep Open/Append/Ack/ListPending/Load/Close on
-	// the static graph.
+	// ahead of try/work wiring; keep Open/Append/Ack/Compact/ListPending/Load/Close
+	// on the static graph.
 	_ = OfflineJournalPath(root)
 	_ = OfflineJournalAckPath(root)
 	j, err := OpenOfflineJournal(root)
@@ -78,6 +78,7 @@ func keepAgentSupportReachability() {
 		})
 		if appendErr == nil {
 			_ = j.AcknowledgeThrough(rec.Sequence)
+			_ = j.Compact()
 		}
 		_, _ = j.ListPending()
 		_ = j.Close()

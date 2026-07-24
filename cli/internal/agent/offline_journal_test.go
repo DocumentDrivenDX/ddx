@@ -281,3 +281,204 @@ func TestOfflineJournal_AcknowledgedResume(t *testing.T) {
 	assert.Equal(t, uint64(5), finalPending[0].Sequence)
 	assert.Equal(t, "idem-ack-5", finalPending[0].IdempotencyKey)
 }
+
+// TestOfflineJournal_SafeCompaction verifies offline journal safe compaction
+// (ADR-022):
+//  1. Compaction never drops an unacknowledged mutation.
+//  2. Compacted and reopened journals preserve unacknowledged mutations in
+//     original order with idempotency key, payload hash, precondition, and
+//     outcome fields intact.
+//  3. Acknowledged-through state and the next monotonic sequence number
+//     survive compaction and close/reopen (including a fully compacted journal).
+func TestOfflineJournal_SafeCompaction(t *testing.T) {
+	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+
+	j, err := OpenOfflineJournal(projectRoot)
+	require.NoError(t, err)
+
+	inputs := []OfflineJournalAppend{
+		{
+			Operation:      "claim",
+			IdempotencyKey: "idem-compact-1",
+			PayloadHash:    "sha256:payload-compact-1",
+			Precondition:   `{"bead_status":"open","base_rev":"aaa"}`,
+			Outcome:        "applied",
+		},
+		{
+			Operation:      "tracker_transition",
+			IdempotencyKey: "idem-compact-2",
+			PayloadHash:    "sha256:payload-compact-2",
+			Precondition:   `{"bead_status":"in_progress"}`,
+			Outcome:        "applied",
+		},
+		{
+			Operation:      "land",
+			IdempotencyKey: "idem-compact-3",
+			PayloadHash:    "sha256:payload-compact-3",
+			Precondition:   `{"base_rev":"aaa","result_rev":"bbb"}`,
+			Outcome:        "conflict",
+		},
+		{
+			Operation:      "claim",
+			IdempotencyKey: "idem-compact-4",
+			PayloadHash:    "sha256:payload-compact-4",
+			Precondition:   `{"bead_status":"open"}`,
+			Outcome:        "applied",
+		},
+		{
+			Operation:      "tracker_transition",
+			IdempotencyKey: "idem-compact-5",
+			PayloadHash:    "sha256:payload-compact-5",
+			Precondition:   `{"bead_status":"in_progress"}`,
+			Outcome:        "already_applied",
+		},
+	}
+
+	appended := make([]OfflineJournalRecord, 0, len(inputs))
+	for i, in := range inputs {
+		rec, err := j.Append(in)
+		require.NoError(t, err, "append %d", i)
+		require.Equal(t, uint64(i+1), rec.Sequence)
+		appended = append(appended, rec)
+	}
+
+	// Acknowledge contiguous sequences 1 and 2; 3–5 remain unacknowledged.
+	require.NoError(t, j.AcknowledgeThrough(2))
+	require.Equal(t, uint64(2), j.AcknowledgedThrough())
+
+	pendingBefore, err := j.ListPending()
+	require.NoError(t, err)
+	require.Len(t, pendingBefore, 3)
+	wantPending := appended[2:] // sequences 3, 4, 5
+	for i, want := range wantPending {
+		assert.Equal(t, want.Sequence, pendingBefore[i].Sequence)
+		assert.Equal(t, want.IdempotencyKey, pendingBefore[i].IdempotencyKey)
+		assert.Equal(t, want.PayloadHash, pendingBefore[i].PayloadHash)
+		assert.Equal(t, want.Precondition, pendingBefore[i].Precondition)
+		assert.Equal(t, want.Outcome, pendingBefore[i].Outcome)
+	}
+
+	// AC#1: compaction never drops an unacknowledged mutation.
+	require.NoError(t, j.Compact())
+	assert.Equal(t, uint64(2), j.AcknowledgedThrough(), "ack cursor unchanged by compact")
+	assert.Equal(t, uint64(6), j.NextSequence(), "next sequence preserved after partial compact")
+
+	pendingAfterCompact, err := j.ListPending()
+	require.NoError(t, err)
+	require.Len(t, pendingAfterCompact, 3, "all unacknowledged mutations retained")
+	assert.Equal(t, []uint64{3, 4, 5}, []uint64{
+		pendingAfterCompact[0].Sequence,
+		pendingAfterCompact[1].Sequence,
+		pendingAfterCompact[2].Sequence,
+	})
+
+	// On-disk journal must contain only unacknowledged rows (acked prefix gone).
+	onDisk, err := LoadOfflineJournalRecords(projectRoot)
+	require.NoError(t, err)
+	require.Len(t, onDisk, 3)
+	for _, rec := range onDisk {
+		assert.Greater(t, rec.Sequence, uint64(2), "acked sequence %d must not remain after compact", rec.Sequence)
+	}
+
+	// AC#2: compacted journal preserves order + idempotency/payload/precondition/outcome.
+	for i, want := range wantPending {
+		got := onDisk[i]
+		assert.Equal(t, want.Sequence, got.Sequence, "compacted sequence[%d]", i)
+		assert.Equal(t, want.IdempotencyKey, got.IdempotencyKey, "compacted key[%d]", i)
+		assert.Equal(t, want.PayloadHash, got.PayloadHash, "compacted hash[%d]", i)
+		assert.Equal(t, want.Precondition, got.Precondition, "compacted precondition[%d]", i)
+		assert.Equal(t, want.Outcome, got.Outcome, "compacted outcome[%d]", i)
+		assert.Equal(t, want.Operation, got.Operation, "compacted operation[%d]", i)
+	}
+
+	// No-op compact when nothing acknowledged remains on disk.
+	require.NoError(t, j.Compact())
+	onDiskAgain, err := LoadOfflineJournalRecords(projectRoot)
+	require.NoError(t, err)
+	require.Len(t, onDiskAgain, 3)
+
+	require.NoError(t, j.Close())
+
+	// AC#2 continued: reopen preserves the same unacknowledged mutations/fields.
+	reopened, err := LoadOfflineJournalRecords(projectRoot)
+	require.NoError(t, err)
+	require.Len(t, reopened, 3)
+	for i, want := range wantPending {
+		got := reopened[i]
+		assert.Equal(t, want.Sequence, got.Sequence, "reopened sequence[%d]", i)
+		assert.Equal(t, want.IdempotencyKey, got.IdempotencyKey, "reopened key[%d]", i)
+		assert.Equal(t, want.PayloadHash, got.PayloadHash, "reopened hash[%d]", i)
+		assert.Equal(t, want.Precondition, got.Precondition, "reopened precondition[%d]", i)
+		assert.Equal(t, want.Outcome, got.Outcome, "reopened outcome[%d]", i)
+	}
+
+	// AC#3: acknowledged-through and next monotonic sequence survive compact+reopen.
+	acked, err := LoadOfflineJournalAcknowledgedThrough(projectRoot)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), acked)
+
+	j2, err := OpenOfflineJournal(projectRoot)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), j2.AcknowledgedThrough())
+	assert.Equal(t, uint64(6), j2.NextSequence())
+
+	rec6, err := j2.Append(OfflineJournalAppend{
+		Operation:      "land",
+		IdempotencyKey: "idem-compact-6",
+		PayloadHash:    "sha256:payload-compact-6",
+		Precondition:   `{"base_rev":"bbb"}`,
+		Outcome:        "applied",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(6), rec6.Sequence)
+	assert.Greater(t, rec6.Sequence, reopened[len(reopened)-1].Sequence)
+
+	// Full compact after acknowledging everything: empty journal, sequences continue.
+	require.NoError(t, j2.AcknowledgeThrough(6))
+	require.NoError(t, j2.Compact())
+	assert.Equal(t, uint64(6), j2.AcknowledgedThrough())
+	assert.Equal(t, uint64(7), j2.NextSequence())
+
+	emptyPending, err := j2.ListPending()
+	require.NoError(t, err)
+	assert.Empty(t, emptyPending)
+
+	emptyOnDisk, err := LoadOfflineJournalRecords(projectRoot)
+	require.NoError(t, err)
+	assert.Empty(t, emptyOnDisk, "fully compacted journal has no mutation rows")
+
+	require.NoError(t, j2.Close())
+
+	// AC#3 continued: fully compacted journal still resumes after ack floor.
+	j3, err := OpenOfflineJournal(projectRoot)
+	require.NoError(t, err)
+	defer func() { _ = j3.Close() }()
+	assert.Equal(t, uint64(6), j3.AcknowledgedThrough())
+	assert.Equal(t, uint64(7), j3.NextSequence())
+
+	rec7, err := j3.Append(OfflineJournalAppend{
+		Operation:      "claim",
+		IdempotencyKey: "idem-compact-7",
+		PayloadHash:    "sha256:payload-compact-7",
+		Precondition:   `{"bead_status":"open"}`,
+		Outcome:        "applied",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(7), rec7.Sequence)
+	assert.Equal(t, "idem-compact-7", rec7.IdempotencyKey)
+	assert.Equal(t, "sha256:payload-compact-7", rec7.PayloadHash)
+	assert.Equal(t, `{"bead_status":"open"}`, rec7.Precondition)
+	assert.Equal(t, "applied", rec7.Outcome)
+
+	// Still never drop the sole unacknowledged mutation on a subsequent compact.
+	require.NoError(t, j3.Compact())
+	finalPending, err := j3.ListPending()
+	require.NoError(t, err)
+	require.Len(t, finalPending, 1)
+	assert.Equal(t, uint64(7), finalPending[0].Sequence)
+	assert.Equal(t, "idem-compact-7", finalPending[0].IdempotencyKey)
+	assert.Equal(t, "sha256:payload-compact-7", finalPending[0].PayloadHash)
+	assert.Equal(t, `{"bead_status":"open"}`, finalPending[0].Precondition)
+	assert.Equal(t, "applied", finalPending[0].Outcome)
+}

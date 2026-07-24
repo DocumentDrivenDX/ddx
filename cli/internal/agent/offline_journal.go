@@ -22,7 +22,7 @@ const (
 	// offlineJournalAckFileName is the durable acknowledged-through cursor file.
 	// Stores the highest contiguous sequence number that has been acknowledged
 	// (e.g. by server reconcile). Separate from the JSONL so ack advances do
-	// not rewrite mutation records (physical compaction is a later step).
+	// not rewrite mutation records; Compact may later drop only acked rows.
 	offlineJournalAckFileName = "offline-journal.ack"
 )
 
@@ -61,14 +61,14 @@ type OfflineJournalAppend struct {
 // OfflineJournal is a project-scoped durable ordered offline coordination
 // journal. Create/open via OpenOfflineJournal; append with Append; mark
 // reconcile progress with AcknowledgeThrough; list unacknowledged mutations
-// with ListPending; release with Close. Reopening continues sequence
-// numbering after the highest persisted sequence and reloads the durable
-// acknowledged-through cursor.
+// with ListPending; drop acknowledged records with Compact; release with
+// Close. Reopening continues sequence numbering after the highest of the
+// remaining records and the durable acknowledged-through cursor.
 //
 // Callers that also serialize mutations with OfflineCoordinator should hold
-// that project lock around Append and AcknowledgeThrough. This type owns
-// durable append, sequence assignment, and ack cursor state only; it does
-// not acquire the offline coordination lock.
+// that project lock around Append, AcknowledgeThrough, and Compact. This
+// type owns durable append, sequence assignment, ack cursor, and safe
+// compaction only; it does not acquire the offline coordination lock.
 type OfflineJournal struct {
 	projectRoot string
 	path        string
@@ -95,8 +95,10 @@ func OfflineJournalAckPath(projectRoot string) string {
 
 // OpenOfflineJournal creates or opens the durable offline journal for
 // projectRoot. Sequence numbering starts at 1 for an empty journal, or one
-// past the highest persisted sequence when reopening an existing file. The
-// durable acknowledged-through cursor is loaded when present (default 0).
+// past max(highest persisted sequence, acknowledged-through) when reopening.
+// Using the ack cursor as a floor preserves monotonic numbering after
+// Compact removes acknowledged records (including a fully-compacted journal).
+// The durable acknowledged-through cursor is loaded when present (default 0).
 func OpenOfflineJournal(projectRoot string) (*OfflineJournal, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {
@@ -121,6 +123,11 @@ func OpenOfflineJournal(projectRoot string) (*OfflineJournal, error) {
 		return nil, err
 	}
 
+	nextBase := highest
+	if acked > nextBase {
+		nextBase = acked
+	}
+
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("offline journal: open: %w", err)
@@ -131,7 +138,7 @@ func OpenOfflineJournal(projectRoot string) (*OfflineJournal, error) {
 		path:         path,
 		ackPath:      ackPath,
 		file:         f,
-		nextSeq:      highest + 1,
+		nextSeq:      nextBase + 1,
 		ackedThrough: acked,
 	}, nil
 }
@@ -209,8 +216,94 @@ func (j *OfflineJournal) Append(in OfflineJournalAppend) (OfflineJournalRecord, 
 	return rec, nil
 }
 
-// Close releases the open journal file. After Close, Append and
-// AcknowledgeThrough fail until the journal is reopened via OpenOfflineJournal.
+// Compact safely removes durable journal records at or below the current
+// acknowledged-through sequence. Unacknowledged records are rewritten in
+// original order with idempotency key, payload hash, precondition, outcome,
+// operation, and sequence fields intact. The acknowledged-through cursor is
+// unchanged. In-memory next sequence numbering continues after the highest
+// sequence ever assigned (remaining records or the ack floor), so reopen
+// cannot reuse sequences after compacting away acknowledged prefixes.
+//
+// Compact is a no-op success when no acknowledged records remain on disk.
+// The rewrite is atomic (tmp + fsync + rename). Callers that serialize via
+// OfflineCoordinator should hold that lock around Compact.
+func (j *OfflineJournal) Compact() error {
+	if j == nil {
+		return fmt.Errorf("offline journal: nil receiver")
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.closed || j.file == nil {
+		return fmt.Errorf("offline journal: closed")
+	}
+
+	// Ensure any prior append is durable before we read+rewrite.
+	if err := j.file.Sync(); err != nil {
+		return fmt.Errorf("offline journal: sync before compact: %w", err)
+	}
+
+	recs, err := loadOfflineJournalRecords(j.path)
+	if err != nil {
+		return err
+	}
+
+	pending := make([]OfflineJournalRecord, 0, len(recs))
+	var highest uint64
+	removed := 0
+	for _, rec := range recs {
+		if rec.Sequence > highest {
+			highest = rec.Sequence
+		}
+		if rec.Sequence > j.ackedThrough {
+			pending = append(pending, rec)
+			continue
+		}
+		removed++
+	}
+	if removed == 0 {
+		return nil
+	}
+
+	// Keep nextSeq monotonic even when every record is compacted away:
+	// floor is max(highest remaining-or-removed sequence, ackedThrough).
+	floor := highest
+	if j.ackedThrough > floor {
+		floor = j.ackedThrough
+	}
+	if j.nextSeq <= floor {
+		j.nextSeq = floor + 1
+	}
+
+	// Close the append handle so rename can replace the path on all platforms.
+	if err := j.file.Close(); err != nil {
+		j.file = nil
+		j.closed = true
+		return fmt.Errorf("offline journal: close before compact: %w", err)
+	}
+	j.file = nil
+
+	if err := rewriteOfflineJournalRecords(j.path, pending); err != nil {
+		// Best-effort reopen so a failed compact does not permanently close.
+		if f, openErr := os.OpenFile(j.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); openErr == nil {
+			j.file = f
+		} else {
+			j.closed = true
+		}
+		return err
+	}
+
+	f, err := os.OpenFile(j.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		j.closed = true
+		return fmt.Errorf("offline journal: reopen after compact: %w", err)
+	}
+	j.file = f
+	return nil
+}
+
+// Close releases the open journal file. After Close, Append,
+// AcknowledgeThrough, and Compact fail until the journal is reopened via
+// OpenOfflineJournal.
 func (j *OfflineJournal) Close() error {
 	if j == nil {
 		return nil
@@ -447,6 +540,53 @@ func persistAcknowledgedThrough(path string, seq uint64) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		cleanup()
 		return fmt.Errorf("offline journal: rename ack: %w", err)
+	}
+	return nil
+}
+
+// rewriteOfflineJournalRecords atomically replaces the journal file contents
+// with recs in the given order (typically unacknowledged mutations after Compact).
+// An empty recs slice truncates the journal to zero durable mutation rows while
+// leaving the ack cursor file untouched.
+func rewriteOfflineJournalRecords(path string, recs []OfflineJournalRecord) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("offline journal: mkdir compact: %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "offline-journal-*.tmp")
+	if err != nil {
+		return fmt.Errorf("offline journal: create compact tmp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpPath) }
+
+	for i, rec := range recs {
+		data, err := json.Marshal(rec)
+		if err != nil {
+			_ = tmp.Close()
+			cleanup()
+			return fmt.Errorf("offline journal: marshal compact record %d: %w", i, err)
+		}
+		data = append(data, '\n')
+		if _, err := tmp.Write(data); err != nil {
+			_ = tmp.Close()
+			cleanup()
+			return fmt.Errorf("offline journal: write compact tmp: %w", err)
+		}
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("offline journal: sync compact tmp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("offline journal: close compact tmp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return fmt.Errorf("offline journal: rename compact: %w", err)
 	}
 	return nil
 }
