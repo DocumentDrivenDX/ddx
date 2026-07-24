@@ -1,10 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -298,6 +302,120 @@ func writeStaleClaimLeaseForTest(t *testing.T, s *bead.Store, rec bead.ClaimLeas
 	path := filepath.Join(bead.ClaimLivenessRoot(s.Dir), rec.BeadID+".json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, data, 0o644))
+}
+
+// TestStopStaleDiskEntry_PreservesLivePIDWithFreshClaim verifies that
+// stopStaleDiskEntry classifies reclaimability before signaling: a disk
+// record naming a live same-machine PID with a fresh claim lease must
+// keep the process alive, keep the claim in_progress, leave the record
+// out of the stopped path, and emit a structured preserve diagnostic.
+func TestStopStaleDiskEntry_PreservesLivePIDWithFreshClaim(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("live PID process-control semantics differ on Windows")
+	}
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+
+	root := t.TempDir()
+	beadID := "ddx-stop-stale-live-fresh"
+	store := seedClaimedBead(t, root, beadID)
+
+	cmd := exec.Command("sleep", "600")
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	pid := cmd.Process.Pid
+	require.True(t, processAlive(pid), "test subprocess must start alive")
+
+	machine := os.Getenv("DDX_MACHINE_ID")
+	if machine == "" {
+		var err error
+		machine, err = os.Hostname()
+		require.NoError(t, err)
+	}
+	writeStaleClaimLeaseForTest(t, store, bead.ClaimLeaseRecord{
+		BeadID:    beadID,
+		Owner:     "worker-test",
+		Machine:   machine,
+		StartedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		PID:       pid,
+	})
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260711T204017-live"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, m.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-5 * time.Minute),
+		PID:         pid,
+		CurrentBead: beadID,
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: workerID + "-a1",
+			BeadID:    beadID,
+			Phase:     "running",
+			StartedAt: time.Now().UTC().Add(-5 * time.Minute),
+		},
+	}))
+
+	var logBuf bytes.Buffer
+	restoreLog := redirectStdLogger(&logBuf)
+	defer restoreLog()
+
+	require.NoError(t, m.stopStaleDiskEntry(workerID))
+
+	// AC1: process alive, claim in_progress, record not stopped.
+	assert.True(t, processAlive(pid), "live managed PID must survive stopStaleDiskEntry")
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "running", rec.State, "record must not enter the stopped path")
+	assert.Equal(t, "running", rec.Status)
+	assert.True(t, rec.FinishedAt.IsZero(), "preserved worker must not set FinishedAt")
+
+	b, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, b.Status, "fresh claim must remain in_progress")
+
+	events, err := store.EventsByKind(beadID, "bead.stopped")
+	require.NoError(t, err)
+	assert.Empty(t, events, "preserve path must not emit bead.stopped")
+
+	// AC2: structured supervisor/lifecycle diagnostic with worker ID, PID,
+	// bead ID, and preservation reason.
+	var preserve *WorkerLifecycleEvent
+	for i := range rec.Lifecycle {
+		if rec.Lifecycle[i].Action == "preserve" {
+			preserve = &rec.Lifecycle[i]
+			break
+		}
+	}
+	require.NotNil(t, preserve, "must emit a lifecycle preserve diagnostic")
+	assert.Equal(t, "server-workers", preserve.Actor)
+	assert.Equal(t, beadID, preserve.BeadID)
+	assert.Contains(t, preserve.Detail, workerID)
+	assert.Contains(t, preserve.Detail, fmt.Sprintf("pid=%d", pid))
+	assert.Contains(t, preserve.Detail, beadID)
+	assert.Contains(t, preserve.Detail, "reason=fresh-claim-or-heartbeat")
+
+	diag := logBuf.String()
+	assert.Contains(t, diag, "preserve live disk-record worker")
+	assert.Contains(t, diag, workerID)
+	assert.Contains(t, diag, fmt.Sprintf("pid=%d", pid))
+	assert.Contains(t, diag, beadID)
+	assert.Contains(t, diag, "reason=fresh-claim-or-heartbeat")
 }
 
 // TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim verifies that stale
