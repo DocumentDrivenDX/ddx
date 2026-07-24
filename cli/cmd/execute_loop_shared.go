@@ -616,14 +616,24 @@ func writeServerManagedResult(cmd *cobra.Command, projectRoot string, result *ag
 		return
 	}
 	lastFailureDetail := ""
+	diagnosis := ""
+	restartable := false
 	if n := len(result.Results); n > 0 {
-		lastFailureDetail = result.Results[n-1].Detail
+		last := result.Results[n-1]
+		lastFailureDetail = last.Detail
+		// Preserve structured resource-exhaustion diagnosis from the agent path
+		// so the supervisor status helper can surface fd_exhaustion without
+		// free-text matching (ddx-029c1dde).
+		diagnosis = last.ResourceExhaustionDiagnosis
+		restartable = last.ResourceExhaustionRestartable
 	}
 	_ = serverpkg.WriteManagedWorkerResult(projectRoot, workerID, serverpkg.ManagedWorkerResult{
-		StopCondition:     result.StopCondition,
-		OperatorAttention: result.OperatorAttention != nil,
-		LastFailureStatus: result.LastFailureStatus,
-		LastFailureDetail: lastFailureDetail,
+		StopCondition:                 result.StopCondition,
+		OperatorAttention:             result.OperatorAttention != nil,
+		LastFailureStatus:             result.LastFailureStatus,
+		LastFailureDetail:             lastFailureDetail,
+		ResourceExhaustionDiagnosis:   diagnosis,
+		ResourceExhaustionRestartable: restartable,
 	})
 }
 

@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"syscall"
 	"testing"
@@ -765,6 +767,103 @@ func TestWorkerSupervisor_ExpiredBlockedTerminalDoesNotSuppressRestartForever(t 
 	})
 }
 
+// TestWorkerSupervisorExposesLatestBlockedTerminalReason proves the read-only
+// status helper returns the newest restart-blocked terminal reason (not an
+// older one still retained in memory).
+func TestWorkerSupervisorExposesLatestBlockedTerminalReason(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	olderAt := now.Add(-5 * time.Minute)
+	newerAt := now.Add(-1 * time.Minute)
+
+	supervisor := NewWorkerSupervisor(m)
+	supervisor.recordTerminalHistory([]WorkerRecord{
+		{
+			ID:         "worker-older-oa",
+			Kind:       "work",
+			State:      "exited",
+			Status:     "operator_attention",
+			ReapReason: "operator_attention",
+			FinishedAt: olderAt,
+		},
+		{
+			ID:         "worker-newer-dirty",
+			Kind:       "work",
+			State:      "exited",
+			Status:     "dirty_root",
+			ReapReason: "dirty_root",
+			FinishedAt: newerAt,
+		},
+	}, now)
+
+	diag, ok := supervisor.LatestBlockedTerminal()
+	require.True(t, ok, "expected a blocked terminal diagnostic")
+	assert.Equal(t, "worker-newer-dirty", diag.WorkerID)
+	assert.Equal(t, "dirty_root", diag.Reason)
+	assert.True(t, diag.TerminalAt.Equal(newerAt), "expected newest terminal timestamp")
+}
+
+// TestWorkerSupervisorPrefersStructuredFDExhaustionDiagnosis proves the helper
+// maps fd exhaustion through structured ManagedWorkerResult fields rather than
+// free-text inference alone, and surfaces it even when the terminal is
+// restartable (not restart-blocked).
+func TestWorkerSupervisorPrefersStructuredFDExhaustionDiagnosis(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-2 * time.Minute)
+	const workerID = "worker-fd-exhausted"
+
+	// Structured result.json from the agent path — the preferred source.
+	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, workerID), 0o755))
+	require.NoError(t, WriteManagedWorkerResult(root, workerID, ManagedWorkerResult{
+		StopCondition:                 "ResourceExhausted",
+		LastFailureStatus:             agent.ExecuteBeadStatusResourceExhausted,
+		LastFailureDetail:             agent.FDExhaustionStopMessage,
+		ResourceExhaustionDiagnosis:   agent.ResourceExhaustionDiagnosisFD,
+		ResourceExhaustionRestartable: true,
+	}))
+
+	// Free-text on the record is deliberately less specific than the
+	// structured diagnosis so a brittle string matcher would pick the wrong
+	// classification if structured fields were ignored.
+	supervisor := NewWorkerSupervisor(m)
+	supervisor.recordTerminalHistory([]WorkerRecord{
+		{
+			ID:         workerID,
+			Kind:       "work",
+			State:      "exited",
+			Status:     agent.ExecuteBeadStatusResourceExhausted,
+			LastError:  agent.ResourceExhaustedStopMessage,
+			FinishedAt: terminalAt,
+			LastResult: &WorkerExecutionResult{
+				Status: agent.ExecuteBeadStatusResourceExhausted,
+				Detail: agent.ResourceExhaustedStopMessage,
+			},
+		},
+	}, now)
+
+	diag, ok := supervisor.LatestBlockedTerminal()
+	require.True(t, ok, "structured fd-exhaustion terminal must be queryable")
+	assert.Equal(t, workerID, diag.WorkerID)
+	assert.Equal(t, agent.ResourceExhaustionDiagnosisFD, diag.Diagnosis,
+		"must prefer ManagedWorkerResult.ResourceExhaustionDiagnosis over free-text LastError")
+	assert.True(t, diag.Restartable, "fd exhaustion is worker-local and restartable")
+	assert.True(t, diag.TerminalAt.Equal(terminalAt))
+	// Reason remains the coarse restart-visible status (resource_exhausted);
+	// Diagnosis carries the structured fd classification.
+	assert.Equal(t, agent.ExecuteBeadStatusResourceExhausted, diag.Reason)
+}
+
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-supervisor-stale")
@@ -1136,6 +1235,158 @@ func TestSupervisorReconcile_FreshClaimingWorkerSurvivesTicks(t *testing.T) {
 	require.True(t, found)
 	assert.Equal(t, "ddx", lease.Owner)
 	assert.True(t, m.hasWorkerHandle(liveID))
+}
+
+// TestSupervisorReconcile_LiveDiskOnlyAttemptSurvivesTicks covers the post-
+// restart case: a real live managed attempt exists only as a disk record
+// (no manager handle). Secondary liveness signals may be stale, so snapshot
+// classifies the worker as stale, but a fresh same-machine claim must keep
+// the process alive across multiple reconcile ticks without spawning a
+// replacement duplicate (regression ddx-1bc702ec / incident mid-attempt stop).
+func TestSupervisorReconcile_LiveDiskOnlyAttemptSurvivesTicks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("live PID process-control semantics differ on Windows")
+	}
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+
+	root := t.TempDir()
+	beadID := "ddx-supervisor-disk-only-live"
+	store := seedClaimedBead(t, root, beadID)
+
+	cmd := exec.Command("sleep", "600")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		if cmd.Process != nil {
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	require.True(t, processAlive(pid), "fixture subprocess must start alive")
+
+	pgid, err := syscall.Getpgid(pid)
+	require.NoError(t, err)
+
+	machine := os.Getenv("DDX_MACHINE_ID")
+	if machine == "" {
+		machine, err = os.Hostname()
+		require.NoError(t, err)
+	}
+	writeStaleClaimLeaseForTest(t, store, bead.ClaimLeaseRecord{
+		BeadID:    beadID,
+		Owner:     "worker-test",
+		Machine:   machine,
+		StartedAt: time.Now().UTC().Add(-2 * time.Minute),
+		UpdatedAt: time.Now().UTC(),
+		PID:       pid,
+	})
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	// Intentionally omit any manager handle: disk-only representation.
+
+	supervisor := NewWorkerSupervisor(m)
+	desired := DefaultWorkerDesiredState(root)
+	desired.DesiredCount = 1
+	desired.Restart.Enabled = false
+	require.NoError(t, supervisor.SaveDesiredState(&desired))
+
+	now := time.Now().UTC()
+	workerID := "worker-20260724T000000-diskonly"
+	attemptID := workerID + "-a1"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	diskRec := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   now.Add(-5 * time.Minute),
+		PID:         pid,
+		PGID:        pgid,
+		CurrentBead: beadID,
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: attemptID,
+			BeadID:    beadID,
+			Phase:     "running",
+			StartedAt: now.Add(-5 * time.Minute),
+		},
+	}
+	require.NoError(t, m.writeRecord(dir, diskRec))
+
+	// Force workerRecordLive false via an expired run-state while the claim
+	// lease remains fresh — models the post-restart secondary-signal gap
+	// without overwriting the worker status.json (which doubles as the
+	// liveness sidecar path).
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		StartedAt: now.Add(-time.Hour),
+		ExpiresAt: now.Add(-time.Minute),
+	}))
+	require.False(t, supervisor.workerRecordLive(diskRec, now),
+		"fixture must be classified non-live by secondary signals")
+	require.False(t, m.hasWorkerHandle(workerID), "must remain disk-only (no manager handle)")
+
+	var logBuf bytes.Buffer
+	restoreLog := redirectStdLogger(&logBuf)
+	defer restoreLog()
+
+	for i := 0; i < 3; i++ {
+		require.NoError(t, supervisor.ReconcileAt(now.Add(time.Duration(i)*time.Second)))
+	}
+
+	// AC1: process remains alive across three reconcile ticks.
+	assert.True(t, processAlive(pid), "live disk-only managed PID must survive ReconcileAt ticks")
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "running", rec.State, "preserved attempt must not be marked stopped")
+	assert.Equal(t, "running", rec.Status)
+	assert.True(t, rec.FinishedAt.IsZero())
+
+	// AC2: claim stays in_progress; no replacement duplicate started.
+	b, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, b.Status, "fresh claim must remain in_progress")
+
+	recs, err := m.List()
+	require.NoError(t, err)
+	runningWork := 0
+	for _, r := range recs {
+		if r.Kind == "work" && r.ProjectRoot == root && (r.State == "running" || r.State == "stopping") {
+			runningWork++
+		}
+	}
+	assert.Equal(t, 1, runningWork, "supervisor must not start a replacement duplicate for the live attempt")
+	assert.False(t, m.hasWorkerHandle(workerID), "preserve must not invent an in-memory handle")
+
+	// AC3: structured supervisor/lifecycle diagnostic with worker, PID, bead, reason.
+	var preserve *WorkerLifecycleEvent
+	for i := range rec.Lifecycle {
+		if rec.Lifecycle[i].Action == "preserve" {
+			preserve = &rec.Lifecycle[i]
+			break
+		}
+	}
+	require.NotNil(t, preserve, "must emit a lifecycle preserve diagnostic")
+	assert.Equal(t, "server-workers", preserve.Actor)
+	assert.Equal(t, beadID, preserve.BeadID)
+	assert.Contains(t, preserve.Detail, workerID)
+	assert.Contains(t, preserve.Detail, fmt.Sprintf("pid=%d", pid))
+	assert.Contains(t, preserve.Detail, beadID)
+	assert.Contains(t, preserve.Detail, "reason=fresh-claim-or-heartbeat")
+
+	diag := logBuf.String()
+	assert.Contains(t, diag, "preserve live disk-record worker")
+	assert.Contains(t, diag, workerID)
+	assert.Contains(t, diag, fmt.Sprintf("pid=%d", pid))
+	assert.Contains(t, diag, beadID)
+	assert.Contains(t, diag, "reason=fresh-claim-or-heartbeat")
 }
 
 func installBlockingWorkerFactory(m *WorkerManager) {

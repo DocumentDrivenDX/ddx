@@ -51,7 +51,10 @@ func TestServerShutdownBoundsSupervisorWaitBeforeWorkerShutdown(t *testing.T) {
 	select {
 	case err := <-done:
 		elapsed := time.Since(start)
-		require.NoError(t, err)
+		// Timeout path must surface a useful error, not hang silently.
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "supervisor did not stop")
+		assert.Contains(t, err.Error(), "continuing worker cleanup")
 		if elapsed > outerBound {
 			t.Fatalf("Shutdown took %v; expected return within %v when supervisor is stuck", elapsed, outerBound)
 		}
@@ -68,6 +71,118 @@ func TestServerShutdownBoundsSupervisorWaitBeforeWorkerShutdown(t *testing.T) {
 		"Shutdown must invoke worker cleanup (cancel live worker) even when supervisorDone never closes")
 	assert.Nil(t, srv.supervisorCancel, "Shutdown must clear supervisorCancel after the bounded wait")
 	assert.Nil(t, srv.supervisorDone, "Shutdown must clear supervisorDone after the bounded wait")
+}
+
+// TestServerShutdownReapsWorkerProcessTreeWhenSupervisorStuck is the part-2
+// regression for ddx-d0fce58c: a live managed worker with descendant
+// provider/git-style subprocesses must still be reaped through the normal
+// WorkerManager.Shutdown path when supervisor cancellation is slow/stuck,
+// and Shutdown must still close the bead hub and stop land coordinators.
+func TestServerShutdownReapsWorkerProcessTreeWhenSupervisorStuck(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group cleanup is covered by Unix implementation")
+	}
+
+	prevGrace := supervisorShutdownGrace
+	supervisorShutdownGrace = 50 * time.Millisecond
+	t.Cleanup(func() { supervisorShutdownGrace = prevGrace })
+
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "shutdown-stuck-supervisor-node")
+
+	workDir := setupTestDir(t)
+	srv := New(":0", workDir)
+	srv.EnableManagedWorkers()
+	// Stubborn tree ignores SIGTERM; keep kill grace short so the test
+	// stays well under systemd's default stop timeout.
+	srv.workers.WatchdogKillGrace = 300 * time.Millisecond
+
+	// Stuck supervisor after cancel (never closes supervisorDone).
+	srv.supervisorCancel = func() {}
+	srv.supervisorDone = make(chan struct{})
+
+	// Spy bead hub so we can prove Close runs on the timeout path.
+	hub := bead.NewLifecycleSubscriber(func(projectID string) (bead.BeadReader, error) {
+		return bead.NewStore(ddxroot.JoinProject(projectID)), nil
+	}, 250*time.Millisecond).(beadHubCloser)
+	spy := &spyBeadHub{beadHubCloser: hub}
+	srv.beadHub = spy
+
+	// Prime one land coordinator so StopAll has an entry to clear.
+	_ = srv.workers.LandCoordinators.Get(workDir)
+
+	store := seedClaimedBead(t, workDir, "ddx-server-shutdown-stuck-sup")
+	_, rootPID, claudePID, claudeSleepPID, codexPID, codexSleepPID := startManagedWatchdogTree(t)
+
+	workerID := "worker-server-shutdown-stuck-sup"
+	require.NoError(t, os.MkdirAll(filepath.Join(srv.workers.rootDir, workerID), 0o755))
+	startedAt := time.Now().UTC().Add(-time.Minute)
+	handle, cancelled := newManagedIdleHandle(t, srv.workers, workerID, "ddx-server-shutdown-stuck-sup", rootPID, startedAt, startedAt)
+	handle.record.PID = rootPID
+	handle.record.PGID = rootPID
+	handle.record.Lifecycle = []WorkerLifecycleEvent{{
+		Action:    "start",
+		Actor:     "local-operator",
+		Timestamp: startedAt,
+		Detail:    "kind=work",
+	}}
+
+	// Outer bound covers supervisor grace + SIGTERM→SIGKILL kill grace for
+	// the stubborn process tree, still far below systemd's ~90s stop timeout.
+	const outerBound = 5 * time.Second
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() { done <- srv.Shutdown() }()
+
+	select {
+	case err := <-done:
+		elapsed := time.Since(start)
+		require.Error(t, err, "stuck supervisor must surface a timeout error")
+		assert.Contains(t, err.Error(), "supervisor did not stop")
+		assert.Contains(t, err.Error(), "continuing worker cleanup")
+		if elapsed > outerBound {
+			t.Fatalf("Shutdown took %v; expected return within %v with stuck supervisor", elapsed, outerBound)
+		}
+		if elapsed < supervisorShutdownGrace {
+			t.Fatalf("Shutdown returned in %v before supervisor grace %v", elapsed, supervisorShutdownGrace)
+		}
+	case <-time.After(outerBound):
+		t.Fatal("Shutdown blocked on stuck supervisorDone; worker process-tree cleanup never ran")
+	}
+
+	if !spy.closeCalled {
+		t.Error("Shutdown did not call beadHub.Close() after supervisor timeout")
+	}
+	all := srv.workers.LandCoordinators.AllMetrics()
+	if len(all) != 0 {
+		t.Errorf("Shutdown did not call StopAll after supervisor timeout: coordinator registry has %d entries", len(all))
+	}
+
+	// Descendant provider process groups (and their sleep children) must
+	// be reaped via the existing worker shutdown path.
+	waitForProcessGone(t, rootPID)
+	waitForProcessGone(t, claudePID)
+	waitForProcessGone(t, claudeSleepPID)
+	waitForProcessGone(t, codexPID)
+	waitForProcessGone(t, codexSleepPID)
+
+	rec, err := srv.workers.readRecord(filepath.Join(srv.workers.rootDir, workerID))
+	require.NoError(t, err)
+	assert.Equal(t, "stopped", rec.State)
+	assert.Equal(t, "stopped", rec.Status)
+	assert.False(t, rec.FinishedAt.IsZero())
+	require.Len(t, rec.Lifecycle, 2)
+	assert.Equal(t, "start", rec.Lifecycle[0].Action)
+	assert.Equal(t, "stop", rec.Lifecycle[1].Action)
+	assert.Contains(t, rec.Lifecycle[1].Detail, "cleanup=")
+
+	b, err := store.Get(context.Background(), "ddx-server-shutdown-stuck-sup")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+	assert.True(t, cancelled.Load(), "Shutdown must cancel the worker goroutine even when supervisor is stuck")
+	assert.Nil(t, srv.supervisorCancel)
+	assert.Nil(t, srv.supervisorDone)
 }
 
 // spyBeadHub wraps a real lifecycle subscriber and records whether Close was

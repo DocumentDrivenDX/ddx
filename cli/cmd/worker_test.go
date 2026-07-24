@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/stretchr/testify/assert"
@@ -93,4 +96,96 @@ func TestWorkerCmd_StatusReportsAbsent(t *testing.T) {
 
 	assert.Contains(t, stdout.String(), "no desired state persisted",
 		"status must gracefully report the absent-configuration case, not error")
+}
+
+// TestWorkerStatusReportsFDExhaustionForMissingDesiredWorker proves text
+// status names the missing desired worker and explains fd exhaustion when
+// desired_count=1 and the last terminal managed worker exited from fd
+// exhaustion (ddx-744b0996).
+func TestWorkerStatusReportsFDExhaustionForMissingDesiredWorker(t *testing.T) {
+	projectRoot := seedMissingDesiredWorkerFDExhaustion(t)
+
+	f := &CommandFactory{WorkingDir: projectRoot}
+	cmd := f.newWorkerStatusCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--project", projectRoot})
+	require.NoError(t, cmd.Execute())
+
+	out := stdout.String()
+	assert.Contains(t, out, "desired_count: 1")
+	assert.Contains(t, out, "missing_count: 1")
+	assert.Contains(t, out, "missing: 1 desired worker")
+	assert.Contains(t, out, "fd_exhaustion_diagnosis: fd_exhaustion")
+	assert.Contains(t, out, "fd exhaustion")
+	assert.Contains(t, out, "worker-20260716T000001-fd")
+}
+
+// TestWorkerStatusJSONIncludesFDExhaustionForMissingDesiredWorker proves
+// JSON status includes desired_count, missing worker count, and
+// fd_exhaustion_diagnosis fields (ddx-744b0996).
+func TestWorkerStatusJSONIncludesFDExhaustionForMissingDesiredWorker(t *testing.T) {
+	projectRoot := seedMissingDesiredWorkerFDExhaustion(t)
+
+	f := &CommandFactory{WorkingDir: projectRoot}
+	cmd := f.newWorkerStatusCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--project", projectRoot, "--json"})
+	require.NoError(t, cmd.Execute())
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &payload))
+	assert.EqualValues(t, 1, payload["desired_count"])
+	assert.EqualValues(t, 1, payload["missing_count"])
+	assert.EqualValues(t, 0, payload["live_count"])
+	assert.Equal(t, "fd_exhaustion", payload["fd_exhaustion_diagnosis"])
+	assert.Equal(t, "worker-20260716T000001-fd", payload["last_terminal_worker_id"])
+}
+
+// seedMissingDesiredWorkerFDExhaustion writes desired_count=1 with no live
+// worker and a terminal managed worker whose structured result is fd
+// exhaustion — the operator-visible gap this bead closes.
+func seedMissingDesiredWorkerFDExhaustion(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+
+	sup, err := workerNewSupervisor(projectRoot)
+	require.NoError(t, err)
+	state := server.DefaultWorkerDesiredState(projectRoot)
+	state.DesiredCount = 1
+	state.Restart.Enabled = true
+	require.NoError(t, sup.SaveDesiredState(&state))
+
+	workerID := "worker-20260716T000001-fd"
+	terminalAt := time.Date(2026, 7, 16, 0, 1, 0, 0, time.UTC)
+	dir := ddxroot.JoinProject(projectRoot, "workers", workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	rec := server.WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      agent.ExecuteBeadStatusResourceExhausted,
+		ProjectRoot: projectRoot,
+		StartedAt:   terminalAt.Add(-time.Minute),
+		FinishedAt:  terminalAt,
+		LastError:   agent.FDExhaustionStopMessage,
+		LastResult: &server.WorkerExecutionResult{
+			Status: agent.ExecuteBeadStatusResourceExhausted,
+			Detail: agent.FDExhaustionStopMessage,
+		},
+	}
+	raw, err := json.MarshalIndent(rec, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "status.json"), append(raw, '\n'), 0o644))
+
+	require.NoError(t, server.WriteManagedWorkerResult(projectRoot, workerID, server.ManagedWorkerResult{
+		StopCondition:     agent.ExecuteBeadStatusResourceExhausted,
+		LastFailureStatus: agent.ExecuteBeadStatusResourceExhausted,
+		LastFailureDetail: agent.FDExhaustionStopMessage,
+	}))
+
+	return projectRoot
 }
