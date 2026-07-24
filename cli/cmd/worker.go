@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/server"
@@ -142,25 +144,63 @@ func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
 				}
 				return fmt.Errorf("worker status: %w", err)
 			}
+			presence, err := sup.DiagnoseDesiredWorkerPresence(state, time.Now().UTC())
+			if err != nil {
+				return fmt.Errorf("worker status: %w", err)
+			}
+			report := workerStatusReport{
+				WorkerDesiredState:    state,
+				LiveCount:             presence.LiveCount,
+				MissingCount:          presence.MissingCount,
+				FDExhaustionDiagnosis: presence.FDExhaustionDiagnosis,
+				LastTerminalWorkerID:  presence.LastTerminalWorkerID,
+			}
 			if asJSON {
-				out, err := json.MarshalIndent(state, "", "  ")
+				out, err := json.MarshalIndent(report, "", "  ")
 				if err != nil {
 					return err
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 				return nil
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-				"project: %s\ndesired_count: %d\nrestart_enabled: %t\ndefault_spec: harness=%q provider=%q model=%q profile=%q\nupdated_at: %s\n",
-				state.ProjectRoot, state.DesiredCount, state.Restart.Enabled,
-				state.DefaultSpec.Harness, state.DefaultSpec.Provider, state.DefaultSpec.Model, state.DefaultSpec.Profile,
-				state.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
+			writeWorkerStatusText(cmd.OutOrStdout(), report)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&projectFlag, "project", "", "Project root (defaults to current working directory)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
 	return cmd
+}
+
+// workerStatusReport is the operator-facing payload for `ddx worker status`.
+// It preserves every field of the durable desired-state file and adds live
+// vs desired presence plus structured diagnosis when workers are missing.
+type workerStatusReport struct {
+	server.WorkerDesiredState
+	LiveCount             int    `json:"live_count"`
+	MissingCount          int    `json:"missing_count"`
+	FDExhaustionDiagnosis string `json:"fd_exhaustion_diagnosis,omitempty"`
+	LastTerminalWorkerID  string `json:"last_terminal_worker_id,omitempty"`
+}
+
+func writeWorkerStatusText(out io.Writer, report workerStatusReport) {
+	state := report.WorkerDesiredState
+	_, _ = fmt.Fprintf(out,
+		"project: %s\ndesired_count: %d\nrestart_enabled: %t\ndefault_spec: harness=%q provider=%q model=%q profile=%q\nupdated_at: %s\n",
+		state.ProjectRoot, state.DesiredCount, state.Restart.Enabled,
+		state.DefaultSpec.Harness, state.DefaultSpec.Provider, state.DefaultSpec.Model, state.DefaultSpec.Profile,
+		state.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
+	_, _ = fmt.Fprintf(out, "live_count: %d\nmissing_count: %d\n", report.LiveCount, report.MissingCount)
+	if report.MissingCount > 0 {
+		_, _ = fmt.Fprintf(out, "missing: %d desired worker(s) not running\n", report.MissingCount)
+	}
+	if report.FDExhaustionDiagnosis != "" {
+		_, _ = fmt.Fprintf(out, "fd_exhaustion_diagnosis: %s\n", report.FDExhaustionDiagnosis)
+		_, _ = fmt.Fprintln(out, "diagnosis: missing desired worker exited from fd exhaustion (worker-local and restartable)")
+		if report.LastTerminalWorkerID != "" {
+			_, _ = fmt.Fprintf(out, "last_terminal_worker: %s\n", report.LastTerminalWorkerID)
+		}
+	}
 }
 
 // workerResolveProject returns an absolute project root. Explicit --project
