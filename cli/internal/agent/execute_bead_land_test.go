@@ -53,8 +53,15 @@ func newLandTestRepo(t *testing.T) *landTestRepo {
 	r.runGit("config", "user.email", "test@test.local")
 	r.writeFile("README.md", "# test\n")
 	// Mirror production: execution evidence is per-machine and gitignored, so it
-	// is never tracked and never dirties the worktree (ddx-d10073a8).
-	r.writeFile(".gitignore", ".ddx/executions/\n")
+	// is never tracked and never dirties the worktree (ddx-d10073a8). Main-git
+	// lock coordination files (canonical dir + stable stale-break guard sidecar)
+	// are runtime state; ordinary token-safe release leaves the guard in place.
+	r.writeFile(".gitignore", strings.Join([]string{
+		".ddx/executions/",
+		".ddx/.git-tracker.lock",
+		".ddx/.git-tracker.lock.*",
+		"",
+	}, "\n"))
 	r.runGit("add", "-A")
 	r.runGit("commit", "-m", "init")
 	r.baseSHA = r.resolveRef("refs/heads/main")
