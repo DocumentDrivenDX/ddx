@@ -396,6 +396,10 @@ func (s *Server) StartSupervisor() {
 // bead lifecycle subscriptions, and land coordinators. Returns the first error
 // encountered. The cleanup steps are idempotent and safe to call on an idle
 // server.
+//
+// Supervisor cancellation is bounded: if the reconcile goroutine is stuck
+// (e.g. hung git/IO), Shutdown logs and returns a useful timeout error but
+// still proceeds to worker cleanup, bead hub close, and land-coordinator stop.
 func (s *Server) Shutdown() error {
 	// Best-effort spoke deregister so the hub registry does not show this
 	// node as stale after a graceful shutdown. Errors are swallowed inside
@@ -405,6 +409,7 @@ func (s *Server) Shutdown() error {
 		_ = s.ShutdownSpoke(ctx)
 		cancel()
 	}
+	var firstErr error
 	if s.supervisorCancel != nil {
 		s.supervisorCancel()
 		s.supervisorCancel = nil
@@ -414,12 +419,15 @@ func (s *Server) Shutdown() error {
 			select {
 			case <-s.supervisorDone:
 			case <-time.After(supervisorShutdownGrace):
-				log.Printf("ddx server: supervisor did not stop within %s; continuing worker cleanup", supervisorShutdownGrace)
+				// Surface the timeout as a returned error while still
+				// falling through to worker/bead-hub/land-coordinator cleanup.
+				msg := fmt.Sprintf("supervisor did not stop within %s; continuing worker cleanup", supervisorShutdownGrace)
+				log.Printf("ddx server: %s", msg)
+				firstErr = fmt.Errorf("%s", msg)
 			}
 			s.supervisorDone = nil
 		}
 	}
-	var firstErr error
 	if s.supervisorRegistry != nil {
 		if err := s.supervisorRegistry.Shutdown(); err != nil && firstErr == nil {
 			firstErr = err
