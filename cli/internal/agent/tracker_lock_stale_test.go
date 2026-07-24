@@ -170,13 +170,20 @@ func TestTrackerLockLeaseReleaseDoesNotDeleteReplacement(t *testing.T) {
 	require.NoError(t, err)
 
 	// Old lease release must use the transition guard + owner_token check and
-	// preserve the replacement on token mismatch.
+	// preserve the replacement on token mismatch. Call the observed release
+	// helper directly (same path as Release) so production has no test-only
+	// method on the lease type.
 	var releaseGuardAcquired bool
-	require.NoError(t, oldLease.releaseObserved(func(stage trackerStaleLockGuardStage) {
-		if stage == trackerStaleGuardStageAcquired {
-			releaseGuardAcquired = true
-		}
-	}))
+	require.NoError(t, releaseMainGitLockObserved(
+		oldLease.lockDir,
+		oldLease.ownerToken,
+		oldLease.guardWait,
+		func(stage trackerStaleLockGuardStage) {
+			if stage == trackerStaleGuardStageAcquired {
+				releaseGuardAcquired = true
+			}
+		},
+	))
 	assert.True(t, releaseGuardAcquired, "old lease release must acquire the transition guard")
 
 	assertTrackerFileBytesEqual(t, filepath.Join(lockDir, "pid"), wantPID)

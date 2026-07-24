@@ -235,10 +235,6 @@ func (l mainGitLockLease) Release() error {
 	return releaseMainGitLockObserved(l.lockDir, l.ownerToken, l.guardWait, nil)
 }
 
-func (l mainGitLockLease) releaseObserved(observer func(trackerStaleLockGuardStage)) error {
-	return releaseMainGitLockObserved(l.lockDir, l.ownerToken, l.guardWait, observer)
-}
-
 type trackerStaleLockGuardStage string
 
 const (
