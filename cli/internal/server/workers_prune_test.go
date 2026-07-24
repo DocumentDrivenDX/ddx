@@ -420,6 +420,8 @@ func TestStopStaleDiskEntry_PreservesLivePIDWithFreshClaim(t *testing.T) {
 
 // TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim verifies that stale
 // disk cleanup preserves a fresh claim held by a different live worker.
+// A dead-PID orphaned disk record may still be marked stopped without
+// unclaiming or emitting bead.stopped.
 func TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
@@ -479,6 +481,95 @@ func TestStopStaleDiskEntry_DoesNotUnclaimForeignClaim(t *testing.T) {
 	events, err := store.EventsByKind(beadID, "bead.stopped")
 	require.NoError(t, err)
 	assert.Empty(t, events, "foreign live claims must not emit a stale stop event")
+}
+
+// TestStopStaleDiskEntry_ReapsLivePIDWithReclaimableStaleClaim proves the
+// reclaimable-stale branch of stopStaleDiskEntry: a live process named by a
+// running disk record is terminated when the bead claim is safely reclaimable,
+// the claim is released, bead.stopped is emitted, and the record is stopped.
+func TestStopStaleDiskEntry_ReapsLivePIDWithReclaimableStaleClaim(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group signal semantics differ on Windows; covered separately")
+	}
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+
+	root := t.TempDir()
+	store := seedClaimedBead(t, root, "ddx-stop-stale-reap")
+	writeStaleClaimLeaseForTest(t, store, bead.ClaimLeaseRecord{
+		BeadID:    "ddx-stop-stale-reap",
+		Owner:     "worker-stale",
+		Machine:   "stale-machine",
+		StartedAt: time.Now().UTC().Add(-3 * time.Hour),
+		UpdatedAt: time.Now().UTC().Add(-3 * time.Hour),
+		PID:       9999991,
+	})
+
+	cmd := exec.Command("sleep", "600")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
+	waitDone := make(chan struct{})
+	go func() {
+		_, _ = cmd.Process.Wait()
+		close(waitDone)
+	}()
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		select {
+		case <-waitDone:
+		case <-time.After(2 * time.Second):
+		}
+	})
+	require.True(t, processAlive(pid), "fixture subprocess must be alive before cleanup")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000002-reap"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	stale := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-1 * time.Hour),
+		PID:         pid,
+		CurrentBead: "ddx-stop-stale-reap",
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: workerID + "-a1",
+			BeadID:    "ddx-stop-stale-reap",
+			Phase:     "running",
+			StartedAt: time.Now().UTC().Add(-1 * time.Hour),
+		},
+	}
+	require.NoError(t, m.writeRecord(dir, stale))
+
+	require.NoError(t, m.stopStaleDiskEntry(workerID))
+
+	require.Eventually(t, func() bool {
+		return !processAlive(pid)
+	}, 3*time.Second, 25*time.Millisecond,
+		"reclaimable stale cleanup must terminate the live process tree")
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "stopped", rec.State)
+	assert.Equal(t, "stopped", rec.Status)
+	assert.False(t, rec.FinishedAt.IsZero())
+
+	b, err := store.Get(context.Background(), "ddx-stop-stale-reap")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status,
+		"reclaimable stale cleanup must release the bead claim")
+
+	events, err := store.EventsByKind("ddx-stop-stale-reap", "bead.stopped")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(events), 1)
+	assert.Equal(t, "stop (stale)", events[0].Summary)
 }
 
 // TestWorkerManagerStopUnknownWorkerStillErrors verifies that Stop on a worker
