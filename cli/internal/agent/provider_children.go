@@ -152,6 +152,47 @@ func scanProviderChildrenForStatus(ctx context.Context, rootPID int, routeLabel,
 	return out
 }
 
+// providerChildPIDSet records provider-child PIDs observed at a lifecycle
+// baseline (for example immediately before preclaim decomposition).
+func providerChildPIDSet(children []workerstatus.ProviderChild) map[int]struct{} {
+	if len(children) == 0 {
+		return nil
+	}
+	out := make(map[int]struct{}, len(children))
+	for _, child := range children {
+		if child.PID > 0 {
+			out[child.PID] = struct{}{}
+		}
+	}
+	return out
+}
+
+// filterProviderChildrenAfterBaseline drops children that were already present
+// at the pre-hook baseline. Combined with a rootPID-scoped scanner, this keeps
+// preclaim candidate metadata free of processes that predate the hook or
+// belong to another worker.
+func filterProviderChildrenAfterBaseline(children []workerstatus.ProviderChild, baseline map[int]struct{}) []workerstatus.ProviderChild {
+	if len(children) == 0 {
+		return nil
+	}
+	if len(baseline) == 0 {
+		out := make([]workerstatus.ProviderChild, len(children))
+		copy(out, children)
+		return out
+	}
+	out := make([]workerstatus.ProviderChild, 0, len(children))
+	for _, child := range children {
+		if _, seen := baseline[child.PID]; seen {
+			continue
+		}
+		out = append(out, child)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // providerChildStatus renders one scanned provider process as a status entry,
 // marking it route-owned (RouteOwner set) when its own provider matches the
 // active route, harness-owned (RouteOwner + HarnessOwned set) when its
