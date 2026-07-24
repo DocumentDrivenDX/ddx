@@ -23,37 +23,71 @@ type ClaimBackend interface {
 	SetLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions) error
 }
 
+// LandBackend is the landing surface the local land path requires.
+// Production LocalCoordinator must be wired to a backend that invokes the
+// real agent.Land path (see agent.NewCoordinationLandBackend). Call-recording
+// fakes are not a substitute for the landing idempotency contract test.
+//
+// The backend returns status/tip fields; LocalCoordinator owns OutcomeCode and
+// idempotency-key memory for the process-local offline path.
+type LandBackend interface {
+	Land(ctx context.Context, req LandRequest) (LandResult, error)
+}
+
 // Compile-time: *bead.Store is the production claim/transition backend.
 var _ ClaimBackend = (*bead.Store)(nil)
 
 // Compile-time: LocalCoordinator satisfies Coordinator.
 var _ Coordinator = (*LocalCoordinator)(nil)
 
-// LocalCoordinator implements Coordinator against a project bead store.
-// It is the offline/local path: claim and tracker-transition mutations call
-// existing bead-store APIs. Durable offline journal and HTTP transport are
-// out of scope.
+// LocalCoordinator implements Coordinator against a project bead store and
+// optional land backend. It is the offline/local path: claim and
+// tracker-transition mutations call existing bead-store APIs; land mutations
+// call the real landing path via LandBackend. Durable offline journal and
+// HTTP transport are out of scope.
 type LocalCoordinator struct {
 	store ClaimBackend
+	land  LandBackend
 
 	mu sync.Mutex
-	// claimByKey / transitionByKey are process-local idempotency memory for
-	// this coordinator instance. Durable journaling is a sibling bead
-	// (ADR-022 offline journal).
+	// claimByKey / transitionByKey / landByKey are process-local idempotency
+	// memory for this coordinator instance. Durable journaling is a sibling
+	// bead (ADR-022 offline journal).
 	claimByKey      map[string]ClaimResult
 	transitionByKey map[string]TransitionResult
+	landByKey       map[string]LandResult
 }
 
 // NewLocalCoordinator returns a Coordinator backed by store. store must be
 // non-nil; production callers pass bead.NewStore(...) for the project root.
-// try/work bootstrap wiring is ddx-2e49980d (out of scope for the claim/
-// transition contract beads).
+// Landing requires WithLand (or NewLocalCoordinatorWithLand) wired to the
+// real land path. try/work bootstrap wiring is ddx-2e49980d (out of scope
+// for the claim/transition/land contract beads).
 func NewLocalCoordinator(store ClaimBackend) *LocalCoordinator {
 	return &LocalCoordinator{
 		store:           store,
 		claimByKey:      make(map[string]ClaimResult),
 		transitionByKey: make(map[string]TransitionResult),
+		landByKey:       make(map[string]LandResult),
 	}
+}
+
+// NewLocalCoordinatorWithLand returns a LocalCoordinator with both claim/
+// transition (store) and land backends. land must invoke the real landing
+// path in production (agent.NewCoordinationLandBackend).
+func NewLocalCoordinatorWithLand(store ClaimBackend, land LandBackend) *LocalCoordinator {
+	c := NewLocalCoordinator(store)
+	c.land = land
+	return c
+}
+
+// WithLand configures the land backend and returns c for fluent wiring.
+func (c *LocalCoordinator) WithLand(land LandBackend) *LocalCoordinator {
+	if c == nil {
+		return nil
+	}
+	c.land = land
+	return c
 }
 
 // Claim applies a claim mutation via the bead-store Claim API and maps the
@@ -205,6 +239,82 @@ func (c *LocalCoordinator) Transition(ctx context.Context, req TransitionRequest
 
 	c.mu.Lock()
 	c.transitionByKey[key] = result
+	c.mu.Unlock()
+
+	return result, nil
+}
+
+// Land applies a landing mutation via the configured LandBackend (production:
+// agent.Land through NewCoordinationLandBackend) and maps the result to the
+// transport-neutral land contract outcomes with process-local idempotency.
+func (c *LocalCoordinator) Land(ctx context.Context, req LandRequest) (LandResult, error) {
+	if c == nil {
+		return LandResult{}, fmt.Errorf("coordination: nil local coordinator")
+	}
+	if c.land == nil {
+		return LandResult{}, fmt.Errorf("coordination: nil land backend")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return LandResult{}, err
+	}
+
+	projectRoot := strings.TrimSpace(req.ProjectRoot)
+	beadID := strings.TrimSpace(req.BeadID)
+	key := strings.TrimSpace(req.IdempotencyKey)
+	if projectRoot == "" {
+		return LandResult{}, fmt.Errorf("coordination: land requires project_root")
+	}
+	if beadID == "" {
+		return LandResult{}, fmt.Errorf("coordination: land requires bead_id")
+	}
+	if key == "" {
+		return LandResult{}, fmt.Errorf("coordination: land requires idempotency_key")
+	}
+
+	c.mu.Lock()
+	if prev, ok := c.landByKey[key]; ok {
+		c.mu.Unlock()
+		// Replay of a key this coordinator already observed: return the prior
+		// outcome as already_applied without re-invoking the land path.
+		out := prev
+		out.Code = OutcomeAlreadyApplied
+		out.IdempotencyKey = key
+		return out, nil
+	}
+	c.mu.Unlock()
+
+	// Normalize request for the backend (echo trimmed fields).
+	req.ProjectRoot = projectRoot
+	req.BeadID = beadID
+	req.IdempotencyKey = key
+	req.WorktreeDir = strings.TrimSpace(req.WorktreeDir)
+	req.BaseRev = strings.TrimSpace(req.BaseRev)
+	req.ResultRev = strings.TrimSpace(req.ResultRev)
+	req.AttemptID = strings.TrimSpace(req.AttemptID)
+	req.TargetBranch = strings.TrimSpace(req.TargetBranch)
+	req.EvidenceDir = strings.TrimSpace(req.EvidenceDir)
+
+	backendResult, err := c.land.Land(ctx, req)
+	if err != nil {
+		return LandResult{}, err
+	}
+
+	result := backendResult
+	result.Code = OutcomeApplied
+	result.BeadID = beadID
+	result.IdempotencyKey = key
+	if result.Status == "" {
+		result.Status = LandStatusLanded
+	}
+	if result.Status == LandStatusPreserved && result.Reason == "" {
+		result.Reason = ReasonLandPreserved
+	}
+
+	c.mu.Lock()
+	c.landByKey[key] = result
 	c.mu.Unlock()
 
 	return result, nil

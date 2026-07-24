@@ -364,12 +364,19 @@ func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 	assert.NotEmpty(t, body["fingerprint"])
 }
 
+// TestExecuteBeadLoop_RepeatedBestEffortReadinessErrorsDoNotStopDrain proves
+// fail-open intakeErr readiness outages keep the drain alive past the pre-claim
+// warn threshold: every ready bead still executes/closes, Run has no terminal
+// OperatorAttention, and exactly one durable non-terminal operator_attention
+// event is recorded (observability without queue-wide stop).
 func TestExecuteBeadLoop_RepeatedBestEffortReadinessErrorsDoNotStopDrain(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	beadCount := DefaultPreClaimWarnRepeatThreshold + 1
+	beadIDs := make([]string, beadCount)
 	for i := 0; i < beadCount; i++ {
 		beadID := fmt.Sprintf("ddx-best-effort-readiness-%d", i)
+		beadIDs[i] = beadID
 		require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: beadID, Priority: i % 5}))
 	}
 
@@ -388,6 +395,8 @@ func TestExecuteBeadLoop_RepeatedBestEffortReadinessErrorsDoNotStopDrain(t *test
 		NoReview:                    true,
 		PreClaimWarnRepeatThreshold: DefaultPreClaimWarnRepeatThreshold,
 		PreClaimIntakeHook: func(context.Context, string) (PreClaimIntakeResult, error) {
+			// Nonfatal intakeErr path (JSON/route unavailable), not structured
+			// PreClaimIntakeError — advisory best-effort readiness outage.
 			return PreClaimIntakeResult{}, errors.New("pre-claim intake: readiness route unavailable: no JSON object found")
 		},
 	})
@@ -395,15 +404,39 @@ func TestExecuteBeadLoop_RepeatedBestEffortReadinessErrorsDoNotStopDrain(t *test
 	require.NotNil(t, result)
 	assert.Equal(t, beadCount, result.Attempts)
 	assert.Equal(t, beadCount, result.Successes)
-	assert.Nil(t, result.OperatorAttention)
+	assert.Nil(t, result.OperatorAttention, "best-effort readiness outages must not set terminal OperatorAttention")
 	assert.NotEqual(t, "operator_attention", result.ExitReason)
+	assert.NotEqual(t, "OperatorAttention", result.StopCondition)
 
-	for i := 0; i < beadCount; i++ {
-		got, getErr := store.Get(context.Background(), fmt.Sprintf("ddx-best-effort-readiness-%d", i))
+	for _, beadID := range beadIDs {
+		got, getErr := store.Get(context.Background(), beadID)
 		require.NoError(t, getErr)
-		assert.Equal(t, bead.StatusClosed, got.Status)
+		assert.Equal(t, bead.StatusClosed, got.Status, "bead %s must still execute and close", beadID)
 	}
+
+	// Stream-side observability: one non-terminal attention signal.
 	assert.Equal(t, 1, strings.Count(events.String(), `"type":"loop.operator_attention"`))
+	assert.Contains(t, events.String(), `"reason":"preclaim_warn_repeated"`)
+
+	// Durable store-side observability: exactly one operator_attention event
+	// across the queue (recorded on the threshold-crossing bead).
+	durableAttention := 0
+	var attentionBody map[string]any
+	for _, beadID := range beadIDs {
+		evts, evtErr := store.Events(beadID)
+		require.NoError(t, evtErr)
+		for i := range evts {
+			if evts[i].Kind == "operator_attention" && evts[i].Summary == "preclaim_warn_repeated" {
+				durableAttention++
+				require.NoError(t, json.Unmarshal([]byte(evts[i].Body), &attentionBody))
+			}
+		}
+	}
+	require.Equal(t, 1, durableAttention, "exactly one durable non-terminal operator_attention event expected")
+	require.NotNil(t, attentionBody)
+	assert.Equal(t, "preclaim_warn_repeated", attentionBody["reason"])
+	assert.Equal(t, float64(DefaultPreClaimWarnRepeatThreshold), attentionBody["count"])
+	assert.NotEmpty(t, attentionBody["fingerprint"])
 }
 
 func TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention(t *testing.T) {

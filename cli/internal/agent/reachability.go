@@ -58,4 +58,22 @@ func keepAgentSupportReachability() {
 		Now: func() time.Time { return time.Unix(0, 0).UTC() },
 	}).WithWorkPhase("do")
 	_ = renderer.FormatLifecycleLine(WorkLogLifecycleLine{Message: "keepalive"})
+
+	// Offline coordination journal (ADR-022) is package-level production API
+	// ahead of try/work wiring; keep Open/Append/Load/Close on the static graph.
+	_ = OfflineJournalPath(root)
+	j, err := OpenOfflineJournal(root)
+	if err == nil && j != nil {
+		_ = j.Path()
+		_ = j.NextSequence()
+		_, _ = j.Append(OfflineJournalAppend{
+			Operation:      "claim",
+			IdempotencyKey: "agent-support-keepalive-1",
+			PayloadHash:    "sha256:keepalive",
+			Precondition:   `{"status":"open"}`,
+			Outcome:        "applied",
+		})
+		_ = j.Close()
+	}
+	_, _ = LoadOfflineJournalRecords(root)
 }
