@@ -14,6 +14,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestServerShutdownBoundsSupervisorWaitBeforeWorkerShutdown proves that
+// when the supervisor reconcile goroutine is stuck after cancellation
+// (supervisorDone never closes), Server.Shutdown still reaches worker
+// cleanup within a bounded duration instead of hanging until systemd
+// SIGKILLs the process group.
+func TestServerShutdownBoundsSupervisorWaitBeforeWorkerShutdown(t *testing.T) {
+	prevGrace := supervisorShutdownGrace
+	supervisorShutdownGrace = 50 * time.Millisecond
+	t.Cleanup(func() { supervisorShutdownGrace = prevGrace })
+
+	workDir := setupTestDir(t)
+	beadID := "ddx-supervisor-bound-shutdown"
+	_ = seedClaimedBead(t, workDir, beadID)
+
+	srv := New(":0", workDir)
+
+	// Simulate a supervisor that has been cancelled but is stuck inside
+	// reconcile/git and never closes supervisorDone.
+	srv.supervisorCancel = func() {}
+	srv.supervisorDone = make(chan struct{}) // intentionally never closed
+
+	workerID := "worker-supervisor-bound-shutdown"
+	require.NoError(t, os.MkdirAll(filepath.Join(srv.workers.rootDir, workerID), 0o755))
+	startedAt := time.Now().UTC().Add(-time.Minute)
+	_, cancelled := newIdleHandle(t, srv.workers, workerID, beadID, startedAt, startedAt)
+
+	// Outer bound must be larger than supervisorShutdownGrace but far
+	// smaller than systemd's default stop timeout (~90s). Without a
+	// bounded wait, Shutdown would hang forever on the stuck channel.
+	const outerBound = 2 * time.Second
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() { done <- srv.Shutdown() }()
+
+	select {
+	case err := <-done:
+		elapsed := time.Since(start)
+		require.NoError(t, err)
+		if elapsed > outerBound {
+			t.Fatalf("Shutdown took %v; expected return within %v when supervisor is stuck", elapsed, outerBound)
+		}
+		// Must have waited at least the grace window before continuing
+		// (otherwise we might not have exercised the timeout path).
+		if elapsed < supervisorShutdownGrace {
+			t.Fatalf("Shutdown returned in %v before supervisor grace %v; stuck-supervisor path not exercised", elapsed, supervisorShutdownGrace)
+		}
+	case <-time.After(outerBound):
+		t.Fatal("Shutdown blocked on stuck supervisorDone; worker cleanup never ran")
+	}
+
+	assert.True(t, cancelled.Load(),
+		"Shutdown must invoke worker cleanup (cancel live worker) even when supervisorDone never closes")
+	assert.Nil(t, srv.supervisorCancel, "Shutdown must clear supervisorCancel after the bounded wait")
+	assert.Nil(t, srv.supervisorDone, "Shutdown must clear supervisorDone after the bounded wait")
+}
+
 // spyBeadHub wraps a real lifecycle subscriber and records whether Close was
 // called.
 type spyBeadHub struct {

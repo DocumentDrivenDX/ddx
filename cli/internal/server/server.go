@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -330,6 +331,17 @@ func (s *Server) RegisterProject(path string) ProjectEntry {
 // when nothing needs to change).
 const defaultSupervisorTick = 10 * time.Second
 
+// defaultSupervisorShutdownGrace is how long Shutdown waits for the
+// supervisor reconcile goroutine after cancellation before falling
+// through to worker cleanup. A stuck Reconcile (e.g. hung git) must not
+// block orderly worker teardown indefinitely — systemd would otherwise
+// SIGKILL the whole cgroup on service stop timeout.
+const defaultSupervisorShutdownGrace = 2 * time.Second
+
+// supervisorShutdownGrace is the live grace used by Shutdown. Tests
+// shorten it for deterministic timing.
+var supervisorShutdownGrace = defaultSupervisorShutdownGrace
+
 // StartSupervisor launches the desired-state reconcile goroutine that
 // keeps server-managed workers running per `.ddx/workers/desired.json`.
 // Safe to call multiple times; subsequent calls are no-ops. Tick cadence
@@ -337,7 +349,8 @@ const defaultSupervisorTick = 10 * time.Second
 // DDX_SUPERVISOR_TICK (Go duration string, e.g. "2s").
 //
 // The loop is stopped by Shutdown, which cancels the goroutine's context
-// and blocks on its exit.
+// and waits up to supervisorShutdownGrace for its exit before continuing
+// to worker cleanup.
 func (s *Server) StartSupervisor() {
 	if s == nil || s.supervisorCancel != nil || (s.supervisorRegistry == nil && s.supervisor == nil) {
 		return
@@ -396,7 +409,13 @@ func (s *Server) Shutdown() error {
 		s.supervisorCancel()
 		s.supervisorCancel = nil
 		if s.supervisorDone != nil {
-			<-s.supervisorDone
+			// Bound the wait: if Reconcile is stuck in git/IO after
+			// cancel, continue so workers still get a prompt cleanup.
+			select {
+			case <-s.supervisorDone:
+			case <-time.After(supervisorShutdownGrace):
+				log.Printf("ddx server: supervisor did not stop within %s; continuing worker cleanup", supervisorShutdownGrace)
+			}
 			s.supervisorDone = nil
 		}
 	}
