@@ -69,6 +69,28 @@ func (r *SidecarLivenessReporter) SetAttempt(beadID, attemptID, phase, route, ha
 	r.mu.Unlock()
 }
 
+// SetCandidateResolving publishes candidate-scoped resolving liveness without
+// creating an implementation attempt identity. Used while preclaim
+// decomposition runs: operators see the candidate bead ID and phase=resolving
+// (plus provider-child observations via the child probe) before any
+// implementation attempt_id is assigned.
+func (r *SidecarLivenessReporter) SetCandidateResolving(beadID, harness, model, profile string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.rec.CurrentBead = beadID
+	r.rec.AttemptID = ""
+	r.rec.Phase = string(PhaseResolving)
+	r.rec.Message = ""
+	r.rec.Route = ""
+	r.rec.Harness = harness
+	r.rec.Model = model
+	r.rec.Profile = profile
+	r.rec.ChildPID = 0
+	r.mu.Unlock()
+}
+
 // SetChildProbe installs a best-effort probe invoked on each heartbeat tick.
 func (r *SidecarLivenessReporter) SetChildProbe(probe func(route, harness, phase string) []workerstatus.ProviderChild) {
 	if r == nil {
@@ -77,6 +99,19 @@ func (r *SidecarLivenessReporter) SetChildProbe(probe func(route, harness, phase
 	r.mu.Lock()
 	r.childProbe = probe
 	r.mu.Unlock()
+}
+
+// SwapChildProbe replaces the installed probe and returns the previous one so
+// callers can restore it after a scoped lifecycle (e.g. preclaim decomposition).
+func (r *SidecarLivenessReporter) SwapChildProbe(probe func(route, harness, phase string) []workerstatus.ProviderChild) func(route, harness, phase string) []workerstatus.ProviderChild {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	prev := r.childProbe
+	r.childProbe = probe
+	r.mu.Unlock()
+	return prev
 }
 
 // SetWorkerState records a non-attempt worker state in the sidecar.
