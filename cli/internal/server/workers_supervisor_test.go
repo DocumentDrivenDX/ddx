@@ -765,6 +765,103 @@ func TestWorkerSupervisor_ExpiredBlockedTerminalDoesNotSuppressRestartForever(t 
 	})
 }
 
+// TestWorkerSupervisorExposesLatestBlockedTerminalReason proves the read-only
+// status helper returns the newest restart-blocked terminal reason (not an
+// older one still retained in memory).
+func TestWorkerSupervisorExposesLatestBlockedTerminalReason(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	olderAt := now.Add(-5 * time.Minute)
+	newerAt := now.Add(-1 * time.Minute)
+
+	supervisor := NewWorkerSupervisor(m)
+	supervisor.recordTerminalHistory([]WorkerRecord{
+		{
+			ID:         "worker-older-oa",
+			Kind:       "work",
+			State:      "exited",
+			Status:     "operator_attention",
+			ReapReason: "operator_attention",
+			FinishedAt: olderAt,
+		},
+		{
+			ID:         "worker-newer-dirty",
+			Kind:       "work",
+			State:      "exited",
+			Status:     "dirty_root",
+			ReapReason: "dirty_root",
+			FinishedAt: newerAt,
+		},
+	}, now)
+
+	diag, ok := supervisor.LatestBlockedTerminal()
+	require.True(t, ok, "expected a blocked terminal diagnostic")
+	assert.Equal(t, "worker-newer-dirty", diag.WorkerID)
+	assert.Equal(t, "dirty_root", diag.Reason)
+	assert.True(t, diag.TerminalAt.Equal(newerAt), "expected newest terminal timestamp")
+}
+
+// TestWorkerSupervisorPrefersStructuredFDExhaustionDiagnosis proves the helper
+// maps fd exhaustion through structured ManagedWorkerResult fields rather than
+// free-text inference alone, and surfaces it even when the terminal is
+// restartable (not restart-blocked).
+func TestWorkerSupervisorPrefersStructuredFDExhaustionDiagnosis(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	terminalAt := now.Add(-2 * time.Minute)
+	const workerID = "worker-fd-exhausted"
+
+	// Structured result.json from the agent path — the preferred source.
+	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, workerID), 0o755))
+	require.NoError(t, WriteManagedWorkerResult(root, workerID, ManagedWorkerResult{
+		StopCondition:                 "ResourceExhausted",
+		LastFailureStatus:             agent.ExecuteBeadStatusResourceExhausted,
+		LastFailureDetail:             agent.FDExhaustionStopMessage,
+		ResourceExhaustionDiagnosis:   agent.ResourceExhaustionDiagnosisFD,
+		ResourceExhaustionRestartable: true,
+	}))
+
+	// Free-text on the record is deliberately less specific than the
+	// structured diagnosis so a brittle string matcher would pick the wrong
+	// classification if structured fields were ignored.
+	supervisor := NewWorkerSupervisor(m)
+	supervisor.recordTerminalHistory([]WorkerRecord{
+		{
+			ID:         workerID,
+			Kind:       "work",
+			State:      "exited",
+			Status:     agent.ExecuteBeadStatusResourceExhausted,
+			LastError:  agent.ResourceExhaustedStopMessage,
+			FinishedAt: terminalAt,
+			LastResult: &WorkerExecutionResult{
+				Status: agent.ExecuteBeadStatusResourceExhausted,
+				Detail: agent.ResourceExhaustedStopMessage,
+			},
+		},
+	}, now)
+
+	diag, ok := supervisor.LatestBlockedTerminal()
+	require.True(t, ok, "structured fd-exhaustion terminal must be queryable")
+	assert.Equal(t, workerID, diag.WorkerID)
+	assert.Equal(t, agent.ResourceExhaustionDiagnosisFD, diag.Diagnosis,
+		"must prefer ManagedWorkerResult.ResourceExhaustionDiagnosis over free-text LastError")
+	assert.True(t, diag.Restartable, "fd exhaustion is worker-local and restartable")
+	assert.True(t, diag.TerminalAt.Equal(terminalAt))
+	// Reason remains the coarse restart-visible status (resource_exhausted);
+	// Diagnosis carries the structured fd classification.
+	assert.Equal(t, agent.ExecuteBeadStatusResourceExhausted, diag.Reason)
+}
+
 func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	root := t.TempDir()
 	store := seedClaimedBead(t, root, "ddx-supervisor-stale")
