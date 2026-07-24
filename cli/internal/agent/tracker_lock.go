@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -210,10 +212,32 @@ func SetTrackerLockMetricsSink(fn func(TrackerLockSample)) func(TrackerLockSampl
 // observes a non-zero retry count without relying on time.Sleep races.
 var trackerLockContendedAttemptHook func(attempt int)
 
-// trackerLockOwnerTokenFile is optional lock metadata. Ordinary acquisition
-// does not require it; tests may install it on a fresh replacement to prove
-// a delayed stale observer cannot alter winner-owned bytes.
+// trackerLockOwnerTokenFile is required ownership metadata for token-safe
+// release. Acquisition publishes it with pid and acquired_at before the
+// protected callback runs; release removes the canonical directory only when
+// the on-disk token still matches the lease.
 const trackerLockOwnerTokenFile = "owner_token"
+
+// mainGitLockLease is the token-bearing handle returned by main-git lock
+// acquisition. Callers must Release it; never RemoveAll the canonical path.
+type mainGitLockLease struct {
+	lockDir    string
+	ownerToken string
+	guardWait  time.Duration
+}
+
+// Release removes the canonical lock only when the transition guard can be
+// acquired and the on-disk owner_token still matches this lease. A missing or
+// mismatched token means the lease was superseded; release leaves the
+// replacement in place. An unproven guard acquisition fails safe and leaves
+// the lock directory untouched.
+func (l mainGitLockLease) Release() error {
+	return releaseMainGitLockObserved(l.lockDir, l.ownerToken, l.guardWait, nil)
+}
+
+func (l mainGitLockLease) releaseObserved(observer func(trackerStaleLockGuardStage)) error {
+	return releaseMainGitLockObserved(l.lockDir, l.ownerToken, l.guardWait, observer)
+}
 
 type trackerStaleLockGuardStage string
 
@@ -238,11 +262,57 @@ var (
 // withTrackerLock; exposed at package scope so tests can pin a specific
 // curve. section is the call-site identifier forwarded to TrackerLockSample
 // and the lockmetrics operation label.
-func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, fn func() error) error {
+//
+// Acquisition returns a token-bearing lease. The protected callback runs only
+// after metadata publication succeeds. Release is deferred and joined with the
+// callback error so guarded-release failures surface to the caller.
+func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, fn func() error) (err error) {
 	lockDir := trackerLockPath(projectRoot)
 	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
 		return fmt.Errorf("tracker lock dir: %w", err)
 	}
+
+	start := time.Now()
+	lease, retries, err := acquireMainGitLock(lockDir, policy)
+	if err != nil {
+		return err
+	}
+	waitDur := time.Since(start)
+	holdStart := time.Now()
+	defer func() {
+		err = errors.Join(err, lease.Release())
+	}()
+
+	op := section
+	if op == "" {
+		op = "tracker.commit"
+	}
+	// Callbacks and lockmetrics instrumentation run only after ordinary
+	// acquisition and never while holding the stale-break transition guard.
+	err = lockmetrics.InstrumentCapped("tracker.lock", op, lockmetrics.CapConfigFor("tracker.lock"), fn)
+	trackerLockSinkMu.RLock()
+	sink := trackerLockSinkFn
+	trackerLockSinkMu.RUnlock()
+	if sink != nil {
+		sink(TrackerLockSample{LockDir: lockDir, Section: section, Wait: waitDur, Hold: time.Since(holdStart), Retries: retries})
+	}
+	return err
+}
+
+// acquireMainGitLock creates the canonical lock directory, publishes pid,
+// acquired_at, and owner_token successfully, and returns a token-bearing lease.
+// Metadata publication failure fails safe: partial cleanup uses guarded token
+// release when possible, and the protected callback is never invoked.
+func acquireMainGitLock(lockDir string, policy LockRetryPolicy) (mainGitLockLease, int, error) {
+	ownerToken, err := newMainGitLockOwnerToken()
+	if err != nil {
+		return mainGitLockLease{}, 0, fmt.Errorf("tracker lock owner token: %w", err)
+	}
+	guardWait := policy.MaxElapsed
+	if guardWait < 0 {
+		guardWait = 0
+	}
+	lease := mainGitLockLease{lockDir: lockDir, ownerToken: ownerToken, guardWait: guardWait}
 
 	start := time.Now()
 	retries := 0
@@ -250,12 +320,16 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 		err := os.Mkdir(lockDir, 0o755)
 		if err == nil {
 			// Metadata publication is outside the stale-break guard: ordinary
-			// acquisition never holds the transition sidecar.
-			_ = os.WriteFile(filepath.Join(lockDir, "pid"),
-				[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
-			_ = os.WriteFile(filepath.Join(lockDir, "acquired_at"),
-				[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644)
-			break
+			// acquisition never holds the transition sidecar. All three fields
+			// must succeed before acquisition is considered published.
+			if metaErr := writeMainGitLockMetadata(lockDir, lease); metaErr != nil {
+				// Once owner_token is durable enough to read, guarded release can
+				// clean this partial acquisition. If writing the token itself
+				// failed, leave the malformed directory rather than risk deleting
+				// a replacement with unguarded RemoveAll.
+				return mainGitLockLease{}, retries, errors.Join(metaErr, lease.Release())
+			}
+			return lease, retries, nil
 		}
 
 		// Classify what exists at lockDir before deciding to sleep or fail.
@@ -267,7 +341,7 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 				// Path disappeared between Mkdir and Lstat (race). Retry immediately.
 				continue
 			}
-			return fmt.Errorf("tracker lock stat: %w", statErr)
+			return mainGitLockLease{}, retries, fmt.Errorf("tracker lock stat: %w", statErr)
 		}
 
 		// Directory and malformed regular-file stale objects share the same
@@ -276,7 +350,7 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 		if info.Mode().IsDir() || info.Mode().IsRegular() {
 			broke, breakErr := breakStaleTrackerLock(lockDir)
 			if breakErr != nil {
-				return fmt.Errorf("tracker lock: break stale: %w", breakErr)
+				return mainGitLockLease{}, retries, fmt.Errorf("tracker lock: break stale: %w", breakErr)
 			}
 			if broke {
 				// Guard is released inside break; ordinary Mkdir can retry.
@@ -291,16 +365,16 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 			if os.IsNotExist(statErr) {
 				continue
 			}
-			return fmt.Errorf("tracker lock stat: %w", statErr)
+			return mainGitLockLease{}, retries, fmt.Errorf("tracker lock stat: %w", statErr)
 		}
 
 		switch {
 		case info.Mode().IsDir():
 			if attempt >= policy.MaxRetries {
-				return lockTimeoutError(lockDir, "max retries")
+				return mainGitLockLease{}, retries, lockTimeoutError(lockDir, "max retries")
 			}
 			if policy.MaxElapsed > 0 && time.Since(start) >= policy.MaxElapsed {
-				return lockTimeoutError(lockDir, "max elapsed")
+				return mainGitLockLease{}, retries, lockTimeoutError(lockDir, "max elapsed")
 			}
 			retries++
 			if hook := trackerLockContendedAttemptHook; hook != nil {
@@ -315,10 +389,10 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 			// LockRetryPolicy budget rather than failing fast.
 			if time.Since(info.ModTime()) > trackerLockStaleAge {
 				if attempt >= policy.MaxRetries {
-					return lockTimeoutError(lockDir, "max retries")
+					return mainGitLockLease{}, retries, lockTimeoutError(lockDir, "max retries")
 				}
 				if policy.MaxElapsed > 0 && time.Since(start) >= policy.MaxElapsed {
-					return lockTimeoutError(lockDir, "max elapsed")
+					return mainGitLockLease{}, retries, lockTimeoutError(lockDir, "max elapsed")
 				}
 				retries++
 				if hook := trackerLockContendedAttemptHook; hook != nil {
@@ -327,33 +401,110 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 				time.Sleep(policy.step(attempt))
 				continue
 			}
-			return fmt.Errorf("tracker lock: malformed lock path %s is a regular file; a lock directory was expected — remove it manually to recover", lockDir)
+			return mainGitLockLease{}, retries, fmt.Errorf("tracker lock: malformed lock path %s is a regular file; a lock directory was expected — remove it manually to recover", lockDir)
 
 		default:
 			// Symlink, socket, device, or other special filesystem object. Do not remove.
-			return fmt.Errorf("tracker lock: malformed lock path %s has type %v; a lock directory was expected — inspect and remove it manually to recover", lockDir, info.Mode().Type())
+			return mainGitLockLease{}, retries, fmt.Errorf("tracker lock: malformed lock path %s has type %v; a lock directory was expected — inspect and remove it manually to recover", lockDir, info.Mode().Type())
 		}
 	}
+}
 
-	waitDur := time.Since(start)
-	holdStart := time.Now()
-	// Ordinary owner release is the holder's private cleanup of the directory
-	// it just created. Stale-break paths never RemoveAll the canonical path.
-	defer os.RemoveAll(lockDir)
-	op := section
-	if op == "" {
-		op = "tracker.commit"
+func newMainGitLockOwnerToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
 	}
-	// Callbacks and lockmetrics instrumentation run only after ordinary
-	// acquisition and never while holding the stale-break transition guard.
-	fnErr := lockmetrics.InstrumentCapped("tracker.lock", op, lockmetrics.CapConfigFor("tracker.lock"), fn)
-	trackerLockSinkMu.RLock()
-	sink := trackerLockSinkFn
-	trackerLockSinkMu.RUnlock()
-	if sink != nil {
-		sink(TrackerLockSample{LockDir: lockDir, Section: section, Wait: waitDur, Hold: time.Since(holdStart), Retries: retries})
+	return hex.EncodeToString(raw), nil
+}
+
+func writeMainGitLockMetadata(lockDir string, lease mainGitLockLease) error {
+	if lease.ownerToken == "" {
+		return fmt.Errorf("tracker lock owner token is empty")
 	}
-	return fnErr
+	// owner_token first so partial-acquisition cleanup can prove ownership.
+	if err := os.WriteFile(filepath.Join(lockDir, trackerLockOwnerTokenFile), []byte(lease.ownerToken), 0o600); err != nil {
+		return fmt.Errorf("tracker lock: write owner_token: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, "pid"), []byte(fmt.Sprintf("%d", os.Getpid())), 0o644); err != nil {
+		return fmt.Errorf("tracker lock: write pid: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, "acquired_at"), []byte(time.Now().UTC().Format(time.RFC3339)), 0o644); err != nil {
+		return fmt.Errorf("tracker lock: write acquired_at: %w", err)
+	}
+	return nil
+}
+
+// releaseMainGitLockObserved acquires the transition guard, re-reads the
+// canonical owner_token, and removes the directory only on an exact match.
+// Never falls back to unconditional RemoveAll of the canonical pathname.
+func releaseMainGitLockObserved(lockDir, ownerToken string, guardWait time.Duration, observer func(trackerStaleLockGuardStage)) error {
+	if lockDir == "" || ownerToken == "" {
+		return fmt.Errorf("tracker lock: release requires canonical path and owner token")
+	}
+	guard, err := acquireTrackerStaleLockTransitionGuardObserved(lockDir, guardWait, observer)
+	if err != nil {
+		// Fail safe: an advisory-lock or sidecar I/O failure must never
+		// authorize removing an unverified canonical directory.
+		return fmt.Errorf("tracker lock: acquire stale-break guard for release: %w", err)
+	}
+	tombstone, owned, renameErr := renameOwnedMainGitLockDir(lockDir, ownerToken)
+	guardErr := releaseTrackerStaleLockBreakGuard(guard)
+	if renameErr != nil {
+		return errors.Join(renameErr, guardErr)
+	}
+	if guardErr != nil {
+		return guardErr
+	}
+	if !owned {
+		// Missing or mismatched token: lease was superseded; preserve replacement.
+		return nil
+	}
+	if err := os.RemoveAll(tombstone); err != nil {
+		return fmt.Errorf("tracker lock: remove owned lock tombstone %s: %w", tombstone, err)
+	}
+	return nil
+}
+
+func renameOwnedMainGitLockDir(lockDir, ownerToken string) (string, bool, error) {
+	inspected, err := os.Lstat(lockDir)
+	if os.IsNotExist(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if !inspected.IsDir() {
+		return "", false, fmt.Errorf("tracker lock: canonical lock path is not a directory: %s", lockDir)
+	}
+	tokenData, err := os.ReadFile(filepath.Join(lockDir, trackerLockOwnerTokenFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Superseded or pre-token era object without our token: preserve.
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	currentToken := strings.TrimSpace(string(tokenData))
+	if currentToken != ownerToken {
+		if _, err := hex.DecodeString(currentToken); err != nil || len(currentToken) != 64 {
+			return "", false, fmt.Errorf("tracker lock: canonical lock owner token is malformed")
+		}
+		// Token mismatch: a replacement owns the canonical path.
+		return "", false, nil
+	}
+	current, err := os.Lstat(lockDir)
+	if err != nil || !current.IsDir() || !os.SameFile(inspected, current) {
+		return "", false, fmt.Errorf("tracker lock: canonical lock identity changed during release")
+	}
+	tombstone := trackerStaleLockTombstonePath(lockDir)
+	if tombstone == "" {
+		return "", false, fmt.Errorf("tracker lock: cannot derive lock tombstone path")
+	}
+	if err := os.Rename(lockDir, tombstone); err != nil {
+		return "", false, err
+	}
+	return tombstone, true, nil
 }
 
 func lockTimeoutError(lockDir, why string) error {
@@ -561,6 +712,29 @@ func tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir string, observer 
 		observer(trackerStaleGuardStageAcquired)
 	}
 	return &trackerStaleLockTransitionGuard{file: guard, mutex: mutex}, true, nil
+}
+
+// acquireTrackerStaleLockTransitionGuardObserved waits up to guardWait for the
+// stable transition guard. Used by token-safe lease release so contending
+// stale-break and release paths serialize without unconditional RemoveAll.
+func acquireTrackerStaleLockTransitionGuardObserved(lockDir string, guardWait time.Duration, observer func(trackerStaleLockGuardStage)) (*trackerStaleLockTransitionGuard, error) {
+	if guardWait < 0 {
+		guardWait = 0
+	}
+	deadline := time.Now().Add(guardWait)
+	for {
+		guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, observer)
+		if err != nil {
+			return nil, err
+		}
+		if acquired {
+			return guard, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("stale-break guard timeout after %s", guardWait)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func releaseTrackerStaleLockBreakGuard(guard *trackerStaleLockTransitionGuard) error {
