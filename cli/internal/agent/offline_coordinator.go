@@ -50,17 +50,11 @@ func NewOfflineCoordinator(projectRoot string) *OfflineCoordinator {
 	return &OfflineCoordinator{projectRoot: projectRoot}
 }
 
-// ProjectRoot returns the project root this coordinator protects.
-func (c *OfflineCoordinator) ProjectRoot() string {
-	if c == nil {
-		return ""
-	}
-	return c.projectRoot
-}
-
 // OfflineCoordinationLockPath returns the durable project-scoped lock path
 // used by OfflineCoordinator.WithLock. Tests and production share this path
 // so serialization proofs exercise the same filesystem object workers use.
+// Production local land coordination (NewLocalLandCoordinator) acquires this
+// same path around agent.Land mutation windows.
 func OfflineCoordinationLockPath(projectRoot string) string {
 	return ddxroot.JoinProject(projectRoot, offlineCoordinationLockDirName)
 }
