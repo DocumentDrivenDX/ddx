@@ -175,21 +175,70 @@ type WorkerSupervisor struct {
 	mu               sync.Mutex
 	seenTerminals    map[string]time.Time
 	blockedTerminals map[string]blockedTerminal
-	restartEvents    []time.Time
+	// terminalDiagnostics retains a read-only snapshot of interesting terminal
+	// outcomes (restart-blocked and/or structured resource diagnoses) for
+	// status callers. Restart policy still keys off blockedTerminals alone.
+	terminalDiagnostics map[string]BlockedTerminalDiagnostic
+	restartEvents       []time.Time
 }
 
 type blockedTerminal struct {
-	Reason     string
-	TerminalAt time.Time
+	Reason      string
+	TerminalAt  time.Time
+	Diagnosis   string
+	Restartable bool
+}
+
+// BlockedTerminalDiagnostic is a read-only summary of a restart-blocked (or
+// diagnosis-bearing) terminal worker, suitable for `ddx worker status` and
+// other status consumers. It does not influence restart policy.
+type BlockedTerminalDiagnostic struct {
+	WorkerID   string    `json:"worker_id,omitempty"`
+	Reason     string    `json:"reason,omitempty"`
+	TerminalAt time.Time `json:"terminal_at,omitempty"`
+	// Diagnosis is a machine-readable classification when structured fields
+	// are present (e.g. agent.ResourceExhaustionDiagnosisFD / "fd_exhaustion").
+	Diagnosis string `json:"diagnosis,omitempty"`
+	// Restartable is true when Diagnosis is worker-local: a fresh worker
+	// process is expected to clear it (fd exhaustion), unlike root-storage
+	// exhaustion which persists across restarts.
+	Restartable bool `json:"restartable,omitempty"`
 }
 
 // NewWorkerSupervisor returns a supervisor for the given manager.
 func NewWorkerSupervisor(m *WorkerManager) *WorkerSupervisor {
 	return &WorkerSupervisor{
-		manager:          m,
-		seenTerminals:    map[string]time.Time{},
-		blockedTerminals: map[string]blockedTerminal{},
+		manager:             m,
+		seenTerminals:       map[string]time.Time{},
+		blockedTerminals:    map[string]blockedTerminal{},
+		terminalDiagnostics: map[string]BlockedTerminalDiagnostic{},
 	}
+}
+
+// LatestBlockedTerminal returns the newest restart-blocked or
+// diagnosis-bearing terminal known to this supervisor. ok is false when none
+// have been recorded. Read-only: does not mutate desired state or restart
+// policy.
+func (s *WorkerSupervisor) LatestBlockedTerminal() (BlockedTerminalDiagnostic, bool) {
+	if s == nil {
+		return BlockedTerminalDiagnostic{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		best   BlockedTerminalDiagnostic
+		found  bool
+		bestAt time.Time
+	)
+	for _, diag := range s.terminalDiagnostics {
+		if !found || diag.TerminalAt.After(bestAt) {
+			best = diag
+			bestAt = diag.TerminalAt
+			found = true
+		}
+	}
+	return best, found
 }
 
 func (s *WorkerSupervisor) desiredStatePath() string {
@@ -403,6 +452,9 @@ func (s *WorkerSupervisor) recordTerminalHistory(terminals []WorkerRecord, now t
 	if s.blockedTerminals == nil {
 		s.blockedTerminals = map[string]blockedTerminal{}
 	}
+	if s.terminalDiagnostics == nil {
+		s.terminalDiagnostics = map[string]BlockedTerminalDiagnostic{}
+	}
 
 	for _, rec := range terminals {
 		if _, seen := s.seenTerminals[rec.ID]; seen {
@@ -412,24 +464,119 @@ func (s *WorkerSupervisor) recordTerminalHistory(terminals []WorkerRecord, now t
 		if isExpectedTerminalWorker(rec) {
 			continue
 		}
-		if isRestartBlockedWorker(rec) {
+
+		reason, diagnosis, restartable := terminalDiagnosticFields(s.manager, rec)
+		terminalAt := workerTerminalTime(rec, now)
+		blocked := isRestartBlockedWorker(rec)
+
+		if blocked {
 			s.blockedTerminals[rec.ID] = blockedTerminal{
-				Reason: firstNonEmpty(
-					rec.ReapReason,
-					rec.Status,
-					rec.LastError,
-					rec.Error,
-					rec.State,
-				),
-				TerminalAt: workerTerminalTime(rec, now),
+				Reason:      reason,
+				TerminalAt:  terminalAt,
+				Diagnosis:   diagnosis,
+				Restartable: restartable,
 			}
-			continue
+		} else {
+			s.restartEvents = append(s.restartEvents, terminalAt)
 		}
-		ts := workerTerminalTime(rec, now)
-		s.restartEvents = append(s.restartEvents, ts)
+
+		// Retain diagnostics for status callers: every restart-blocked
+		// terminal, plus any terminal that carries a structured diagnosis
+		// (e.g. fd_exhaustion) even when restart remains allowed.
+		if blocked || diagnosis != "" {
+			s.terminalDiagnostics[rec.ID] = BlockedTerminalDiagnostic{
+				WorkerID:    rec.ID,
+				Reason:      reason,
+				TerminalAt:  terminalAt,
+				Diagnosis:   diagnosis,
+				Restartable: restartable,
+			}
+		}
 	}
 
 	s.restartEvents = pruneTimeWindow(s.restartEvents, now, time.Hour)
+}
+
+// terminalDiagnosticFields extracts the human reason and structured diagnosis
+// for a terminal worker. Structured ManagedWorkerResult / LastResult fields
+// win over free-text matching so status consumers can rely on machine-readable
+// classifications (e.g. "fd_exhaustion") without re-implementing EMFILE checks.
+func terminalDiagnosticFields(m *WorkerManager, rec WorkerRecord) (reason, diagnosis string, restartable bool) {
+	reason = firstNonEmpty(
+		rec.ReapReason,
+		rec.Status,
+		rec.LastError,
+		rec.Error,
+		rec.State,
+	)
+
+	var managed *ManagedWorkerResult
+	if m != nil && rec.ID != "" {
+		if res, ok := readManagedWorkerResult(filepath.Join(m.rootDir, rec.ID)); ok {
+			managed = res
+		}
+	}
+
+	// Prefer explicit structured diagnosis from the managed-worker result.
+	if managed != nil && strings.TrimSpace(managed.ResourceExhaustionDiagnosis) != "" {
+		diagnosis = strings.TrimSpace(managed.ResourceExhaustionDiagnosis)
+		restartable = managed.ResourceExhaustionRestartable
+		if reason == "" || reason == rec.State {
+			reason = firstNonEmpty(managed.LastFailureDetail, managed.LastFailureStatus, managed.StopCondition, reason)
+		}
+		return reason, diagnosis, restartable
+	}
+
+	// Prefer structured LastResult when the agent path already classified the
+	// failure as resource_exhausted with the fd-exhaustion stop message.
+	if rec.LastResult != nil {
+		if d, ok := diagnosisFromResourceFields(rec.LastResult.Status, rec.LastResult.Detail); ok {
+			if reason == "" || reason == rec.State {
+				reason = firstNonEmpty(rec.LastResult.Detail, rec.LastResult.Status, reason)
+			}
+			return reason, d, true
+		}
+	}
+
+	// Managed result without explicit diagnosis field: still map known
+	// resource_exhausted + fd stop message through structured status/detail.
+	if managed != nil {
+		if d, ok := diagnosisFromResourceFields(managed.LastFailureStatus, managed.LastFailureDetail); ok {
+			if reason == "" || reason == rec.State {
+				reason = firstNonEmpty(managed.LastFailureDetail, managed.LastFailureStatus, reason)
+			}
+			return reason, d, true
+		}
+	}
+
+	// Last resort: free-text fields that already carry the agent-emitted
+	// FDExhaustionStopMessage constant (not a new EMFILE classifier).
+	if d, ok := diagnosisFromResourceFields(rec.Status, firstNonEmpty(rec.LastError, rec.Error)); ok {
+		return reason, d, true
+	}
+
+	return reason, "", false
+}
+
+// diagnosisFromResourceFields maps known agent-emitted resource-exhaustion
+// status/detail pairs onto ResourceExhaustionDiagnosisFD. It only recognizes
+// existing structured constants and fixtures — it does not classify raw
+// errno values.
+func diagnosisFromResourceFields(status, detail string) (string, bool) {
+	status = strings.TrimSpace(status)
+	detail = strings.TrimSpace(detail)
+	if detail == agent.FDExhaustionStopMessage {
+		return agent.ResourceExhaustionDiagnosisFD, true
+	}
+	if status == agent.ExecuteBeadStatusResourceExhausted &&
+		strings.Contains(strings.ToLower(detail), "file-descriptor") {
+		return agent.ResourceExhaustionDiagnosisFD, true
+	}
+	if status == agent.ResourceExhaustionDiagnosisFD ||
+		strings.EqualFold(status, agent.ResourceExhaustionDiagnosisFD) {
+		return agent.ResourceExhaustionDiagnosisFD, true
+	}
+	return "", false
 }
 
 func (s *WorkerSupervisor) stopNewestExcess(running []WorkerRecord, excess int) error {

@@ -32,6 +32,12 @@ type ManagedWorkerResult struct {
 	// future caller forgets to set OperatorAttention.
 	LastFailureStatus string `json:"last_failure_status,omitempty"`
 	LastFailureDetail string `json:"last_failure_detail,omitempty"`
+	// ResourceExhaustionDiagnosis mirrors ExecuteBeadReport.ResourceExhaustionDiagnosis
+	// (e.g. "fd_exhaustion") so status callers can classify the terminal without
+	// brittle free-text matching.
+	ResourceExhaustionDiagnosis string `json:"resource_exhaustion_diagnosis,omitempty"`
+	// ResourceExhaustionRestartable mirrors ExecuteBeadReport.ResourceExhaustionRestartable.
+	ResourceExhaustionRestartable bool `json:"resource_exhaustion_restartable,omitempty"`
 }
 
 // IsRestartBlocking reports whether this terminal outcome must suppress an
