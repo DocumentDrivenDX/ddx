@@ -1411,7 +1411,14 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 // when the worker is unknown to the manager (already exited / never existed).
 // stopStaleDiskEntry handles the case where a worker's disk record shows
 // state=running but no live goroutine exists (e.g. after a server restart).
-// It releases any held bead claim and flips the on-disk state to "stopped".
+// Classification runs before any process signal:
+//
+//   - Reclaimable stale claim: terminate the process tree (if live), release
+//     the claim, emit bead.stopped, and mark the record stopped.
+//   - Non-reclaimable claim with a live PID: preserve the process and leave
+//     the record out of the stopped path (sibling beads own diagnostics).
+//   - Non-reclaimable claim with a dead/absent PID: mark the orphaned disk
+//     record stopped without unclaiming or emitting bead.stopped.
 func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	dir := filepath.Join(m.rootDir, id)
 	rec, err := m.readRecord(dir)
@@ -1435,27 +1442,59 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
-	if rec.PID > 0 && processAlive(rec.PID) {
+
+	// Pre-cleanup classification: never signal a live PID until ownership
+	// and liveness evidence prove the claim is safely reclaimable.
+	var store *bead.Store
+	canRelease := true
+	if beadID != "" {
+		store = bead.NewStore(ddxroot.JoinProject(projectRoot))
+		canRelease = staleDiskEntryCanReleaseClaim(store, beadID)
+	}
+	pidLive := rec.PID > 0 && processAlive(rec.PID)
+
+	if !canRelease {
+		if pidLive {
+			// Preserve branch: live process with a fresh/non-reclaimable claim.
+			// Sibling beads own preservation diagnostics and supervisor adoption.
+			return nil
+		}
+		// Orphaned dead-PID disk entry sharing a non-reclaimable claim: drop
+		// the phantom record only — do not unclaim or emit bead.stopped.
+		rec.State = "stopped"
+		rec.Status = "stopped"
+		if rec.FinishedAt.IsZero() {
+			rec.FinishedAt = now
+		}
+		rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+			Action:    "stop",
+			Actor:     "local-operator",
+			Timestamp: now,
+			Detail:    fmt.Sprintf("reason=stop-stale-orphan pid=%d", rec.PID),
+			BeadID:    beadID,
+		})
+		return m.writeRecord(dir, rec)
+	}
+
+	// Reclaimable stale branch: terminate process tree, release claim, stop.
+	if pidLive {
 		cleanupManagedWorkerProcessTree(rec.PID, nil, 250*time.Millisecond)
 	}
 
-	if beadID != "" {
-		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-		if staleDiskEntryCanReleaseClaim(store, beadID) {
-			body := fmt.Sprintf(
-				"worker=%s pid=%d reason=stop-stale",
-				id, rec.PID,
-			)
-			_ = store.AppendEvent(beadID, bead.BeadEvent{
-				Kind:      "bead.stopped",
-				Summary:   "stop (stale)",
-				Body:      body,
-				Actor:     "ddx",
-				Source:    "server-workers",
-				CreatedAt: now,
-			})
-			_ = store.Unclaim(beadID)
-		}
+	if beadID != "" && store != nil {
+		body := fmt.Sprintf(
+			"worker=%s pid=%d reason=stop-stale",
+			id, rec.PID,
+		)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "stop (stale)",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
 	}
 
 	rec.State = "stopped"
