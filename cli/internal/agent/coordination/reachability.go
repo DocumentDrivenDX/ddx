@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
@@ -16,9 +17,10 @@ func init() {
 	KeepReachabilityForDeadcode()
 }
 
-// KeepReachabilityForDeadcode roots LocalCoordinator claim and transition APIs
-// in the static production call graph. Runtime work remains gated behind an
-// env var and is disabled by default. Command wiring lands in ddx-2e49980d.
+// KeepReachabilityForDeadcode roots LocalCoordinator claim, transition, and
+// land APIs in the static production call graph. Runtime work remains gated
+// behind an env var and is disabled by default. Command wiring lands in
+// ddx-2e49980d.
 func KeepReachabilityForDeadcode() {
 	keepCoordinationReachability()
 }
@@ -32,7 +34,8 @@ func keepCoordinationReachability() {
 	// a real project store. Contention and transition-rejection mapping are
 	// also exercised via ErrAlreadyClaimed / rejected lifecycle errors.
 	backend := &keepaliveClaimBackend{}
-	coord := NewLocalCoordinator(backend)
+	landBackend := &keepaliveLandBackend{}
+	coord := NewLocalCoordinatorWithLand(backend, landBackend)
 	_, _ = coord.Claim(context.Background(), ClaimRequest{
 		BeadID:         "ddx-coordination-keepalive",
 		Assignee:       "keepalive-worker",
@@ -57,6 +60,23 @@ func keepCoordinationReachability() {
 		BeadID:         "ddx-coordination-keepalive",
 		ToStatus:       bead.StatusOpen,
 		IdempotencyKey: "coordination-transition-1",
+	})
+	// Land path + already_applied replay for landing APIs.
+	_, _ = coord.Land(context.Background(), LandRequest{
+		ProjectRoot:    "/tmp/ddx-coordination-keepalive",
+		BaseRev:        "base",
+		ResultRev:      "result",
+		BeadID:         "ddx-coordination-keepalive",
+		AttemptID:      "keepalive-land-1",
+		IdempotencyKey: "coordination-land-1",
+	})
+	_, _ = coord.Land(context.Background(), LandRequest{
+		ProjectRoot:    "/tmp/ddx-coordination-keepalive",
+		BaseRev:        "base",
+		ResultRev:      "result",
+		BeadID:         "ddx-coordination-keepalive",
+		AttemptID:      "keepalive-land-1",
+		IdempotencyKey: "coordination-land-1",
 	})
 }
 
@@ -99,4 +119,21 @@ func (b *keepaliveClaimBackend) SetLifecycleStatus(_ string, status string, _ be
 	}
 	b.status = status
 	return nil
+}
+
+// keepaliveLandBackend is a process-local stub used only by the deadcode
+// reachability keepalive. Production LocalCoordinator uses
+// agent.NewCoordinationLandBackend → agent.Land.
+type keepaliveLandBackend struct {
+	calls int
+}
+
+func (b *keepaliveLandBackend) Land(_ context.Context, req LandRequest) (LandResult, error) {
+	b.calls++
+	return LandResult{
+		BeadID:       req.BeadID,
+		Status:       LandStatusLanded,
+		NewTip:       strings.TrimSpace(req.ResultRev),
+		TargetBranch: "main",
+	}, nil
 }
