@@ -193,6 +193,12 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 			pathspec:    ":(exclude).ddx/.git-tracker.lock",
 			ignoreProbe: ".ddx/.git-tracker.lock/pid",
 		},
+		{
+			// Stable stale-break advisory sidecar left by single-winner
+			// disposal (.ddx/.git-tracker.lock.stale-break.lock).
+			pathspec:    ":(exclude).ddx/.git-tracker.lock.stale-break.lock",
+			ignoreProbe: ".ddx/.git-tracker.lock.stale-break.lock",
+		},
 	}
 
 	pathspecs := make([]string, 0, len(candidates))
