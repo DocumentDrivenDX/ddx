@@ -24,6 +24,7 @@ package server
 // Why: see ddx-8746d8a6 / ddx-e14efc58 / ddx-6aa50e57.
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -81,6 +82,10 @@ type LandCoordinator struct {
 	gitOps      agent.LandingGitOps
 	queue       chan *LandSubmission
 	done        chan struct{}
+	// offline serializes land mutations across independent CLI processes for
+	// the offline/manual path (ADR-022 rev 6). Nil for the server-hosted
+	// coordinator, which already has single-process FIFO serialization.
+	offline *agent.OfflineCoordinator
 
 	metricsMu sync.Mutex
 	metrics   CoordinatorMetrics
@@ -89,16 +94,29 @@ type LandCoordinator struct {
 // NewLocalLandCoordinator returns a process-local LandCoordinator for use
 // by CLI commands such as `ddx work` / `legacy agent work`. It has the same
 // single-writer semantics as the server-hosted coordinator but its lifetime
-// is tied to the CLI invocation. Stop() should be called on function exit.
+// is tied to the CLI invocation, and land mutations run under the project
+// offline coordination lock so independent CLI processes cannot overlap.
+// Stop() should be called on function exit.
 func NewLocalLandCoordinator(projectRoot string, gitOps agent.LandingGitOps) *LandCoordinator {
-	return newLandCoordinator(projectRoot, gitOps)
+	c := makeLandCoordinator(projectRoot, gitOps)
+	// Install the offline lock before starting the coordinator goroutine so
+	// the first Submit cannot race past a nil offline field.
+	c.offline = agent.NewOfflineCoordinator(projectRoot)
+	go c.run()
+	return c
 }
 
 func newLandCoordinator(projectRoot string, gitOps agent.LandingGitOps) *LandCoordinator {
+	c := makeLandCoordinator(projectRoot, gitOps)
+	go c.run()
+	return c
+}
+
+func makeLandCoordinator(projectRoot string, gitOps agent.LandingGitOps) *LandCoordinator {
 	if gitOps == nil {
 		gitOps = agent.RealLandingGitOps{}
 	}
-	c := &LandCoordinator{
+	return &LandCoordinator{
 		projectRoot: projectRoot,
 		gitOps:      gitOps,
 		// Buffered so a single-worker happy path does not block on a
@@ -106,8 +124,6 @@ func newLandCoordinator(projectRoot string, gitOps agent.LandingGitOps) *LandCoo
 		queue: make(chan *LandSubmission, 32),
 		done:  make(chan struct{}),
 	}
-	go c.run()
-	return c
 }
 
 // Submit sends req to the coordinator and blocks until the LandResult is
@@ -146,11 +162,27 @@ func (c *LandCoordinator) Stop() {
 func (c *LandCoordinator) run() {
 	for sub := range c.queue {
 		start := time.Now()
-		result, err := agent.Land(c.projectRoot, sub.Request, c.gitOps)
+		result, err := c.land(sub.Request)
 		elapsed := time.Since(start)
 		c.recordMetrics(sub.Request, result, err, elapsed)
 		sub.replyCh <- landReply{result: result, err: err}
 	}
+}
+
+// land invokes agent.Land under the project offline coordination lock when
+// this coordinator is the CLI/local path. Server-hosted coordinators leave
+// offline nil and rely on the in-process FIFO queue alone.
+func (c *LandCoordinator) land(req agent.LandRequest) (*agent.LandResult, error) {
+	if c.offline == nil {
+		return agent.Land(c.projectRoot, req, c.gitOps)
+	}
+	var result *agent.LandResult
+	err := c.offline.WithLock(context.Background(), func() error {
+		var landErr error
+		result, landErr = agent.Land(c.projectRoot, req, c.gitOps)
+		return landErr
+	})
+	return result, err
 }
 
 // recordMetrics updates the in-memory metrics after a Land() call.
