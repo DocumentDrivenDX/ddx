@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/coordination"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
@@ -248,6 +249,9 @@ More information:
 	persona.KeepReachabilityForDeadcode()
 	metaprompt.KeepReachabilityForDeadcode()
 	metric.KeepReachabilityForDeadcode()
+	// Coordination claim APIs land before try/work wiring (ddx-2e49980d);
+	// keep them on the production graph so pre-merge deadcode stays green.
+	coordination.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }

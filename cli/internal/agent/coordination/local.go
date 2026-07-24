@@ -39,6 +39,8 @@ type LocalCoordinator struct {
 
 // NewLocalCoordinator returns a Coordinator backed by store. store must be
 // non-nil; production callers pass bead.NewStore(...) for the project root.
+// try/work bootstrap wiring is ddx-2e49980d (out of scope for the claim
+// contract bead).
 func NewLocalCoordinator(store ClaimBackend) *LocalCoordinator {
 	return &LocalCoordinator{
 		store:        store,
