@@ -1500,6 +1500,17 @@ func runningManagedWorkers(t *testing.T, m *WorkerManager, projectRoot string) [
 	return out
 }
 
+// stopProjectWorkersErr joins every live in-process worker on m by delegating
+// to WorkerManager.Shutdown. Unlike a Stop-plus-runningManagedWorkerCount poll,
+// this does not return until runWorker has persisted its terminal record
+// (FinishedAt set), so fixture teardown cannot race a late status.json write.
+func stopProjectWorkersErr(m *WorkerManager) error {
+	if m == nil {
+		return nil
+	}
+	return m.Shutdown()
+}
+
 func stopProjectWorkers(t *testing.T, m *WorkerManager, projectRoot string) {
 	t.Helper()
 	_ = projectRoot
@@ -1508,8 +1519,110 @@ func stopProjectWorkers(t *testing.T, m *WorkerManager, projectRoot string) {
 	// runWorker goroutine to persist its terminal record, so t.TempDir cleanup
 	// cannot race a late status.json write. Waiting on
 	// runningManagedWorkerCount()==0 is not sufficient: Stop() flips the record
-	// to "stopping" immediately, satisfying that predicate while the goroutine
+	// to "stopped" immediately, satisfying that predicate while the goroutine
 	// is still finalizing — which surfaces as
 	// "TempDir RemoveAll cleanup: directory not empty" under load.
-	require.NoError(t, m.Shutdown())
+	require.NoError(t, stopProjectWorkersErr(m))
+}
+
+// TestStopProjectWorkersWaitsForRunWorkerFinalization proves that the project
+// fixture teardown helper cannot return after Stop has cancelled the worker
+// but before runWorker has written its final status.json (FinishedAt). That
+// race is what surfaces as intermittent TempDir RemoveAll failures in
+// unrelated server tests that share stopProjectWorkers.
+func TestStopProjectWorkersWaitsForRunWorkerFinalization(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires work goroutine timing; too slow for -short")
+	}
+
+	root, err := os.MkdirTemp("", "ddx-stop-project-workers-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+
+	setupBeadStoreWithReadyBead(t, root)
+
+	executorStarted := make(chan struct{})
+	cancelObserved := make(chan struct{})
+	releaseFinalization := make(chan struct{})
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				close(executorStarted)
+				<-ctx.Done()
+				close(cancelObserved)
+				// Hold finalization until the test releases the barrier. This
+				// models a slow post-cancel path that still writes status.json.
+				<-releaseFinalization
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: ctx.Err().Error(),
+				}, ctx.Err()
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:     "once",
+		NoReview: true,
+	})
+	require.NoError(t, err)
+
+	select {
+	case <-executorStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("executor never started")
+	}
+
+	teardownDone := make(chan error, 1)
+	go func() {
+		teardownDone <- stopProjectWorkersErr(m)
+	}()
+
+	select {
+	case <-cancelObserved:
+	case <-time.After(5 * time.Second):
+		t.Fatal("executor did not observe cancellation from teardown")
+	}
+
+	// While finalization is blocked, Stop has already flipped in-memory state
+	// so the old "running count is zero" predicate would pass incorrectly.
+	require.Eventually(t, func() bool {
+		return runningManagedWorkerCount(t, m, root) == 0
+	}, 2*time.Second, 10*time.Millisecond)
+
+	select {
+	case err := <-teardownDone:
+		t.Fatalf("stopProjectWorkers returned before runWorker finalization completed: %v", err)
+	case <-time.After(150 * time.Millisecond):
+		// still blocked: join is waiting on finalization, not just state flip
+	}
+
+	shown, err := m.Show(record.ID)
+	require.NoError(t, err)
+	assert.True(t, shown.FinishedAt.IsZero(), "FinishedAt must remain zero until finalization barrier is released")
+
+	close(releaseFinalization)
+
+	select {
+	case err := <-teardownDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("stopProjectWorkers did not return after finalization barrier was released")
+	}
+
+	final, err := m.Show(record.ID)
+	require.NoError(t, err)
+	assert.False(t, final.FinishedAt.IsZero(), "FinishedAt must be persisted after joined teardown")
+	assert.Equal(t, "stopped", final.State)
+
+	require.NoError(t, os.RemoveAll(root), "fixture root must be removable immediately after joined teardown")
+	// Give a late write a chance to recreate the tree if the join was incomplete.
+	time.Sleep(50 * time.Millisecond)
+	_, statErr := os.Stat(root)
+	assert.True(t, os.IsNotExist(statErr), "worker must not recreate fixture root after joined teardown")
 }
