@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1411,7 +1412,9 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 // when the worker is unknown to the manager (already exited / never existed).
 // stopStaleDiskEntry handles the case where a worker's disk record shows
 // state=running but no live goroutine exists (e.g. after a server restart).
-// It releases any held bead claim and flips the on-disk state to "stopped".
+// It releases any held bead claim and flips the on-disk state to "stopped",
+// except when a live same-machine PID is backed by a fresh claim lease or
+// heartbeat — that process and claim are preserved (regression ddx-8c8675ba).
 func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	dir := filepath.Join(m.rootDir, id)
 	rec, err := m.readRecord(dir)
@@ -1435,27 +1438,54 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
-	if rec.PID > 0 && processAlive(rec.PID) {
+
+	// Classify reclaimability before any signal or state rewrite so a
+	// mid-attempt worker with a fresh lease cannot be killed first and
+	// only then "protected" by the claim check (incident: managed-worker
+	// mid-attempt stop).
+	canReleaseClaim := true
+	var store *bead.Store
+	if beadID != "" {
+		store = bead.NewStore(ddxroot.JoinProject(projectRoot))
+		canReleaseClaim = staleDiskEntryCanReleaseClaim(store, beadID)
+	}
+	pidAlive := rec.PID > 0 && processAlive(rec.PID)
+	if pidAlive && !canReleaseClaim {
+		reason := "fresh-claim-or-heartbeat"
+		detail := fmt.Sprintf(
+			"reason=%s worker=%s pid=%d bead=%s",
+			reason, id, rec.PID, beadID,
+		)
+		log.Printf("worker supervisor: preserve live disk-record worker %s", detail)
+		rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+			Action:    "preserve",
+			Actor:     "server-workers",
+			Timestamp: now,
+			Detail:    detail,
+			BeadID:    beadID,
+		})
+		// Leave state running/stopping; do not kill the process or unclaim.
+		return m.writeRecord(dir, rec)
+	}
+
+	if pidAlive {
 		cleanupManagedWorkerProcessTree(rec.PID, nil, 250*time.Millisecond)
 	}
 
-	if beadID != "" {
-		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-		if staleDiskEntryCanReleaseClaim(store, beadID) {
-			body := fmt.Sprintf(
-				"worker=%s pid=%d reason=stop-stale",
-				id, rec.PID,
-			)
-			_ = store.AppendEvent(beadID, bead.BeadEvent{
-				Kind:      "bead.stopped",
-				Summary:   "stop (stale)",
-				Body:      body,
-				Actor:     "ddx",
-				Source:    "server-workers",
-				CreatedAt: now,
-			})
-			_ = store.Unclaim(beadID)
-		}
+	if beadID != "" && canReleaseClaim && store != nil {
+		body := fmt.Sprintf(
+			"worker=%s pid=%d reason=stop-stale",
+			id, rec.PID,
+		)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "stop (stale)",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
 	}
 
 	rec.State = "stopped"
