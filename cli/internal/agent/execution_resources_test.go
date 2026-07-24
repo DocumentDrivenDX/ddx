@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
@@ -223,10 +224,28 @@ func (h *postCleanupHookRunner) Cleanup(ctx context.Context) (ExecutionCleanupSu
 // reclaimed file/inode counts surface on the CleanupSummary that feeds
 // resource.preflight events, while the live (non-tmp) heartbeat file is left
 // in place.
+//
+// Fixture roots come from newExecuteLoopTestStore so config-derived DDx/cache
+// paths stay private to this test and cannot enumerate a host-global scratch
+// tree or module cache.
 func TestResourcePreflightReportsClaimLivenessReclaimedInodes(t *testing.T) {
-	projectRoot := t.TempDir()
+	store, _, _ := newExecuteLoopTestStore(t)
+	fixtureRoot := filepath.Dir(store.Dir)
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
-	tempRoot := t.TempDir()
+
+	tempRoot := os.Getenv(config.ExecutionWorktreeRootEnv)
+	require.NotEmpty(t, tempRoot, "newExecuteLoopTestStore must pin DDX_EXEC_WT_DIR")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	// Fixture roots may nest under the process temp dir via t.TempDir, but must
+	// not be the host temp root that production cleanup enumerates by default.
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(tempRoot))
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(projectRoot))
+	// Store/project/temp all share the private fixture allocated by the helper.
+	assertPathUnder(t, store.Dir, fixtureRoot)
+	assertPathUnder(t, projectRoot, fixtureRoot)
+	assertPathUnder(t, tempRoot, fixtureRoot)
 
 	claimLivenessRoot := bead.ClaimLivenessRoot(ddxroot.JoinProject(projectRoot))
 	require.NoError(t, os.MkdirAll(claimLivenessRoot, 0o755))
@@ -276,6 +295,11 @@ func TestResourcePreflightReportsClaimLivenessReclaimedInodes(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "expected stale claim-liveness tmp file to be reclaimed")
 	_, statErr = os.Stat(liveHeartbeat)
 	assert.NoError(t, statErr, "expected live claim-liveness heartbeat file to be preserved")
+
+	// Config-derived roots remain the private pin after the cleanup pass.
+	require.Equal(t, filepath.Clean(tempRoot), filepath.Clean(config.ExecutionTempRoot(projectRoot)))
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(config.ExecutionScratchRoot(projectRoot)))
+	assertPathUnder(t, config.ExecutionTempRoot(projectRoot), fixtureRoot)
 }
 
 type cleanupTogglingRunner struct {
