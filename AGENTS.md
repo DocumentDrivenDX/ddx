@@ -102,6 +102,32 @@ already has — i.e. a force-push rewriting that history — the hook
 rejects it. Do not disable this hook to work around it; the right move
 is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
 
+## CI Green Policy (standing)
+
+**Keep `main` CI green.** Upstream CI Validation is a load-bearing gate for
+this repo; a red main line is a regression to fix, not background noise.
+
+- **Before landing changes that touch `cli/`:** run the packages you changed
+  (`cd cli && go test ./<pkgs>/...`) and prefer `lefthook run pre-commit` on
+  the staged set. Do not push knowing the suite is broken.
+- **When CI is red on main or a PR you own:** diagnose `CI Validation` first
+  (`gh run view <id> --log-failed`). Fix root causes; do not paper over with
+  skipped suites or disabled hooks.
+- **Known failure classes to watch:**
+  - Collection-lock re-entry: never call `Store.WriteAll` inside `WithLock` —
+    use `WriteAllLocked` (enforced by `lockreentrylint` + reentry tests;
+    regression: ddx-2a319f04 / ddx-79148c01).
+  - Latency-budget tests skip under `-race` and `-short`; the pollution-guard
+    step must not re-enforce those budgets without race (shared runners flake).
+  - Tracker-heartbeat floods: CI has concurrency cancel-in-progress; still
+    avoid treating tracker-only push noise as a reason to ignore real reds.
+- **Prevention over hope:** if a class of failure lands twice, add a
+  pre-commit and/or CI lint/test so it cannot silently recur. Prefer the
+  existing `cli/tools/lint/*` + lefthook patterns.
+- **Do not merge with a red CI Validation** on the PR unless the operator
+  explicitly waives it. Pre-existing Security/Demos reds on main are separate
+  from CI Validation unless they block merge policy.
+
 ## Prohibited Actions
 
 - Do not edit `.ddx/beads.jsonl` manually.

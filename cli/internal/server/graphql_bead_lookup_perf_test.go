@@ -291,6 +291,9 @@ func BenchmarkGraphQLBeadLookupLegacyScanLatency(b *testing.B) {
 }
 
 func TestServerStateBeadSnapshotLatencyBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("latency budget skipped in -short")
+	}
 	if raceEnabled {
 		t.Skip("latency budget not meaningful under race detector")
 	}
@@ -315,6 +318,9 @@ func TestServerStateBeadSnapshotLatencyBudget(t *testing.T) {
 }
 
 func TestGraphQLBeadLookupLatencyBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("latency budget skipped in -short")
+	}
 	if raceEnabled {
 		t.Skip("latency budget not meaningful under race detector")
 	}
