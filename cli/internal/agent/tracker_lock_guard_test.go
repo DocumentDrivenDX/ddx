@@ -51,7 +51,7 @@ func TestTrackerStaleLockGuardCrashReleasesWithoutReplacingSidecar(t *testing.T)
 	require.Error(t, holder.Wait(), "killed guard holder must exit abnormally")
 
 	require.Eventually(t, func() bool {
-		guard, acquired, acquireErr := tryAcquireTrackerStaleLockTransitionGuard(lockDir)
+		guard, acquired, acquireErr := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
 		if acquireErr != nil || !acquired {
 			return false
 		}
@@ -64,7 +64,7 @@ func TestTrackerStaleLockGuardCrashReleasesWithoutReplacingSidecar(t *testing.T)
 	assert.True(t, os.SameFile(before, after), "crash + successor acquire must not replace the sidecar inode")
 
 	// Ordinary acquire/release cycle must also leave the sidecar path intact.
-	guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuard(lockDir)
+	guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
 	require.NoError(t, err)
 	require.True(t, acquired)
 	require.NoError(t, releaseTrackerStaleLockBreakGuard(guard))
@@ -79,17 +79,17 @@ func TestTrackerStaleLockGuardSerializesSameProcess(t *testing.T) {
 	lockDir := filepath.Join(t.TempDir(), ".ddx", ".git-tracker.lock")
 	require.NoError(t, os.MkdirAll(filepath.Dir(lockDir), 0o755))
 
-	first, acquired, err := tryAcquireTrackerStaleLockTransitionGuard(lockDir)
+	first, acquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
 	require.NoError(t, err)
 	require.True(t, acquired)
 
-	second, secondAcquired, err := tryAcquireTrackerStaleLockTransitionGuard(lockDir)
+	second, secondAcquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
 	require.NoError(t, err)
 	assert.False(t, secondAcquired, "keyed process mutex must serialize same-process guard attempts")
 	assert.Nil(t, second)
 
 	require.NoError(t, releaseTrackerStaleLockBreakGuard(first))
-	third, thirdAcquired, err := tryAcquireTrackerStaleLockTransitionGuard(lockDir)
+	third, thirdAcquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
 	require.NoError(t, err)
 	require.True(t, thirdAcquired)
 	require.NoError(t, releaseTrackerStaleLockBreakGuard(third))
@@ -104,7 +104,7 @@ func TestTrackerStaleLockGuardOpenErrorFailsSafe(t *testing.T) {
 	// Place a directory at the sidecar path so O_RDWR open fails (EISDIR).
 	require.NoError(t, os.Mkdir(guardPath, 0o755))
 
-	guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuard(lockDir)
+	guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
 	assert.Error(t, err, "non-contention open failure must surface as an error")
 	assert.False(t, acquired, "failed open must not report the guard as held")
 	assert.Nil(t, guard)

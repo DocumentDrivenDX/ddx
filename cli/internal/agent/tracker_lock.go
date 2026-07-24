@@ -255,7 +255,10 @@ var trackerStaleLockTombstoneSeq atomic.Uint64
 // callback error so guarded-release failures surface to the caller.
 func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, fn func() error) (err error) {
 	lockDir := trackerLockPath(projectRoot)
-	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
+	// Parent of the canonical lock and of trackerLockGuardPath(projectRoot)
+	// is the same directory; use the package-local guard path helper so the
+	// sibling sidecar derivation stays on the production call graph.
+	if err := os.MkdirAll(filepath.Dir(trackerLockGuardPath(projectRoot)), 0o755); err != nil {
 		return fmt.Errorf("tracker lock dir: %w", err)
 	}
 

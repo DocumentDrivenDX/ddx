@@ -52,12 +52,6 @@ func trackerStaleLockGuardMutex(guardPath string) *sync.Mutex {
 	return actual.(*sync.Mutex)
 }
 
-// tryAcquireTrackerStaleLockTransitionGuard is the non-observed form used by
-// tests and call sites that only need success/failure.
-func tryAcquireTrackerStaleLockTransitionGuard(lockDir string) (*trackerStaleLockTransitionGuard, bool, error) {
-	return tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, nil)
-}
-
 // tryAcquireTrackerStaleLockTransitionGuardObserved opens the stable sidecar,
 // acquires an exclusive OS advisory lock non-blockingly, and returns the held
 // guard. Contention returns (nil, false, nil). Non-contention open/lock errors
