@@ -3955,3 +3955,4 @@
 {"schema_version":1,"attempt_id":"20260723T231427-dd4c873e","bead_id":"ddx-3d574176","session_id":"eb-577c1240","ts_end":"2026-07-24T00:29:27Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260723T215015-47f08ff1","bead_id":"ddx-ce5bfdc8","session_id":"eb-547c1ce5","ts_end":"2026-07-24T00:29:34Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260723T230638-6abe88f0","bead_id":"ddx-db7e6cf8","session_id":"eb-54a671ba","ts_end":"2026-07-24T00:29:40Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
+{"schema_version":1,"attempt_id":"20260723T230659-b14ab498","bead_id":"ddx-97af6a52","session_id":"eb-b9b1b4b7","ts_start":"2026-07-23T23:17:18Z","ts_end":"2026-07-24T00:36:40Z","model":"gpt-5.4-mini","harness":"codex","outcome":"no_changes","exit_code":0,"duration_ms":4761698}
