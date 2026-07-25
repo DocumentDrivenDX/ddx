@@ -181,6 +181,12 @@ type Server struct {
 	// every /graphql request shares one instance.
 	reportedWorkers *reportedWorkersAdapter
 
+	// coordReg caches per-project coordination.LocalCoordinator instances and
+	// idempotency outcomes for ADR-022 coordination/mutations and
+	// coordination/reconcile (ddx-b45dcbd4). Lazily constructed.
+	coordRegOnce sync.Once
+	coordReg     *projectCoordinationRegistry
+
 	// supervisor remains the workingDir supervisor for direct tests and
 	// backwards-compatibility. The background reconcile goroutine now walks
 	// supervisorRegistry so additional registered projects are included too.
@@ -1134,6 +1140,10 @@ func (s *Server) routes() {
 	scoped("POST /api/projects/{project}/beads/{id}/reopen", s.handleReopenBead)
 	scoped("POST /api/projects/{project}/beads/{id}/cancel", s.handleCancelBead)
 	scoped("POST /api/projects/{project}/beads/{id}/deps", s.handleBeadDeps)
+
+	// Worker coordination — project-scoped (ADR-022 rev 6 / ddx-b45dcbd4)
+	scoped("POST /api/projects/{project}/coordination/mutations", s.handleCoordinationMutation)
+	scoped("POST /api/projects/{project}/coordination/reconcile", s.handleCoordinationReconcile)
 
 	// Agent model/capabilities status surfaces — legacy + project-scoped (FEAT-006)
 	legacy("GET /api/agent/models", s.handleAgentModels)
