@@ -619,6 +619,207 @@ func TestMissingRuntimeArtifactDiagnosticIdentifiesSourceDocument(t *testing.T) 
 	}
 }
 
+const fixtureCompleteMissingMappedPathText = `---
+ddx:
+  id: FIXTURE-COMPLETE-MISSING-MAPPED-PATH-TEXT
+---
+# Fixture Complete Missing Mapped Path Text
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-050: Relative artifact path
+
+The system MUST report the mapped relative path exactly as written.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-050 | ./artifacts/missing/report.json | test -f ./artifacts/missing/report.json |
+`
+
+// TestMissingRuntimeArtifactDiagnosticPreservesMappedPathText: a missing
+// runtime-artifact diagnostic reports the relative mapped path exactly as
+// written in the Verification row, not a cleaned (./ stripped), absolute,
+// or inferred replacement.
+func TestMissingRuntimeArtifactDiagnosticPreservesMappedPathText(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/complete_missing_mapped_path_text.md"
+	const mappedAsWritten = "./artifacts/missing/report.json"
+
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingMappedPathText)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingMappedPathText)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	row := model.Rows[0]
+	if row.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("parsed EvidenceTarget = %q, want mapped text %q", row.EvidenceTarget, mappedAsWritten)
+	}
+
+	// Resolver cleans ./ away for existence checks; diagnostic must not.
+	res := ResolveRuntimeArtifactRow(root, row)
+	if res.Kind != RuntimeArtifactClassRuntime {
+		t.Fatalf("Kind = %q, want runtime_artifact", res.Kind)
+	}
+	if res.Resolved {
+		t.Fatalf("missing path must be unresolved; got %+v", res)
+	}
+	if res.Path == mappedAsWritten {
+		t.Fatalf("test precondition failed: resolver Path must differ from mapped text (cleaned); both = %q", res.Path)
+	}
+	if res.Path != "artifacts/missing/report.json" {
+		t.Fatalf("resolver Path = %q, want cleaned artifacts/missing/report.json", res.Path)
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.ArtifactPath != mappedAsWritten {
+		t.Fatalf("ArtifactPath = %q, want mapped text %q (not cleaned %q)", f.ArtifactPath, mappedAsWritten, res.Path)
+	}
+	if f.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("EvidenceTarget = %q, want mapped text %q", f.EvidenceTarget, mappedAsWritten)
+	}
+	if !strings.Contains(f.Message, mappedAsWritten) {
+		t.Fatalf("Message must contain mapped path %q; got %q", mappedAsWritten, f.Message)
+	}
+	if strings.Contains(f.Message, `"`+res.Path+`"`) && res.Path != mappedAsWritten {
+		t.Fatalf("Message must not quote cleaned resolver path %q; got %q", res.Path, f.Message)
+	}
+	// Must not report an absolute path under the temp root.
+	if strings.Contains(f.ArtifactPath, root) || strings.Contains(f.Message, root) {
+		t.Fatalf("diagnostic must not use absolute/repo-root path; ArtifactPath=%q Message=%q root=%q",
+			f.ArtifactPath, f.Message, root)
+	}
+
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingMappedPathText, root)
+	if len(docFindings) != 1 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts: expected 1 finding; got %+v", docFindings)
+	}
+	if docFindings[0].ArtifactPath != mappedAsWritten {
+		t.Fatalf("CheckDocumentRuntimeArtifacts ArtifactPath = %q, want %q", docFindings[0].ArtifactPath, mappedAsWritten)
+	}
+}
+
+const fixtureCompleteMissingRowVsResolverPath = `---
+ddx:
+  id: FIXTURE-COMPLETE-MISSING-ROW-VS-RESOLVER-PATH
+---
+# Fixture Complete Missing Row Vs Resolver Path
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-051: Backticked artifact path
+
+The system MUST preserve backticked mapped path text in the diagnostic.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-051 | ` + "`.ddx/executions/missing/report.json`" + ` | test -f .ddx/executions/missing/report.json |
+`
+
+// TestMissingRuntimeArtifactDiagnosticUsesRowPathNotResolverPath: when the
+// resolver's cleaned Path differs from the mapped Verification text (e.g.
+// markdown backticks around the path), the missing-artifact diagnostic still
+// emits the mapped text, not the resolver path.
+func TestMissingRuntimeArtifactDiagnosticUsesRowPathNotResolverPath(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/complete_missing_row_vs_resolver_path.md"
+	const mappedAsWritten = "`.ddx/executions/missing/report.json`"
+	const resolverPath = ".ddx/executions/missing/report.json"
+
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingRowVsResolverPath)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingRowVsResolverPath)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	row := model.Rows[0]
+	if row.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("parsed EvidenceTarget = %q, want mapped text %q", row.EvidenceTarget, mappedAsWritten)
+	}
+
+	res := ResolveRuntimeArtifactRow(root, row)
+	if res.Kind != RuntimeArtifactClassRuntime {
+		t.Fatalf("Kind = %q, want runtime_artifact", res.Kind)
+	}
+	if res.Resolved {
+		t.Fatalf("missing path must be unresolved; got %+v", res)
+	}
+	if res.Path != resolverPath {
+		t.Fatalf("resolver Path = %q, want cleaned %q", res.Path, resolverPath)
+	}
+	if res.Path == mappedAsWritten {
+		t.Fatal("test precondition failed: resolver Path must differ from raw mapped text")
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.ArtifactPath != mappedAsWritten {
+		t.Fatalf("ArtifactPath = %q, want mapped row text %q (not resolver path %q)",
+			f.ArtifactPath, mappedAsWritten, resolverPath)
+	}
+	if f.ArtifactPath == res.Path {
+		t.Fatalf("ArtifactPath must not equal resolver Path %q", res.Path)
+	}
+	if f.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("EvidenceTarget = %q, want %q", f.EvidenceTarget, mappedAsWritten)
+	}
+	if !strings.Contains(f.Message, mappedAsWritten) {
+		t.Fatalf("Message must contain mapped text %q; got %q", mappedAsWritten, f.Message)
+	}
+	// Resolver cleaned path must not replace mapped text in ArtifactPath.
+	if f.ArtifactPath == resolverPath {
+		t.Fatalf("ArtifactPath must not be the cleaned resolver path %q", resolverPath)
+	}
+
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingRowVsResolverPath, root)
+	if len(docFindings) != 1 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts: expected 1 finding; got %+v", docFindings)
+	}
+	if docFindings[0].ArtifactPath != mappedAsWritten {
+		t.Fatalf("CheckDocumentRuntimeArtifacts ArtifactPath = %q, want %q",
+			docFindings[0].ArtifactPath, mappedAsWritten)
+	}
+}
+
 // TestRuntimeArtifactResolver_ReadOnly: resolving every fixture leaves all
 // fixture files byte-identical.
 func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
