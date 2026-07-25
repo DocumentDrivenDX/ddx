@@ -255,6 +255,199 @@ func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
 	}
 }
 
+// TestAgentGitConfigEnvSanitizesRepositorySelection proves the shared fixture
+// git helper (fixtureGitEnvInteg / fixtureGitCommand) clears inherited
+// GIT_DIR, GIT_WORK_TREE, and GIT_INDEX_FILE before any fixture git config
+// write, while still binding commands to the intended temporary repository
+// via cmd.Dir.
+func TestAgentGitConfigEnvSanitizesRepositorySelection(t *testing.T) {
+	// Outer checkout: stands in for a hook-contaminated primary repository.
+	outer := filepath.Join(t.TempDir(), "outer")
+	runGitInteg(t, filepath.Dir(outer), "init", "-b", "main", outer)
+	runGitInteg(t, outer, "config", "user.name", "Outer Checkout")
+	runGitInteg(t, outer, "config", "user.email", "outer@ddx.test")
+	require.NoError(t, os.WriteFile(filepath.Join(outer, "seed.txt"), []byte("outer\n"), 0o644))
+	runGitInteg(t, outer, "add", "seed.txt")
+	runGitInteg(t, outer, "commit", "-m", "chore: seed outer")
+
+	// Fixture repository that must receive config writes.
+	fixture := filepath.Join(t.TempDir(), "fixture")
+	runGitInteg(t, filepath.Dir(fixture), "init", "-b", "main", fixture)
+
+	// Contaminate the process environment the way lefthook does.
+	t.Setenv("GIT_DIR", filepath.Join(outer, ".git"))
+	t.Setenv("GIT_WORK_TREE", outer)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(outer, ".git", "index"))
+
+	// The constructed command must not carry repository-selection vars, and
+	// must still resolve to the fixture (cmd.Dir binding after the scrub).
+	cmd := fixtureGitCommand(t, fixture, "rev-parse", "--show-toplevel")
+	for _, kv := range cmd.Env {
+		for _, banned := range []string{"GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE="} {
+			if strings.HasPrefix(kv, banned) {
+				t.Fatalf("fixture git env leaked repository-selection var %q", kv)
+			}
+		}
+	}
+	// Private config scope must be re-bound after CleanEnv strips GIT_CONFIG_*.
+	gotPrivate := false
+	for _, kv := range cmd.Env {
+		if strings.HasPrefix(kv, "GIT_CONFIG_GLOBAL=") {
+			gotPrivate = true
+			require.Equal(t, "GIT_CONFIG_GLOBAL="+testFixtureGitConfigPath, kv)
+		}
+	}
+	require.True(t, gotPrivate, "fixture helper must bind GIT_CONFIG_GLOBAL to the TestMain private config")
+
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "fixture rev-parse under contaminated env: %s", out)
+	gotTop, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	require.NoError(t, err)
+	wantTop, err := filepath.EvalSymlinks(fixture)
+	require.NoError(t, err)
+	require.Equal(t, wantTop, gotTop, "helper must bind git to fixture dir, not inherited GIT_DIR")
+
+	// A real config write must land in the fixture, not the outer checkout.
+	runGitInteg(t, fixture, "config", "user.email", "sanitized-fixture@ddx.test")
+	email := runGitInteg(t, fixture, "config", "--local", "--get", "user.email")
+	require.Equal(t, "sanitized-fixture@ddx.test", email)
+
+	outerConfig, err := os.ReadFile(filepath.Join(outer, ".git", "config"))
+	require.NoError(t, err)
+	require.NotContains(t, string(outerConfig), "sanitized-fixture@ddx.test",
+		"config write under contaminated env must not touch outer checkout")
+}
+
+// TestAgentGitConfigHelperUsesPrivateConfig proves core.bare, core.worktree,
+// user.name, and user.email writes through the fixture helper land only in the
+// temporary fixture repository/config scope and not in the invoking checkout's
+// common config.
+func TestAgentGitConfigHelperUsesPrivateConfig(t *testing.T) {
+	// Invoking checkout with a linked worktree (common-dir selection surface).
+	primary := filepath.Join(t.TempDir(), "primary")
+	runGitInteg(t, filepath.Dir(primary), "init", "-b", "main", primary)
+	runGitInteg(t, primary, "config", "user.name", "Primary Guard")
+	runGitInteg(t, primary, "config", "user.email", "primary-guard@ddx.test")
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "seed.txt"), []byte("seed\n"), 0o644))
+	runGitInteg(t, primary, "add", "seed.txt")
+	runGitInteg(t, primary, "commit", "-m", "chore: seed primary")
+	runGitInteg(t, primary, "config", "extensions.worktreeConfig", "true")
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGitInteg(t, primary, "worktree", "add", "-b", "private-config-linked", linked, "HEAD")
+	t.Cleanup(func() { _ = runGitInteg(t, primary, "worktree", "remove", "--force", linked) })
+
+	primaryConfigPath := filepath.Join(primary, ".git", "config")
+	beforePrimary, err := os.ReadFile(primaryConfigPath)
+	require.NoError(t, err)
+	beforeValues := fixtureConfigValues(t, primary)
+
+	// Contaminate selection to the shared common gitdir of the primary checkout.
+	t.Setenv("GIT_DIR", filepath.Join(primary, ".git"))
+	t.Setenv("GIT_WORK_TREE", primary)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(primary, ".git", "index"))
+
+	fixture, _ := newScriptHarnessRepo(t, 0)
+	redirectedWorktree := filepath.Join(t.TempDir(), "redirected-worktree")
+	// Dangerous keys that previously leaked into the shared checkout config.
+	// Write identity first (no bare/worktree interaction), then the core keys.
+	runGitInteg(t, fixture, "config", "user.name", "Fixture Private Name")
+	runGitInteg(t, fixture, "config", "user.email", "fixture-private@ddx.test")
+	runGitInteg(t, fixture, "config", "core.bare", "true")
+	runGitInteg(t, fixture, "config", "core.worktree", redirectedWorktree)
+
+	// Fixture local scope received the writes. Read the config file directly:
+	// any further `git config --get` under CombinedOutput mixes a stderr
+	// warning when both core.bare and core.worktree are set ("do not make sense").
+	fixtureCfgPath := filepath.Join(fixture, ".git", "config")
+	fixtureCfg, err := os.ReadFile(fixtureCfgPath)
+	require.NoError(t, err)
+	fixtureText := string(fixtureCfg)
+	require.Contains(t, fixtureText, "bare = true")
+	require.Contains(t, fixtureText, "worktree = "+redirectedWorktree)
+	require.Contains(t, fixtureText, "name = Fixture Private Name")
+	require.Contains(t, fixtureText, "email = fixture-private@ddx.test")
+
+	// Invoking checkout common config must be byte-identical and retain values.
+	afterPrimary, err := os.ReadFile(primaryConfigPath)
+	require.NoError(t, err)
+	require.Equal(t, beforePrimary, afterPrimary, "fixture helper must not rewrite primary common config")
+	require.Equal(t, beforeValues, fixtureConfigValues(t, primary), "primary core/user config must be unchanged")
+
+	// Linked worktree must remain usable (shared common dir not corrupted).
+	_, statusErr := runGitIntegOutput(linked, "status", "--short")
+	require.NoError(t, statusErr, "linked worktree must remain usable after fixture config writes")
+
+	// Explicit content guard: private identity strings never appear in primary.
+	for _, banned := range []string{
+		"Fixture Private Name",
+		"fixture-private@ddx.test",
+		"redirected-worktree",
+	} {
+		require.NotContains(t, string(afterPrimary), banned,
+			"primary common config must not contain fixture-private value %q", banned)
+	}
+}
+
+// TestAgentGitConfigHelperFailsClosedWhenPrivateScopeUnavailable proves setup
+// returns a deterministic error before mutation when the helper cannot establish
+// a fixture-private config scope.
+func TestAgentGitConfigHelperFailsClosedWhenPrivateScopeUnavailable(t *testing.T) {
+	// Build an outer checkout that a non-fail-closed helper would mutate when
+	// GIT_DIR is inherited and a config write is attempted.
+	outer := filepath.Join(t.TempDir(), "outer")
+	runGitInteg(t, filepath.Dir(outer), "init", "-b", "main", outer)
+	runGitInteg(t, outer, "config", "user.name", "Outer FailClosed")
+	runGitInteg(t, outer, "config", "user.email", "outer-failclosed@ddx.test")
+	outerConfigPath := filepath.Join(outer, ".git", "config")
+	beforeOuter, err := os.ReadFile(outerConfigPath)
+	require.NoError(t, err)
+
+	fixture := t.TempDir()
+	// Contaminate selection toward outer so any accidental git spawn would hit it.
+	t.Setenv("GIT_DIR", filepath.Join(outer, ".git"))
+	t.Setenv("GIT_WORK_TREE", outer)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(outer, ".git", "index"))
+
+	// Case 1: private config path unset — helper must refuse before spawning git.
+	saved := testFixtureGitConfigPath
+	t.Cleanup(func() { testFixtureGitConfigPath = saved })
+	testFixtureGitConfigPath = ""
+
+	env, envErr := fixtureGitEnvInteg()
+	require.Error(t, envErr, "fixtureGitEnvInteg must fail closed when private path is unset")
+	require.Nil(t, env)
+	require.Contains(t, envErr.Error(), "test fixture private git config is not initialized")
+
+	out, runErr := runGitIntegOutput(fixture, "config", "core.bare", "true")
+	require.Error(t, runErr, "runGitIntegOutput must refuse without private config scope")
+	require.Contains(t, runErr.Error(), "without private config")
+	require.Empty(t, out)
+
+	afterUnset, err := os.ReadFile(outerConfigPath)
+	require.NoError(t, err)
+	require.Equal(t, beforeOuter, afterUnset, "fail-closed path must not mutate outer config when path is unset")
+
+	// Case 2: private config path points at a non-regular path (directory).
+	badDir := t.TempDir()
+	testFixtureGitConfigPath = badDir
+	env, envErr = fixtureGitEnvInteg()
+	require.Error(t, envErr, "fixtureGitEnvInteg must fail closed when private path is not a regular file")
+	require.Nil(t, env)
+	require.Contains(t, envErr.Error(), "not a regular file")
+
+	out, runErr = runGitIntegOutput(fixture, "config", "user.email", "should-not-write@ddx.test")
+	require.Error(t, runErr)
+	require.Contains(t, runErr.Error(), "without private config")
+	require.Empty(t, out)
+
+	afterBad, err := os.ReadFile(outerConfigPath)
+	require.NoError(t, err)
+	require.Equal(t, beforeOuter, afterBad, "fail-closed path must not mutate outer config when private scope is unusable")
+	require.NotContains(t, string(afterBad), "should-not-write@ddx.test")
+	require.NotContains(t, string(afterBad), "bare = true")
+}
+
 // TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree proves the test
 // fixture boundary itself, rather than only ExecuteBead's harness wrapper.
 // The parent process deliberately points Git at a real primary repository;
