@@ -7,9 +7,9 @@
 //
 // Sibling parser symbols (verification inventory, waiver policy,
 // observation freshness, zero-evidence, test-symbol resolution,
-// runtime-artifact resolution, command allowlist) remain reachable
-// from main for production RTA without changing the status-gate exit
-// contract.
+// citation-granularity, runtime-artifact resolution, command allowlist)
+// remain reachable from main for production RTA without changing the
+// status-gate exit contract.
 //
 // Usage:
 //
@@ -55,19 +55,20 @@ func main() {
 			exitCode = 1
 		}
 		// Keep verification / waiver / observation-freshness /
-		// zero-evidence / test-symbol / runtime-artifact /
-		// command-allowlist symbols production-reachable (read-only).
-		// These probes must not change the status-gate exit contract.
+		// zero-evidence / test-symbol / citation-granularity /
+		// runtime-artifact / command-allowlist symbols
+		// production-reachable (read-only). These probes must not
+		// change the status-gate exit contract.
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
 // touchSiblingParsers exercises verification, waiver, observation-
-// freshness, zero-evidence, test-symbol, runtime-artifact, and
-// command-allowlist passes on markdown under root so those package
-// symbols remain reachable from main. Read-only; never changes the
-// status-gate exit path.
+// freshness, zero-evidence, test-symbol, citation-granularity,
+// runtime-artifact, and command-allowlist passes on markdown under
+// root so those package symbols remain reachable from main. Read-only;
+// never changes the status-gate exit path.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -109,18 +110,25 @@ func probeFile(path, repoRoot string) {
 	}
 
 	// Zero-evidence (WB-1 step 5), coverage-cardinality, Go test-
-	// symbol resolution, runtime-artifact resolution, and Verification
-	// command allowlist (WB-1 steps 3-4): keep
-	// CheckDocumentZeroEvidence / CheckDocumentCoverageCardinality /
+	// symbol resolution, citation-granularity, runtime-artifact
+	// resolution, and Verification command allowlist (WB-1 steps 3-4):
+	// keep CheckDocumentZeroEvidence / CheckDocumentCoverageCardinality /
 	// CheckDocumentTestSymbols / CheckDocumentCommandAllowlist /
-	// ResolveRuntimeArtifactRows production-reachable. Read-only
-	// probes; do not change the status-gate exit contract and do not
-	// emit missing-artifact diagnostics (sibling child's job).
+	// IsCoveringCitation / ResolveRuntimeArtifactRows
+	// production-reachable. Read-only probes; do not change the
+	// status-gate exit contract and do not emit missing-artifact
+	// diagnostics (sibling child's job).
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
 		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
 		_ = spechonesty.CheckDocumentTestSymbols(path, string(data), repoRoot)
 		_ = spechonesty.CheckDocumentCommandAllowlist(path, string(data))
+	}
+	// Citation-granularity predicate (WB-1 steps 3-4): file-only test
+	// paths vs exact Test* symbols. Pure over row fields; discard
+	// results so the status-gate exit path is unchanged.
+	for _, row := range model.Rows {
+		_ = spechonesty.IsCoveringCitation(row)
 	}
 	// Runtime-artifact classifier + path resolver (WB-1 steps 3-4).
 	// Pure read-only lookup against repoRoot; discard results so the
