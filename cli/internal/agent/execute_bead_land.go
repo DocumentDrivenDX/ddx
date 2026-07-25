@@ -921,7 +921,12 @@ func checkoutSyncDirtyOverlapPaths(dir, fromRev string, dirtyPaths []string) ([]
 }
 
 func checkoutSyncDeferralIgnoredPath(path string) bool {
-	if strings.HasPrefix(path, ".ddx/executions/") ||
+	// Never-deleted main-git stale-break guard sidecar. Derived from the
+	// package-local helper so ignore identity cannot drift from the on-disk
+	// path, independent of project .gitignore.
+	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(".ddx", ".git-tracker.lock")))
+	if path == guardRel ||
+		strings.HasPrefix(path, ".ddx/executions/") ||
 		strings.HasPrefix(path, ".ddx/runs/") ||
 		strings.HasPrefix(path, ".ddx/backups/") ||
 		strings.HasPrefix(path, ".ddx/run-state/") ||
