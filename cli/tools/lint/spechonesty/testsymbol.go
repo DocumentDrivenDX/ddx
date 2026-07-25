@@ -95,6 +95,12 @@ var (
 //   - Evidence naming an existing Test* symbol in scope → no diagnostic.
 //   - Non-test evidence (static checks, runtime artifacts) is ignored.
 //
+// Resolution is independent per row (TD-027 mixed-evidence contract): a
+// resolving row never suppresses, satisfies, or coalesces diagnostics for a
+// different row whose target is missing. Each missing Test* target yields
+// its own actionable FindingMissingTestSymbol diagnostic with symbol and
+// row context (RequirementRef, Line).
+//
 // Read-only: opens files for parse only; never writes.
 func CheckTestSymbolResolution(in TestSymbolInput) []TestSymbolFinding {
 	if !IsCompleteStatus(in.Status) {
