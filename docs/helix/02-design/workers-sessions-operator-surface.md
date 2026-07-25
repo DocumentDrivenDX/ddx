@@ -44,9 +44,10 @@ Every worker and session view is project-scoped. Per `ddx-d30bc1a0`, worker
 liveness sidecars live under `ddxroot.Path()/workers/<worker-id>/status.json`
 and immutable run evidence lives under
 `ddxroot.Path()/executions/<attempt-id>/`, where `ddxroot.Path()` is shorthand
-for `ddxroot.Path(ctx, projectRoot)`. The server and UI must resolve project
-context first, then read these paths, so the operator surface behaves the same
-for in-tree and convention-mode projects.
+for `ddxroot.Path(ctx, projectRoot)`, per `ddx-06cbaa90` (presence-based DDx
+root resolution and per-project worktree registry). The server and UI must
+resolve project context first, then read these paths, so the operator surface
+behaves the same for in-tree and convention-mode projects.
 
 ## Navigation and Audit
 

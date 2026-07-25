@@ -20,10 +20,12 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 
 All project-scoped run and evidence paths in this plan are rooted at
 `ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, per
-`ddx-d30bc1a0`. In-tree projects still resolve to `<projectRoot>/.ddx`;
-convention-mode projects resolve to the per-project XDG directory derived from
-project identity. Any remaining literal legacy root-prefixed examples in older
-plan text should be read as `ddxroot.Path()/...`.
+`ddx-d30bc1a0` and per `ddx-06cbaa90` (presence-based DDx root resolution and
+per-project worktree registry). In-tree projects still resolve to
+`<projectRoot>/.ddx`; convention-mode projects resolve to the per-project XDG
+directory derived from project identity. Any remaining literal legacy
+root-prefixed examples in older plan text should be read as
+`ddxroot.Path()/...`.
 
 ## Decisions (resolved through review)
 
