@@ -6,8 +6,8 @@
 // to the docs tree.
 //
 // Sibling parser symbols (verification inventory, waiver policy,
-// observation freshness) remain reachable from main for production RTA
-// without changing the status-gate exit contract.
+// observation freshness, zero-evidence) remain reachable from main for
+// production RTA without changing the status-gate exit contract.
 //
 // Usage:
 //
@@ -52,17 +52,18 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", d.Path, line, d.Kind, d.Message)
 			exitCode = 1
 		}
-		// Keep verification / waiver / observation-freshness symbols
-		// production-reachable (read-only). These probes must not change
-		// the status-gate exit contract.
+		// Keep verification / waiver / observation-freshness /
+		// zero-evidence symbols production-reachable (read-only). These
+		// probes must not change the status-gate exit contract.
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
-// touchSiblingParsers exercises verification, waiver, and observation-
-// freshness parsers on markdown under root so those package symbols remain
-// reachable from main. Read-only; never changes the status-gate exit path.
+// touchSiblingParsers exercises verification, waiver, observation-
+// freshness, and zero-evidence passes on markdown under root so those
+// package symbols remain reachable from main. Read-only; never changes
+// the status-gate exit path.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -97,6 +98,13 @@ func probeFile(path string) {
 	_ = model.Rows
 	for _, f := range model.Findings {
 		_ = f
+	}
+
+	// Zero-evidence (WB-1 step 5): keep CheckDocumentZeroEvidence and
+	// CheckZeroEvidence production-reachable. Read-only probe; does not
+	// change the status-gate exit contract.
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
 	}
 
 	waiver, err := spechonesty.ParseVerificationWaiverFile(path)
