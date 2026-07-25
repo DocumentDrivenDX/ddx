@@ -881,3 +881,134 @@ func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
 		t.Fatalf("resolver mutated package testdata fixtures:\n%s", strings.Join(diffs, "\n"))
 	}
 }
+
+// TestCompleteVerificationRuntimeArtifactChecks_ReadOnly: running runtime
+// artifact validation over fixtures does not modify any fixture file.
+// Collects diagnostics in memory and asserts fixture contents and
+// mutation-relevant metadata are unchanged after validation.
+func TestCompleteVerificationRuntimeArtifactChecks_ReadOnly(t *testing.T) {
+	root := t.TempDir()
+	writeExistingRuntimeArtifactFixture(t, root)
+
+	docsDir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	// On-disk Complete/Implemented fixtures: existing + missing paths so
+	// validation exercises both pass and diagnostic emission without writes.
+	docs := map[string]string{
+		"complete_existing.md":  fixtureCompleteExistingRuntimeArtifact,
+		"implemented_existing.md": fixtureImplementedExistingRuntimeArtifact,
+		"complete_missing.md":   fixtureCompleteMissingRuntimeArtifact,
+		"complete_mapped_path.md": fixtureCompleteMissingMappedPathText,
+		"complete_backtick_path.md": fixtureCompleteMissingRowVsResolverPath,
+	}
+	for name, content := range docs {
+		if err := os.WriteFile(filepath.Join(docsDir, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	before := snapshotFixtures(t, root)
+	if len(before) == 0 {
+		t.Fatal("expected fixture files in snapshot")
+	}
+
+	// Validation through parsed Verification rows + runtime artifact resolver;
+	// diagnostics stay in memory.
+	for name, content := range docs {
+		p := filepath.Join(docsDir, name)
+		_ = CheckDocumentRuntimeArtifacts(p, content, root)
+
+		status := ParseDocumentStatusMarkdown(p, content)
+		model := ParseVerificationMarkdown(p, content)
+		_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+			Path:       p,
+			Status:     status.Status,
+			StatusLine: status.Line,
+			Rows:       model.Rows,
+			RepoRoot:   root,
+		})
+	}
+
+	// Direct in-memory path: mixed rows (existing, missing, out-of-band).
+	_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:   "docs/in_memory_mixed.md",
+		Status: StatusComplete,
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-001", EvidenceTarget: ".ddx/executions/fixture/report.json", Line: 1},
+			{RequirementRef: "REQ-002", EvidenceTarget: "docs/helix/evidence.json", Line: 2},
+			{RequirementRef: "REQ-003", EvidenceTarget: ".ddx/executions/missing/report.json", Line: 3},
+			{RequirementRef: "REQ-004", EvidenceTarget: "TestCreateResource", Line: 4},
+			{RequirementRef: "REQ-005", EvidenceTarget: "check:static-delete", Line: 5},
+			{RequirementRef: "REQ-006", EvidenceTarget: "./artifacts/missing/report.json", Line: 6},
+		},
+		RepoRoot: root,
+	})
+	_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:   "docs/in_memory_implemented.md",
+		Status: StatusImplemented,
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-010", EvidenceTarget: "docs/helix/evidence.json", Line: 1},
+			{RequirementRef: "REQ-011", EvidenceTarget: "artifacts/does-not-exist.json", Line: 2},
+		},
+		RepoRoot: root,
+	})
+
+	after := snapshotFixtures(t, root)
+	if diffs := diffFixtures(before, after); len(diffs) > 0 {
+		t.Fatalf("runtime artifact validation mutated fixtures:\n%s", strings.Join(diffs, "\n"))
+	}
+
+	// Package testdata fixtures must stay untouched when used as RepoRoot.
+	tdRoot := filepath.Join("testdata")
+	beforeTD := snapshotFixtures(t, tdRoot)
+	if len(beforeTD) == 0 {
+		t.Fatal("expected package testdata fixtures")
+	}
+
+	err := filepath.Walk(filepath.Join("testdata", "docs"), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(strings.ToLower(info.Name()), ".md") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		_ = CheckDocumentRuntimeArtifacts(path, string(data), tdRoot)
+		status := ParseDocumentStatusMarkdown(path, string(data))
+		model := ParseVerificationMarkdown(path, string(data))
+		_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+			Path:       path,
+			Status:     status.Status,
+			StatusLine: status.Line,
+			Rows:       model.Rows,
+			RepoRoot:   tdRoot,
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk package testdata docs: %v", err)
+	}
+
+	// Also exercise the package fixture Verification rows via document parse.
+	path := filepath.Join("testdata", "docs", "section_anchors_only.md")
+	model, err := ParseVerificationDocument(path)
+	if err != nil {
+		t.Fatalf("ParseVerificationDocument: %v", err)
+	}
+	_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:     path,
+		Status:   StatusComplete,
+		Rows:     model.Rows,
+		RepoRoot: tdRoot,
+	})
+
+	afterTD := snapshotFixtures(t, tdRoot)
+	if diffs := diffFixtures(beforeTD, afterTD); len(diffs) > 0 {
+		t.Fatalf("runtime artifact validation mutated package testdata:\n%s", strings.Join(diffs, "\n"))
+	}
+}
