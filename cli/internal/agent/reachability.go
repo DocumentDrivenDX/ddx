@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/runrecord"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
@@ -21,6 +22,9 @@ func init() {
 // var and is disabled by default.
 func KeepReachabilityForDeadcode() {
 	keepAgentSupportReachability()
+	// Crash-safe run-record publisher (WB-2) is package-level production API
+	// ahead of try/work dispatch wiring; keep Publish/Read on the static graph.
+	runrecord.KeepReachabilityForDeadcode()
 }
 
 func keepAgentSupportReachability() {

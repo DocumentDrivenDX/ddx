@@ -253,6 +253,9 @@ More information:
 	// keep domain + client constructors on the production graph.
 	coordination.KeepReachabilityForDeadcode()
 	agent.KeepCoordinationClientReachable()
+	// Run-record atomic publisher is ahead of try/work dispatch wiring;
+	// keep Publish/Read on the production graph (ddx-128c35f5).
+	agent.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }
