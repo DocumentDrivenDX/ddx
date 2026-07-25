@@ -5,26 +5,24 @@
 // runtime-artifact target resolver. For each Complete/Implemented row
 // classified as an inspectable runtime artifact target, resolves the
 // path under the repository root. Existing (resolved) artifacts emit
-// no diagnostic — the positive path this file owns.
+// no diagnostic. Unresolved inspectable targets emit one
+// FindingMissingRuntimeArtifact diagnostic that carries the mapping
+// row's requirement id and the source document path so the document
+// owner can locate the exact Verification row.
 //
-// Emission of missing-artifact diagnostics for unresolved targets is a
-// sibling child; this pass only guarantees that current-revision
-// artifacts do not false-positive. Read-only: never mutates documents
-// or fixtures.
+// Read-only: never mutates documents or fixtures. Does not reimplement
+// classification or path resolution — consumes ResolveRuntimeArtifactRow.
 package spechonesty
 
+import "fmt"
+
 // RuntimeArtifactFindingKind classifies a runtime-artifact validation
-// diagnostic. The missing-artifact kind is reserved for the sibling
-// that emits unresolved-target diagnostics; this pass currently
-// returns no findings on the positive (resolved) path.
+// diagnostic.
 type RuntimeArtifactFindingKind string
 
 const (
 	// FindingMissingRuntimeArtifact is emitted when a mapped inspectable
 	// runtime artifact path does not resolve under the repository root.
-	// Emission is owned by the missing-artifact sibling; the constant
-	// exists so the positive-path pass and tests can name the diagnostic
-	// kind without inventing a second vocabulary.
 	FindingMissingRuntimeArtifact RuntimeArtifactFindingKind = "missing_runtime_artifact"
 )
 
@@ -77,8 +75,10 @@ type RuntimeArtifactInput struct {
 //   - Out-of-band evidence (Test*, check:*, free text) → ignored here.
 //   - Runtime-artifact target that resolves under RepoRoot → no diagnostic
 //     for that row (positive path; prevents false positives).
-//   - Runtime-artifact target that does not resolve → no emission from
-//     this pass; the missing-artifact sibling owns that diagnostic body.
+//   - Runtime-artifact target that does not resolve → one
+//     FindingMissingRuntimeArtifact diagnostic whose Path is the source
+//     document and whose RequirementRef is the offending Verification
+//     row's requirement id (never inferred from prose).
 //
 // Resolution is independent per row. Read-only: delegates existence
 // checks to ResolveRuntimeArtifactRow; never writes.
@@ -101,11 +101,35 @@ func CheckRuntimeArtifactResolution(in RuntimeArtifactInput) []RuntimeArtifactFi
 			// Existing inspectable artifact: pass, no diagnostic.
 			continue
 		}
-		// Unresolved runtime artifact: missing-artifact diagnostic body
-		// is intentionally not emitted here (sibling child). Keep the
-		// branch explicit so resolved rows never fall through into a
-		// future diagnostic by accident.
-		_ = res
+		// Unresolved inspectable runtime artifact: emit a diagnostic
+		// that identifies the mapping-row requirement and source doc.
+		line := row.Line
+		if line <= 0 {
+			line = 1
+		}
+		reqRef := row.RequirementRef
+		if reqRef == "" {
+			// Prefer resolver copy when the row field is empty; still
+			// do not invent ids from prose.
+			reqRef = res.RequirementRef
+		}
+		artifactPath := res.Path
+		if artifactPath == "" {
+			artifactPath = stripEvidenceMarkup(row.EvidenceTarget)
+		}
+		findings = append(findings, RuntimeArtifactFinding{
+			Path:           in.Path,
+			Line:           line,
+			RequirementRef: reqRef,
+			EvidenceTarget: row.EvidenceTarget,
+			ArtifactPath:   artifactPath,
+			Kind:           FindingMissingRuntimeArtifact,
+			Severity:       SeverityError,
+			Message: fmt.Sprintf(
+				"%s: missing runtime artifact %q (requirement %q); mapped path does not exist under repository root",
+				in.Path, artifactPath, reqRef,
+			),
+		})
 	}
 	return findings
 }
