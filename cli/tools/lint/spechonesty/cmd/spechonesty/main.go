@@ -100,11 +100,13 @@ func probeFile(path string) {
 		_ = f
 	}
 
-	// Zero-evidence (WB-1 step 5): keep CheckDocumentZeroEvidence and
-	// CheckZeroEvidence production-reachable. Read-only probe; does not
-	// change the status-gate exit contract.
+	// Zero-evidence (WB-1 step 5) and coverage-cardinality (WB-1 steps
+	// 3-4): keep CheckDocumentZeroEvidence / CheckCoverageCardinality
+	// production-reachable. Read-only probes; do not change the
+	// status-gate exit contract.
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
+		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
 	}
 
 	waiver, err := spechonesty.ParseVerificationWaiverFile(path)

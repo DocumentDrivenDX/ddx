@@ -61,6 +61,10 @@ const (
 	// Non-waivable; cardinality siblings own per-requirement uncovered
 	// and duplicate diagnostics separately.
 	FindingZeroEvidence CoverageFindingKind = "zero_evidence"
+	// FindingDuplicateMapping is a Complete/Implemented requirement (or
+	// stable anchor) covered by more than one Verification mapping row.
+	// Non-waivable; emitted by the coverage-cardinality pass.
+	FindingDuplicateMapping CoverageFindingKind = "duplicate_mapping"
 	// FindingMissingStatus is non-waivable (WB-1 step 5).
 	FindingMissingStatus CoverageFindingKind = "missing_status"
 	// FindingDuplicateID is non-waivable (WB-1 step 5).
