@@ -170,6 +170,10 @@ type workerHandle struct {
 	cancel  context.CancelFunc
 	logBuf  *bytes.Buffer
 	logFile *os.File
+	// done is closed after the worker's final record is written.
+	// Shutdown waits on it for in-process workers so teardown cannot return
+	// before the terminal status.json is durable.
+	done chan struct{}
 	// progressCh receives ProgressEvents from the execute-bead loop.
 	// The WorkerManager drains this channel to update WorkerRecord and
 	// broadcast to SSE subscribers.
@@ -598,6 +602,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		cancel:       cancel,
 		logBuf:       logBuf,
 		logFile:      logFile,
+		done:         make(chan struct{}),
 		progressCh:   progressCh,
 		progressDone: make(chan struct{}),
 		lastPhaseTS:  time.Now().UTC(),
@@ -672,6 +677,11 @@ func (m *WorkerManager) waitManagedWorkerExit(cmd *exec.Cmd, id, dir string, han
 	waitErr := cmd.Wait()
 	close(progressCh)
 	<-handle.progressDone
+	defer func() {
+		if handle.done != nil {
+			close(handle.done)
+		}
+	}()
 
 	now := time.Now().UTC()
 	m.mu.Lock()
@@ -783,6 +793,7 @@ func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run Plugi
 		cancel:       cancel,
 		logBuf:       logBuf,
 		logFile:      logFile,
+		done:         make(chan struct{}),
 		progressCh:   progressCh,
 		progressDone: make(chan struct{}),
 		lastPhaseTS:  startedAt,
@@ -851,6 +862,11 @@ func (m *WorkerManager) runPluginAction(ctx context.Context, id, dir string, spe
 
 	close(progressCh)
 	<-handle.progressDone
+	defer func() {
+		if handle.done != nil {
+			close(handle.done)
+		}
+	}()
 
 	m.mu.Lock()
 	record := handle.record
@@ -1224,6 +1240,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	// Wait for drainProgress to process all remaining events (including live
 	// counter increments) before we overwrite handle.record with the final state.
 	<-handle.progressDone
+	defer func() {
+		if handle.done != nil {
+			close(handle.done)
+		}
+	}()
 
 	m.mu.Lock()
 	record := handle.record
@@ -1756,8 +1777,9 @@ func (m *WorkerManager) Shutdown() error {
 	m.StopWatchdog()
 
 	type liveWorker struct {
-		id         string
-		waitForEnd bool
+		id        string
+		handle    *workerHandle
+		needsStop bool
 	}
 
 	m.mu.Lock()
@@ -1768,22 +1790,30 @@ func (m *WorkerManager) Shutdown() error {
 			continue
 		}
 		rec := handle.record
-		if rec.State != "running" && rec.State != "stopping" {
-			continue
+		if rec.FinishedAt.IsZero() {
+			liveIDs[id] = struct{}{}
 		}
-		if !rec.FinishedAt.IsZero() {
-			continue
+		switch {
+		case rec.State == "running" || rec.State == "stopping":
+			live = append(live, liveWorker{
+				id:        id,
+				handle:    handle,
+				needsStop: true,
+			})
+		case rec.FinishedAt.IsZero() && handle.logFile != nil:
+			live = append(live, liveWorker{
+				id:     id,
+				handle: handle,
+			})
 		}
-		liveIDs[id] = struct{}{}
-		live = append(live, liveWorker{
-			id:         id,
-			waitForEnd: handle.logFile != nil,
-		})
 	}
 	m.mu.Unlock()
 
 	var firstErr error
 	for _, worker := range live {
+		if !worker.needsStop {
+			continue
+		}
 		if err := m.Stop(worker.id); err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -1822,15 +1852,24 @@ func (m *WorkerManager) Shutdown() error {
 
 	const shutdownWaitTimeout = 5 * time.Second
 	for _, worker := range live {
-		if !worker.waitForEnd {
-			continue
-		}
-		if err := m.waitForStoppedRecord(worker.id, shutdownWaitTimeout); err != nil && firstErr == nil {
+		if err := m.waitForWorkerFinalization(worker.id, worker.handle, shutdownWaitTimeout); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 
 	return firstErr
+}
+
+func (m *WorkerManager) waitForWorkerFinalization(id string, handle *workerHandle, timeout time.Duration) error {
+	if handle != nil && handle.done != nil {
+		select {
+		case <-handle.done:
+			return nil
+		case <-time.After(timeout):
+			return fmt.Errorf("worker %s did not persist stopped state before shutdown timeout", id)
+		}
+	}
+	return m.waitForStoppedRecord(id, timeout)
 }
 
 func (m *WorkerManager) waitForStoppedRecord(id string, timeout time.Duration) error {
