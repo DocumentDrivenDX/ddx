@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -202,10 +205,16 @@ func TestLoop_DisruptionEventEmitted(t *testing.T) {
 	assert.Equal(t, "transport_error", beadEv.Summary)
 }
 
+// runInterruptedWorkAttempt drives one canceled execute-loop attempt on a
+// hermetic store fixture. newExecuteLoopTestStore pins private HOME/XDG/
+// DDX_EXEC_WT_DIR roots under a per-test fixture so this path never inherits
+// process-global DDx/config roots or enumerates a host-shared scratch tree.
 func runInterruptedWorkAttempt(t *testing.T) (*bead.Store, *bead.Bead, *ExecuteBeadLoopResult, error) {
 	t.Helper()
 
 	store, candidate, _ := newExecuteLoopTestStore(t)
+	requirePinnedExecuteLoopRoots(t, store)
+
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -228,9 +237,37 @@ func runInterruptedWorkAttempt(t *testing.T) (*bead.Store, *bead.Bead, *ExecuteB
 	return store, candidate, result, err
 }
 
+// requirePinnedExecuteLoopRoots fails fast when the interrupted-work fixture
+// is missing private DDx/config root pins and would fall through to host-
+// global HOME/cache/temp trees.
+func requirePinnedExecuteLoopRoots(t *testing.T, store *bead.Store) {
+	t.Helper()
+	require.NotNil(t, store)
+
+	execWT := os.Getenv(config.ExecutionWorktreeRootEnv)
+	require.NotEmpty(t, execWT, "interrupted-work fixture must pin %s", config.ExecutionWorktreeRootEnv)
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(execWT),
+		"DDX_EXEC_WT_DIR must not resolve to the host process temp root")
+
+	// pinExecuteLoopPrivateRoots places store/ and exec-wt/ as siblings under
+	// one private fixture root; reject any store that lives outside that tree.
+	require.Equal(t, filepath.Dir(store.Dir), filepath.Dir(execWT),
+		"store and exec-wt must share the private fixture root")
+
+	projectRoot := filepath.Dir(store.Dir)
+	tempRoot := config.ExecutionTempRoot(projectRoot)
+	scratchRoot := config.ExecutionScratchRoot(projectRoot)
+	require.Equal(t, filepath.Clean(execWT), filepath.Clean(tempRoot))
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(tempRoot))
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(scratchRoot))
+	assertPathUnder(t, store.Dir, filepath.Dir(execWT))
+	assertPathUnder(t, tempRoot, filepath.Dir(execWT))
+	assertPathUnder(t, scratchRoot, filepath.Dir(execWT))
+}
+
 // TestWorkInterrupt_InFlightAttemptUnclaimsBead verifies that an in-flight
 // interrupted attempt releases the claim and returns the bead to open so it is
-// re-claimable.
+// re-claimable. Fixture roots are private via runInterruptedWorkAttempt.
 func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
 	store, candidate, result, err := runInterruptedWorkAttempt(t)
 	if err != nil && !errors.Is(err, context.Canceled) {
@@ -240,6 +277,69 @@ func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	assert.True(t, result.Results[0].Disrupted)
 
+	// Re-assert hermetic roots after the interrupt path so a mid-run env leak
+	// cannot silently re-point cleanup at a host-global DDx scratch tree.
+	requirePinnedExecuteLoopRoots(t, store)
+
+	got, err := store.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+}
+
+// TestRunInterruptedWorkAttemptUsesPrivateRoots proves runInterruptedWorkAttempt
+// re-pins fixture-local DDx/config roots even when process-global HOME/XDG/
+// cache roots are poisoned with a host-looking shared exec-wt tree.
+func TestRunInterruptedWorkAttemptUsesPrivateRoots(t *testing.T) {
+	sharedHome := t.TempDir()
+	sharedCache := filepath.Join(sharedHome, ".cache", "ddx", "exec-wt")
+	require.NoError(t, os.MkdirAll(sharedCache, 0o755))
+	sharedConfigDir := filepath.Join(sharedHome, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(sharedConfigDir, 0o755))
+	// Host-looking global config that would redirect execution temp onto the
+	// shared cache if the interrupt fixture failed to pin private roots.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(sharedConfigDir, "config.yaml"),
+		[]byte("version: \"1.0\"\nexecutions:\n  temp_worktree_root: "+sharedCache+"\n"),
+		0o644,
+	))
+
+	// Poison process-global roots the way a host environment would.
+	t.Setenv("HOME", sharedHome)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(sharedHome, ".local", "share"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(sharedHome, ".cache"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(sharedHome, ".config"))
+	t.Setenv(config.ExecutionWorktreeRootEnv, "")
+
+	store, candidate, result, err := runInterruptedWorkAttempt(t)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, store)
+	require.NotNil(t, candidate)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+	assert.True(t, result.Results[0].Disrupted)
+
+	// Store and config-derived roots stay outside the poisoned shared home.
+	assertPathOutside(t, store.Dir, sharedHome)
+	require.NotEqual(t, filepath.Clean(sharedHome), filepath.Clean(os.Getenv("HOME")))
+	require.NotEqual(t, filepath.Clean(filepath.Join(sharedHome, ".cache")), filepath.Clean(os.Getenv("XDG_CACHE_HOME")))
+	execWT := os.Getenv(config.ExecutionWorktreeRootEnv)
+	require.NotEmpty(t, execWT)
+	require.NotEqual(t, filepath.Clean(sharedCache), filepath.Clean(execWT))
+	assertPathOutside(t, execWT, sharedHome)
+
+	projectRoot := filepath.Dir(store.Dir)
+	tempRoot := config.ExecutionTempRoot(projectRoot)
+	scratchRoot := config.ExecutionScratchRoot(projectRoot)
+	require.Equal(t, filepath.Clean(execWT), filepath.Clean(tempRoot))
+	assertPathOutside(t, tempRoot, sharedHome)
+	assertPathOutside(t, scratchRoot, sharedHome)
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(tempRoot))
+	require.NotEqual(t, filepath.Clean(os.TempDir()), filepath.Clean(scratchRoot))
+
+	// Interrupt semantics must still hold on the hermetic fixture.
 	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
