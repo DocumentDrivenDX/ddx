@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -167,7 +168,7 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 	// Never-deleted main-git stale-break guard sidecar. Derived from the
 	// package-local helper so the suffix cannot drift from the on-disk path.
 	// Code-level exclusion (independent of project .gitignore).
-	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(".ddx", ".git-tracker.lock")))
+	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(ddxroot.DirName, ".git-tracker.lock")))
 	candidates := []struct {
 		pathspec    string
 		ignoreProbe string

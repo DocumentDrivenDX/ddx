@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ func TestOfflineJournal_AppendRecordDurability(t *testing.T) {
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
 
 	journalPath := OfflineJournalPath(projectRoot)
-	require.Equal(t, filepath.Join(projectRoot, ".ddx", "coordination", "offline-journal.jsonl"), journalPath)
+	require.Equal(t, filepath.Join(projectRoot, ddxroot.DirName, "coordination", "offline-journal.jsonl"), journalPath)
 
 	j, err := OpenOfflineJournal(projectRoot)
 	require.NoError(t, err)
@@ -144,7 +145,7 @@ func TestOfflineJournal_AcknowledgedResume(t *testing.T) {
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
 
 	ackPath := OfflineJournalAckPath(projectRoot)
-	require.Equal(t, filepath.Join(projectRoot, ".ddx", "coordination", "offline-journal.ack"), ackPath)
+	require.Equal(t, filepath.Join(projectRoot, ddxroot.DirName, "coordination", "offline-journal.ack"), ackPath)
 
 	j, err := OpenOfflineJournal(projectRoot)
 	require.NoError(t, err)

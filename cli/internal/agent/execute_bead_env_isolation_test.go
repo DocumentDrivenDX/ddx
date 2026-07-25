@@ -194,9 +194,17 @@ func TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched(t *testi
 }
 
 func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
+	// Fail closed during setup if the suite cannot prove a private config scope
+	// before any intentional mutation. Then install an invoking-repo guard that
+	// receives hostile GIT_* selection so leaks cannot rewrite a shared checkout.
+	invoking := newInvokingRepoConfigGuard(t)
+
+	// Dedicated temporary fixture repository — never the process cwd / host repo.
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 	runGitInteg(t, projectRoot, "config", "extensions.worktreeConfig", "true")
+
+	fixtureConfigPath := filepath.Join(projectRoot, ".git", "config")
 
 	directivePath := filepath.Join(t.TempDir(), "mutate-git-config.txt")
 	writeDirectiveFile(t, directivePath, []string{
@@ -253,6 +261,17 @@ func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
 			}
 		}
 	}
+
+	// Fixture local config must not retain the harness contamination keys either.
+	afterFixtureConfig, err := os.ReadFile(fixtureConfigPath)
+	require.NoError(t, err)
+	require.NotContains(t, string(afterFixtureConfig), "fixture@ddx.test")
+	require.NotContains(t, string(afterFixtureConfig), "nested@ddx.test")
+	require.NotContains(t, string(afterFixtureConfig), "DDxFixture")
+
+	// Invoking stand-in common config must be byte-identical (no core.bare /
+	// core.worktree / user.name / user.email leak from the fixture path).
+	invoking.assertUnchanged(t)
 }
 
 // TestAgentGitConfigEnvSanitizesRepositorySelection proves the shared fixture
@@ -510,18 +529,6 @@ func TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree(t *testing.T) {
 	require.NoError(t, primaryStatusErr, "primary checkout must remain usable")
 	_, linkedStatusErr := runGitIntegOutput(linked, "status", "--short")
 	require.NoError(t, linkedStatusErr, "linked worktree must remain usable")
-}
-
-func fixtureConfigValues(t *testing.T, repo string) map[string]string {
-	t.Helper()
-	values := make(map[string]string)
-	for _, key := range []string{"core.bare", "core.worktree", "user.name", "user.email"} {
-		out, err := runGitIntegOutput(repo, "config", "--get", key)
-		if err == nil {
-			values[key] = out
-		}
-	}
-	return values
 }
 
 func runCoreBareRepairFixture(t *testing.T) {

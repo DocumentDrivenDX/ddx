@@ -21,6 +21,8 @@ var initGitignoreRules = []string{
 	".ddx/agent-logs/",
 	".ddx/attachments/",
 	".ddx/workers/",
+	// Offline coordination journal (shared client bootstrap; ADR-022).
+	".ddx/coordination/",
 	".ddx/exec-runs.d/",
 	".ddx/.execute-bead-wt-*/",
 	// Execution evidence is per-machine working state and is NEVER committed;

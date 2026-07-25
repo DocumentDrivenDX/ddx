@@ -249,9 +249,13 @@ More information:
 	persona.KeepReachabilityForDeadcode()
 	metaprompt.KeepReachabilityForDeadcode()
 	metric.KeepReachabilityForDeadcode()
-	// Coordination claim APIs land before try/work wiring (ddx-2e49980d);
-	// keep them on the production graph so pre-merge deadcode stays green.
+	// Coordination client is wired into try/work bootstrap (ddx-2e49980d);
+	// keep domain + client constructors on the production graph.
 	coordination.KeepReachabilityForDeadcode()
+	agent.KeepCoordinationClientReachable()
+	// Run-record atomic publisher is ahead of try/work dispatch wiring;
+	// keep Publish/Read on the production graph (ddx-128c35f5).
+	agent.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }

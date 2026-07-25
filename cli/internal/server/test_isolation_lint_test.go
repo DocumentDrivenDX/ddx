@@ -46,6 +46,8 @@ var isolationHelpers = map[string]bool{
 	"setupProjectWithBeads":      true,
 	"setupBeadLookupFixture":     true,
 	"BuildBeadFixture":           true,
+	// setupCoordinationProject sets XDG_DATA_HOME before returning a fixture root.
+	"setupCoordinationProject": true,
 }
 
 // TestTestsIsolateStateDir walks the Go test files in the server package and

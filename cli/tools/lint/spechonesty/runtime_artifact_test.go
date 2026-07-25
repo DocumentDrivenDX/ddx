@@ -1,10 +1,14 @@
 package spechonesty
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestRuntimeArtifactTargetClassification: mapping rows whose evidence
@@ -172,7 +176,7 @@ func TestRuntimeArtifactTargetResolution(t *testing.T) {
 	}
 
 	// Generated fixture artifact under .ddx/executions/.
-	fixtureRel := filepath.Join(".ddx", "executions", "fixture", "report.json")
+	fixtureRel := filepath.Join(ddxroot.DirName, "executions", "fixture", "report.json")
 	fixtureAbs := filepath.Join(root, fixtureRel)
 	if err := os.MkdirAll(filepath.Dir(fixtureAbs), 0o755); err != nil {
 		t.Fatalf("mkdir fixture: %v", err)
@@ -294,7 +298,7 @@ func TestRuntimeArtifactTargetResolution_NoNetwork(t *testing.T) {
 	t.Setenv("https_proxy", "http://127.0.0.1:1")
 
 	root := t.TempDir()
-	rel := filepath.Join(".ddx", "executions", "offline", "report.json")
+	rel := filepath.Join(ddxroot.DirName, "executions", "offline", "report.json")
 	abs := filepath.Join(root, rel)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -371,7 +375,7 @@ The system MUST publish generated evidence under the fixture tree.
 func writeExistingRuntimeArtifactFixture(t *testing.T, root string) {
 	t.Helper()
 	paths := []string{
-		filepath.Join(".ddx", "executions", "fixture", "report.json"),
+		filepath.Join(ddxroot.DirName, "executions", "fixture", "report.json"),
 		filepath.Join("docs", "helix", "evidence.json"),
 	}
 	for _, rel := range paths {
@@ -617,6 +621,207 @@ func TestMissingRuntimeArtifactDiagnosticIdentifiesSourceDocument(t *testing.T) 
 	}
 }
 
+const fixtureCompleteMissingMappedPathText = `---
+ddx:
+  id: FIXTURE-COMPLETE-MISSING-MAPPED-PATH-TEXT
+---
+# Fixture Complete Missing Mapped Path Text
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-050: Relative artifact path
+
+The system MUST report the mapped relative path exactly as written.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-050 | ./artifacts/missing/report.json | test -f ./artifacts/missing/report.json |
+`
+
+// TestMissingRuntimeArtifactDiagnosticPreservesMappedPathText: a missing
+// runtime-artifact diagnostic reports the relative mapped path exactly as
+// written in the Verification row, not a cleaned (./ stripped), absolute,
+// or inferred replacement.
+func TestMissingRuntimeArtifactDiagnosticPreservesMappedPathText(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/complete_missing_mapped_path_text.md"
+	const mappedAsWritten = "./artifacts/missing/report.json"
+
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingMappedPathText)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingMappedPathText)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	row := model.Rows[0]
+	if row.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("parsed EvidenceTarget = %q, want mapped text %q", row.EvidenceTarget, mappedAsWritten)
+	}
+
+	// Resolver cleans ./ away for existence checks; diagnostic must not.
+	res := ResolveRuntimeArtifactRow(root, row)
+	if res.Kind != RuntimeArtifactClassRuntime {
+		t.Fatalf("Kind = %q, want runtime_artifact", res.Kind)
+	}
+	if res.Resolved {
+		t.Fatalf("missing path must be unresolved; got %+v", res)
+	}
+	if res.Path == mappedAsWritten {
+		t.Fatalf("test precondition failed: resolver Path must differ from mapped text (cleaned); both = %q", res.Path)
+	}
+	if res.Path != "artifacts/missing/report.json" {
+		t.Fatalf("resolver Path = %q, want cleaned artifacts/missing/report.json", res.Path)
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.ArtifactPath != mappedAsWritten {
+		t.Fatalf("ArtifactPath = %q, want mapped text %q (not cleaned %q)", f.ArtifactPath, mappedAsWritten, res.Path)
+	}
+	if f.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("EvidenceTarget = %q, want mapped text %q", f.EvidenceTarget, mappedAsWritten)
+	}
+	if !strings.Contains(f.Message, mappedAsWritten) {
+		t.Fatalf("Message must contain mapped path %q; got %q", mappedAsWritten, f.Message)
+	}
+	if strings.Contains(f.Message, `"`+res.Path+`"`) && res.Path != mappedAsWritten {
+		t.Fatalf("Message must not quote cleaned resolver path %q; got %q", res.Path, f.Message)
+	}
+	// Must not report an absolute path under the temp root.
+	if strings.Contains(f.ArtifactPath, root) || strings.Contains(f.Message, root) {
+		t.Fatalf("diagnostic must not use absolute/repo-root path; ArtifactPath=%q Message=%q root=%q",
+			f.ArtifactPath, f.Message, root)
+	}
+
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingMappedPathText, root)
+	if len(docFindings) != 1 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts: expected 1 finding; got %+v", docFindings)
+	}
+	if docFindings[0].ArtifactPath != mappedAsWritten {
+		t.Fatalf("CheckDocumentRuntimeArtifacts ArtifactPath = %q, want %q", docFindings[0].ArtifactPath, mappedAsWritten)
+	}
+}
+
+const fixtureCompleteMissingRowVsResolverPath = `---
+ddx:
+  id: FIXTURE-COMPLETE-MISSING-ROW-VS-RESOLVER-PATH
+---
+# Fixture Complete Missing Row Vs Resolver Path
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-051: Backticked artifact path
+
+The system MUST preserve backticked mapped path text in the diagnostic.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-051 | ` + "`.ddx/executions/missing/report.json`" + ` | test -f .ddx/executions/missing/report.json |
+`
+
+// TestMissingRuntimeArtifactDiagnosticUsesRowPathNotResolverPath: when the
+// resolver's cleaned Path differs from the mapped Verification text (e.g.
+// markdown backticks around the path), the missing-artifact diagnostic still
+// emits the mapped text, not the resolver path.
+func TestMissingRuntimeArtifactDiagnosticUsesRowPathNotResolverPath(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/complete_missing_row_vs_resolver_path.md"
+	const mappedAsWritten = "`.ddx/executions/missing/report.json`"
+	const resolverPath = ".ddx/executions/missing/report.json"
+
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingRowVsResolverPath)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingRowVsResolverPath)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	row := model.Rows[0]
+	if row.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("parsed EvidenceTarget = %q, want mapped text %q", row.EvidenceTarget, mappedAsWritten)
+	}
+
+	res := ResolveRuntimeArtifactRow(root, row)
+	if res.Kind != RuntimeArtifactClassRuntime {
+		t.Fatalf("Kind = %q, want runtime_artifact", res.Kind)
+	}
+	if res.Resolved {
+		t.Fatalf("missing path must be unresolved; got %+v", res)
+	}
+	if res.Path != resolverPath {
+		t.Fatalf("resolver Path = %q, want cleaned %q", res.Path, resolverPath)
+	}
+	if res.Path == mappedAsWritten {
+		t.Fatal("test precondition failed: resolver Path must differ from raw mapped text")
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.ArtifactPath != mappedAsWritten {
+		t.Fatalf("ArtifactPath = %q, want mapped row text %q (not resolver path %q)",
+			f.ArtifactPath, mappedAsWritten, resolverPath)
+	}
+	if f.ArtifactPath == res.Path {
+		t.Fatalf("ArtifactPath must not equal resolver Path %q", res.Path)
+	}
+	if f.EvidenceTarget != mappedAsWritten {
+		t.Fatalf("EvidenceTarget = %q, want %q", f.EvidenceTarget, mappedAsWritten)
+	}
+	if !strings.Contains(f.Message, mappedAsWritten) {
+		t.Fatalf("Message must contain mapped text %q; got %q", mappedAsWritten, f.Message)
+	}
+	// Resolver cleaned path must not replace mapped text in ArtifactPath.
+	if f.ArtifactPath == resolverPath {
+		t.Fatalf("ArtifactPath must not be the cleaned resolver path %q", resolverPath)
+	}
+
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingRowVsResolverPath, root)
+	if len(docFindings) != 1 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts: expected 1 finding; got %+v", docFindings)
+	}
+	if docFindings[0].ArtifactPath != mappedAsWritten {
+		t.Fatalf("CheckDocumentRuntimeArtifacts ArtifactPath = %q, want %q",
+			docFindings[0].ArtifactPath, mappedAsWritten)
+	}
+}
+
 // TestRuntimeArtifactResolver_ReadOnly: resolving every fixture leaves all
 // fixture files byte-identical.
 func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
@@ -653,7 +858,7 @@ func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
 	// Create a temporary artifact tree and resolve against it without
 	// touching package fixtures.
 	tmp := t.TempDir()
-	art := filepath.Join(tmp, ".ddx", "executions", "fixture", "report.json")
+	art := filepath.Join(tmp, ddxroot.DirName, "executions", "fixture", "report.json")
 	if err := os.MkdirAll(filepath.Dir(art), 0o755); err != nil {
 		t.Fatalf("mkdir tmp artifact: %v", err)
 	}
@@ -676,5 +881,359 @@ func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
 	afterTD := snapshotFixtures(t, tdRoot)
 	if diffs := diffFixtures(beforeTD, afterTD); len(diffs) > 0 {
 		t.Fatalf("resolver mutated package testdata fixtures:\n%s", strings.Join(diffs, "\n"))
+	}
+}
+
+// TestCompleteVerificationRuntimeArtifactChecks_ReadOnly: running runtime
+// artifact validation over fixtures does not modify any fixture file.
+// Collects diagnostics in memory and asserts fixture contents and
+// mutation-relevant metadata are unchanged after validation.
+func TestCompleteVerificationRuntimeArtifactChecks_ReadOnly(t *testing.T) {
+	root := t.TempDir()
+	writeExistingRuntimeArtifactFixture(t, root)
+
+	docsDir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	// On-disk Complete/Implemented fixtures: existing + missing paths so
+	// validation exercises both pass and diagnostic emission without writes.
+	docs := map[string]string{
+		"complete_existing.md":  fixtureCompleteExistingRuntimeArtifact,
+		"implemented_existing.md": fixtureImplementedExistingRuntimeArtifact,
+		"complete_missing.md":   fixtureCompleteMissingRuntimeArtifact,
+		"complete_mapped_path.md": fixtureCompleteMissingMappedPathText,
+		"complete_backtick_path.md": fixtureCompleteMissingRowVsResolverPath,
+	}
+	for name, content := range docs {
+		if err := os.WriteFile(filepath.Join(docsDir, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	before := snapshotFixtures(t, root)
+	if len(before) == 0 {
+		t.Fatal("expected fixture files in snapshot")
+	}
+
+	// Validation through parsed Verification rows + runtime artifact resolver;
+	// diagnostics stay in memory.
+	for name, content := range docs {
+		p := filepath.Join(docsDir, name)
+		_ = CheckDocumentRuntimeArtifacts(p, content, root)
+
+		status := ParseDocumentStatusMarkdown(p, content)
+		model := ParseVerificationMarkdown(p, content)
+		_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+			Path:       p,
+			Status:     status.Status,
+			StatusLine: status.Line,
+			Rows:       model.Rows,
+			RepoRoot:   root,
+		})
+	}
+
+	// Direct in-memory path: mixed rows (existing, missing, out-of-band).
+	_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:   "docs/in_memory_mixed.md",
+		Status: StatusComplete,
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-001", EvidenceTarget: ".ddx/executions/fixture/report.json", Line: 1},
+			{RequirementRef: "REQ-002", EvidenceTarget: "docs/helix/evidence.json", Line: 2},
+			{RequirementRef: "REQ-003", EvidenceTarget: ".ddx/executions/missing/report.json", Line: 3},
+			{RequirementRef: "REQ-004", EvidenceTarget: "TestCreateResource", Line: 4},
+			{RequirementRef: "REQ-005", EvidenceTarget: "check:static-delete", Line: 5},
+			{RequirementRef: "REQ-006", EvidenceTarget: "./artifacts/missing/report.json", Line: 6},
+		},
+		RepoRoot: root,
+	})
+	_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:   "docs/in_memory_implemented.md",
+		Status: StatusImplemented,
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-010", EvidenceTarget: "docs/helix/evidence.json", Line: 1},
+			{RequirementRef: "REQ-011", EvidenceTarget: "artifacts/does-not-exist.json", Line: 2},
+		},
+		RepoRoot: root,
+	})
+
+	after := snapshotFixtures(t, root)
+	if diffs := diffFixtures(before, after); len(diffs) > 0 {
+		t.Fatalf("runtime artifact validation mutated fixtures:\n%s", strings.Join(diffs, "\n"))
+	}
+
+	// Package testdata fixtures must stay untouched when used as RepoRoot.
+	tdRoot := filepath.Join("testdata")
+	beforeTD := snapshotFixtures(t, tdRoot)
+	if len(beforeTD) == 0 {
+		t.Fatal("expected package testdata fixtures")
+	}
+
+	err := filepath.Walk(filepath.Join("testdata", "docs"), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(strings.ToLower(info.Name()), ".md") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		_ = CheckDocumentRuntimeArtifacts(path, string(data), tdRoot)
+		status := ParseDocumentStatusMarkdown(path, string(data))
+		model := ParseVerificationMarkdown(path, string(data))
+		_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+			Path:       path,
+			Status:     status.Status,
+			StatusLine: status.Line,
+			Rows:       model.Rows,
+			RepoRoot:   tdRoot,
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk package testdata docs: %v", err)
+	}
+
+	// Also exercise the package fixture Verification rows via document parse.
+	path := filepath.Join("testdata", "docs", "section_anchors_only.md")
+	model, err := ParseVerificationDocument(path)
+	if err != nil {
+		t.Fatalf("ParseVerificationDocument: %v", err)
+	}
+	_ = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:     path,
+		Status:   StatusComplete,
+		Rows:     model.Rows,
+		RepoRoot: tdRoot,
+	})
+
+	afterTD := snapshotFixtures(t, tdRoot)
+	if diffs := diffFixtures(beforeTD, afterTD); len(diffs) > 0 {
+		t.Fatalf("runtime artifact validation mutated package testdata:\n%s", strings.Join(diffs, "\n"))
+	}
+}
+
+// documentRestampGuard captures the load-bearing document fields that
+// runtime-artifact validation must not rewrite: status stamp text,
+// Verification mapping rows, and evidence target cell text.
+type documentRestampGuard struct {
+	// content is the full document bytes as written.
+	content string
+	// statusStamp is the exact body status line (e.g. "**Status:** Complete").
+	statusStamp string
+	// status is the normalized parser status.
+	status DocStatus
+	// mappingRow is the exact markdown table data row for the first mapping.
+	mappingRow string
+	// evidenceTarget is the parsed Evidence cell text.
+	evidenceTarget string
+	// requirementRef is the parsed requirement id on that row.
+	requirementRef string
+}
+
+func captureDocumentRestampGuard(t *testing.T, path, content string) documentRestampGuard {
+	t.Helper()
+	status := ParseDocumentStatusMarkdown(path, content)
+	if !IsCompleteStatus(status.Status) {
+		t.Fatalf("%s: status %q is not Complete/Implemented", path, status.Status)
+	}
+	model := ParseVerificationMarkdown(path, content)
+	if len(model.Rows) == 0 {
+		t.Fatalf("%s: expected at least one Verification mapping row", path)
+	}
+	row := model.Rows[0]
+
+	// Extract the exact status stamp line and mapping table row from the
+	// raw document so restamping/normalization of either is detectable.
+	var statusStamp, mappingRow string
+	for _, line := range strings.Split(content, "\n") {
+		trim := strings.TrimSpace(line)
+		if statusStamp == "" && strings.HasPrefix(strings.ToLower(trim), "**status:**") {
+			statusStamp = line
+		}
+		// First data row after the header separator: "| REQ-... |"
+		if mappingRow == "" && strings.HasPrefix(trim, "|") &&
+			strings.Contains(trim, row.RequirementRef) &&
+			strings.Contains(trim, row.EvidenceTarget) {
+			mappingRow = line
+		}
+	}
+	if statusStamp == "" {
+		t.Fatalf("%s: could not locate body status stamp line", path)
+	}
+	if mappingRow == "" {
+		t.Fatalf("%s: could not locate mapping row for %s / %s", path, row.RequirementRef, row.EvidenceTarget)
+	}
+	return documentRestampGuard{
+		content:        content,
+		statusStamp:    statusStamp,
+		status:         status.Status,
+		mappingRow:     mappingRow,
+		evidenceTarget: row.EvidenceTarget,
+		requirementRef: row.RequirementRef,
+	}
+}
+
+func assertDocumentNotRestamped(t *testing.T, path, afterContent string, before documentRestampGuard) {
+	t.Helper()
+	if afterContent != before.content {
+		t.Fatalf("%s: document fixture bytes changed after runtime-artifact validation", path)
+	}
+	if !strings.Contains(afterContent, before.statusStamp) {
+		t.Fatalf("%s: status stamp %q was rewritten or removed", path, strings.TrimSpace(before.statusStamp))
+	}
+	if !strings.Contains(afterContent, before.mappingRow) {
+		t.Fatalf("%s: Verification mapping row %q was rewritten or removed", path, strings.TrimSpace(before.mappingRow))
+	}
+	if !strings.Contains(afterContent, before.evidenceTarget) {
+		t.Fatalf("%s: evidence target text %q was rewritten or removed", path, before.evidenceTarget)
+	}
+
+	// Re-parse: status stamp value, mapping row identity, and evidence
+	// target text must match the pre-validation snapshot exactly.
+	after := captureDocumentRestampGuard(t, path, afterContent)
+	if after.status != before.status {
+		t.Fatalf("%s: status restamped from %q to %q", path, before.status, after.status)
+	}
+	if after.statusStamp != before.statusStamp {
+		t.Fatalf("%s: status stamp line changed:\n  before: %q\n  after:  %q", path, before.statusStamp, after.statusStamp)
+	}
+	if after.mappingRow != before.mappingRow {
+		t.Fatalf("%s: mapping row changed:\n  before: %q\n  after:  %q", path, before.mappingRow, after.mappingRow)
+	}
+	if after.evidenceTarget != before.evidenceTarget {
+		t.Fatalf("%s: evidence target restamped from %q to %q", path, before.evidenceTarget, after.evidenceTarget)
+	}
+	if after.requirementRef != before.requirementRef {
+		t.Fatalf("%s: requirement ref changed from %q to %q", path, before.requirementRef, after.requirementRef)
+	}
+}
+
+// TestRuntimeArtifactValidationDoesNotRestampDocuments: running runtime
+// artifact validation over Complete/Implemented document fixtures must
+// emit diagnostics only in memory and must not rewrite status stamps,
+// Verification mapping rows, or evidence target text on disk.
+//
+// Document-level restamp guard (sibling TestCompleteVerificationRuntimeArtifactChecks_ReadOnly
+// covers generic fixture tree mutation; this test pins the protected
+// document fields the pre-commit lint must leave untouched).
+func TestRuntimeArtifactValidationDoesNotRestampDocuments(t *testing.T) {
+	root := t.TempDir()
+	// Existing artifacts for the positive-path Complete/Implemented fixtures.
+	writeExistingRuntimeArtifactFixture(t, root)
+
+	docsDir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+
+	// Complete + Implemented fixtures: existing (no diagnostic) and missing
+	// (diagnostic emitted in memory). All must remain byte-identical on disk.
+	docs := map[string]string{
+		"complete_existing.md":    fixtureCompleteExistingRuntimeArtifact,
+		"implemented_existing.md": fixtureImplementedExistingRuntimeArtifact,
+		"complete_missing.md":     fixtureCompleteMissingRuntimeArtifact,
+		"complete_mapped_path.md": fixtureCompleteMissingMappedPathText,
+	}
+
+	guards := make(map[string]documentRestampGuard, len(docs))
+	for name, content := range docs {
+		path := filepath.Join(docsDir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		guards[name] = captureDocumentRestampGuard(t, path, content)
+	}
+
+	// Snapshot the markdown document fixtures only (restamp scope). Evidence
+	// artifacts under docs/helix/ from writeExistingRuntimeArtifactFixture are
+	// not document stamps and are out of this guard.
+	beforeDocs := make(map[string]fixtureState, len(docs))
+	for name := range docs {
+		path := filepath.Join(docsDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("snapshot read %s: %v", name, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("snapshot stat %s: %v", name, err)
+		}
+		sum := sha256.Sum256(data)
+		beforeDocs[name] = fixtureState{
+			sum:     hex.EncodeToString(sum[:]),
+			mode:    info.Mode(),
+			size:    info.Size(),
+			modTime: info.ModTime().UTC().Round(0),
+		}
+	}
+
+	var memoryFindings []RuntimeArtifactFinding
+	for name, content := range docs {
+		path := filepath.Join(docsDir, name)
+		// Primary production-style path: parse + resolve via convenience helper.
+		findings := CheckDocumentRuntimeArtifacts(path, content, root)
+		memoryFindings = append(memoryFindings, findings...)
+
+		// Explicit path using parsed Verification rows + runtime artifact resolver.
+		status := ParseDocumentStatusMarkdown(path, content)
+		model := ParseVerificationMarkdown(path, content)
+		findings = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+			Path:       path,
+			Status:     status.Status,
+			StatusLine: status.Line,
+			Rows:       model.Rows,
+			RepoRoot:   root,
+		})
+		memoryFindings = append(memoryFindings, findings...)
+	}
+
+	// Diagnostics must be collected in memory for missing-artifact fixtures
+	// (validation is not a silent no-op). Existing-artifact fixtures contribute none.
+	var missingCount int
+	for _, f := range memoryFindings {
+		if f.Kind == FindingMissingRuntimeArtifact {
+			missingCount++
+		}
+	}
+	if missingCount == 0 {
+		t.Fatal("expected in-memory missing_runtime_artifact diagnostics for missing-path fixtures")
+	}
+
+	// Document markdown fixtures must be byte-identical (no restamp/normalize write).
+	afterDocs := make(map[string]fixtureState, len(docs))
+	for name := range docs {
+		path := filepath.Join(docsDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("after-read %s: %v", name, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("after-stat %s: %v", name, err)
+		}
+		sum := sha256.Sum256(data)
+		afterDocs[name] = fixtureState{
+			sum:     hex.EncodeToString(sum[:]),
+			mode:    info.Mode(),
+			size:    info.Size(),
+			modTime: info.ModTime().UTC().Round(0),
+		}
+	}
+	if diffs := diffFixtures(beforeDocs, afterDocs); len(diffs) > 0 {
+		t.Fatalf("runtime artifact validation restamped document fixtures:\n%s", strings.Join(diffs, "\n"))
+	}
+
+	// Field-level guard: status stamp line, mapping row text, and evidence
+	// target text must match the pre-validation capture for every fixture.
+	for name, before := range guards {
+		path := filepath.Join(docsDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("re-read %s: %v", name, err)
+		}
+		assertDocumentNotRestamped(t, path, string(data), before)
 	}
 }

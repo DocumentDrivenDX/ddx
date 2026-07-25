@@ -474,3 +474,183 @@ func TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness(t *testing.T) 
 	assert.Equal(t, 0, gotRun.attempts, "decomposition must not count as implementation attempts")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
 }
+
+// TestWorkLoop_PreClaimDecompositionRefreshesResolvingLiveness blocks a
+// hermetic decomposition hook long enough to observe at least two sidecar
+// snapshots with advancing last_activity_at while phase=resolving for the
+// same candidate bead ID. After the hook returns, the resolving heartbeat
+// must stop cleanly without leaving active resolving status behind
+// (ddx-943b1e1f).
+func TestWorkLoop_PreClaimDecompositionRefreshesResolvingLiveness(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	candidate := &bead.Bead{
+		ID:         "ddx-preclaim-refresh-liveness",
+		Title:      "Refresh resolving liveness while decomposing",
+		Acceptance: "1. TestWorkLoop_PreClaimDecompositionRefreshesResolvingLiveness\n2. cd cli && go test ./internal/agent/...",
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var execCalls int32
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			t.Error("executor must not run while preclaim resolving liveness is heartbeating")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "split for resolving liveness heartbeat coverage",
+		Children: []PreClaimDecompositionChild{
+			{
+				Title:       "Child refresh liveness",
+				Description: "PROBLEM\nChild\n\nROOT CAUSE\ncli/internal/agent/preclaim_decomp_liveness.go:1\n",
+				Acceptance:  "1. TestChildRefreshLiveness\n2. cd cli && go test ./internal/agent/...",
+			},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. TestWorkLoop_PreClaimDecompositionRefreshesResolvingLiveness", Coverage: "covered by Child refresh liveness AC 1"},
+			{ParentAC: "2. cd cli && go test ./internal/agent/...", Coverage: "covered by Child refresh liveness AC 2"},
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		HeartbeatInterval:     5 * time.Millisecond,
+		MaxDecompositionDepth: 3,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	projectRoot := store.Dir
+	sessionID := "sess-preclaim-refresh-liveness"
+	type runResult struct {
+		attempts int
+		err      error
+	}
+	done := make(chan runResult, 1)
+	go func() {
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			TargetBeadID: candidate.ID,
+			ProjectRoot:  projectRoot,
+			SessionID:    sessionID,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeTooLargeDecomposed,
+					Detail:  "too large; split required",
+				}, nil
+			},
+			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+				close(entered)
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				return decomp, nil
+			},
+		})
+		attempts := 0
+		if result != nil {
+			attempts = result.Attempts
+		}
+		done <- runResult{attempts: attempts, err: err}
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("decomposition hook never entered")
+	}
+
+	// Snapshot 1: candidate resolving with initialized last_activity_at.
+	var first workerstatus.LivenessRecord
+	require.Eventually(t, func() bool {
+		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+		if err != nil {
+			return false
+		}
+		if rec.CurrentBead != candidate.ID || rec.Phase != "resolving" || rec.LastActivityAt.IsZero() {
+			return false
+		}
+		first = rec
+		return true
+	}, 2*time.Second, 5*time.Millisecond,
+		"first sidecar snapshot must report candidate + phase=resolving + last_activity_at")
+
+	// Snapshot 2: same candidate still resolving, last_activity_at advanced.
+	var second workerstatus.LivenessRecord
+	require.Eventually(t, func() bool {
+		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+		if err != nil {
+			return false
+		}
+		if rec.CurrentBead != candidate.ID || rec.Phase != "resolving" {
+			return false
+		}
+		if !rec.LastActivityAt.After(first.LastActivityAt) {
+			return false
+		}
+		second = rec
+		return true
+	}, 2*time.Second, 5*time.Millisecond,
+		"second sidecar snapshot must advance last_activity_at while phase=resolving for the same candidate")
+
+	assert.Equal(t, candidate.ID, second.CurrentBead)
+	assert.Equal(t, "resolving", second.Phase)
+	assert.True(t, second.LastActivityAt.After(first.LastActivityAt),
+		"last_activity_at must strictly advance across resolving heartbeats")
+	assert.Empty(t, second.AttemptID, "resolving heartbeat must not invent an implementation attempt_id")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls),
+		"implementation executor must not run during resolving heartbeat")
+
+	// Release the hook; heartbeat must stop and clear active resolving status.
+	close(release)
+	gotRun := <-done
+	require.NoError(t, gotRun.err)
+	assert.Equal(t, 0, gotRun.attempts,
+		"preclaim decomposition must not count as an implementation attempt")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
+
+	// After the hook returns and the Once loop exits, the sidecar must not
+	// leave candidate+resolving active. ClearAttempt + OnTick writes empty
+	// bead/phase; subsequent idle ticks (if any) must also not re-assert
+	// resolving for this candidate.
+	require.Eventually(t, func() bool {
+		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+		if err != nil {
+			return false
+		}
+		// Active resolving for this candidate is gone.
+		if rec.CurrentBead == candidate.ID && rec.Phase == "resolving" {
+			return false
+		}
+		return true
+	}, 2*time.Second, 5*time.Millisecond,
+		"heartbeat must stop after decomposition hook returns without leaving active resolving status")
+
+	final, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+	require.NoError(t, err)
+	assert.False(t, final.CurrentBead == candidate.ID && final.Phase == "resolving",
+		"post-hook sidecar must not retain active resolving for the candidate (bead=%q phase=%q)",
+		final.CurrentBead, final.Phase)
+
+	// Capture a post-completion timestamp and ensure resolving does not
+	// reappear / re-advance under the candidate after the hook completed.
+	postDoneAt := final.LastActivityAt
+	time.Sleep(30 * time.Millisecond)
+	after, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+	require.NoError(t, err)
+	assert.False(t, after.CurrentBead == candidate.ID && after.Phase == "resolving",
+		"resolving heartbeat must not resume for the candidate after the hook returns")
+	if after.CurrentBead == candidate.ID && after.Phase == "resolving" && !postDoneAt.IsZero() {
+		assert.False(t, after.LastActivityAt.After(postDoneAt),
+			"last_activity_at must not keep advancing under active resolving after hook return")
+	}
+}

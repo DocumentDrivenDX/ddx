@@ -90,9 +90,10 @@ type AgentRunRuntime struct {
 	// the worker's liveness sidecar so the progress watchdog can distinguish a
 	// healthy long-running attempt from a wedge (ddx-6190edc6).
 	OnRouteResolved func(harness, provider, model string)
-	// OnExecuteStart, when non-nil, is called immediately before invoking
+	// OnExecuteStart, when non-nil, is called after the dispatching run record
+	// (when applicable) is durably published and immediately before invoking
 	// FizeauService.Execute. The worker uses this boundary to arm its route-stage
-	// timeout after DDx-local worktree and prompt preparation has completed.
+	// timeout after DDx-local worktree/prompt preparation and substrate publish.
 	OnExecuteStart func()
 }
 

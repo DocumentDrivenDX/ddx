@@ -227,6 +227,16 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	// fizeau returns ErrHarnessModelIncompatible (typed, non-nil) on pre-dispatch
 	// errors and a failed final event for post-dispatch errors.
 	start := time.Now().UTC()
+
+	// Publish the durable DDx-owned dispatching run record before any Fizeau
+	// boundary (OnExecuteStart watchdog arm or Execute). execute-bead sets
+	// Correlation.attempt_id to the stable DDx attempt identifier; plain ddx run
+	// without that key is a no-op. Fail closed so dispatch never races ahead of
+	// the substrate (ddx-6af9a0f3).
+	if err := publishDispatchingRunRecord(workDir, runtime); err != nil {
+		return nil, err
+	}
+
 	if runtime.OnExecuteStart != nil {
 		runtime.OnExecuteStart()
 	}

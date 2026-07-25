@@ -272,8 +272,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		loopSink = workerprobe.TeeJSONL(io.Discard, probe)
 	}
 
-	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
-	defer localCoord.Stop()
+	// Shared reconnecting coordination client (ADR-022 rev 6). Manual work and
+	// --server-managed share this path; only process lifetime differs.
+	coordClient, coordErr := bootstrapCoordinationClient(projectRoot, bead.NewStore(beadStoreRoot))
+	if coordErr != nil {
+		return fmt.Errorf("coordination client: %w", coordErr)
+	}
+	if coordClient != nil {
+		defer func() { _ = coordClient.Close() }()
+	}
 
 	overrides := config.CLIOverrides{
 		Assignee:          resolveClaimAssignee(),
@@ -461,7 +468,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
-				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
+				coordinationLandSubmit(projectRoot, coordClient),
 				bead.NewStore(beadStoreRoot),
 				resolveClaimAssignee(), "ddx work",
 				nil,
@@ -526,6 +533,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		})
 	}
 
+	workerStore = agent.WrapStoreWithCoordination(workerStore, coordClient)
 	worker := &agent.ExecuteBeadWorker{
 		Store:    workerStore,
 		Reviewer: reviewer,
@@ -551,6 +559,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		EventSink:               loopSink,
 		WorkerID:                resolveClaimAssignee(),
 		ProjectRoot:             projectRoot,
+		Coordination:            coordClient,
 		TrackerSyncEnabled:      workTrackerSyncEnabled(cmd),
 		CleanupRunner:           cleanupRunner,
 		ResourceChecker:         resourceChecker,

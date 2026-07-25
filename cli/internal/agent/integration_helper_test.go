@@ -70,6 +70,87 @@ func fixtureGitCommand(t *testing.T, dir string, args ...string) *exec.Cmd {
 	return cmd
 }
 
+// requirePrivateFixtureGitConfigScope fails the test with a deterministic setup
+// error when the TestMain-owned private global config is unavailable. Call this
+// before any intentional git config corruption so a misconfigured suite cannot
+// silently target the invoking checkout.
+func requirePrivateFixtureGitConfigScope(t *testing.T) {
+	t.Helper()
+	if _, err := fixtureGitEnvInteg(); err != nil {
+		t.Fatalf("setup: cannot establish private git config scope before mutation: %v", err)
+	}
+}
+
+// invokingRepoConfigGuard stands in for the host/invoking repository that
+// fixture core.bare / identity corruption must never rewrite. Contaminating
+// GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE to this guard reproduces the lefthook
+// launch surface that previously rewrote a shared checkout's .git/config.
+type invokingRepoConfigGuard struct {
+	root             string
+	commonConfigPath string
+	beforeBytes      []byte
+	beforeValues     map[string]string
+}
+
+// newInvokingRepoConfigGuard creates a dedicated stand-in for the invoking
+// repository, snapshots its common config, and installs hostile GIT_*
+// repository-selection variables pointing at that stand-in. Call assertUnchanged
+// after fixture execution to prove core.bare/core.worktree/user.* did not leak.
+func newInvokingRepoConfigGuard(t *testing.T) *invokingRepoConfigGuard {
+	t.Helper()
+	requirePrivateFixtureGitConfigScope(t)
+
+	root := filepath.Join(t.TempDir(), "invoking-primary")
+	runGitInteg(t, filepath.Dir(root), "init", "-b", "main", root)
+	runGitInteg(t, root, "config", "user.name", "Invoking Primary Guard")
+	runGitInteg(t, root, "config", "user.email", "invoking-primary-guard@ddx.test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("seed\n"), 0o644))
+	runGitInteg(t, root, "add", "seed.txt")
+	runGitInteg(t, root, "commit", "-m", "chore: seed invoking primary guard")
+
+	commonConfigPath := filepath.Join(root, ".git", "config")
+	beforeBytes, err := os.ReadFile(commonConfigPath)
+	require.NoError(t, err)
+
+	// Contaminate process env the way lefthook does for the parent checkout.
+	t.Setenv("GIT_DIR", filepath.Join(root, ".git"))
+	t.Setenv("GIT_WORK_TREE", root)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(root, ".git", "index"))
+
+	return &invokingRepoConfigGuard{
+		root:             root,
+		commonConfigPath: commonConfigPath,
+		beforeBytes:      beforeBytes,
+		beforeValues:     fixtureConfigValues(t, root),
+	}
+}
+
+func (g *invokingRepoConfigGuard) assertUnchanged(t *testing.T) {
+	t.Helper()
+	afterBytes, err := os.ReadFile(g.commonConfigPath)
+	require.NoError(t, err)
+	require.Equal(t, g.beforeBytes, afterBytes,
+		"fixture must not rewrite invoking repository common config at %s", g.commonConfigPath)
+	require.Equal(t, g.beforeValues, fixtureConfigValues(t, g.root),
+		"fixture must not write core.bare, core.worktree, user.name, or user.email to invoking repository")
+	_, statusErr := runGitIntegOutput(g.root, "status", "--short")
+	require.NoError(t, statusErr, "invoking repository must remain a usable worktree")
+}
+
+// fixtureConfigValues returns the local/effective values of the keys that
+// intentional fixture corruption has historically leaked into shared checkouts.
+func fixtureConfigValues(t *testing.T, repo string) map[string]string {
+	t.Helper()
+	values := make(map[string]string)
+	for _, key := range []string{"core.bare", "core.worktree", "user.name", "user.email"} {
+		out, err := runGitIntegOutput(repo, "config", "--get", key)
+		if err == nil {
+			values[key] = out
+		}
+	}
+	return values
+}
+
 // runGitInteg runs a git command in dir with scrubbed GIT_* env.
 // Fails the test on non-zero exit.
 func runGitInteg(t *testing.T, dir string, args ...string) string {

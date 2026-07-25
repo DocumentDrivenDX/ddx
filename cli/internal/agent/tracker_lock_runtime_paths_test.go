@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,8 +26,8 @@ func TestTrackerLockRuntimePathsIgnoredWithoutGitignore(t *testing.T) {
 	runGitInteg(t, root, "add", ".gitignore")
 	runGitInteg(t, root, "commit", "-m", "remove tracker-lock ignore coverage")
 
-	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(".ddx", ".git-tracker.lock")))
-	require.Equal(t, ".ddx/.git-tracker.lock.stale-break.lock", guardRel)
+	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(ddxroot.DirName, ".git-tracker.lock")))
+	require.Equal(t, ddxroot.DirName+"/.git-tracker.lock.stale-break.lock", guardRel)
 	const implRel = "cli/internal/agent/feature.go"
 
 	// --- synthesizeCommitExcludePathspecs ---

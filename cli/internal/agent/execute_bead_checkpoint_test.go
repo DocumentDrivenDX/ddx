@@ -527,6 +527,45 @@ func TestPreDispatchCheckpoint_IgnoresCollectionLockSiblingSidecar(t *testing.T)
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
 }
 
+// TestPreDispatchCheckpoint_IgnoresCoordinationJournalWithoutGitignore guards
+// ADR-022 shared-client bootstrap: OpenOfflineJournal materializes
+// .ddx/coordination/offline-journal.jsonl on every try/work entry. Older
+// projects without a .gitignore rule must still treat that path as runtime
+// scratch so pre-dispatch does not release the claim as "implementation dirty".
+func TestPreDispatchCheckpoint_IgnoresCoordinationJournalWithoutGitignore(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260725T000004-coord-journal"
+
+	// No .gitignore rule for .ddx/coordination/ — simulate an older repo.
+	journalRel := filepath.Join(ddxroot.DirName, "coordination", "offline-journal.jsonl")
+	journalPath := filepath.Join(projectRoot, journalRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(journalPath), 0o755))
+	require.NoError(t, os.WriteFile(journalPath, []byte(""), 0o644))
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(journalRel),
+		"offline coordination journal must not appear in pre-dispatch checkpoint dirt")
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	assert.False(t, committed,
+		"checkpoint must be a no-op when only coordination journal is dirty")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"),
+		"HEAD must not advance when only coordination journal is dirty")
+
+	// Negative: ordinary untracked file still surfaces.
+	implPath := filepath.Join(projectRoot, "feature.txt")
+	require.NoError(t, os.WriteFile(implPath, []byte("real implementation\n"), 0o644))
+
+	paths, err = preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, paths, "feature.txt",
+		"ordinary untracked files must still surface as checkpoint dirt")
+	assert.NotContains(t, paths, filepath.ToSlash(journalRel))
+}
+
 func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"

@@ -40,6 +40,10 @@ type OfflineJournalRecord struct {
 	IdempotencyKey string `json:"idempotency_key"`
 	// PayloadHash is a hash of the request payload used for conflict detection.
 	PayloadHash string `json:"payload_hash"`
+	// Payload is the raw mutation body required to reconcile offline work to a
+	// reachable server (ADR-022 POST .../coordination/reconcile). Optional for
+	// older journal rows that only stored hashes.
+	Payload json.RawMessage `json:"payload,omitempty"`
 	// Precondition captures the pre-apply durable version / expected state.
 	Precondition string `json:"precondition,omitempty"`
 	// Outcome captures the post-apply observed result (applied, conflict, ...).
@@ -54,6 +58,7 @@ type OfflineJournalAppend struct {
 	Operation      string
 	IdempotencyKey string
 	PayloadHash    string
+	Payload        json.RawMessage
 	Precondition   string
 	Outcome        string
 }
@@ -194,6 +199,7 @@ func (j *OfflineJournal) Append(in OfflineJournalAppend) (OfflineJournalRecord, 
 		Operation:      strings.TrimSpace(in.Operation),
 		IdempotencyKey: key,
 		PayloadHash:    hash,
+		Payload:        append(json.RawMessage(nil), in.Payload...),
 		Precondition:   in.Precondition,
 		Outcome:        in.Outcome,
 		RecordedAt:     time.Now().UTC(),

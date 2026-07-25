@@ -37,8 +37,10 @@ type RuntimeArtifactFinding struct {
 	RequirementRef string
 	// EvidenceTarget is the raw evidence cell from the mapping row.
 	EvidenceTarget string
-	// ArtifactPath is the normalized/offending path string from the
-	// mapping row (resolver Path). Empty when not a runtime artifact.
+	// ArtifactPath is the mapped artifact path exactly as written on the
+	// Verification row (raw EvidenceTarget text). It is never reconstructed
+	// from resolver output, cleaned/normalized paths, or absolute
+	// ResolvedPath values. Empty when not a runtime artifact.
 	ArtifactPath string
 	// Kind classifies the failure.
 	Kind RuntimeArtifactFindingKind
@@ -77,11 +79,16 @@ type RuntimeArtifactInput struct {
 //     for that row (positive path; prevents false positives).
 //   - Runtime-artifact target that does not resolve → one
 //     FindingMissingRuntimeArtifact diagnostic whose Path is the source
-//     document and whose RequirementRef is the offending Verification
-//     row's requirement id (never inferred from prose).
+//     document, whose RequirementRef is the offending Verification
+//     row's requirement id (never inferred from prose), and whose
+//     ArtifactPath / message path fragment is the mapped artifact text
+//     exactly as written on the row (not cleaned, absolute, resolved,
+//     or inferred from the resolver).
 //
 // Resolution is independent per row. Read-only: delegates existence
-// checks to ResolveRuntimeArtifactRow; never writes.
+// checks to ResolveRuntimeArtifactRow; never writes. The resolver may
+// use a cleaned/absolute filesystem path internally for existence
+// checks; that path is never copied into the diagnostic display fields.
 func CheckRuntimeArtifactResolution(in RuntimeArtifactInput) []RuntimeArtifactFinding {
 	if !IsCompleteStatus(in.Status) {
 		return nil
@@ -113,10 +120,10 @@ func CheckRuntimeArtifactResolution(in RuntimeArtifactInput) []RuntimeArtifactFi
 			// do not invent ids from prose.
 			reqRef = res.RequirementRef
 		}
-		artifactPath := res.Path
-		if artifactPath == "" {
-			artifactPath = stripEvidenceMarkup(row.EvidenceTarget)
-		}
+		// Display path must be the raw mapped artifact text from the
+		// Verification row. Do not use res.Path (cleaned/normalized),
+		// res.ResolvedPath (absolute), or any inferred reconstruction.
+		artifactPath := row.EvidenceTarget
 		findings = append(findings, RuntimeArtifactFinding{
 			Path:           in.Path,
 			Line:           line,
