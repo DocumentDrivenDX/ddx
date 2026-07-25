@@ -7,11 +7,14 @@
 // requirement covered zero times and one per requirement covered more
 // than once. Exactly-once coverage yields no diagnostic.
 //
-// At the requirement-to-evidence join, only rows that pass
-// IsCoveringCitation count as coverage: file-only test citations and
-// bare non-target evidence do not. Zero-evidence (empty row set),
-// waivers, evidence-target resolution (disk existence), and command
-// allowlists are sibling children. Read-only: pure over the supplied input.
+// Citation-granularity exclusion is an explicit pre-join filter stage
+// (FilterCoveringRows): file-only test citations and bare non-target
+// evidence never enter the requirement-to-evidence row multiset, so
+// duplicate or unrelated file-only rows cannot satisfy coverage
+// cardinality or mask an uncovered Complete requirement. Zero-evidence
+// (empty row set), waivers, evidence-target resolution (disk existence),
+// and command allowlists are sibling children. Read-only: pure over the
+// supplied input.
 package spechonesty
 
 import (
@@ -33,7 +36,36 @@ type CoverageCardinalityInput struct {
 	// Inventory is the ordered requirement IDs or section anchors.
 	Inventory []string
 	// Rows is the well-formed Verification mapping row set.
+	// File-only / non-covering rows are dropped by FilterCoveringRows
+	// before the cardinality join; callers may pass the full parser
+	// output.
 	Rows []VerificationRow
+}
+
+// FilterCoveringRows is the pre-join citation-granularity filter for the
+// coverage-cardinality pass. It returns only rows that pass
+// IsCoveringCitation, preserving input order.
+//
+// File-only test citations and bare non-target evidence are dropped here
+// so they never enter the requirement-to-evidence join multiset.
+// Duplicate or unrelated file-only rows therefore cannot contribute to
+// coverage counts. Rows that name an exact Test*, static check, or
+// artifact target pass through unchanged. Existence of named targets on
+// disk is not resolved. Pure and read-only.
+func FilterCoveringRows(rows []VerificationRow) []VerificationRow {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]VerificationRow, 0, len(rows))
+	for _, row := range rows {
+		if IsCoveringCitation(row) {
+			out = append(out, row)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // CheckCoverageCardinality joins inventory requirements against mapping
@@ -41,13 +73,16 @@ type CoverageCardinalityInput struct {
 //
 // Rules:
 //   - Non-Complete/Implemented statuses → no findings.
-//   - Only rows where IsCoveringCitation is true count toward coverage
-//     (file-only test paths and bare non-target evidence are excluded).
-//   - Inventory requirement with zero counting mapping rows → one
-//     FindingUnmetVerification naming that requirement.
-//   - Inventory requirement with two or more counting mapping rows → one
+//   - FilterCoveringRows runs first: file-only / non-covering rows never
+//     enter the joined multiset (duplicate file-only rows cannot mask
+//     an uncovered Complete requirement).
+//   - Inventory requirement with zero covering mapping rows after the
+//     pre-join filter → one FindingUnmetVerification naming that
+//     requirement.
+//   - Inventory requirement with two or more covering mapping rows → one
 //     FindingDuplicateMapping naming that requirement.
-//   - Inventory requirement with exactly one counting mapping row → no diagnostic.
+//   - Inventory requirement with exactly one covering mapping row → no
+//     diagnostic.
 //
 // Pure and read-only: no filesystem or network access. Extra mapping
 // rows whose RequirementRef is not in the inventory are ignored by this
@@ -61,17 +96,17 @@ func CheckCoverageCardinality(in CoverageCardinalityInput) []CoverageFinding {
 		return nil
 	}
 
-	counts := make(map[string]int, len(in.Rows))
-	firstLine := make(map[string]int, len(in.Rows))
-	for _, row := range in.Rows {
+	// Pre-join filter stage: drop file-only / non-covering rows so the
+	// cardinality join never sees them. Counting only over the filtered
+	// multiset prevents duplicate or unrelated file-only rows from
+	// satisfying coverage cardinality.
+	coveringRows := FilterCoveringRows(in.Rows)
+
+	counts := make(map[string]int, len(coveringRows))
+	firstLine := make(map[string]int, len(coveringRows))
+	for _, row := range coveringRows {
 		ref := strings.TrimSpace(row.RequirementRef)
 		if ref == "" {
-			continue
-		}
-		// Citation-granularity exclusion at the coverage join: a mapping
-		// row that does not name an exact Test*, static check, or
-		// artifact target does not count as requirement coverage.
-		if !IsCoveringCitation(row) {
 			continue
 		}
 		counts[ref]++

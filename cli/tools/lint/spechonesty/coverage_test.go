@@ -291,6 +291,134 @@ func TestCompleteVerificationCoverageCardinality_ExactlyOncePasses(t *testing.T)
 	}
 }
 
+// TestCompleteVerificationCoverageCardinality_FileOnlyRowsFilteredBeforeJoin:
+// duplicate or unrelated file-only mapping rows are excluded by the
+// pre-join FilterCoveringRows stage and never enter the cardinality join
+// multiset. A Complete requirement whose only rows are file-only citations
+// is still reported as uncovered no matter how many such rows exist.
+func TestCompleteVerificationCoverageCardinality_FileOnlyRowsFilteredBeforeJoin(t *testing.T) {
+	path := "docs/fixtures/complete_file_only_duplicates.md"
+
+	// Constructed case: many duplicate + unrelated file-only rows for one
+	// requirement, and an unrelated file-only row for a second requirement.
+	// None name a covering target, so both inventory members stay uncovered.
+	rawRows := []VerificationRow{
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 10},
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 11}, // duplicate file-only
+		{RequirementRef: "REQ-001", EvidenceTarget: "cli/internal/bead/store_test.go", Command: "go test ./cli/internal/bead", Line: 12}, // unrelated file-only
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/other_test.go", Command: "go test ./pkg", Line: 13}, // another file-only
+		{RequirementRef: "REQ-002", EvidenceTarget: "pkg/list_test.go", Command: "go test ./pkg", Line: 14},
+	}
+	for _, row := range rawRows {
+		if IsCoveringCitation(row) {
+			t.Fatalf("test row must be non-covering file-only; got covering EvidenceTarget=%q", row.EvidenceTarget)
+		}
+	}
+
+	// Explicit pre-join filter stage drops every file-only row.
+	filtered := FilterCoveringRows(rawRows)
+	if len(filtered) != 0 {
+		t.Fatalf("FilterCoveringRows must drop all file-only rows before the join; got %+v", filtered)
+	}
+
+	findings := CheckCoverageCardinality(CoverageCardinalityInput{
+		Path:       path,
+		Status:     StatusComplete,
+		StatusLine: 5,
+		Inventory:  []string{"REQ-001", "REQ-002"},
+		Rows:       rawRows,
+	})
+	if len(findings) != 2 {
+		t.Fatalf("duplicate/unrelated file-only rows must not mask uncovered Complete requirements; want 2 uncovered, got findings=%+v", findings)
+	}
+	for _, req := range []string{"REQ-001", "REQ-002"} {
+		found := false
+		for _, f := range findings {
+			if f.Kind == FindingUnmetVerification && strings.Contains(f.Message, req) {
+				if f.Severity != SeverityError {
+					t.Fatalf("%s Severity = %q, want %q", req, f.Severity, SeverityError)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected uncovered diagnostic for %s after pre-join filter; got %+v", req, findings)
+		}
+	}
+	// No duplicate-mapping false positive from multiple file-only rows.
+	for _, f := range findings {
+		if f.Kind == FindingDuplicateMapping {
+			t.Fatalf("file-only duplicates must not enter the join multiset as duplicate covering rows; got %+v", f)
+		}
+	}
+
+	// Mixed multiset: covering rows pass the filter; file-only duplicates
+	// for the same requirement are dropped and do not create a duplicate
+	// cardinality finding or mask a second uncovered requirement.
+	mixedRaw := []VerificationRow{
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 20},
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 21},
+		{RequirementRef: "REQ-001", EvidenceTarget: "TestCreateResource", Command: "go test ./pkg -run TestCreateResource", Line: 22},
+		{RequirementRef: "REQ-010", EvidenceTarget: "pkg/delete_test.go", Command: "go test ./pkg", Line: 23},
+		{RequirementRef: "REQ-010", EvidenceTarget: "pkg/delete_test.go", Command: "go test ./pkg", Line: 24},
+	}
+	mixedFiltered := FilterCoveringRows(mixedRaw)
+	if len(mixedFiltered) != 1 {
+		t.Fatalf("FilterCoveringRows must keep only the covering Test* row; got %+v", mixedFiltered)
+	}
+	if mixedFiltered[0].EvidenceTarget != "TestCreateResource" {
+		t.Fatalf("FilterCoveringRows kept wrong row: %+v", mixedFiltered[0])
+	}
+	mixedFindings := CheckCoverageCardinality(CoverageCardinalityInput{
+		Path:      path,
+		Status:    StatusComplete,
+		Inventory: []string{"REQ-001", "REQ-010"},
+		Rows:      mixedRaw,
+	})
+	// REQ-001 covered exactly once (file-only dups dropped); REQ-010 uncovered.
+	var uncovered010, uncovered001, dups int
+	for _, f := range mixedFindings {
+		switch {
+		case f.Kind == FindingUnmetVerification && strings.Contains(f.Message, "REQ-010"):
+			uncovered010++
+		case f.Kind == FindingUnmetVerification && strings.Contains(f.Message, "REQ-001"):
+			uncovered001++
+		case f.Kind == FindingDuplicateMapping:
+			dups++
+		}
+	}
+	if uncovered010 != 1 {
+		t.Fatalf("REQ-010 with only file-only rows must stay uncovered; findings=%+v", mixedFindings)
+	}
+	if uncovered001 != 0 {
+		t.Fatalf("REQ-001 with one covering row after filter must not be uncovered; findings=%+v", mixedFindings)
+	}
+	if dups != 0 {
+		t.Fatalf("file-only duplicates must not produce duplicate_mapping after pre-join filter; findings=%+v", mixedFindings)
+	}
+
+	// Fixture path: single file-only row still filtered before join.
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteFileOnlyTest)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteFileOnlyTest)
+	if len(FilterCoveringRows(model.Rows)) != 0 {
+		t.Fatalf("fixture file-only rows must be dropped by FilterCoveringRows; rows=%+v", model.Rows)
+	}
+	docFindings := CheckDocumentCoverageCardinality(path, fixtureCompleteFileOnlyTest)
+	var uncovered []CoverageFinding
+	for _, f := range docFindings {
+		if f.Kind == FindingUnmetVerification && strings.Contains(f.Message, "REQ-001") {
+			uncovered = append(uncovered, f)
+		}
+	}
+	if len(uncovered) != 1 {
+		t.Fatalf("file-only fixture must leave REQ-001 uncovered after pre-join filter; got findings=%+v", docFindings)
+	}
+}
+
 // TestCompleteVerificationCoverageCardinality_IgnoresFileOnlyCitations:
 // a Complete fixture that cites only a test file path without a specific
 // mapped target does not count that citation as requirement coverage, and
