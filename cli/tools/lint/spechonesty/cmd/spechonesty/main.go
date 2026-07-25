@@ -6,9 +6,9 @@
 // to the docs tree.
 //
 // Sibling parser symbols (verification inventory, waiver policy,
-// observation freshness, zero-evidence, test-symbol resolution) remain
-// reachable from main for production RTA without changing the status-gate
-// exit contract.
+// observation freshness, zero-evidence, test-symbol resolution,
+// command allowlist) remain reachable from main for production RTA
+// without changing the status-gate exit contract.
 //
 // Usage:
 //
@@ -54,18 +54,18 @@ func main() {
 			exitCode = 1
 		}
 		// Keep verification / waiver / observation-freshness /
-		// zero-evidence / test-symbol symbols production-reachable
-		// (read-only). These probes must not change the status-gate exit
-		// contract.
+		// zero-evidence / test-symbol / command-allowlist symbols
+		// production-reachable (read-only). These probes must not change
+		// the status-gate exit contract.
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
 // touchSiblingParsers exercises verification, waiver, observation-
-// freshness, zero-evidence, and test-symbol passes on markdown under
-// root so those package symbols remain reachable from main. Read-only;
-// never changes the status-gate exit path.
+// freshness, zero-evidence, test-symbol, and command-allowlist passes
+// on markdown under root so those package symbols remain reachable from
+// main. Read-only; never changes the status-gate exit path.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -106,15 +106,17 @@ func probeFile(path, repoRoot string) {
 		_ = f
 	}
 
-	// Zero-evidence (WB-1 step 5), coverage-cardinality, and Go test-
-	// symbol resolution (WB-1 steps 3-4): keep CheckDocumentZeroEvidence /
-	// CheckDocumentCoverageCardinality / CheckDocumentTestSymbols
-	// production-reachable. Read-only probes; do not change the
-	// status-gate exit contract.
+	// Zero-evidence (WB-1 step 5), coverage-cardinality, Go test-
+	// symbol resolution, and Verification command allowlist (WB-1 steps
+	// 3-4): keep CheckDocumentZeroEvidence /
+	// CheckDocumentCoverageCardinality / CheckDocumentTestSymbols /
+	// CheckDocumentCommandAllowlist production-reachable. Read-only
+	// probes; do not change the status-gate exit contract.
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
 		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
 		_ = spechonesty.CheckDocumentTestSymbols(path, string(data), repoRoot)
+		_ = spechonesty.CheckDocumentCommandAllowlist(path, string(data))
 	}
 
 	waiver, err := spechonesty.ParseVerificationWaiverFile(path)
