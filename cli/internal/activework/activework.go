@@ -100,6 +100,9 @@ func Collect(projectRoot string, store claimLeaseReader, now time.Time) (Snapsho
 			if rec.PID > 0 && !processAlive(rec.PID) {
 				continue
 			}
+			if rec.AttemptID == "" {
+				continue
+			}
 			add(Record{
 				WorkerID:       rec.WorkerID,
 				BeadID:         rec.CurrentBead,
