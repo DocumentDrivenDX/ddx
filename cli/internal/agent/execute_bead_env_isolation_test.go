@@ -450,9 +450,10 @@ func TestAgentGitConfigHelperFailsClosedWhenPrivateScopeUnavailable(t *testing.T
 
 // TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree proves the test
 // fixture boundary itself, rather than only ExecuteBead's harness wrapper.
-// The parent process deliberately points Git at a real primary repository;
-// runGitInteg/newScriptHarnessRepo must scrub that selection and make the
-// fixture repair only its own temporary repository.
+// The parent process deliberately points Git at a real primary repository with a
+// linked worktree; runGitInteg/newScriptHarnessRepo must scrub that selection,
+// keep primary common config and linked worktree config.worktree byte-identical,
+// and make the fixture observe+repair only its own temporary repository.
 func TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree(t *testing.T) {
 	primary := filepath.Join(t.TempDir(), "primary")
 	runGitInteg(t, filepath.Dir(primary), "init", "-b", "main", primary)
@@ -467,32 +468,43 @@ func TestAgentGitConfigFixturesDoNotLeakToPrimaryLinkedWorktree(t *testing.T) {
 	linked := filepath.Join(t.TempDir(), "linked")
 	runGitInteg(t, primary, "worktree", "add", "-b", "fixture-linked", linked, "HEAD")
 	t.Cleanup(func() { _ = runGitInteg(t, primary, "worktree", "remove", "--force", linked) })
+	// Distinct worktree-scoped identity so linked config.worktree exists and is
+	// distinguishable from the primary common config surface.
+	runGitInteg(t, linked, "config", "--worktree", "user.name", "Linked Worktree Guard")
+	runGitInteg(t, linked, "config", "--worktree", "user.email", "linked-fixture-guard@ddx.test")
 
 	primaryConfig := filepath.Join(primary, ".git", "config")
-	primaryWorktreeConfig := filepath.Join(primary, ".git", "config.worktree")
-	beforeConfig, err := os.ReadFile(primaryConfig)
+	linkedGitDir := strings.TrimSpace(runGitInteg(t, linked, "rev-parse", "--absolute-git-dir"))
+	linkedWorktreeConfig := filepath.Join(linkedGitDir, "config.worktree")
+	beforePrimaryConfig, err := os.ReadFile(primaryConfig)
 	require.NoError(t, err)
-	beforeWorktreeConfig, err := os.ReadFile(primaryWorktreeConfig)
+	beforeLinkedWorktreeConfig, err := os.ReadFile(linkedWorktreeConfig)
 	require.NoError(t, err)
-	beforeValues := fixtureConfigValues(t, primary)
+	beforePrimaryValues := fixtureConfigValues(t, primary)
+	beforeLinkedValues := fixtureConfigValues(t, linked)
 
 	// This is the failure mode observed on the shared checkout: a caller's Git
 	// repository selection survives into an agent fixture. If a fixture helper
 	// ever stops using fixtureGitEnvInteg, its `git config core.bare true` below
-	// targets primary and the byte-identity checks fail.
+	// targets primary (and can corrupt shared common config / worktree selection)
+	// and the byte-identity checks fail.
 	t.Setenv("GIT_DIR", filepath.Join(primary, ".git"))
 	t.Setenv("GIT_WORK_TREE", primary)
 	t.Setenv("GIT_INDEX_FILE", filepath.Join(primary, ".git", "index"))
 	runCoreBareRepairFixture(t)
 	runLandFixtureGitMutationPaths(t)
 
-	afterConfig, err := os.ReadFile(primaryConfig)
+	afterPrimaryConfig, err := os.ReadFile(primaryConfig)
 	require.NoError(t, err)
-	afterWorktreeConfig, err := os.ReadFile(primaryWorktreeConfig)
+	afterLinkedWorktreeConfig, err := os.ReadFile(linkedWorktreeConfig)
 	require.NoError(t, err)
-	require.Equal(t, beforeConfig, afterConfig, "fixture must not rewrite primary .git/config")
-	require.Equal(t, beforeWorktreeConfig, afterWorktreeConfig, "fixture must not rewrite primary .git/config.worktree")
-	require.Equal(t, beforeValues, fixtureConfigValues(t, primary), "fixture must preserve primary core/user config values")
+	require.Equal(t, beforePrimaryConfig, afterPrimaryConfig, "fixture must not rewrite primary .git/config")
+	require.Equal(t, beforeLinkedWorktreeConfig, afterLinkedWorktreeConfig,
+		"fixture must not rewrite linked-worktree config.worktree")
+	require.Equal(t, beforePrimaryValues, fixtureConfigValues(t, primary),
+		"fixture must preserve primary core.bare/core.worktree/user.name/user.email")
+	require.Equal(t, beforeLinkedValues, fixtureConfigValues(t, linked),
+		"fixture must preserve linked-worktree core.bare/core.worktree/user.name/user.email")
 
 	_, primaryStatusErr := runGitIntegOutput(primary, "status", "--short")
 	require.NoError(t, primaryStatusErr, "primary checkout must remain usable")
