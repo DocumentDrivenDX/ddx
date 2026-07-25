@@ -68,8 +68,8 @@ type coordinationMutationResponse struct {
 
 // coordinationReconcileRequest is the wire body for POST .../coordination/reconcile.
 type coordinationReconcileRequest struct {
-	WorkerID string                        `json:"worker_id"`
-	Entries  []coordinationReconcileEntry  `json:"entries"`
+	WorkerID string                       `json:"worker_id"`
+	Entries  []coordinationReconcileEntry `json:"entries"`
 }
 
 // coordinationReconcileEntry is one ordered offline journal mutation.
@@ -85,8 +85,8 @@ type coordinationReconcileEntry struct {
 // coordinationReconcileResponse carries per-entry outcomes and the highest
 // contiguous sequence the server has accepted (resumable batches).
 type coordinationReconcileResponse struct {
-	AcknowledgedThrough uint64                         `json:"acknowledged_through"`
-	Results             []coordinationReconcileResult  `json:"results"`
+	AcknowledgedThrough uint64                        `json:"acknowledged_through"`
+	Results             []coordinationReconcileResult `json:"results"`
 }
 
 // coordinationReconcileResult is one entry outcome inside a reconcile batch.
@@ -105,19 +105,19 @@ type coordinationOutcomeRecord struct {
 // projectCoordinationRegistry caches one LocalCoordinator + outcome map per
 // project root for the lifetime of the server process.
 type projectCoordinationRegistry struct {
-	mu      sync.Mutex
-	byRoot  map[string]*projectCoordination
+	mu     sync.Mutex
+	byRoot map[string]*projectCoordination
 	// landFor resolves the production LandCoordinator for a project root.
 	// Production wiring uses WorkerManager.LandCoordinators.
 	landFor func(projectRoot string) *LandCoordinator
 }
 
 type projectCoordination struct {
-	root   string
-	coord  *coordination.LocalCoordinator
-	store  *bead.Store
-	mu     sync.Mutex
-	byKey  map[string]coordinationOutcomeRecord
+	root  string
+	coord *coordination.LocalCoordinator
+	store *bead.Store
+	mu    sync.Mutex
+	byKey map[string]coordinationOutcomeRecord
 }
 
 func newProjectCoordinationRegistry(landFor func(string) *LandCoordinator) *projectCoordinationRegistry {
