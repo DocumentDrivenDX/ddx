@@ -6,8 +6,10 @@
 // to the docs tree.
 //
 // Sibling parser symbols (verification inventory, waiver policy,
-// observation freshness) remain reachable from main for production RTA
-// without changing the status-gate exit contract.
+// observation freshness, zero-evidence, test-symbol resolution,
+// citation-granularity, runtime-artifact resolution, command allowlist)
+// remain reachable from main for production RTA without changing the
+// status-gate exit contract.
 //
 // Usage:
 //
@@ -52,24 +54,32 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", d.Path, line, d.Kind, d.Message)
 			exitCode = 1
 		}
-		// Keep verification / waiver / observation-freshness symbols
-		// production-reachable (read-only). These probes must not change
-		// the status-gate exit contract.
+		// Keep verification / waiver / observation-freshness /
+		// zero-evidence / test-symbol / citation-granularity /
+		// runtime-artifact / command-allowlist symbols
+		// production-reachable (read-only). These probes must not
+		// change the status-gate exit contract.
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
-// touchSiblingParsers exercises verification, waiver, and observation-
-// freshness parsers on markdown under root so those package symbols remain
-// reachable from main. Read-only; never changes the status-gate exit path.
+// touchSiblingParsers exercises verification, waiver, observation-
+// freshness, zero-evidence, test-symbol, citation-granularity,
+// runtime-artifact, and command-allowlist passes on markdown under
+// root so those package symbols remain reachable from main. Read-only;
+// never changes the status-gate exit path.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
 		return err
 	}
+	// Repo root for Go test-symbol resolution: directory argument is the
+	// docs tree (or a file under the tree); resolve relative to that path.
+	repoRoot := root
 	if !info.IsDir() {
-		probeFile(root)
+		repoRoot = filepath.Dir(root)
+		probeFile(root, repoRoot)
 		return nil
 	}
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -82,12 +92,12 @@ func touchSiblingParsers(root string) error {
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 			return nil
 		}
-		probeFile(path)
+		probeFile(path, repoRoot)
 		return nil
 	})
 }
 
-func probeFile(path string) {
+func probeFile(path, repoRoot string) {
 	model, err := spechonesty.ParseVerificationDocument(path)
 	if err != nil {
 		return
@@ -97,6 +107,37 @@ func probeFile(path string) {
 	_ = model.Rows
 	for _, f := range model.Findings {
 		_ = f
+	}
+
+	// Zero-evidence (WB-1 step 5), coverage-cardinality, Go test-
+	// symbol resolution, citation-granularity, runtime-artifact
+	// resolution, and Verification command allowlist (WB-1 steps 3-4):
+	// keep CheckDocumentZeroEvidence / CheckDocumentCoverageCardinality /
+	// CheckDocumentTestSymbols / CheckDocumentCommandAllowlist /
+	// IsCoveringCitation / ResolveRuntimeArtifactRows
+	// production-reachable. Read-only probes; do not change the
+	// status-gate exit contract and do not emit missing-artifact
+	// diagnostics (sibling child's job).
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
+		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
+		_ = spechonesty.CheckDocumentTestSymbols(path, string(data), repoRoot)
+		_ = spechonesty.CheckDocumentCommandAllowlist(path, string(data))
+	}
+	// Citation-granularity predicate (WB-1 steps 3-4): file-only test
+	// paths vs exact Test* symbols. Pure over row fields; discard
+	// results so the status-gate exit path is unchanged.
+	for _, row := range model.Rows {
+		_ = spechonesty.IsCoveringCitation(row)
+	}
+	// Runtime-artifact classifier + path resolver (WB-1 steps 3-4).
+	// Pure read-only lookup against repoRoot; discard results so the
+	// status-gate exit path is unchanged.
+	_ = spechonesty.ResolveRuntimeArtifactRows(repoRoot, model.Rows)
+	for _, row := range model.Rows {
+		_ = spechonesty.ClassifyRuntimeArtifactTarget(row.EvidenceTarget)
+		_ = spechonesty.ResolveRuntimeArtifactTarget(repoRoot, row.EvidenceTarget)
+		_ = spechonesty.ResolveRuntimeArtifactRow(repoRoot, row)
 	}
 
 	waiver, err := spechonesty.ParseVerificationWaiverFile(path)

@@ -56,6 +56,19 @@ const (
 	// (uncovered requirement, missing evidence target, etc.). These are
 	// the only findings a reasoned non-Complete waiver may downgrade.
 	FindingUnmetVerification CoverageFindingKind = "unmet_verification"
+	// FindingZeroEvidence is a Complete/Implemented document with no
+	// Verification mapping rows at all (document-level presence check).
+	// Non-waivable; cardinality siblings own per-requirement uncovered
+	// and duplicate diagnostics separately.
+	FindingZeroEvidence CoverageFindingKind = "zero_evidence"
+	// FindingDuplicateMapping is a Complete/Implemented requirement (or
+	// stable anchor) covered by more than one Verification mapping row.
+	// Non-waivable; emitted by the coverage-cardinality pass.
+	FindingDuplicateMapping CoverageFindingKind = "duplicate_mapping"
+	// FindingNonAllowlistedCommand is a Complete/Implemented Verification
+	// mapping row whose command is outside the executable verification
+	// allowlist. Non-waivable; emitted by the command-allowlist pass.
+	FindingNonAllowlistedCommand CoverageFindingKind = "non_allowlisted_command"
 	// FindingMissingStatus is non-waivable (WB-1 step 5).
 	FindingMissingStatus CoverageFindingKind = "missing_status"
 	// FindingDuplicateID is non-waivable (WB-1 step 5).
