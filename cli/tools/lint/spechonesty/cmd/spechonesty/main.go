@@ -6,8 +6,9 @@
 // to the docs tree.
 //
 // Sibling parser symbols (verification inventory, waiver policy,
-// observation freshness, zero-evidence) remain reachable from main for
-// production RTA without changing the status-gate exit contract.
+// observation freshness, zero-evidence, test-symbol resolution) remain
+// reachable from main for production RTA without changing the status-gate
+// exit contract.
 //
 // Usage:
 //
@@ -53,24 +54,29 @@ func main() {
 			exitCode = 1
 		}
 		// Keep verification / waiver / observation-freshness /
-		// zero-evidence symbols production-reachable (read-only). These
-		// probes must not change the status-gate exit contract.
+		// zero-evidence / test-symbol symbols production-reachable
+		// (read-only). These probes must not change the status-gate exit
+		// contract.
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
 }
 
 // touchSiblingParsers exercises verification, waiver, observation-
-// freshness, and zero-evidence passes on markdown under root so those
-// package symbols remain reachable from main. Read-only; never changes
-// the status-gate exit path.
+// freshness, zero-evidence, and test-symbol passes on markdown under
+// root so those package symbols remain reachable from main. Read-only;
+// never changes the status-gate exit path.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
 		return err
 	}
+	// Repo root for Go test-symbol resolution: directory argument is the
+	// docs tree (or a file under the tree); resolve relative to that path.
+	repoRoot := root
 	if !info.IsDir() {
-		probeFile(root)
+		repoRoot = filepath.Dir(root)
+		probeFile(root, repoRoot)
 		return nil
 	}
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -83,12 +89,12 @@ func touchSiblingParsers(root string) error {
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 			return nil
 		}
-		probeFile(path)
+		probeFile(path, repoRoot)
 		return nil
 	})
 }
 
-func probeFile(path string) {
+func probeFile(path, repoRoot string) {
 	model, err := spechonesty.ParseVerificationDocument(path)
 	if err != nil {
 		return
@@ -100,13 +106,15 @@ func probeFile(path string) {
 		_ = f
 	}
 
-	// Zero-evidence (WB-1 step 5) and coverage-cardinality (WB-1 steps
-	// 3-4): keep CheckDocumentZeroEvidence / CheckCoverageCardinality
+	// Zero-evidence (WB-1 step 5), coverage-cardinality, and Go test-
+	// symbol resolution (WB-1 steps 3-4): keep CheckDocumentZeroEvidence /
+	// CheckDocumentCoverageCardinality / CheckDocumentTestSymbols
 	// production-reachable. Read-only probes; do not change the
 	// status-gate exit contract.
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
 		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
+		_ = spechonesty.CheckDocumentTestSymbols(path, string(data), repoRoot)
 	}
 
 	waiver, err := spechonesty.ParseVerificationWaiverFile(path)
