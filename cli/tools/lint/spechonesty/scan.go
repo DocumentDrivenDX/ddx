@@ -30,10 +30,11 @@ type Diagnostic struct {
 //   - I/O or parse errors
 //   - missing status on SD/TD/ADR design documents
 //   - duplicate document ids within the helix lint scope (HelixLintRelativeDirs)
+//   - duplicate user-story ids across feature documents (01-frame/features/)
 //
 // The tree is never modified. Non-design documents without a status stamp
-// do not produce a missing-status diagnostic. Duplicate-id failures are
-// non-waivable (WB-1 step 5).
+// do not produce a missing-status diagnostic. Duplicate-id and
+// duplicate-US-id failures are non-waivable (WB-1 step 5).
 func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -85,6 +86,13 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 		return diags, dupErr
 	}
 	diags = append(diags, dupDiags...)
+
+	// Duplicate US-id scan is confined to 01-frame/features/ under root.
+	usDiags, usErr := ScanDuplicateUserStoryIDs(root)
+	if usErr != nil {
+		return diags, usErr
+	}
+	diags = append(diags, usDiags...)
 	return diags, nil
 }
 
