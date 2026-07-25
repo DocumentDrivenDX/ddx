@@ -235,9 +235,16 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		loopSink = workerprobe.TeeJSONL(io.Discard, probe)
 	}
 
-	// Process-local LandCoordinator.
-	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
-	defer localCoord.Stop()
+	// Shared reconnecting coordination client (ADR-022 rev 6). Claim,
+	// tracker-transition, and landing all go through this client — no process-
+	// local LandCoordinator competing with a reachable server.
+	coordClient, coordErr := bootstrapCoordinationClient(projectRoot, bead.NewStore(beadStoreRoot))
+	if coordErr != nil {
+		return fmt.Errorf("coordination client: %w", coordErr)
+	}
+	if coordClient != nil {
+		defer func() { _ = coordClient.Close() }()
+	}
 
 	// Post-merge reviewer (on by default, skipped via --no-review).
 	var reviewer agent.CandidateReviewer
@@ -372,9 +379,10 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					}, target); loadErr == nil {
 						targetBead = loaded
 					}
+					landSubmit := coordinationLandSubmit(projectRoot, coordClient)
 					landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 						ctx, projectRoot, targetBead, res,
-						func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
+						landSubmit,
 						bead.NewStore(beadStoreRoot),
 						resolveClaimAssignee(), "ddx try",
 						nil,
@@ -421,8 +429,9 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		postMergeReviewer = newCommandReviewer(projectRoot, beadStoreRoot, reviewTier, &rcfg)
 		reviewer = postMergeReviewer.(agent.CandidateReviewer)
 	}
+	workerStore := agent.WrapStoreWithCoordination(forcedStore, coordClient)
 	worker := &agent.ExecuteBeadWorker{
-		Store:    forcedStore,
+		Store:    workerStore,
 		Executor: executor,
 		Reviewer: postMergeReviewer,
 	}
@@ -468,6 +477,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		EventSink:               loopSink,
 		WorkerID:                resolveClaimAssignee(),
 		ProjectRoot:             projectRoot,
+		Coordination:            coordClient,
 		ResourceChecker:         resourceChecker,
 		ResourcePressureChecker: buildCLIResourcePressureChecker(projectRoot, f.resourcePressureCheckerOverride),
 		LoadPressureThreshold:   rcfg.LoadPressureThreshold(),

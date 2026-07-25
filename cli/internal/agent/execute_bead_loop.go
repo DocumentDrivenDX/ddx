@@ -185,6 +185,11 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID              string
 	WorkerID               string
 	ProjectRoot            string
+	// Coordination is the shared reconnecting coordination client (ADR-022).
+	// When non-nil, production try/work claim and tracker-transition paths
+	// receive it via WrapStoreWithCoordination; landing receives it through
+	// the SubmitLand callback. Managed and manual workers share one client.
+	Coordination *CoordinationClient
 	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
 	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
 	// to dispatch a single specific bead through the same claim → executor →
