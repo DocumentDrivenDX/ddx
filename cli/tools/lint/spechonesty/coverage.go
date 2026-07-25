@@ -7,9 +7,11 @@
 // requirement covered zero times and one per requirement covered more
 // than once. Exactly-once coverage yields no diagnostic.
 //
-// Zero-evidence (empty row set), citation granularity, waivers,
-// evidence-target resolution, and command allowlists are sibling
-// children. Read-only: pure over the supplied input.
+// At the requirement-to-evidence join, only rows that pass
+// IsCoveringCitation count as coverage: file-only test citations and
+// bare non-target evidence do not. Zero-evidence (empty row set),
+// waivers, evidence-target resolution (disk existence), and command
+// allowlists are sibling children. Read-only: pure over the supplied input.
 package spechonesty
 
 import (
@@ -39,15 +41,18 @@ type CoverageCardinalityInput struct {
 //
 // Rules:
 //   - Non-Complete/Implemented statuses → no findings.
-//   - Inventory requirement with zero mapping rows → one
+//   - Only rows where IsCoveringCitation is true count toward coverage
+//     (file-only test paths and bare non-target evidence are excluded).
+//   - Inventory requirement with zero counting mapping rows → one
 //     FindingUnmetVerification naming that requirement.
-//   - Inventory requirement with two or more mapping rows → one
+//   - Inventory requirement with two or more counting mapping rows → one
 //     FindingDuplicateMapping naming that requirement.
-//   - Inventory requirement with exactly one mapping row → no diagnostic.
+//   - Inventory requirement with exactly one counting mapping row → no diagnostic.
 //
 // Pure and read-only: no filesystem or network access. Extra mapping
 // rows whose RequirementRef is not in the inventory are ignored by this
-// pass (they are not inventory coverage failures).
+// pass (they are not inventory coverage failures). Named target existence
+// on disk is not resolved here.
 func CheckCoverageCardinality(in CoverageCardinalityInput) []CoverageFinding {
 	if !IsCompleteStatus(in.Status) {
 		return nil
@@ -61,6 +66,12 @@ func CheckCoverageCardinality(in CoverageCardinalityInput) []CoverageFinding {
 	for _, row := range in.Rows {
 		ref := strings.TrimSpace(row.RequirementRef)
 		if ref == "" {
+			continue
+		}
+		// Citation-granularity exclusion at the coverage join: a mapping
+		// row that does not name an exact Test*, static check, or
+		// artifact target does not count as requirement coverage.
+		if !IsCoveringCitation(row) {
 			continue
 		}
 		counts[ref]++

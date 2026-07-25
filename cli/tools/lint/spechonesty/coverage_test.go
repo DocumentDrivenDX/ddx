@@ -291,6 +291,196 @@ func TestCompleteVerificationCoverageCardinality_ExactlyOncePasses(t *testing.T)
 	}
 }
 
+// TestCompleteVerificationCoverageCardinality_IgnoresFileOnlyCitations:
+// a Complete fixture that cites only a test file path without a specific
+// mapped target does not count that citation as requirement coverage, and
+// the affected requirement is reported as uncovered.
+func TestCompleteVerificationCoverageCardinality_IgnoresFileOnlyCitations(t *testing.T) {
+	path := "docs/fixtures/complete_file_only_test.md"
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteFileOnlyTest)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteFileOnlyTest)
+	if len(model.Inventory) == 0 {
+		t.Fatal("fixture inventory must be non-empty")
+	}
+	if len(model.Rows) == 0 {
+		t.Fatal("fixture must have at least one mapping row (file-only citation)")
+	}
+	for _, row := range model.Rows {
+		if IsCoveringCitation(row) {
+			t.Fatalf("fixture row must be non-covering file-only; got covering EvidenceTarget=%q", row.EvidenceTarget)
+		}
+	}
+
+	findings := CheckDocumentCoverageCardinality(path, fixtureCompleteFileOnlyTest)
+	var uncovered []CoverageFinding
+	for _, f := range findings {
+		if f.Kind == FindingUnmetVerification && strings.Contains(f.Message, "REQ-001") {
+			uncovered = append(uncovered, f)
+		}
+	}
+	if len(uncovered) != 1 {
+		t.Fatalf("file-only citation must leave REQ-001 uncovered; got findings=%+v", findings)
+	}
+	f := uncovered[0]
+	if f.Severity != SeverityError {
+		t.Fatalf("Severity = %q, want %q", f.Severity, SeverityError)
+	}
+	if f.Path != path {
+		t.Fatalf("Path = %q, want %q", f.Path, path)
+	}
+	if !strings.Contains(f.Message, "REQ-001") {
+		t.Fatalf("Message must name REQ-001; got %q", f.Message)
+	}
+	if !strings.Contains(strings.ToLower(f.Message), "uncovered") {
+		t.Fatalf("Message must report uncovered; got %q", f.Message)
+	}
+
+	// Direct CheckCoverageCardinality path (same contract, no re-parse).
+	direct := CheckCoverageCardinality(CoverageCardinalityInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Inventory:  model.Inventory,
+		Rows:       model.Rows,
+	})
+	var directUncovered int
+	for _, f := range direct {
+		if f.Kind == FindingUnmetVerification && strings.Contains(f.Message, "REQ-001") {
+			directUncovered++
+		}
+	}
+	if directUncovered != 1 {
+		t.Fatalf("direct CheckCoverageCardinality: want 1 uncovered for REQ-001; got %+v", direct)
+	}
+
+	// Constructed multi-req case: only file-only rows → all uncovered;
+	// no false "covered" from non-covering citations.
+	multi := CheckCoverageCardinality(CoverageCardinalityInput{
+		Path:   path,
+		Status: StatusComplete,
+		Inventory: []string{"REQ-A", "REQ-B"},
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-A", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 10},
+			{RequirementRef: "REQ-B", EvidenceTarget: "cli/internal/bead/store_test.go", Command: "go test ./cli/internal/bead", Line: 11},
+		},
+	})
+	if len(multi) != 2 {
+		t.Fatalf("two file-only-only requirements must both be uncovered; got %+v", multi)
+	}
+	for _, req := range []string{"REQ-A", "REQ-B"} {
+		found := false
+		for _, f := range multi {
+			if f.Kind == FindingUnmetVerification && strings.Contains(f.Message, req) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected uncovered diagnostic for %s; got %+v", req, multi)
+		}
+	}
+}
+
+// TestCompleteVerificationCoverageCardinality_TargetedRowsCount: a
+// Complete fixture whose mapping row names an exact Test* symbol, static
+// check, or artifact target counts as coverage and yields no uncovered
+// diagnostic for that requirement.
+func TestCompleteVerificationCoverageCardinality_TargetedRowsCount(t *testing.T) {
+	// Exact Test* symbol.
+	testPath := "docs/fixtures/complete_existing_test.md"
+	testStatus := ParseDocumentStatusMarkdown(testPath, fixtureCompleteExistingTest)
+	if testStatus.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", testStatus.Status, StatusComplete)
+	}
+	testModel := ParseVerificationMarkdown(testPath, fixtureCompleteExistingTest)
+	if len(testModel.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(testModel.Rows))
+	}
+	if !IsCoveringCitation(testModel.Rows[0]) {
+		t.Fatalf("exact Test* row must be covering; EvidenceTarget=%q", testModel.Rows[0].EvidenceTarget)
+	}
+	testFindings := CheckDocumentCoverageCardinality(testPath, fixtureCompleteExistingTest)
+	for _, f := range testFindings {
+		if f.Kind == FindingUnmetVerification {
+			t.Fatalf("targeted Test* coverage must not emit uncovered diagnostic; got %+v", testFindings)
+		}
+	}
+	if len(testFindings) != 0 {
+		t.Fatalf("exactly-once targeted Test* must emit no cardinality diagnostics; got %+v", testFindings)
+	}
+
+	// Exact static check (check:<name>).
+	checkPath := "docs/fixtures/complete_static_check.md"
+	checkModel := ParseVerificationMarkdown(checkPath, fixtureCompleteStaticCheck)
+	if len(checkModel.Rows) != 1 {
+		t.Fatalf("static-check rows = %d, want 1", len(checkModel.Rows))
+	}
+	if !IsCoveringCitation(checkModel.Rows[0]) {
+		t.Fatalf("static check row must be covering; EvidenceTarget=%q", checkModel.Rows[0].EvidenceTarget)
+	}
+	checkFindings := CheckDocumentCoverageCardinality(checkPath, fixtureCompleteStaticCheck)
+	for _, f := range checkFindings {
+		if f.Kind == FindingUnmetVerification {
+			t.Fatalf("targeted static-check coverage must not emit uncovered; got %+v", checkFindings)
+		}
+	}
+	if len(checkFindings) != 0 {
+		t.Fatalf("exactly-once static check must emit no cardinality diagnostics; got %+v", checkFindings)
+	}
+
+	// Exact artifact target.
+	artPath := "docs/fixtures/complete_artifact_target.md"
+	artModel := ParseVerificationMarkdown(artPath, fixtureCompleteArtifactTarget)
+	if len(artModel.Rows) != 1 {
+		t.Fatalf("artifact rows = %d, want 1", len(artModel.Rows))
+	}
+	if !IsCoveringCitation(artModel.Rows[0]) {
+		t.Fatalf("artifact row must be covering; EvidenceTarget=%q", artModel.Rows[0].EvidenceTarget)
+	}
+	artFindings := CheckDocumentCoverageCardinality(artPath, fixtureCompleteArtifactTarget)
+	for _, f := range artFindings {
+		if f.Kind == FindingUnmetVerification {
+			t.Fatalf("targeted artifact coverage must not emit uncovered; got %+v", artFindings)
+		}
+	}
+	if len(artFindings) != 0 {
+		t.Fatalf("exactly-once artifact must emit no cardinality diagnostics; got %+v", artFindings)
+	}
+
+	// Mixed document: covering rows count; file-only does not mask
+	// (sibling ordering/masking is out of scope — here only assert that a
+	// requirement with one targeted row is not uncovered).
+	mixed := CheckCoverageCardinality(CoverageCardinalityInput{
+		Path:      "docs/fixtures/mixed.md",
+		Status:    StatusComplete,
+		Inventory: []string{"REQ-001", "REQ-002", "REQ-010"},
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-001", EvidenceTarget: "TestCreateResource", Command: "go test ./pkg -run TestCreateResource", Line: 1},
+			{RequirementRef: "REQ-002", EvidenceTarget: "check:static-list", Command: "go run ./tools/lint/listcheck", Line: 2},
+			{RequirementRef: "REQ-010", EvidenceTarget: ".ddx/executions/fixture/report.json", Command: "test -f .ddx/executions/fixture/report.json", Line: 3},
+		},
+	})
+	if len(mixed) != 0 {
+		t.Fatalf("targeted Test*/check/artifact rows must cover all inventory; got %+v", mixed)
+	}
+
+	// Direct construction: scoped Test* still counts.
+	scoped := CheckCoverageCardinality(CoverageCardinalityInput{
+		Path:      "docs/fixtures/scoped.md",
+		Status:    StatusComplete,
+		Inventory: []string{"REQ-001"},
+		Rows: []VerificationRow{
+			{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go:TestCreateResource", Command: "go test ./pkg", Line: 1},
+		},
+	})
+	if len(scoped) != 0 {
+		t.Fatalf("scoped Test* must count as coverage; got %+v", scoped)
+	}
+}
+
 func containsString(ss []string, want string) bool {
 	for _, s := range ss {
 		if s == want {
