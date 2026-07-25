@@ -1311,6 +1311,12 @@ func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
 }
 
 func TestWorkRepairsCoreBareAndContinuesSameCandidate(t *testing.T) {
+	// Private fixture config scope + invoking-repo guard must be established
+	// before intentional core.bare corruption so the repair path cannot rewrite
+	// a shared checkout's common config (the 2026-07-17 lefthook leak class).
+	invoking := newInvokingRepoConfigGuard(t)
+
+	// Dedicated temporary fixture repository/config scope only.
 	projectRoot, _ := newScriptHarnessRepo(t, 2)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 
@@ -1320,8 +1326,15 @@ func TestWorkRepairsCoreBareAndContinuesSameCandidate(t *testing.T) {
 		`commit test: ${DDX_BEAD_ID}`,
 	})
 
+	// Intentional corruption is scoped to the temporary fixture only.
 	runGitInteg(t, projectRoot, "config", "core.bare", "true")
-	require.Equal(t, "true", runGitInteg(t, projectRoot, "config", "--local", "--get", "core.bare"))
+	require.Equal(t, "true", runGitInteg(t, projectRoot, "config", "--local", "--get", "core.bare"),
+		"temporary fixture must observe its own intentional core.bare=true")
+	// Prove the write landed in the fixture config file, not the invoking stand-in.
+	fixtureCfg, err := os.ReadFile(filepath.Join(projectRoot, ".git", "config"))
+	require.NoError(t, err)
+	require.Contains(t, string(fixtureCfg), "bare = true")
+	invoking.assertUnchanged(t) // still clean after the intentional fixture write
 
 	var execCalls int32
 	var executed []string
@@ -1360,6 +1373,13 @@ func TestWorkRepairsCoreBareAndContinuesSameCandidate(t *testing.T) {
 	assert.Contains(t, out, `"type":"loop.pre_dispatch_git_repaired"`)
 	assert.Contains(t, out, gitrepohealth.IssueCoreBareCorruption)
 	assert.Contains(t, logBuf.String(), "repaired project git config before readiness")
+
+	// Fixture repaired its own corruption; invoking common config still untouched.
+	fixtureCfgAfter, err := os.ReadFile(filepath.Join(projectRoot, ".git", "config"))
+	require.NoError(t, err)
+	require.NotContains(t, string(fixtureCfgAfter), "bare = true",
+		"fixture must repair its own intentional core.bare=true")
+	invoking.assertUnchanged(t)
 }
 
 func TestWorkRepairsCoreWorktreeAndHooksPathAndContinues(t *testing.T) {
