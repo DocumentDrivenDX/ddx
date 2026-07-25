@@ -30,6 +30,19 @@ type trackerStaleBreakResult struct {
 	Error string `json:"error,omitempty"`
 }
 
+// TestTrackerLockGuardPathDerivesSiblingSidecar proves the projectRoot helper
+// builds a ".lock"-suffixed sibling of trackerLockPath.
+func TestTrackerLockGuardPathDerivesSiblingSidecar(t *testing.T) {
+	root := t.TempDir()
+	lockPath := trackerLockPath(root)
+	guardPath := trackerLockGuardPath(root)
+	require.NotEmpty(t, guardPath)
+	assert.Equal(t, trackerStaleLockBreakGuardPath(lockPath), guardPath)
+	assert.Equal(t, lockPath+".stale-break.lock", guardPath)
+	assert.True(t, strings.HasSuffix(guardPath, ".lock"))
+	assert.Equal(t, filepath.Dir(lockPath), filepath.Dir(guardPath))
+}
+
 // TestTrackerStaleLockBreakSingleWinner uses coordinated cross-process
 // contenders against one stale process-shared main-git lock and proves
 // exactly one contender owns the guarded stale-to-tombstone disposal.

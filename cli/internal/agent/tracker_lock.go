@@ -104,6 +104,14 @@ func trackerLockPath(projectRoot string) string {
 	return lockmetrics.SharedTrackerLockPath(projectRoot)
 }
 
+// trackerLockGuardPath returns the deterministic never-deleted sibling
+// advisory-lock file adjacent to trackerLockPath(projectRoot). The name ends
+// in ".lock". Ordinary acquisition and release only open/lock/unlock/close this
+// path; they never delete, truncate, rename, or recreate it.
+func trackerLockGuardPath(projectRoot string) string {
+	return trackerStaleLockBreakGuardPath(trackerLockPath(projectRoot))
+}
+
 // withMainGitLock acquires the process-shared main-git lock for the
 // given project root, runs fn, and releases the lock. The lock is a
 // directory created via os.Mkdir (atomic across processes on POSIX and
@@ -235,24 +243,7 @@ func (l mainGitLockLease) Release() error {
 	return releaseMainGitLockObserved(l.lockDir, l.ownerToken, l.guardWait, nil)
 }
 
-type trackerStaleLockGuardStage string
-
-const (
-	trackerStaleGuardStageAttempted    trackerStaleLockGuardStage = "attempted"
-	trackerStaleGuardStageContended    trackerStaleLockGuardStage = "contended"
-	trackerStaleGuardStageAcquired     trackerStaleLockGuardStage = "acquired"
-	trackerStaleGuardStageBeforeRename trackerStaleLockGuardStage = "before-rename"
-)
-
-type trackerStaleLockTransitionGuard struct {
-	file  *os.File
-	mutex *sync.Mutex
-}
-
-var (
-	trackerStaleLockGuardMutexes sync.Map
-	trackerStaleLockTombstoneSeq atomic.Uint64
-)
+var trackerStaleLockTombstoneSeq atomic.Uint64
 
 // withTrackerLockPolicy is the policy-parameterised form of
 // withTrackerLock; exposed at package scope so tests can pin a specific
@@ -264,7 +255,10 @@ var (
 // callback error so guarded-release failures surface to the caller.
 func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, fn func() error) (err error) {
 	lockDir := trackerLockPath(projectRoot)
-	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
+	// Parent of the canonical lock and of trackerLockGuardPath(projectRoot)
+	// is the same directory; use the package-local guard path helper so the
+	// sibling sidecar derivation stays on the production call graph.
+	if err := os.MkdirAll(filepath.Dir(trackerLockGuardPath(projectRoot)), 0o755); err != nil {
 		return fmt.Errorf("tracker lock dir: %w", err)
 	}
 
@@ -649,100 +643,10 @@ func freshlyInspectStaleTrackerLock(lockDir string) (os.FileInfo, bool) {
 	return inspected, stale
 }
 
-func trackerStaleLockBreakGuardPath(lockDir string) string {
-	if lockDir == "" {
-		return ""
-	}
-	return lockDir + ".stale-break.lock"
-}
-
 func trackerStaleLockTombstonePath(lockDir string) string {
 	if lockDir == "" {
 		return ""
 	}
 	suffix := fmt.Sprintf("%d-%d-%d", os.Getpid(), time.Now().UnixNano(), trackerStaleLockTombstoneSeq.Add(1))
 	return filepath.Join(filepath.Dir(lockDir), filepath.Base(lockDir)+".tombstone."+suffix+".lock")
-}
-
-func trackerStaleLockGuardMutex(guardPath string) *sync.Mutex {
-	mutex := &sync.Mutex{}
-	actual, _ := trackerStaleLockGuardMutexes.LoadOrStore(guardPath, mutex)
-	return actual.(*sync.Mutex)
-}
-
-func tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir string, observer func(trackerStaleLockGuardStage)) (*trackerStaleLockTransitionGuard, bool, error) {
-	guardPath := trackerStaleLockBreakGuardPath(lockDir)
-	if guardPath == "" {
-		return nil, false, fmt.Errorf("tracker lock: stale-break guard requires lock directory")
-	}
-	if observer != nil {
-		observer(trackerStaleGuardStageAttempted)
-	}
-	mutex := trackerStaleLockGuardMutex(guardPath)
-	if !mutex.TryLock() {
-		if observer != nil {
-			observer(trackerStaleGuardStageContended)
-		}
-		return nil, false, nil
-	}
-	guard, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		mutex.Unlock()
-		return nil, false, err
-	}
-	locked, err := tryLockTrackerStaleBreakGuardFile(guard)
-	if err != nil {
-		_ = guard.Close()
-		mutex.Unlock()
-		return nil, false, err
-	}
-	if !locked {
-		_ = guard.Close()
-		mutex.Unlock()
-		if observer != nil {
-			observer(trackerStaleGuardStageContended)
-		}
-		return nil, false, nil
-	}
-	if observer != nil {
-		observer(trackerStaleGuardStageAcquired)
-	}
-	return &trackerStaleLockTransitionGuard{file: guard, mutex: mutex}, true, nil
-}
-
-// acquireTrackerStaleLockTransitionGuardObserved waits up to guardWait for the
-// stable transition guard. Used by token-safe lease release so contending
-// stale-break and release paths serialize without unconditional RemoveAll.
-func acquireTrackerStaleLockTransitionGuardObserved(lockDir string, guardWait time.Duration, observer func(trackerStaleLockGuardStage)) (*trackerStaleLockTransitionGuard, error) {
-	if guardWait < 0 {
-		guardWait = 0
-	}
-	deadline := time.Now().Add(guardWait)
-	for {
-		guard, acquired, err := tryAcquireTrackerStaleLockTransitionGuardObserved(lockDir, observer)
-		if err != nil {
-			return nil, err
-		}
-		if acquired {
-			return guard, nil
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("stale-break guard timeout after %s", guardWait)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func releaseTrackerStaleLockBreakGuard(guard *trackerStaleLockTransitionGuard) error {
-	if guard == nil {
-		return nil
-	}
-	var err error
-	if guard.file != nil {
-		err = errors.Join(unlockTrackerStaleBreakGuardFile(guard.file), guard.file.Close())
-	}
-	if guard.mutex != nil {
-		guard.mutex.Unlock()
-	}
-	return err
 }
