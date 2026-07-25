@@ -495,6 +495,128 @@ func TestImplementedVerificationResolvesExistingRuntimeArtifact(t *testing.T) {
 	}
 }
 
+const fixtureCompleteMissingRuntimeArtifact = `---
+ddx:
+  id: FIXTURE-COMPLETE-MISSING-RUNTIME-ARTIFACT
+---
+# Fixture Complete Missing Runtime Artifact
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-042: Observation report
+
+The system MUST retain the observation report artifact.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-042 | .ddx/executions/missing/report.json | test -f .ddx/executions/missing/report.json |
+`
+
+// TestMissingRuntimeArtifactDiagnosticIdentifiesRequirementID: a missing
+// inspectable runtime-artifact mapping diagnostic includes the requirement
+// id from the offending Verification row (not inferred from prose).
+func TestMissingRuntimeArtifactDiagnosticIdentifiesRequirementID(t *testing.T) {
+	root := t.TempDir()
+	// Empty repo root: mapped artifact path does not exist.
+
+	path := "docs/fixtures/complete_missing_runtime_artifact.md"
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingRuntimeArtifact)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingRuntimeArtifact)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	if model.Rows[0].RequirementRef != "REQ-042" {
+		t.Fatalf("parsed RequirementRef = %q, want REQ-042", model.Rows[0].RequirementRef)
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.Severity != SeverityError {
+		t.Fatalf("Severity = %q, want %q", f.Severity, SeverityError)
+	}
+	if f.RequirementRef != "REQ-042" {
+		t.Fatalf("RequirementRef = %q, want REQ-042 from offending Verification row", f.RequirementRef)
+	}
+	if !strings.Contains(f.Message, "REQ-042") {
+		t.Fatalf("Message must identify requirement id REQ-042; got %q", f.Message)
+	}
+
+	// Convenience path must also surface the row identity.
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingRuntimeArtifact, root)
+	if len(docFindings) != 1 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts: expected 1 finding; got %+v", docFindings)
+	}
+	if docFindings[0].RequirementRef != "REQ-042" {
+		t.Fatalf("CheckDocumentRuntimeArtifacts RequirementRef = %q, want REQ-042", docFindings[0].RequirementRef)
+	}
+}
+
+// TestMissingRuntimeArtifactDiagnosticIdentifiesSourceDocument: a missing
+// inspectable runtime-artifact mapping diagnostic includes the source
+// document path containing the offending Verification row.
+func TestMissingRuntimeArtifactDiagnosticIdentifiesSourceDocument(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/complete_missing_runtime_artifact.md"
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingRuntimeArtifact)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingRuntimeArtifact)
+	if model.Path != path {
+		t.Fatalf("model.Path = %q, want %q", model.Path, path)
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.Path != path {
+		t.Fatalf("diagnostic Path = %q, want source document %q", f.Path, path)
+	}
+	if !strings.Contains(f.Message, path) {
+		t.Fatalf("Message must identify source document %q; got %q", path, f.Message)
+	}
+
+	// Convenience path records the same document path on the diagnostic.
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingRuntimeArtifact, root)
+	if len(docFindings) != 1 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts: expected 1 finding; got %+v", docFindings)
+	}
+	if docFindings[0].Path != path {
+		t.Fatalf("CheckDocumentRuntimeArtifacts Path = %q, want %q", docFindings[0].Path, path)
+	}
+}
+
 // TestRuntimeArtifactResolver_ReadOnly: resolving every fixture leaves all
 // fixture files byte-identical.
 func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
