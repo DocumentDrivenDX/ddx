@@ -324,6 +324,177 @@ func TestRuntimeArtifactTargetResolution_NoNetwork(t *testing.T) {
 	}
 }
 
+const fixtureCompleteExistingRuntimeArtifact = `---
+ddx:
+  id: FIXTURE-COMPLETE-EXISTING-RUNTIME-ARTIFACT
+---
+# Fixture Complete Existing Runtime Artifact
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-001: Observation report
+
+The system MUST retain the observation report artifact.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-001 | .ddx/executions/fixture/report.json | test -f .ddx/executions/fixture/report.json |
+`
+
+const fixtureImplementedExistingRuntimeArtifact = `---
+ddx:
+  id: FIXTURE-IMPLEMENTED-EXISTING-RUNTIME-ARTIFACT
+---
+# Fixture Implemented Existing Runtime Artifact
+
+**Status:** Implemented
+
+## Requirements
+
+### REQ-010: Generated evidence
+
+The system MUST publish generated evidence under the fixture tree.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-010 | docs/helix/evidence.json | test -f docs/helix/evidence.json |
+`
+
+// writeExistingRuntimeArtifactFixture places the inspectable artifact paths
+// used by the Complete/Implemented positive-path fixtures under root.
+func writeExistingRuntimeArtifactFixture(t *testing.T, root string) {
+	t.Helper()
+	paths := []string{
+		filepath.Join(".ddx", "executions", "fixture", "report.json"),
+		filepath.Join("docs", "helix", "evidence.json"),
+	}
+	for _, rel := range paths {
+		abs := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(abs, []byte(`{"ok":true}`), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+}
+
+// TestCompleteVerificationResolvesExistingRuntimeArtifact: a Complete
+// fixture mapping a requirement to an existing inspectable runtime
+// artifact passes artifact resolution and emits no missing-artifact
+// diagnostic.
+func TestCompleteVerificationResolvesExistingRuntimeArtifact(t *testing.T) {
+	root := t.TempDir()
+	writeExistingRuntimeArtifactFixture(t, root)
+
+	path := "docs/fixtures/complete_existing_runtime_artifact.md"
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteExistingRuntimeArtifact)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteExistingRuntimeArtifact)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	row := model.Rows[0]
+	if row.EvidenceTarget != ".ddx/executions/fixture/report.json" {
+		t.Fatalf("EvidenceTarget = %q", row.EvidenceTarget)
+	}
+
+	// Resolver positive path: classified as runtime artifact and present.
+	res := ResolveRuntimeArtifactRow(root, row)
+	if res.Kind != RuntimeArtifactClassRuntime {
+		t.Fatalf("Kind = %q, want runtime_artifact", res.Kind)
+	}
+	if !res.Resolved {
+		t.Fatalf("existing runtime artifact must resolve; got %+v", res)
+	}
+	if res.ResolvedPath == "" {
+		t.Fatal("ResolvedPath must be set when Resolved")
+	}
+
+	// Analyzer validation: no missing-artifact diagnostic for existing path.
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 0 {
+		t.Fatalf("existing runtime artifact must emit no diagnostic; got %+v", findings)
+	}
+	for _, f := range findings {
+		if f.Kind == FindingMissingRuntimeArtifact {
+			t.Fatalf("must not emit missing_runtime_artifact for existing path; got %+v", f)
+		}
+	}
+
+	// Convenience path (status + mapping parse + validation).
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteExistingRuntimeArtifact, root)
+	if len(docFindings) != 0 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts must pass for existing artifact; got %+v", docFindings)
+	}
+}
+
+// TestImplementedVerificationResolvesExistingRuntimeArtifact: an
+// Implemented fixture mapping a requirement to an existing inspectable
+// runtime artifact passes artifact resolution and emits no
+// missing-artifact diagnostic.
+func TestImplementedVerificationResolvesExistingRuntimeArtifact(t *testing.T) {
+	root := t.TempDir()
+	writeExistingRuntimeArtifactFixture(t, root)
+
+	path := "docs/fixtures/implemented_existing_runtime_artifact.md"
+	status := ParseDocumentStatusMarkdown(path, fixtureImplementedExistingRuntimeArtifact)
+	if status.Status != StatusImplemented {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusImplemented)
+	}
+	if !IsCompleteStatus(status.Status) {
+		t.Fatal("Implemented must be treated as Complete/Implemented for validation")
+	}
+	model := ParseVerificationMarkdown(path, fixtureImplementedExistingRuntimeArtifact)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+	row := model.Rows[0]
+	if row.EvidenceTarget != "docs/helix/evidence.json" {
+		t.Fatalf("EvidenceTarget = %q", row.EvidenceTarget)
+	}
+
+	res := ResolveRuntimeArtifactRow(root, row)
+	if res.Kind != RuntimeArtifactClassRuntime || !res.Resolved {
+		t.Fatalf("existing Implemented runtime artifact must resolve; got %+v", res)
+	}
+
+	findings := CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+		Path:       path,
+		Status:     status.Status,
+		StatusLine: status.Line,
+		Rows:       model.Rows,
+		RepoRoot:   root,
+	})
+	if len(findings) != 0 {
+		t.Fatalf("existing runtime artifact must emit no diagnostic; got %+v", findings)
+	}
+	for _, f := range findings {
+		if f.Kind == FindingMissingRuntimeArtifact {
+			t.Fatalf("must not emit missing_runtime_artifact for existing path; got %+v", f)
+		}
+	}
+
+	docFindings := CheckDocumentRuntimeArtifacts(path, fixtureImplementedExistingRuntimeArtifact, root)
+	if len(docFindings) != 0 {
+		t.Fatalf("CheckDocumentRuntimeArtifacts must pass for Implemented existing artifact; got %+v", docFindings)
+	}
+}
+
 // TestRuntimeArtifactResolver_ReadOnly: resolving every fixture leaves all
 // fixture files byte-identical.
 func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {

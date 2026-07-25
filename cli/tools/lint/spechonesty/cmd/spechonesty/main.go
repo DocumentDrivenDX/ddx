@@ -111,18 +111,21 @@ func probeFile(path, repoRoot string) {
 
 	// Zero-evidence (WB-1 step 5), coverage-cardinality, Go test-
 	// symbol resolution, citation-granularity, runtime-artifact
-	// resolution, and Verification command allowlist (WB-1 steps 3-4):
-	// keep CheckDocumentZeroEvidence / CheckDocumentCoverageCardinality /
-	// CheckDocumentTestSymbols / CheckDocumentCommandAllowlist /
+	// resolution/validation, and Verification command allowlist
+	// (WB-1 steps 3-4): keep CheckDocumentZeroEvidence /
+	// CheckDocumentCoverageCardinality / CheckDocumentTestSymbols /
+	// CheckDocumentCommandAllowlist / CheckDocumentRuntimeArtifacts /
 	// IsCoveringCitation / ResolveRuntimeArtifactRows
 	// production-reachable. Read-only probes; do not change the
-	// status-gate exit contract and do not emit missing-artifact
-	// diagnostics (sibling child's job).
+	// status-gate exit contract. Missing-artifact diagnostic emission
+	// remains a sibling child's job; the positive-path validation
+	// only guarantees existing artifacts produce no findings.
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
 		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
 		_ = spechonesty.CheckDocumentTestSymbols(path, string(data), repoRoot)
 		_ = spechonesty.CheckDocumentCommandAllowlist(path, string(data))
+		_ = spechonesty.CheckDocumentRuntimeArtifacts(path, string(data), repoRoot)
 	}
 	// Citation-granularity predicate (WB-1 steps 3-4): file-only test
 	// paths vs exact Test* symbols. Pure over row fields; discard
