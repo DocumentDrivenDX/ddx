@@ -86,9 +86,10 @@ other; they only need write access to the shared `origin`.
 ## Project Identity (ddx-d30bc1a0)
 
 Per `ddx-d30bc1a0`, each machine resolves project-scoped DDx state through
-`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`. For
-multi-machine coordination, participating clones SHOULD share the same remote
-identity so convention-mode resolution converges on the same
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, per
+`ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree
+registry). For multi-machine coordination, participating clones SHOULD share
+the same remote identity so convention-mode resolution converges on the same
 `<host>/<owner>/<repo>` project key. The no-remote local fallback is
 intentionally machine-local and is not a cross-machine identity contract.
 
