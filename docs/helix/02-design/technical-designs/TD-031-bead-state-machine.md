@@ -276,7 +276,7 @@ The field `extra.consecutive_ladder_exhaustions` is a compact coordination count
 
 - **Incremented** at the end of each drain cycle in which the bead's configured sequence of abstract `MinPower` new-attempt retries was fully exhausted and none produced a close or forward progress. Exhaustion is derived from completed DDx attempts, not a Fizeau catalog or concrete route list.
 - **Reset to 0** when the bead is successfully closed, when a reframe or decompose pass fires (the bead's prompt has changed; start fresh), or when an operator explicitly clears the counter via `ddx bead update`.
-- **Threshold**: when `consecutive_ladder_exhaustions >= 2` (default; configurable in `ddxroot.Path()/config.yaml` as `escalation.auto_recovery_threshold`), the drain loop triggers the auto-recovery sequence described in ADR-024 Escalation Sequencing and SD-025 Layer 3.5.
+- **Threshold**: when `consecutive_ladder_exhaustions >= 2` (default; configurable in `ddxroot.Path()/config.yaml` as `escalation.auto_recovery_threshold`, where `ddxroot.Path()` is the resolved per-project DDx root per `ddx-06cbaa90`), the drain loop triggers the auto-recovery sequence described in ADR-024 Escalation Sequencing and SD-025 Layer 3.5.
 - **Direct structural trigger**: explicit too-large, needs-decomposition, child-depth-cap, or no-changes-decompose classifications may enter §3.3 immediately without waiting for the counter threshold. The counter prevents infinite same-bead retry loops; it must not delay obvious decomposition work.
 - The auto-recovery decision itself fires the `reframe_applied` or `decompose_applied` outcome, which changes status per §3.
 
@@ -371,7 +371,7 @@ concrete pins, inspect a catalog, or steer the next route.
 
 **Loop interaction**: the worker retries the locked operation with exponential backoff up to a bounded budget. On budget exhaustion the calling outcome maps to `execution_failed` (§3). The worker does not enter a dedicated worker-state for lock contention; it remains `draining` and treats the failure as ordinary.
 
-**Filesystem-shape contract**: per `ddx-d30bc1a0`, the main-git/tracker lock path is `ddxroot.Path()/.git-tracker.lock`, where `ddxroot.Path()` is the resolved per-project DDx root. It is a process-shared lock **directory**, not a regular lockfile. Lock acquisition MUST classify the existing path immediately after `mkdir` reports that it already exists and MUST NOT sleep/back off until the path is confirmed to be a real lock directory.
+**Filesystem-shape contract**: per `ddx-d30bc1a0`, the main-git/tracker lock path is `ddxroot.Path()/.git-tracker.lock`, where `ddxroot.Path()` is the resolved per-project DDx root per `ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree registry). It is a process-shared lock **directory**, not a regular lockfile. Lock acquisition MUST classify the existing path immediately after `mkdir` reports that it already exists and MUST NOT sleep/back off until the path is confirmed to be a real lock directory.
 
 - Missing after race: retry acquisition immediately.
 - Directory: apply the existing PID/`acquired_at` stale-lock policy. A directory owned by a live process remains ordinary lock contention.
