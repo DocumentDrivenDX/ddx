@@ -70,12 +70,14 @@ the addr file is a single-entry file; a new server start overwrites it.
 ### Project Identity (ddx-d30bc1a0)
 
 Per `ddx-d30bc1a0`, every project-scoped DDx path in this topology is rooted at
-`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`. In-tree
-projects still resolve to `<projectRoot>/.ddx`; convention-mode projects
-resolve to the per-project XDG directory derived from git remote identity (or
-the documented local fallback). The host+user registry stores checkout paths and
-resolved project IDs, but beads, workers, execution bundles, attachments, and
-other project state remain under that project's own `ddxroot.Path()`.
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, per
+`ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree
+registry). In-tree projects still resolve to `<projectRoot>/.ddx`;
+convention-mode projects resolve to the per-project XDG directory derived from
+git remote identity (or the documented local fallback). The host+user registry
+stores checkout paths and resolved project IDs, but beads, workers, execution
+bundles, attachments, and other project state remain under that project's own
+`ddxroot.Path()`.
 
 ### Registry Population
 
