@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -478,7 +479,7 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 	// Never-deleted main-git stale-break guard sidecar. Matched via the
 	// package-local helper so ignore identity cannot drift from the on-disk
 	// path, independent of project .gitignore.
-	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(".ddx", ".git-tracker.lock")))
+	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(ddxroot.DirName, ".git-tracker.lock")))
 	switch {
 	case isLockMetricsPath(path):
 		return true
@@ -521,6 +522,15 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 	case path == ".ddx/workers":
 		return true
 	case strings.HasPrefix(path, ".ddx/workers/"):
+		return true
+	case path == ".ddx/coordination":
+		// Offline journal + coordination scratch created by the shared
+		// reconnecting coordination client (ADR-022 rev 6). Runtime only —
+		// never bead implementation work. Must not trip pre-dispatch when
+		// bootstrapCoordinationClient/OpenOfflineJournal materializes
+		// offline-journal.jsonl on every try/work entry.
+		return true
+	case strings.HasPrefix(path, ".ddx/coordination/"):
 		return true
 	default:
 		return false

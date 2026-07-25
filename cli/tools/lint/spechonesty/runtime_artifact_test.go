@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestRuntimeArtifactTargetClassification: mapping rows whose evidence
@@ -172,7 +174,7 @@ func TestRuntimeArtifactTargetResolution(t *testing.T) {
 	}
 
 	// Generated fixture artifact under .ddx/executions/.
-	fixtureRel := filepath.Join(".ddx", "executions", "fixture", "report.json")
+	fixtureRel := filepath.Join(ddxroot.DirName, "executions", "fixture", "report.json")
 	fixtureAbs := filepath.Join(root, fixtureRel)
 	if err := os.MkdirAll(filepath.Dir(fixtureAbs), 0o755); err != nil {
 		t.Fatalf("mkdir fixture: %v", err)
@@ -294,7 +296,7 @@ func TestRuntimeArtifactTargetResolution_NoNetwork(t *testing.T) {
 	t.Setenv("https_proxy", "http://127.0.0.1:1")
 
 	root := t.TempDir()
-	rel := filepath.Join(".ddx", "executions", "offline", "report.json")
+	rel := filepath.Join(ddxroot.DirName, "executions", "offline", "report.json")
 	abs := filepath.Join(root, rel)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -371,7 +373,7 @@ The system MUST publish generated evidence under the fixture tree.
 func writeExistingRuntimeArtifactFixture(t *testing.T, root string) {
 	t.Helper()
 	paths := []string{
-		filepath.Join(".ddx", "executions", "fixture", "report.json"),
+		filepath.Join(ddxroot.DirName, "executions", "fixture", "report.json"),
 		filepath.Join("docs", "helix", "evidence.json"),
 	}
 	for _, rel := range paths {
@@ -653,7 +655,7 @@ func TestRuntimeArtifactResolver_ReadOnly(t *testing.T) {
 	// Create a temporary artifact tree and resolve against it without
 	// touching package fixtures.
 	tmp := t.TempDir()
-	art := filepath.Join(tmp, ".ddx", "executions", "fixture", "report.json")
+	art := filepath.Join(tmp, ddxroot.DirName, "executions", "fixture", "report.json")
 	if err := os.MkdirAll(filepath.Dir(art), 0o755); err != nil {
 		t.Fatalf("mkdir tmp artifact: %v", err)
 	}

@@ -198,3 +198,13 @@ func (s *coordinatingLoopStore) Release(beadID, assignee, toStatus string) error
 	}
 	return s.inner.Unclaim(beadID)
 }
+
+// CooldownOverrideInfo forwards the force-claim / ignore-cooldown reporter
+// surface so WrapStoreWithCoordination does not strip singleBeadStore or
+// ignoreCooldownStore metadata needed for appendForceClaimEvent.
+func (s *coordinatingLoopStore) CooldownOverrideInfo(beadID string) (string, bool) {
+	if reporter, ok := s.inner.(cooldownOverrideReporter); ok {
+		return reporter.CooldownOverrideInfo(beadID)
+	}
+	return "", false
+}

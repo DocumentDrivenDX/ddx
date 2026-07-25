@@ -1049,6 +1049,7 @@ func shouldSkipLocalInstallIssue(rel string) bool {
 		".ddx/server/",
 		".ddx/tsnet/",
 		".ddx/workers/",
+		".ddx/coordination/",
 		"node_modules/",
 		"tmp/",
 		"website/node_modules/",

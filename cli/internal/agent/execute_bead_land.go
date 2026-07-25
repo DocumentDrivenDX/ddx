@@ -57,6 +57,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 )
@@ -924,12 +925,14 @@ func checkoutSyncDeferralIgnoredPath(path string) bool {
 	// Never-deleted main-git stale-break guard sidecar. Derived from the
 	// package-local helper so ignore identity cannot drift from the on-disk
 	// path, independent of project .gitignore.
-	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(".ddx", ".git-tracker.lock")))
+	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(ddxroot.DirName, ".git-tracker.lock")))
 	if path == guardRel ||
 		strings.HasPrefix(path, ".ddx/executions/") ||
 		strings.HasPrefix(path, ".ddx/runs/") ||
 		strings.HasPrefix(path, ".ddx/backups/") ||
 		strings.HasPrefix(path, ".ddx/run-state/") ||
+		strings.HasPrefix(path, ".ddx/coordination/") ||
+		path == ".ddx/coordination" ||
 		strings.HasPrefix(path, ".ddx/.git-tracker.lock/") ||
 		(strings.HasPrefix(path, ".ddx/.git-tracker.lock.") && strings.HasSuffix(path, ".lock")) {
 		return true

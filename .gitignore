@@ -439,6 +439,9 @@ cli/internal/agent/.ddx/
 .ddx/executions/
 .ddx/executions-archive/
 .ddx/harness-sessions/
+# Offline coordination journal (ADR-022 reconnecting client). Per-machine;
+# OpenOfflineJournal creates it on every try/work bootstrap.
+.ddx/coordination/
 # Ephemeral lock-contention metrics — rewritten on every tracker lock (incl.
 # the pre-land checkpoint's own lock), so tracking it makes the land checkpoint
 # commit it in a ~1/s loop. Per-machine, untracked. attempts.jsonl stays durable.
