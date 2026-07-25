@@ -1,6 +1,8 @@
 package spechonesty
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1010,5 +1012,228 @@ func TestCompleteVerificationRuntimeArtifactChecks_ReadOnly(t *testing.T) {
 	afterTD := snapshotFixtures(t, tdRoot)
 	if diffs := diffFixtures(beforeTD, afterTD); len(diffs) > 0 {
 		t.Fatalf("runtime artifact validation mutated package testdata:\n%s", strings.Join(diffs, "\n"))
+	}
+}
+
+// documentRestampGuard captures the load-bearing document fields that
+// runtime-artifact validation must not rewrite: status stamp text,
+// Verification mapping rows, and evidence target cell text.
+type documentRestampGuard struct {
+	// content is the full document bytes as written.
+	content string
+	// statusStamp is the exact body status line (e.g. "**Status:** Complete").
+	statusStamp string
+	// status is the normalized parser status.
+	status DocStatus
+	// mappingRow is the exact markdown table data row for the first mapping.
+	mappingRow string
+	// evidenceTarget is the parsed Evidence cell text.
+	evidenceTarget string
+	// requirementRef is the parsed requirement id on that row.
+	requirementRef string
+}
+
+func captureDocumentRestampGuard(t *testing.T, path, content string) documentRestampGuard {
+	t.Helper()
+	status := ParseDocumentStatusMarkdown(path, content)
+	if !IsCompleteStatus(status.Status) {
+		t.Fatalf("%s: status %q is not Complete/Implemented", path, status.Status)
+	}
+	model := ParseVerificationMarkdown(path, content)
+	if len(model.Rows) == 0 {
+		t.Fatalf("%s: expected at least one Verification mapping row", path)
+	}
+	row := model.Rows[0]
+
+	// Extract the exact status stamp line and mapping table row from the
+	// raw document so restamping/normalization of either is detectable.
+	var statusStamp, mappingRow string
+	for _, line := range strings.Split(content, "\n") {
+		trim := strings.TrimSpace(line)
+		if statusStamp == "" && strings.HasPrefix(strings.ToLower(trim), "**status:**") {
+			statusStamp = line
+		}
+		// First data row after the header separator: "| REQ-... |"
+		if mappingRow == "" && strings.HasPrefix(trim, "|") &&
+			strings.Contains(trim, row.RequirementRef) &&
+			strings.Contains(trim, row.EvidenceTarget) {
+			mappingRow = line
+		}
+	}
+	if statusStamp == "" {
+		t.Fatalf("%s: could not locate body status stamp line", path)
+	}
+	if mappingRow == "" {
+		t.Fatalf("%s: could not locate mapping row for %s / %s", path, row.RequirementRef, row.EvidenceTarget)
+	}
+	return documentRestampGuard{
+		content:        content,
+		statusStamp:    statusStamp,
+		status:         status.Status,
+		mappingRow:     mappingRow,
+		evidenceTarget: row.EvidenceTarget,
+		requirementRef: row.RequirementRef,
+	}
+}
+
+func assertDocumentNotRestamped(t *testing.T, path, afterContent string, before documentRestampGuard) {
+	t.Helper()
+	if afterContent != before.content {
+		t.Fatalf("%s: document fixture bytes changed after runtime-artifact validation", path)
+	}
+	if !strings.Contains(afterContent, before.statusStamp) {
+		t.Fatalf("%s: status stamp %q was rewritten or removed", path, strings.TrimSpace(before.statusStamp))
+	}
+	if !strings.Contains(afterContent, before.mappingRow) {
+		t.Fatalf("%s: Verification mapping row %q was rewritten or removed", path, strings.TrimSpace(before.mappingRow))
+	}
+	if !strings.Contains(afterContent, before.evidenceTarget) {
+		t.Fatalf("%s: evidence target text %q was rewritten or removed", path, before.evidenceTarget)
+	}
+
+	// Re-parse: status stamp value, mapping row identity, and evidence
+	// target text must match the pre-validation snapshot exactly.
+	after := captureDocumentRestampGuard(t, path, afterContent)
+	if after.status != before.status {
+		t.Fatalf("%s: status restamped from %q to %q", path, before.status, after.status)
+	}
+	if after.statusStamp != before.statusStamp {
+		t.Fatalf("%s: status stamp line changed:\n  before: %q\n  after:  %q", path, before.statusStamp, after.statusStamp)
+	}
+	if after.mappingRow != before.mappingRow {
+		t.Fatalf("%s: mapping row changed:\n  before: %q\n  after:  %q", path, before.mappingRow, after.mappingRow)
+	}
+	if after.evidenceTarget != before.evidenceTarget {
+		t.Fatalf("%s: evidence target restamped from %q to %q", path, before.evidenceTarget, after.evidenceTarget)
+	}
+	if after.requirementRef != before.requirementRef {
+		t.Fatalf("%s: requirement ref changed from %q to %q", path, before.requirementRef, after.requirementRef)
+	}
+}
+
+// TestRuntimeArtifactValidationDoesNotRestampDocuments: running runtime
+// artifact validation over Complete/Implemented document fixtures must
+// emit diagnostics only in memory and must not rewrite status stamps,
+// Verification mapping rows, or evidence target text on disk.
+//
+// Document-level restamp guard (sibling TestCompleteVerificationRuntimeArtifactChecks_ReadOnly
+// covers generic fixture tree mutation; this test pins the protected
+// document fields the pre-commit lint must leave untouched).
+func TestRuntimeArtifactValidationDoesNotRestampDocuments(t *testing.T) {
+	root := t.TempDir()
+	// Existing artifacts for the positive-path Complete/Implemented fixtures.
+	writeExistingRuntimeArtifactFixture(t, root)
+
+	docsDir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+
+	// Complete + Implemented fixtures: existing (no diagnostic) and missing
+	// (diagnostic emitted in memory). All must remain byte-identical on disk.
+	docs := map[string]string{
+		"complete_existing.md":    fixtureCompleteExistingRuntimeArtifact,
+		"implemented_existing.md": fixtureImplementedExistingRuntimeArtifact,
+		"complete_missing.md":     fixtureCompleteMissingRuntimeArtifact,
+		"complete_mapped_path.md": fixtureCompleteMissingMappedPathText,
+	}
+
+	guards := make(map[string]documentRestampGuard, len(docs))
+	for name, content := range docs {
+		path := filepath.Join(docsDir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		guards[name] = captureDocumentRestampGuard(t, path, content)
+	}
+
+	// Snapshot the markdown document fixtures only (restamp scope). Evidence
+	// artifacts under docs/helix/ from writeExistingRuntimeArtifactFixture are
+	// not document stamps and are out of this guard.
+	beforeDocs := make(map[string]fixtureState, len(docs))
+	for name := range docs {
+		path := filepath.Join(docsDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("snapshot read %s: %v", name, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("snapshot stat %s: %v", name, err)
+		}
+		sum := sha256.Sum256(data)
+		beforeDocs[name] = fixtureState{
+			sum:     hex.EncodeToString(sum[:]),
+			mode:    info.Mode(),
+			size:    info.Size(),
+			modTime: info.ModTime().UTC().Round(0),
+		}
+	}
+
+	var memoryFindings []RuntimeArtifactFinding
+	for name, content := range docs {
+		path := filepath.Join(docsDir, name)
+		// Primary production-style path: parse + resolve via convenience helper.
+		findings := CheckDocumentRuntimeArtifacts(path, content, root)
+		memoryFindings = append(memoryFindings, findings...)
+
+		// Explicit path using parsed Verification rows + runtime artifact resolver.
+		status := ParseDocumentStatusMarkdown(path, content)
+		model := ParseVerificationMarkdown(path, content)
+		findings = CheckRuntimeArtifactResolution(RuntimeArtifactInput{
+			Path:       path,
+			Status:     status.Status,
+			StatusLine: status.Line,
+			Rows:       model.Rows,
+			RepoRoot:   root,
+		})
+		memoryFindings = append(memoryFindings, findings...)
+	}
+
+	// Diagnostics must be collected in memory for missing-artifact fixtures
+	// (validation is not a silent no-op). Existing-artifact fixtures contribute none.
+	var missingCount int
+	for _, f := range memoryFindings {
+		if f.Kind == FindingMissingRuntimeArtifact {
+			missingCount++
+		}
+	}
+	if missingCount == 0 {
+		t.Fatal("expected in-memory missing_runtime_artifact diagnostics for missing-path fixtures")
+	}
+
+	// Document markdown fixtures must be byte-identical (no restamp/normalize write).
+	afterDocs := make(map[string]fixtureState, len(docs))
+	for name := range docs {
+		path := filepath.Join(docsDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("after-read %s: %v", name, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("after-stat %s: %v", name, err)
+		}
+		sum := sha256.Sum256(data)
+		afterDocs[name] = fixtureState{
+			sum:     hex.EncodeToString(sum[:]),
+			mode:    info.Mode(),
+			size:    info.Size(),
+			modTime: info.ModTime().UTC().Round(0),
+		}
+	}
+	if diffs := diffFixtures(beforeDocs, afterDocs); len(diffs) > 0 {
+		t.Fatalf("runtime artifact validation restamped document fixtures:\n%s", strings.Join(diffs, "\n"))
+	}
+
+	// Field-level guard: status stamp line, mapping row text, and evidence
+	// target text must match the pre-validation capture for every fixture.
+	for name, before := range guards {
+		path := filepath.Join(docsDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("re-read %s: %v", name, err)
+		}
+		assertDocumentNotRestamped(t, path, string(data), before)
 	}
 }
