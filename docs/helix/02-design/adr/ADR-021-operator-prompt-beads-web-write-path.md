@@ -146,11 +146,13 @@ operator-prompt submissions.
 
 Per `ddx-d30bc1a0`, the web write path is project-scoped before it is
 prompt-scoped. The receiving node resolves the selected project's DDx root via
-`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, then
-persists the operator-prompt bead under `ddxroot.Path()/beads.jsonl`,
-attachments under `ddxroot.Path()/attachments/<bead-id>/`, and execution
-evidence under `ddxroot.Path()/executions/<attempt-id>/`. This keeps
-operator-prompt storage aligned across in-tree and convention-mode projects.
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, per
+`ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree
+registry), then persists the operator-prompt bead under
+`ddxroot.Path()/beads.jsonl`, attachments under
+`ddxroot.Path()/attachments/<bead-id>/`, and execution evidence under
+`ddxroot.Path()/executions/<attempt-id>/`. This keeps operator-prompt storage
+aligned across in-tree and convention-mode projects.
 
 ## Multi-node delegation policy
 
