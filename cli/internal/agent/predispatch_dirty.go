@@ -475,6 +475,10 @@ func preDispatchCheckpointAllowedPath(path string) bool {
 }
 
 func preDispatchCheckpointIgnoredPath(path string) bool {
+	// Never-deleted main-git stale-break guard sidecar. Matched via the
+	// package-local helper so ignore identity cannot drift from the on-disk
+	// path, independent of project .gitignore.
+	guardRel := filepath.ToSlash(trackerStaleLockBreakGuardPath(filepath.Join(".ddx", ".git-tracker.lock")))
 	switch {
 	case isLockMetricsPath(path):
 		return true
@@ -482,10 +486,13 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/.git-tracker.lock/"):
 		return true
+	case path == guardRel:
+		// Stable advisory-lock sidecar left by single-winner disposal.
+		// Runtime coordination only — not parent work.
+		return true
 	case strings.HasPrefix(path, ".ddx/.git-tracker.lock.") && strings.HasSuffix(path, ".lock"):
-		// Main-git-lock stale-break uses a stable sibling advisory-lock sidecar
-		// (for example .ddx/.git-tracker.lock.stale-break.lock) and contender-
-		// unique tombstones. Runtime coordination only — not parent work.
+		// Contender-unique tombstones from guarded stale-break renames.
+		// Runtime coordination only — not parent work.
 		return true
 	case path == ".ddx/beads.lock":
 		return true
