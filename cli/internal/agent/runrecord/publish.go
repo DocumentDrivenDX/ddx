@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 )
 
 // errPublishKilled is returned when a test-injected fault aborts publish mid-flight.
@@ -51,6 +52,16 @@ func (h *publishHooks) maybeFault(phase publishFaultPhase, recordPath, tmpPath s
 	return nil
 }
 
+// publishTestHooks routes Publish (and thus TransitionToRunning /
+// TransitionToTerminal) through the same fault/observation path as the
+// package-private publish used by pre-dispatch tests. Production code never
+// sets this; only *_test.go helpers install hooks. Tests that install hooks
+// must not run in parallel with each other.
+var (
+	publishTestHooksMu sync.Mutex
+	publishTestHooks   *publishHooks
+)
+
 // RecordPath returns the absolute path of the durable record for runID under
 // projectRoot: <projectRoot>/.ddx/runs/<run-id>/record.json.
 func RecordPath(projectRoot, runID string) string {
@@ -71,8 +82,16 @@ func RunDir(projectRoot, runID string) string {
 // Publish encodes only the typed Record schema; provider raw output, PIDs,
 // process-tree metadata, and provider-session canonical state are not fields
 // on Record and therefore cannot be persisted.
+//
+// Running and terminal phase updates call Publish, so they share this atomic
+// writer contract with the pre-dispatch publisher.
 func Publish(projectRoot string, rec Record) error {
-	return publish(projectRoot, rec, nil)
+	// Snapshot optional test hooks (nil in production). The brief lock is a
+	// no-op when no test has installed hooks.
+	publishTestHooksMu.Lock()
+	h := publishTestHooks
+	publishTestHooksMu.Unlock()
+	return publish(projectRoot, rec, h)
 }
 
 // Read loads the durable record for runID, or returns (nil, nil) when absent.
