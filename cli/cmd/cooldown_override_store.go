@@ -1,24 +1,34 @@
 package cmd
 
 import (
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
+// cooldownLoopStore is the narrowest store surface the ignore-cooldown and
+// single-bead wrappers need. ReadyExecutionIgnoringCooldown is still concrete
+// on *bead.Store and is not yet part of bead.Backend, so it is expressed here
+// as a local extension of ExecuteBeadLoopStore rather than embedding *bead.Store.
+type cooldownLoopStore interface {
+	agent.ExecuteBeadLoopStore
+	ReadyExecutionIgnoringCooldown() ([]bead.Bead, error)
+}
+
 type ignoreCooldownStore struct {
-	*bead.Store
+	cooldownLoopStore
 	overrideRetryAfter map[string]string
 }
 
-func newIgnoreCooldownStore(store *bead.Store) *ignoreCooldownStore {
-	return &ignoreCooldownStore{Store: store}
+func newIgnoreCooldownStore(store cooldownLoopStore) *ignoreCooldownStore {
+	return &ignoreCooldownStore{cooldownLoopStore: store}
 }
 
 func (s *ignoreCooldownStore) ReadyExecution() ([]bead.Bead, error) {
-	standard, err := s.Store.ReadyExecution()
+	standard, err := s.cooldownLoopStore.ReadyExecution()
 	if err != nil {
 		return nil, err
 	}
-	withCooldown, err := s.ReadyExecutionIgnoringCooldown()
+	withCooldown, err := s.cooldownLoopStore.ReadyExecutionIgnoringCooldown()
 	if err != nil {
 		return nil, err
 	}
@@ -48,14 +58,14 @@ func (s *ignoreCooldownStore) CooldownOverrideInfo(beadID string) (string, bool)
 // It respects the underlying ready queue by default and only surfaces a bead
 // in retry cooldown when forceCooldown is enabled.
 type singleBeadStore struct {
-	*bead.Store
+	cooldownLoopStore
 	targetID           string
 	forceCooldown      bool
 	overrideRetryAfter map[string]string
 }
 
 func (s *singleBeadStore) ReadyExecution() ([]bead.Bead, error) {
-	standard, err := s.Store.ReadyExecution()
+	standard, err := s.cooldownLoopStore.ReadyExecution()
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +79,7 @@ func (s *singleBeadStore) ReadyExecution() ([]bead.Bead, error) {
 		s.overrideRetryAfter = nil
 		return nil, nil
 	}
-	withCooldown, err := s.ReadyExecutionIgnoringCooldown()
+	withCooldown, err := s.cooldownLoopStore.ReadyExecutionIgnoringCooldown()
 	if err != nil {
 		return nil, err
 	}

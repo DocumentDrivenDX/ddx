@@ -195,9 +195,9 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	// Restrict the ready queue view to the targeted bead. Retry cooldown is
 	// only bypassed when --force-claim is explicitly present.
 	forcedStore := &singleBeadStore{
-		Store:         store,
-		targetID:      target.ID,
-		forceCooldown: forceClaim,
+		cooldownLoopStore: store,
+		targetID:          target.ID,
+		forceCooldown:     forceClaim,
 	}
 	if !forceClaim {
 		standardReady, standardErr := store.ReadyExecution()
@@ -538,12 +538,11 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	return tryExitCodeForStatus(report.Status)
 }
 
-func resolveTryExecutionHint(ctx context.Context, beadID string, store *bead.Store, fallback *bead.Bead, explicitMinPower bool, publicPolicy string) (escalation.ExecutionHint, error) {
+func resolveTryExecutionHint(ctx context.Context, beadID string, store attemptBeadReader, fallback *bead.Bead, explicitMinPower bool, publicPolicy string) (escalation.ExecutionHint, error) {
+	// Refresh reuses the same reader: bead.Store.Get re-reads from disk via
+	// ReadAll, so a second Get is sufficient without reconstructing *bead.Store.
 	currentTarget, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
-		if store == nil {
-			return nil
-		}
-		return bead.NewStoreWithCollection(store.Dir, store.Collection)
+		return store
 	}, fallback)
 	if err != nil {
 		return escalation.ExecutionHint{}, err

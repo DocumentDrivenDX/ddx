@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/coordination"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 )
 
 // bootstrapCoordinationClient constructs the single reconnecting coordination
 // client used by try/work claim, tracker-transition, and landing paths.
 // Callers must Close the client on exit. Returns nil client when store is nil.
-func bootstrapCoordinationClient(projectRoot string, store *bead.Store) (*agent.CoordinationClient, error) {
+// store is coordination.ClaimBackend (satisfied by *bead.Store) rather than the
+// concrete store type so command wiring depends only on the claim surface.
+func bootstrapCoordinationClient(projectRoot string, store coordination.ClaimBackend) (*agent.CoordinationClient, error) {
 	if store == nil {
 		return nil, nil
 	}

@@ -70,7 +70,8 @@ type CommandFactory struct {
 
 	// beadMigratorOverride, when non-nil, replaces the bead migrator factory
 	// so tests can capture migration options without hitting the real importer.
-	beadMigratorOverride func(*bead.Store) (bead.Migrator, error)
+	// The argument is the store root directory (same value as MigratorOptions.Dir).
+	beadMigratorOverride func(dir string) (bead.Migrator, error)
 
 	// syncGitRunnerOverride replaces the real git runner in 'ddx sync' (for testing).
 	syncGitRunnerOverride syncGitRunner

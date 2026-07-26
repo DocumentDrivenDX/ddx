@@ -137,7 +137,7 @@ func TestBeadMigrate_ToAxonDryRunRoutesToImporter(t *testing.T) {
 	capture := &captureAxonMigrator{
 		stats: bead.MigrateAxonStats{BeadsMigrated: 3, EventsMigrated: 2},
 	}
-	factory.beadMigratorOverride = func(*bead.Store) (bead.Migrator, error) {
+	factory.beadMigratorOverride = func(string) (bead.Migrator, error) {
 		return capture, nil
 	}
 
@@ -164,7 +164,7 @@ func TestBeadMigrate_ToAxonApplyRoutesToImporter(t *testing.T) {
 	capture := &captureAxonMigrator{
 		stats: bead.MigrateAxonStats{BeadsMigrated: 4, EventsMigrated: 1, AttachmentsMigrated: 2},
 	}
-	factory.beadMigratorOverride = func(*bead.Store) (bead.Migrator, error) {
+	factory.beadMigratorOverride = func(string) (bead.Migrator, error) {
 		return capture, nil
 	}
 
@@ -193,7 +193,7 @@ func TestBeadMigrate_ToAxonVerifyRoutesToImporter(t *testing.T) {
 	capture := &captureAxonMigrator{
 		stats: bead.MigrateAxonStats{BeadsMigrated: 1, EventsMigrated: 0},
 	}
-	factory.beadMigratorOverride = func(*bead.Store) (bead.Migrator, error) {
+	factory.beadMigratorOverride = func(string) (bead.Migrator, error) {
 		return capture, nil
 	}
 
