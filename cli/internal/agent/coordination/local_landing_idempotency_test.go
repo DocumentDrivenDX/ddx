@@ -11,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/coordination"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
@@ -27,6 +28,10 @@ import (
 // call-recording mocks. Production path is agent.Land — not a fake recorder.
 func TestCoordinationContract_LocalLandingIdempotency(t *testing.T) {
 	projectRoot := t.TempDir()
+	// Keep the real landing path off the host-global DDx config so the temp
+	// finalization worktree always lands in a writable scratch root.
+	scratchRoot := t.TempDir()
+	t.Setenv(config.ExecutionWorktreeRootEnv, filepath.Join(scratchRoot, "exec-wt"))
 	initGitRepo(t, projectRoot)
 	// Production land path expects execution evidence + lock paths gitignored.
 	writeFile(t, projectRoot, ".gitignore", strings.Join([]string{
