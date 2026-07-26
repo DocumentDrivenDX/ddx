@@ -180,6 +180,36 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		issues = append(issues, repoIssues...)
 	}
 
+	// Check 4b2: Default-branch tracking (network-free; no fetch). Surfaces
+	// detached HEAD / upstream vs origin/HEAD mismatch before queue drains.
+	fmt.Print("✓ Checking Default Branch Tracking... ")
+	dbpIssues := checkDefaultBranchPreflight(f.WorkingDir)
+	if len(dbpIssues) == 0 {
+		fmt.Println("✅ Default Branch Tracking")
+	} else {
+		// Hard-fail kinds are reported as ❌; advisory kinds as ⚠️.
+		hard := false
+		for _, issue := range dbpIssues {
+			if issue.Type == "default_branch_hard_fail" {
+				hard = true
+				break
+			}
+		}
+		if hard {
+			fmt.Printf("❌ Default Branch Tracking Issues (%d)\n", len(dbpIssues))
+			allGood = false
+		} else {
+			fmt.Printf("⚠️  Default Branch Tracking Advisories (%d)\n", len(dbpIssues))
+		}
+		for _, issue := range dbpIssues {
+			fmt.Printf("   ⚠️  %s\n", issue.Description)
+			for _, r := range issue.Remediation {
+				fmt.Printf("   💡 %s\n", r)
+			}
+		}
+		issues = append(issues, dbpIssues...)
+	}
+
 	// Check 4c: Worktrees master — detect stale execute-bead paths in worktrees.json.
 	fmt.Print("✓ Checking Worktrees Registry... ")
 	if masterIssue := checkStaleWorktreesMaster(f.WorkingDir); masterIssue != nil {
@@ -1034,6 +1064,65 @@ func checkGitRepoHealth(workingDir string, fix bool) []DiagnosticIssue {
 		})
 	}
 	return issues
+}
+
+// checkDefaultBranchPreflight runs the network-free default-branch diagnostic
+// and maps hard-fail / warn results into DiagnosticIssue rows for ddx doctor.
+// Pass results produce no issues. Does not fetch (P9).
+func checkDefaultBranchPreflight(workingDir string) []DiagnosticIssue {
+	res := gitpkg.CheckDefaultBranchPreflight(workingDir)
+	if res.Pass() {
+		return nil
+	}
+	issueType := "default_branch_advisory"
+	if res.HardFail() {
+		issueType = "default_branch_hard_fail"
+	} else if res.Warn() {
+		issueType = "default_branch_advisory"
+	}
+	remediation := []string{res.Message}
+	switch res.Kind {
+	case gitpkg.DefaultBranchDetachedHEAD:
+		remediation = []string{
+			res.Message,
+			"git switch <default-branch>",
+		}
+	case gitpkg.DefaultBranchMismatch:
+		remediation = []string{
+			res.Message,
+			"git branch -u origin/" + res.DefaultBranch,
+			"or: git config branch." + res.CurrentBranch + ".merge refs/heads/" + res.DefaultBranch,
+		}
+	case gitpkg.DefaultBranchBehind:
+		remediation = []string{
+			res.Message,
+			"ddx sync",
+			"git pull --ff-only",
+		}
+	case gitpkg.DefaultBranchMissingOriginHEAD:
+		remediation = []string{
+			res.Message,
+			"git remote set-head origin -a",
+		}
+	case gitpkg.DefaultBranchMissingUpstream:
+		remediation = []string{
+			res.Message,
+			"git branch -u origin/" + res.DefaultBranch,
+		}
+	}
+	return []DiagnosticIssue{{
+		Type:        issueType,
+		Description: res.Message,
+		Remediation: remediation,
+		SystemInfo: map[string]string{
+			"kind":            string(res.Kind),
+			"current_branch":  res.CurrentBranch,
+			"upstream_branch": res.UpstreamBranch,
+			"default_branch":  res.DefaultBranch,
+			"upstream_ref":    res.UpstreamRef,
+			"origin_head_ref": res.OriginHEADRef,
+		},
+	}}
 }
 
 // packageJSONCheck holds the result of scanning one package.json location.
