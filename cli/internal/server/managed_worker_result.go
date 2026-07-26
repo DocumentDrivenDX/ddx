@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,36 @@ func normalizeManagedWorkerReason(v string) string {
 // the supervising WorkerManager agree on for a given project root + worker id.
 func managedWorkerResultDir(projectRoot, workerID string) string {
 	return filepath.Join(ddxroot.JoinProject(projectRoot, "workers"), workerID)
+}
+
+const managedWorkerSpecFileName = "spec.json"
+
+// LoadManagedWorkerSpec reads the persisted ExecuteLoopWorkerSpec for a
+// server-managed worker id from .ddx/workers/<workerID>/spec.json.
+// The parent server launches `ddx work --server-managed <id>` with only the
+// worker id (plus optional project root); the child must load execution
+// parameters from this file rather than reconstructing them from CLI defaults.
+func LoadManagedWorkerSpec(projectRoot, workerID string) (ExecuteLoopWorkerSpec, error) {
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" {
+		return ExecuteLoopWorkerSpec{}, fmt.Errorf("server-managed worker id is required")
+	}
+	path := filepath.Join(managedWorkerResultDir(projectRoot, workerID), managedWorkerSpecFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ExecuteLoopWorkerSpec{}, fmt.Errorf(
+				"no persisted ExecuteLoopWorkerSpec for server-managed worker %q at %s; start the worker via the server so it writes .ddx/workers/<id>/spec.json before launching the process",
+				workerID, path,
+			)
+		}
+		return ExecuteLoopWorkerSpec{}, fmt.Errorf("read persisted ExecuteLoopWorkerSpec for worker %q: %w", workerID, err)
+	}
+	var spec ExecuteLoopWorkerSpec
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return ExecuteLoopWorkerSpec{}, fmt.Errorf("parse persisted ExecuteLoopWorkerSpec for worker %q: %w", workerID, err)
+	}
+	return spec, nil
 }
 
 // WriteManagedWorkerResult writes res to <workers>/<workerID>/result.json. It

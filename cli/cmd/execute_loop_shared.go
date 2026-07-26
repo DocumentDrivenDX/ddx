@@ -199,8 +199,58 @@ func optionalFloat64Flag(cmd *cobra.Command, name string, defaultValue float64) 
 	return value
 }
 
-func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
+// serverManagedWorkerID returns the --server-managed worker id when set.
+func serverManagedWorkerID(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+	f := cmd.Flags().Lookup("server-managed")
+	if f == nil {
+		return ""
+	}
+	return strings.TrimSpace(f.Value.String())
+}
+
+// resolveExecuteLoopSpec builds the execute-loop spec for this command.
+// When --server-managed <worker-id> is set, the persisted ExecuteLoopWorkerSpec
+// under .ddx/workers/<id>/spec.json is the source of truth (not CLI defaults).
+func (f *CommandFactory) resolveExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (executeloop.ExecuteLoopSpec, executeloop.DispatchOptions, bool, error) {
+	if workerID := serverManagedWorkerID(cmd); workerID != "" {
+		projectFlag, _ := cmd.Flags().GetString("project")
+		projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+		loaded, err := serverpkg.LoadManagedWorkerSpec(projectRoot, workerID)
+		if err != nil {
+			return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, false, err
+		}
+		// Execution parameters come from the persisted record, not flag defaults.
+		loaded.OpaquePassthrough = treatPassthroughAsOpaque
+		if strings.TrimSpace(loaded.ProjectRoot) == "" {
+			loaded.ProjectRoot = projectRoot
+		}
+		loaded.ApplyDefaults()
+		if err := loaded.Validate(); err != nil {
+			return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, false, fmt.Errorf(
+				"invalid persisted ExecuteLoopWorkerSpec for server-managed worker %q: %w", workerID, err,
+			)
+		}
+		asJSON, _ := cmd.Flags().GetBool("json")
+		dispatchJSON := ""
+		if asJSON {
+			dispatchJSON = "true"
+		}
+		local, _ := cmd.Flags().GetBool("local")
+		return loaded, executeloop.DispatchOptions{Local: local, JSON: dispatchJSON}, loaded.MinPowerSet, nil
+	}
+
 	spec, dispatch, err := parseExecuteLoopSpec(cmd, treatPassthroughAsOpaque)
+	if err != nil {
+		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, false, err
+	}
+	return spec, dispatch, cmd.Flags().Changed("min-power"), nil
+}
+
+func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
+	spec, dispatch, explicitMinPower, err := f.resolveExecuteLoopSpec(cmd, treatPassthroughAsOpaque)
 	if err != nil {
 		return err
 	}
@@ -212,7 +262,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
 	}
-	explicitMinPower := cmd.Flags().Changed("min-power")
 	store := bead.NewStore(beadStoreRoot)
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {

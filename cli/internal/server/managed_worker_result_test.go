@@ -1,7 +1,10 @@
 package server
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +20,48 @@ func initInTreeProject(t *testing.T) string {
 		t.Fatalf("mkdir .ddx: %v", err)
 	}
 	return root
+}
+
+func TestLoadManagedWorkerSpec_RoundTripAndMissing(t *testing.T) {
+	root := initInTreeProject(t)
+	const workerID = "worker-load-spec"
+
+	_, err := LoadManagedWorkerSpec(root, workerID)
+	if err == nil {
+		t.Fatal("expected error for missing spec")
+	}
+	if !strings.Contains(err.Error(), "no persisted ExecuteLoopWorkerSpec") {
+		t.Fatalf("expected actionable missing-spec error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), workerID) {
+		t.Fatalf("error must name worker id, got: %v", err)
+	}
+
+	dir := managedWorkerResultDir(root, workerID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	want := ExecuteLoopWorkerSpec{
+		Mode:     "once",
+		Harness:  "disk-harness",
+		Model:    "disk-model",
+		MinPower: 5,
+	}
+	data, err := json.MarshalIndent(want, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, managedWorkerSpecFileName), append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	got, err := LoadManagedWorkerSpec(root, workerID)
+	if err != nil {
+		t.Fatalf("LoadManagedWorkerSpec: %v", err)
+	}
+	if got.Harness != want.Harness || got.Model != want.Model || got.MinPower != want.MinPower {
+		t.Fatalf("loaded spec mismatch: got %+v want harness/model/min_power from disk", got)
+	}
 }
 
 func TestManagedWorkerResult_RoundTripAndClassification(t *testing.T) {
