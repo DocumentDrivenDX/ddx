@@ -258,6 +258,11 @@ func (p *ExecutionResourcePreflight) checkRoots() ([]ExecutionResourceRootCheck,
 		} else if softNotes := p.softPressureNotes(check); len(softNotes) > 0 {
 			softHealthy = false
 			check.Notes = append(check.Notes, softNotes...)
+			// Soft inode pressure: collect bounded top-inode consumers before
+			// cleanup so operators can see which children are consuming inodes.
+			if p.inodeSoftPressure(check) {
+				applyTopInodeConsumerDiagnostics(&check)
+			}
 			for _, note := range softNotes {
 				softDetails = append(softDetails, fmt.Sprintf("resource preflight: %s: %s", root, note))
 			}
@@ -314,6 +319,7 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 		if probed.InodesFree > 0 && probed.InodesFree < p.hardMinFreeInodes() {
 			msg := fmt.Sprintf("free inodes %d < required %d", probed.InodesFree, p.hardMinFreeInodes())
 			check.Notes = append(check.Notes, msg)
+			applyTopInodeConsumerDiagnostics(&check)
 			return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 		}
 		return check, nil
@@ -334,9 +340,39 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 	if inodesFree > 0 && inodesFree < p.hardMinFreeInodes() {
 		msg := fmt.Sprintf("free inodes %d < required %d", inodesFree, p.hardMinFreeInodes())
 		check.Notes = append(check.Notes, msg)
+		applyTopInodeConsumerDiagnostics(&check)
 		return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 	}
 	return check, nil
+}
+
+// inodeSoftPressure reports whether free inodes are below the soft cleanup
+// threshold (InodesFree == 0 is treated as unavailable, not pressure).
+func (p *ExecutionResourcePreflight) inodeSoftPressure(check ExecutionResourceRootCheck) bool {
+	min := p.softMinFreeInodes()
+	return min > 0 && check.InodesFree > 0 && check.InodesFree < min
+}
+
+// applyTopInodeConsumerDiagnostics attaches a bounded ranking of immediate
+// children by entry count to check. Best-effort: scan errors become notes and
+// do not replace the original resource-pressure failure. Does not delete or
+// open file contents for reading.
+func applyTopInodeConsumerDiagnostics(check *ExecutionResourceRootCheck) {
+	if check == nil || strings.TrimSpace(check.Path) == "" {
+		return
+	}
+	consumers, truncated, err := scanTopInodeConsumers(
+		check.Path,
+		defaultTopInodeConsumerLimit,
+		defaultTopInodeEntriesPerChild,
+		time.Now(),
+	)
+	if err != nil {
+		check.Notes = append(check.Notes, "top inode consumers: "+err.Error())
+		return
+	}
+	check.TopInodeConsumers = consumers
+	check.TopInodeConsumersTruncated = truncated
 }
 
 func (p *ExecutionResourcePreflight) softPressureNotes(check ExecutionResourceRootCheck) []string {
