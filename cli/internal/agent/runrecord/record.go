@@ -99,6 +99,16 @@ type FizeauPublicResult struct {
 	FinalExitCode *int `json:"final_exit_code,omitempty"`
 	// DurationMS is the public final duration when reported.
 	DurationMS *int64 `json:"duration_ms,omitempty"`
+	// CostUSD is the public final cost when reported (nil = unknown).
+	CostUSD *float64 `json:"cost_usd,omitempty"`
+	// InputTokens is the public final input token count when reported.
+	InputTokens *int `json:"input_tokens,omitempty"`
+	// OutputTokens is the public final output token count when reported.
+	OutputTokens *int `json:"output_tokens,omitempty"`
+	// TotalTokens is the public final total token count when reported.
+	TotalTokens *int `json:"total_tokens,omitempty"`
+	// CachedTokens is the public final cache-read token count when reported.
+	CachedTokens *int `json:"cached_tokens,omitempty"`
 }
 
 // EvidenceLink points at an evidence artifact. Path is relative to the run
