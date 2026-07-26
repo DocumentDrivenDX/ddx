@@ -17,6 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -613,6 +614,14 @@ func seedAttemptCloneUserConfig(ctx context.Context, projectRoot, clonePath stri
 	}
 	_ = internalgit.Command(ctx, clonePath, "config", "user.name", userName).Run()
 	_ = internalgit.Command(ctx, clonePath, "config", "user.email", userEmail).Run()
+	// Publish the originating project root so SharedTrackerLockPath(clonePath)
+	// resolves to the same lock domain as SharedTrackerLockPath(projectRoot).
+	// Without this, a local-clone checkout is its own git repo and would hold
+	// a private .ddx/.git-tracker.lock, splitting the main-git lock domain
+	// from worktree attempts and from the project (ddx-39e78654).
+	if abs, err := filepath.Abs(projectRoot); err == nil && abs != "" {
+		_ = internalgit.Command(ctx, clonePath, "config", lockmetrics.SharedMainGitLockRootConfigKey, abs).Run()
+	}
 }
 
 func configureAttemptCloneTransientExcludes(clonePath string) {

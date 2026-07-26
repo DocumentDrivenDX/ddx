@@ -1512,6 +1512,13 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 			// saw. No merge commit is created.
 			if prep.currentTip == req.BaseRev {
 				if err := gitOps.UpdateRefTo(wd, prep.targetRef, req.ResultRev, prep.currentTip); err != nil {
+					// Compare-and-swap loss is the same recoverable condition as
+					// lockedTip != prep.currentTip above: a sibling (or other
+					// mutator) advanced the target tip. Retry the land loop.
+					if isUpdateRefCASLoss(err) {
+						retry = true
+						return nil
+					}
 					return fmt.Errorf("fast-forwarding %s to %s: %w", prep.targetRef, req.ResultRev, err)
 				}
 				result = &LandResult{
@@ -1570,6 +1577,13 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 				return fmt.Errorf("reading merge HEAD: %w", err)
 			}
 			if err := gitOps.UpdateRefTo(wd, prep.targetRef, mergeSHA, lockedTip); err != nil {
+				// Post-merge CAS loss: tip moved between lockedTip resolve and
+				// update-ref. Mirror the pre-merge lockedTip != prep.currentTip
+				// path — release the lock and retry the land loop (ddx-39e78654).
+				if isUpdateRefCASLoss(err) {
+					retry = true
+					return nil
+				}
 				return fmt.Errorf("fast-forwarding %s to merge commit %s: %w", prep.targetRef, mergeSHA, err)
 			}
 			result = &LandResult{
@@ -1938,6 +1952,21 @@ func LandConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (stri
 	}
 	syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, dirtyBefore, nil)
 	return mergeSHA, nil
+}
+
+// isUpdateRefCASLoss reports whether err is a git update-ref compare-and-swap
+// failure of the form "cannot lock ref '...': is at X but expected Y". That
+// condition is recoverable inside the land loop: a sibling (or other mutator)
+// advanced the target tip, so the land should re-prepare and retry rather
+// than hard-fail as land_retry to a single-shot caller like `ddx try`.
+func isUpdateRefCASLoss(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "cannot lock ref") &&
+		strings.Contains(lower, " is at ") &&
+		strings.Contains(lower, " but expected ")
 }
 
 // shortAttempt returns a 10-char slug derived from attemptID for use in temp

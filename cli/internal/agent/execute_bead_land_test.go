@@ -777,6 +777,133 @@ func TestLand_MergeRequired(t *testing.T) {
 	}
 }
 
+// postMergeCASLossGitOps injects a single compare-and-swap loss on the first
+// target-branch UpdateRefTo (the post-merge / fast-forward CAS), advancing the
+// tip to racerSHA so the land loop must re-prepare and retry.
+type postMergeCASLossGitOps struct {
+	real              RealLandingGitOps
+	racerSHA          string
+	mu                sync.Mutex
+	injected          bool
+	targetCASAttempts int
+}
+
+var _ LandingGitOps = (*postMergeCASLossGitOps)(nil)
+
+func (g *postMergeCASLossGitOps) CurrentBranch(dir string) (string, error) {
+	return g.real.CurrentBranch(dir)
+}
+func (g *postMergeCASLossGitOps) ResolveRef(dir, ref string) (string, error) {
+	return g.real.ResolveRef(dir, ref)
+}
+func (g *postMergeCASLossGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
+	if strings.HasPrefix(ref, "refs/heads/") && oldSHA != "" {
+		g.mu.Lock()
+		g.targetCASAttempts++
+		inject := !g.injected && g.racerSHA != ""
+		if inject {
+			g.injected = true
+		}
+		g.mu.Unlock()
+		if inject {
+			// Move the target tip under the lander's feet, then report the CAS
+			// loss git would surface for expected=oldSHA.
+			if err := g.real.UpdateRefTo(dir, ref, g.racerSHA, ""); err != nil {
+				return err
+			}
+			return fmt.Errorf("git update-ref %s: fatal: cannot lock ref '%s': is at %s but expected %s: exit status 128",
+				ref, ref, g.racerSHA, oldSHA)
+		}
+	}
+	return g.real.UpdateRefTo(dir, ref, sha, oldSHA)
+}
+func (g *postMergeCASLossGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	return g.real.SyncWorkTreeToHead(dir, fromRev)
+}
+func (g *postMergeCASLossGitOps) AddWorktree(dir, path, rev string) error {
+	return g.real.AddWorktree(dir, path, rev)
+}
+func (g *postMergeCASLossGitOps) AddBranchWorktree(dir, path, branch string) error {
+	return g.real.AddBranchWorktree(dir, path, branch)
+}
+func (g *postMergeCASLossGitOps) RemoveWorktree(dir, path string) error {
+	return g.real.RemoveWorktree(dir, path)
+}
+func (g *postMergeCASLossGitOps) MergeInto(wtDir, srcRev, msg string) error {
+	return g.real.MergeInto(wtDir, srcRev, msg)
+}
+func (g *postMergeCASLossGitOps) HeadRevAt(dir string) (string, error) {
+	return g.real.HeadRevAt(dir)
+}
+func (g *postMergeCASLossGitOps) CountCommits(dir, base, tip string) int {
+	return g.real.CountCommits(dir, base, tip)
+}
+func (g *postMergeCASLossGitOps) VerifyCandidateHistory(dir, base, tip string) error {
+	return g.real.VerifyCandidateHistory(dir, base, tip)
+}
+func (g *postMergeCASLossGitOps) DiffNumstat(dir, base, tip string) (string, error) {
+	return g.real.DiffNumstat(dir, base, tip)
+}
+func (g *postMergeCASLossGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
+	return g.real.DiffNameOnly(dir, base, tip)
+}
+
+// TestLand_RetriesOnPostMergeCASLoss simulates refs/heads/main advancing between
+// lock acquisition / merge and the post-merge update-ref CAS. The land loop
+// must retry and eventually succeed (status landed) instead of hard-failing
+// with an error that becomes land_retry for single-shot callers (ddx-39e78654).
+func TestLand_RetriesOnPostMergeCASLoss(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature-content\n", "feat: worker")
+	siblingSHA := r.commitOn(r.baseSHA, "sibling.txt", "sibling-content\n", "feat: sibling")
+	// Racer advances main after the lander has resolved lockedTip=siblingSHA
+	// but before its post-merge CAS lands — injected by postMergeCASLossGitOps.
+	racerSHA := r.commitOn(siblingSHA, "racer.txt", "racer-content\n", "feat: racer")
+	r.runGit("update-ref", "refs/heads/main", siblingSHA)
+	r.syncWorkTreeFrom(r.baseSHA)
+
+	ops := &postMergeCASLossGitOps{real: RealLandingGitOps{}, racerSHA: racerSHA}
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-cas-retry",
+		AttemptID:    "20260726T000001-cas",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed after CAS retry, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if !land.Merged {
+		t.Errorf("expected Merged=true (merge path with sibling tip), got false")
+	}
+	ops.mu.Lock()
+	attempts := ops.targetCASAttempts
+	ops.mu.Unlock()
+	if attempts < 2 {
+		t.Fatalf("expected at least 2 target-branch CAS attempts (one loss + one success), got %d", attempts)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != land.NewTip {
+		t.Errorf("main tip = %s, want landed NewTip %s", got, land.NewTip)
+	}
+	if !r.shaReachable("refs/heads/main", workerSHA) {
+		t.Errorf("worker commit %s not reachable from main after CAS retry land", workerSHA)
+	}
+	if !r.shaReachable("refs/heads/main", racerSHA) {
+		t.Errorf("racer commit %s not reachable from main after CAS retry land", racerSHA)
+	}
+	// Replay fidelity: worker commit parent remains BaseRev.
+	workerParents := r.commitParents(workerSHA)
+	if len(workerParents) != 1 || workerParents[0] != r.baseSHA {
+		t.Errorf("worker commit parent = %v, want [%s]", workerParents, r.baseSHA)
+	}
+}
+
 // TestLand_MergeConflict verifies that a merge conflict is handled cleanly:
 // the target branch is untouched, the original ResultRev is preserved under
 // refs/ddx/iterations/, and no stale worktree is left behind.

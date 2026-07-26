@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -218,17 +219,75 @@ func CapConfigFor(lockName string) CapConfig {
 	return resolveCapConfig(lockName)
 }
 
+// SharedMainGitLockRootConfigKey is the local git config key that isolated
+// attempt clones publish so SharedTrackerLockPath resolves to the project
+// root's lock domain rather than the clone's private .ddx directory.
+// Written by LocalCloneAttemptBackend.Prepare (ddx-39e78654).
+const SharedMainGitLockRootConfigKey = "ddx.sharedMainGitLockRoot"
+
+// executeBeadClonePathSegment is the directory-name prefix used by
+// LocalCloneAttemptBackend isolate dirs (agent.ExecuteBeadClonePrefix). Duplicated
+// here so lockmetrics does not import agent.
+const executeBeadClonePathSegment = ".execute-bead-clone-"
+
 // SharedMainGitLockRoot resolves the DDx state root that should own the
 // process-shared main-git lock. Linked worktrees converge on the primary
-// workspace when one is available; otherwise the caller falls back to the
-// standard project-scoped DDx path.
+// workspace when one is available. Local-clone attempt backends publish
+// SharedMainGitLockRootConfigKey so their private clone checkouts share the
+// same project lock domain. Otherwise the caller falls back to the standard
+// project-scoped DDx path.
 func SharedMainGitLockRoot(projectRoot string) string {
+	// Only shell out to git config for isolated local-clone attempt paths.
+	// Ordinary project roots and linked worktrees must not pay a git-config
+	// round-trip on every withMainGitLock (ddx-39e78654).
+	if looksLikeExecuteBeadClonePath(projectRoot) {
+		if root := sharedMainGitLockRootFromConfig(projectRoot); root != "" {
+			return root
+		}
+	}
 	if workspace := gitpkg.FindNearestDDxWorkspace(projectRoot); workspace != "" {
 		if info, err := os.Stat(filepath.Join(workspace, ddxroot.DirName)); err == nil && info.IsDir() {
 			return workspace
 		}
 	}
 	return ddxroot.Path(context.Background(), projectRoot)
+}
+
+// looksLikeExecuteBeadClonePath reports whether p is under or is an
+// execute-bead local-clone isolate directory.
+func looksLikeExecuteBeadClonePath(p string) bool {
+	if p == "" {
+		return false
+	}
+	return strings.Contains(filepath.ToSlash(p), executeBeadClonePathSegment)
+}
+
+// sharedMainGitLockRootFromConfig reads ddx.sharedMainGitLockRoot from the
+// local git config of projectRoot (or its containing repo). Empty when unset
+// or unreadable. Used by local-clone attempt checkouts to point lock
+// acquisition at the originating project rather than the clone itself.
+func sharedMainGitLockRootFromConfig(projectRoot string) string {
+	if strings.TrimSpace(projectRoot) == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := gitpkg.Command(ctx, projectRoot, "config", "--local", "--get", SharedMainGitLockRootConfigKey).Output()
+	if err != nil {
+		return ""
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return ""
+	}
+	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		return ""
+	}
+	return abs
 }
 
 // SharedTrackerLockPath resolves the process-shared tracker lock used by

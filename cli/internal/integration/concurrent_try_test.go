@@ -276,21 +276,19 @@ func TestIntegration_ConcurrentTryDistinctBeads_LocalClone(t *testing.T) {
 	}
 	wg.Wait()
 
-	// All 4 subprocesses must have exited (code 0=success, 1=preserved, 2=other).
-	// We accept both 0 and 1 because a concurrent land race can preserve a
-	// result (another worker on a shared fixture may have advanced the branch).
-	//
-	// The same shared-branch contention also surfaces as the retryable
-	// land_retry status: the `git update-ref` compare-and-swap on the target
-	// branch loses to a sibling worker that advanced it mid-merge. `ddx try` is
-	// single-shot, so it reports that with exit code 2 even though the work is
-	// preserved on a refs/ddx/iterations/... ref and the bead stays claimable.
-	// That belongs with codes 0 and 1, not with genuine execution failures;
-	// race-detector overhead makes contention heavy enough to hit it regularly.
-	// Every other exit-code-2 failure is still an error.
+	// All 4 subprocesses must have exited successfully (0) or with a preserved
+	// result (1). Concurrent land races on a shared fixture can still preserve
+	// when merge content conflicts, but post-merge update-ref CAS losses are
+	// retried inside the land loop (ddx-39e78654) and must no longer surface
+	// as land_retry / exit 2.
 	for i, r := range results {
-		if r.code == 2 && !isLandCoordinationRetryOutput(r.output) {
-			t.Errorf("worker %d (bead %s) exited with code 2 (unexpected failure):\n%s", i, r.beadID, r.output)
+		if r.code != 0 && r.code != 1 {
+			t.Errorf("worker %d (bead %s) exited with code %d (want 0=success or 1=preserved):\n%s",
+				i, r.beadID, r.code, r.output)
+		}
+		if isLandCoordinationRetryOutput(r.output) {
+			t.Errorf("worker %d (bead %s) reported land_retry; land loop should have retried CAS loss:\n%s",
+				i, r.beadID, r.output)
 		}
 	}
 

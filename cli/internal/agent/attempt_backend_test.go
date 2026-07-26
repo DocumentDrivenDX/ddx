@@ -10,9 +10,50 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
+
+// TestSharedTrackerLockPathIsBackendIndependent asserts that
+// lockmetrics.SharedTrackerLockPath resolves to the same lock directory for
+// worktree and local-clone attempt backends on one project root — including
+// when resolved from each backend's WorkDir (ddx-39e78654).
+func TestSharedTrackerLockPathIsBackendIndependent(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+
+	ctx := context.Background()
+	wt, err := (WorktreeAttemptBackend{}).Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-lock-wt",
+		AttemptID:   "20260726T000001-wt",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, wt)
+	t.Cleanup(func() { _ = (WorktreeAttemptBackend{}).Cleanup(ctx, wt) })
+
+	cl, err := (LocalCloneAttemptBackend{}).Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-lock-cl",
+		AttemptID:   "20260726T000001-cl",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, cl)
+	t.Cleanup(func() { _ = (LocalCloneAttemptBackend{}).Cleanup(ctx, cl) })
+
+	want := lockmetrics.SharedTrackerLockPath(projectRoot)
+	require.Equal(t, want, lockmetrics.SharedTrackerLockPath(wt.ProjectRoot),
+		"worktree ProjectRoot lock path")
+	require.Equal(t, want, lockmetrics.SharedTrackerLockPath(cl.ProjectRoot),
+		"local-clone ProjectRoot lock path")
+	require.Equal(t, want, lockmetrics.SharedTrackerLockPath(wt.WorkDir),
+		"worktree WorkDir must share project lock domain")
+	require.Equal(t, want, lockmetrics.SharedTrackerLockPath(cl.WorkDir),
+		"local-clone WorkDir must share project lock domain")
+}
 
 func TestResolveAttemptBackendDefaultsToLocalClone(t *testing.T) {
 	rcfg := (&config.Config{Version: "1.0", Agent: &config.AgentConfig{}}).Resolve(config.CLIOverrides{})
