@@ -47,6 +47,9 @@ func keepRunRecordReachability() {
 		StartedAt: now,
 		UpdatedAt: now,
 	}
+	// PublishInitial roots the pre-route initial writer (and its phase-only
+	// validation) in the production graph ahead of execute-bead dispatch wiring.
+	_ = PublishInitial(root, rec)
 	_ = Publish(root, rec)
 	_, _ = Read(root, runID)
 }
