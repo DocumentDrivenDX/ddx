@@ -97,7 +97,7 @@ func BuildEscalationSummary(attempts []PowerAttemptRecord, winningPowerClass str
 
 // BeadEventAppender records append-only evidence events on a bead. Mirrors
 // agent.BeadEventAppender so escalation can append events without importing
-// agent. *bead.Store satisfies both interfaces.
+// agent. bead.Backend (and any other AppendEvent implementor) satisfies it.
 type BeadEventAppender interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 }

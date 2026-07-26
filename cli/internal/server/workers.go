@@ -1498,7 +1498,7 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	// only then "protected" by the claim check (incident: managed-worker
 	// mid-attempt stop).
 	canReleaseClaim := true
-	var store *bead.Store
+	var store workerClaimStore
 	if beadID != "" {
 		store = bead.NewStore(ddxroot.JoinProject(projectRoot))
 		canReleaseClaim = staleDiskEntryCanReleaseClaim(store, beadID)
@@ -1661,10 +1661,18 @@ func (m *WorkerManager) UnjamStaleClaims(ctx context.Context) (WorkerClaimCleanu
 	return report, nil
 }
 
+// workerClaimStore is the narrow store surface used by stale-disk claim
+// reclaim. Construction stays bead.NewStore; callers depend on this interface
+// rather than *bead.Store (TD-027 §21).
+type workerClaimStore interface {
+	bead.Backend
+	ClaimLease(id string) (bead.ClaimLeaseRecord, bool, error)
+}
+
 // staleDiskEntryCanReleaseClaim reports whether stopStaleDiskEntry may safely
 // release the bead claim for beadID. Fresh leases are preserved; when the
 // heartbeat sidecar is absent or stale, the stale record cleanup can reclaim.
-func staleDiskEntryCanReleaseClaim(store *bead.Store, beadID string) bool {
+func staleDiskEntryCanReleaseClaim(store workerClaimStore, beadID string) bool {
 	lease, found, err := store.ClaimLease(beadID)
 	if err != nil {
 		return false

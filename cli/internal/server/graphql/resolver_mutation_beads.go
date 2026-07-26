@@ -9,9 +9,9 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
-// beadStore returns a bead.Store rooted at the per-request working directory
+// beadStore returns a projectStore rooted at the per-request working directory
 // (from ctx via WithWorkingDir, falling back to r.WorkingDir).
-func (r *mutationResolver) beadStore(ctx context.Context) *bead.Store {
+func (r *mutationResolver) beadStore(ctx context.Context) projectStore {
 	return projectBeadStore(r.workingDir(ctx))
 }
 

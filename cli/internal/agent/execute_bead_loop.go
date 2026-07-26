@@ -5908,10 +5908,11 @@ func oneLineGateSummary(detail string) string {
 
 // stampPreservedReviewBlockMarkers records durable Bead.Extra block markers
 // through the store API when the large-deletion safety gate preserves an
-// attempt for review. Deterministic ready-queue eligibility (bead.Store)
-// reads these markers to exclude the bead from worker readiness until an
-// operator stamps a matching preserved-review-unblocked-at/-attempt pair via
-// `ddx bead update --set` (ddx-ec1c1f89).
+// attempt for review. Deterministic ready-queue eligibility (ReadyExecution
+// on ExecuteBeadLoopStore / bead.Backend implementors) reads these markers to
+// exclude the bead from worker readiness until an operator stamps a matching
+// preserved-review-unblocked-at/-attempt pair via `ddx bead update --set`
+// (ddx-ec1c1f89).
 func stampPreservedReviewBlockMarkers(ctx context.Context, store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, at time.Time) error {
 	fingerprint := hashText(oneLineGateSummary(report.Detail))
 	return store.Update(ctx, beadID, func(b *bead.Bead) {

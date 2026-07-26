@@ -115,7 +115,10 @@ type projectCoordinationRegistry struct {
 type projectCoordination struct {
 	root  string
 	coord *coordination.LocalCoordinator
-	store *bead.Store
+	// store is the per-project bead backend (constructed via bead.NewStore).
+	// Typed as bead.Backend so coordination does not depend on *bead.Store
+	// (TD-027 §21).
+	store bead.Backend
 	mu    sync.Mutex
 	byKey map[string]coordinationOutcomeRecord
 }

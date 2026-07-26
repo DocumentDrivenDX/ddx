@@ -11,9 +11,9 @@ import (
 )
 
 // ClaimBackend is the bead-store surface the local claim path requires.
-// Production LocalCoordinator must be wired to a real *bead.Store (or another
-// Backend that invokes the same claim primitive). Call-recording fakes are not
-// a substitute for the contention contract test.
+// Production LocalCoordinator must be wired to a real bead.Backend implementor
+// (or another backend that invokes the same claim primitive). Call-recording
+// fakes are not a substitute for the contention contract test.
 //
 // SetLifecycleStatus is required so tracker-transition mutations share the
 // same production store path as claim (ddx-0ce3c378).
