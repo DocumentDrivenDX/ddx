@@ -11,6 +11,22 @@ import (
 	"time"
 )
 
+// withPublishTestHooks installs h for Publish until the returned cleanup runs.
+// Test-only: lives in *_test.go so deadcode does not treat it as production
+// dead. Tests must call cleanup when finished and must not install hooks from
+// concurrent t.Parallel cases.
+func withPublishTestHooks(h *publishHooks) (cleanup func()) {
+	publishTestHooksMu.Lock()
+	prev := publishTestHooks
+	publishTestHooks = h
+	publishTestHooksMu.Unlock()
+	return func() {
+		publishTestHooksMu.Lock()
+		publishTestHooks = prev
+		publishTestHooksMu.Unlock()
+	}
+}
+
 // TestRunRecordUpdateAtomicitySurvivesKill injects interruption during running
 // and terminal record updates and observes either the prior complete record or
 // the next complete record — never partial JSON. It also proves those phase
