@@ -1088,10 +1088,18 @@ func checkDefaultBranchPreflight(workingDir string) []DiagnosticIssue {
 			"git switch <default-branch>",
 		}
 	case gitpkg.DefaultBranchMismatch:
+		// Tell operators how to return to the default branch, retarget
+		// upstream tracking, or deliberately drain a feature branch.
+		switchHint := "git switch " + res.DefaultBranch
+		if res.DefaultBranch == "" {
+			switchHint = "git switch <default-branch>"
+		}
 		remediation = []string{
 			res.Message,
-			"git branch -u origin/" + res.DefaultBranch,
+			switchHint + "  # switch to the default branch",
+			"git branch -u origin/" + res.DefaultBranch + "  # update upstream tracking",
 			"or: git config branch." + res.CurrentBranch + ".merge refs/heads/" + res.DefaultBranch,
+			"or: ddx work --allow-non-default-branch / ddx try --allow-non-default-branch for deliberate feature-branch drains",
 		}
 	case gitpkg.DefaultBranchBehind:
 		remediation = []string{
