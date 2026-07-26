@@ -619,14 +619,28 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	if m.managedLaunch {
 		managedRecord, err := m.launchManagedExecuteLoop(id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
 		if err != nil {
+			// Persist a terminal failed record so operators see an actionable
+			// status instead of a still-running worker with PID/PGID zero.
+			// Do not leave the pre-launch "running" snapshot as the live truth.
+			now := time.Now().UTC()
 			m.mu.Lock()
+			failed := handle.record
+			failed.State = "failed"
+			failed.Status = "failed"
+			failed.Error = err.Error()
+			failed.LastError = err.Error()
+			failed.FinishedAt = now
+			failed.PID = 0
+			failed.PGID = 0
+			failed.Substate = ""
 			delete(m.workers, id)
 			m.mu.Unlock()
+			_ = m.writeRecord(dir, failed)
+			cancel()
 			_ = logFile.Close()
 			if eventsFile != nil {
 				_ = eventsFile.Close()
 			}
-			_ = os.RemoveAll(dir)
 			return WorkerRecord{}, err
 		}
 		return managedRecord, nil
