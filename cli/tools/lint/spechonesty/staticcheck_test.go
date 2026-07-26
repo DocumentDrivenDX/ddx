@@ -3,7 +3,6 @@ package spechonesty
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -101,11 +100,17 @@ func TestCompleteVerificationRejectsMissingStaticChecks(t *testing.T) {
 
 func TestCompleteVerificationStaticCheckRegistryIsDeterministic(t *testing.T) {
 	wantNames := []string{"static-delete", "static-list", "lockreentry", "spechonesty"}
-	if got := DefaultStaticCheckModel().Names(); !reflect.DeepEqual(got, wantNames) {
-		t.Fatalf("DefaultStaticCheckModel().Names() = %#v, want %#v", got, wantNames)
+	model := DefaultStaticCheckModel()
+	if len(model.Checks) != len(wantNames) {
+		t.Fatalf("DefaultStaticCheckModel().Checks length = %d, want %d", len(model.Checks), len(wantNames))
+	}
+	for i, want := range wantNames {
+		if got := model.Checks[i].Name; got != want {
+			t.Fatalf("DefaultStaticCheckModel().Checks[%d].Name = %q, want %q", i, got, want)
+		}
 	}
 
-	model := StaticCheckModel{
+	model = StaticCheckModel{
 		Checks: []StaticCheckDefinition{
 			{Name: "static-delete", Analyzer: "deletecheck", Command: "go run ./tools/lint/deletecheck"},
 		},

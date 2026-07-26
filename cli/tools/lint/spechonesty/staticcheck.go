@@ -72,18 +72,6 @@ func (m StaticCheckModel) Has(name string) bool {
 	return false
 }
 
-// Names returns the registered check names in deterministic order.
-func (m StaticCheckModel) Names() []string {
-	if len(m.Checks) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(m.Checks))
-	for _, check := range m.Checks {
-		out = append(out, check.Name)
-	}
-	return out
-}
-
 // StaticCheckInput is the document-level input for the static-check
 // resolver.
 type StaticCheckInput struct {
