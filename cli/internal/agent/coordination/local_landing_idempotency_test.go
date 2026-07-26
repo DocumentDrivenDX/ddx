@@ -83,6 +83,7 @@ func TestCoordinationContract_LocalLandingIdempotency(t *testing.T) {
 	assert.Equal(t, resultSHA, first.NewTip, "fast-forward tip should be worker result")
 	assert.Equal(t, landKey, first.IdempotencyKey)
 	assert.False(t, first.Merged, "same-base land should fast-forward")
+	assert.Empty(t, first.Reason, "clean land must not synthesize a reason")
 
 	// Durable git truth after applied land.
 	mainTip := strings.TrimSpace(runGitOutput(t, projectRoot, "rev-parse", "refs/heads/main"))
@@ -113,6 +114,7 @@ func TestCoordinationContract_LocalLandingIdempotency(t *testing.T) {
 		"already_applied echoes the prior NewTip")
 	assert.Equal(t, beadID, replay.BeadID)
 	assert.Equal(t, landKey, replay.IdempotencyKey)
+	assert.Empty(t, replay.Reason, "already_applied replay must not synthesize a reason")
 
 	// Git tip unchanged after idempotent replay.
 	mainTipAfter := strings.TrimSpace(runGitOutput(t, projectRoot, "rev-parse", "refs/heads/main"))
