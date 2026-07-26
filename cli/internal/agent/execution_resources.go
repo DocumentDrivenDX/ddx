@@ -280,16 +280,26 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		check.Notes = append(check.Notes, "mkdir: "+err.Error())
+		// ENOSPC/no-space mkdir failures: best-effort scan when the path is
+		// still listable; scanner errors become notes and never mask mkdir.
+		if isNoSpaceError(err) {
+			applyTopInodeConsumerDiagnostics(&check)
+		}
 		return check, fmt.Errorf("resource preflight: %s: mkdir: %w", root, err)
 	}
 
-	writable, writableReason, fdExhausted := probeWritableRoot(root)
+	writable, writableReason, fdExhausted, noSpace := probeWritableRoot(root)
 	check.Writable = writable
 	check.WritableReason = writableReason
 	if !writable {
 		check.Notes = append(check.Notes, writableReason)
 		if fdExhausted {
 			applyFDDiagnostics(&check)
+		}
+		// Attach bounded top-inode consumers on ENOSPC/temp-creation failures
+		// so operators see which children are filling the failing root.
+		if noSpace {
+			applyTopInodeConsumerDiagnostics(&check)
 		}
 		return check, fmt.Errorf("resource preflight: %s: %s", root, writableReason)
 	}
@@ -298,6 +308,9 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 		probed, err := p.RootProbe(root)
 		if err != nil {
 			check.Notes = append(check.Notes, err.Error())
+			if isNoSpaceError(err) || isNoSpaceReason(err.Error()) {
+				applyTopInodeConsumerDiagnostics(&check)
+			}
 			return check, err
 		}
 		check.BytesFree = probed.BytesFree
@@ -309,6 +322,9 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 				msg = "root probe reported unwritable"
 			}
 			check.Notes = append(check.Notes, msg)
+			if isNoSpaceReason(msg) {
+				applyTopInodeConsumerDiagnostics(&check)
+			}
 			return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 		}
 		if probed.BytesFree > 0 && probed.BytesFree < p.hardMinFreeBytes() {
@@ -419,29 +435,52 @@ func (p *ExecutionResourcePreflight) hardMinFreeInodes() uint64 {
 // actually exhausting the test process's file descriptors.
 var createWritabilityProbeFile = os.CreateTemp
 
-// probeWritableRoot reports whether root is writable. The third return value
-// is set when the failure is fd exhaustion (EMFILE/ENFILE) rather than an
+// probeWritableRoot reports whether root is writable.
+// fdExhausted is set when the failure is EMFILE/ENFILE rather than an
 // ordinary permission- or filesystem-level unwritable root.
-func probeWritableRoot(root string) (bool, string, bool) {
+// noSpace is set when the failure is ENOSPC / "no space left on device"
+// (including temp-file creation failures that surface that way).
+func probeWritableRoot(root string) (writable bool, reason string, fdExhausted, noSpace bool) {
 	f, err := createWritabilityProbeFile(root, ".ddx-resource-preflight-*")
 	if err != nil {
-		return false, "writability check failed: " + err.Error(), isFDExhaustionError(err)
+		return false, "writability check failed: " + err.Error(), isFDExhaustionError(err), isNoSpaceError(err)
 	}
 	name := f.Name()
 	if closeErr := f.Close(); closeErr != nil {
 		_ = os.Remove(name)
-		return false, "writability check close failed: " + closeErr.Error(), isFDExhaustionError(closeErr)
+		return false, "writability check close failed: " + closeErr.Error(), isFDExhaustionError(closeErr), isNoSpaceError(closeErr)
 	}
 	if removeErr := os.Remove(name); removeErr != nil {
-		return false, "writability check remove failed: " + removeErr.Error(), false
+		return false, "writability check remove failed: " + removeErr.Error(), false, isNoSpaceError(removeErr)
 	}
-	return true, "", false
+	return true, "", false, false
 }
 
 // isFDExhaustionError reports whether err is caused by the process or host
 // hitting its open-file-descriptor limit.
 func isFDExhaustionError(err error) bool {
 	return errors.Is(err, unix.EMFILE) || errors.Is(err, unix.ENFILE)
+}
+
+// isNoSpaceError reports whether err is ENOSPC / no-space-left-on-device.
+func isNoSpaceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, unix.ENOSPC) {
+		return true
+	}
+	return isNoSpaceReason(err.Error())
+}
+
+// isNoSpaceReason reports whether a free-form reason/message indicates ENOSPC.
+func isNoSpaceReason(reason string) bool {
+	r := strings.ToLower(strings.TrimSpace(reason))
+	if r == "" {
+		return false
+	}
+	return strings.Contains(r, "no space left on device") ||
+		strings.Contains(r, "enospc")
 }
 
 // applyFDDiagnostics attaches fd-exhaustion diagnostics (open fd count,
@@ -463,12 +502,15 @@ func applyFDDiagnostics(check *ExecutionResourceRootCheck) {
 
 func probeExecutionRoot(root string) (ExecutionResourceRootCheck, error) {
 	check := ExecutionResourceRootCheck{Path: root}
-	writable, writableReason, fdExhausted := probeWritableRoot(root)
+	writable, writableReason, fdExhausted, noSpace := probeWritableRoot(root)
 	check.Writable = writable
 	check.WritableReason = writableReason
 	if !writable {
 		if fdExhausted {
 			applyFDDiagnostics(&check)
+		}
+		if noSpace {
+			applyTopInodeConsumerDiagnostics(&check)
 		}
 		return check, fmt.Errorf("resource preflight: %s: %s", root, writableReason)
 	}
