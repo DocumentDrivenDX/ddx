@@ -241,7 +241,8 @@ type routingFacts struct {
 // missing or unreadable bead store yields an empty map, never an error, since
 // the loader still has authoritative data on each result.
 func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
-	store := bead.NewStore(ddxroot.JoinProject(workingDir))
+	// Construct via factory but depend only on BeadReader (TD-027 §21).
+	var store bead.BeadReader = bead.NewStore(ddxroot.JoinProject(workingDir))
 	beads, err := store.ReadAll(context.Background())
 	if err != nil {
 		// Return an empty map so missing bead store does not abort

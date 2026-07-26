@@ -695,7 +695,14 @@ func writeServerManagedResult(cmd *cobra.Command, projectRoot string, result *ag
 	})
 }
 
-func (f *CommandFactory) buildAttemptAuditFinalizers(projectRoot string, store *bead.Store) (func(agent.ExecuteBeadReport) error, func() error) {
+// attemptAuditBeadReader is the narrowest store contract durable-audit
+// finalization needs (bead Get for metrics enrichment). *bead.Store and any
+// bead.BeadReader satisfy it.
+type attemptAuditBeadReader interface {
+	Get(ctx context.Context, id string) (*bead.Bead, error)
+}
+
+func (f *CommandFactory) buildAttemptAuditFinalizers(projectRoot string, store attemptAuditBeadReader) (func(agent.ExecuteBeadReport) error, func() error) {
 	if f.durableAuditFinalizeOverride != nil {
 		return f.durableAuditFinalizeOverride, nil
 	}

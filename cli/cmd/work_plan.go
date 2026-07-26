@@ -79,9 +79,9 @@ func (f *CommandFactory) runWorkPlan(cmd *cobra.Command, _ []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	// Use beadStore() so that linked-worktree invocations resolve to the
-	// primary worktree's canonical store (same path as bead show/list/export).
-	store := f.beadStoreConcrete()
+	// Use beadStoreConcrete for PreviewQueueStore (ReadyExecution is not on
+	// bead.Backend yet) but hold it only as the narrow queue interface.
+	var store agent.PreviewQueueStore = f.beadStoreConcrete()
 
 	filters := agent.PickerFilters{
 		LabelFilter:  labelFilter,

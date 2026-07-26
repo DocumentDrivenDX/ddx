@@ -91,7 +91,9 @@ Examples:
   ddx bead validate-ready --threshold 0.75`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStoreConcrete()
+			// ReadyExecution is not yet on bead.Backend; hold the concrete
+			// construction result as the narrow PreviewQueueStore interface.
+			var s agent.PreviewQueueStore = f.beadStoreConcrete()
 			beads, err := s.ReadyExecution()
 			if err != nil {
 				return fmt.Errorf("ready-execution: %w", err)

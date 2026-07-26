@@ -15,8 +15,7 @@ func (f *CommandFactory) checkLifecycleMigrationGate(cmd *cobra.Command) error {
 		return nil
 	}
 
-	s := f.beadStoreConcrete()
-	mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
+	mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: f.beadStoreRoot()})
 	if err != nil {
 		return err
 	}

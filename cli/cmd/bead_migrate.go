@@ -8,11 +8,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func (f *CommandFactory) beadMigrator(s *bead.Store) (bead.Migrator, error) {
+func (f *CommandFactory) beadMigrator(dir string) (bead.Migrator, error) {
 	if f.beadMigratorOverride != nil {
-		return f.beadMigratorOverride(s)
+		return f.beadMigratorOverride(dir)
 	}
-	return bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
+	return bead.NewMigrator(bead.MigratorOptions{Dir: dir})
 }
 
 func (f *CommandFactory) newBeadMigrateCommand() *cobra.Command {
@@ -36,8 +36,10 @@ backend using the importer path. Use --dry-run to inspect the counts,
 import, and --limit N to cap the number of beads imported.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Concrete store is required for path-level migrate/archive commits
+			// (s.File, LifecycleSchemaMarkerPath) that are not on bead.Backend.
 			s := f.beadStoreConcrete()
-			mig, err := f.beadMigrator(s)
+			mig, err := f.beadMigrator(s.Dir)
 			if err != nil {
 				return err
 			}
