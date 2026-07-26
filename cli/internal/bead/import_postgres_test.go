@@ -313,7 +313,10 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 	assert.Equal(t, string(want), string(got))
 }
 
-func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
+// TestImporter_Verify_DetectsDrift covers verifyImportedAxonCorpus after a
+// post-import mutation of Axon target data (read-back path, not in-memory
+// source-only compare). The error must name the bead ID and the drifted field.
+func TestImporter_Verify_DetectsDrift(t *testing.T) {
 	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	now := time.Date(2026, time.January, 7, 15, 0, 0, 0, time.UTC)
 	sourceBeads := []Bead{
@@ -330,6 +333,8 @@ func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, stats.BeadsMigrated)
 
+	// Mutate the Axon transport store so verification must re-read target data
+	// through target.ReadAll (GraphQL/Axon path), not reuse the import write set.
 	transport := target.backend.(*AxonBackend).GraphQLTransport.(*fakeAxonGraphQLTransport)
 	transport.mu.Lock()
 	drift := transport.beads["ddx-drift-2"]
@@ -337,12 +342,23 @@ func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
 	transport.beads["ddx-drift-2"] = drift
 	transport.mu.Unlock()
 
+	// Prove the mutation is visible via read-back before verify runs.
+	readBack, err := target.Get(testCtx(), "ddx-drift-2")
+	require.NoError(t, err)
+	require.Equal(t, "drifted", readBack.Title, "post-import mutation must surface through Axon read-back")
+
 	err = verifyImportedAxonCorpus(testCtx(), target, sourceDir, sourceBeads)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ddx-drift-2")
-	assert.Contains(t, err.Error(), "drift")
+	msg := err.Error()
+	assert.Contains(t, msg, "ddx-drift-2", "error must name the drifted bead ID")
+	assert.Contains(t, msg, "field title", "error must indicate the specific field drift")
+	assert.Contains(t, msg, "drifted")
+	assert.Contains(t, msg, "two")
 }
 
+// TestImporter_Verify_RoundTripPassesOnCleanImport proves MigrateAxonOptions.Verify
+// succeeds after a clean import and that attachment-derived events plus extras
+// fields survive Axon write/read-back (not only trivial top-level bead fields).
 func TestImporter_Verify_RoundTripPassesOnCleanImport(t *testing.T) {
 	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	now := time.Date(2026, time.January, 7, 16, 0, 0, 0, time.UTC)
@@ -356,7 +372,9 @@ func TestImporter_Verify_RoundTripPassesOnCleanImport(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Extra: map[string]any{
-				"custom-key": "custom-val",
+				"custom-key":         "custom-val",
+				"spec-id":            "FEAT-RT",
+				"execution-eligible": true,
 			},
 		},
 		{
@@ -369,12 +387,15 @@ func TestImporter_Verify_RoundTripPassesOnCleanImport(t *testing.T) {
 			UpdatedAt: now,
 			Extra: map[string]any{
 				"events_attachment": eventsAttachmentRelPath("ddx-round-2"),
+				"custom-key":        "attached-extra",
+				"spec-id":           "FEAT-ATTACH",
 			},
 		},
 	}
 	writeAxonImportCorpus(t, sourceDir, sourceBeads, nil)
 	writeEventsSidecar(t, sourceDir, "ddx-round-2", []BeadEvent{
-		{Kind: "closed", Summary: "done", CreatedAt: now.Add(time.Minute)},
+		{Kind: "closed", Summary: "done", Body: "closed body", Actor: "importer", CreatedAt: now.Add(time.Minute), Source: "fixture"},
+		{Kind: "review", Summary: "APPROVE", CreatedAt: now.Add(2 * time.Minute), Actor: "reviewer"},
 	})
 
 	target := newAxonStore(t)
@@ -382,12 +403,49 @@ func TestImporter_Verify_RoundTripPassesOnCleanImport(t *testing.T) {
 		CopyAttachments: true,
 		Verify:          true,
 	})
+	// AC1: Verify=true must pass after a clean import (no drift).
 	require.NoError(t, err)
 	assert.Equal(t, 2, stats.BeadsMigrated)
+	assert.Equal(t, 2, stats.EventsMigrated)
 	assert.Equal(t, 1, stats.AttachmentsMigrated)
 
+	// AC2: attachment + extras fields survive Axon read-back (not only verify's pass).
 	got, err := target.ReadAll(testCtx())
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, "custom-val", got[0].Extra["custom-key"])
+	byID := make(map[string]Bead, len(got))
+	for _, b := range got {
+		byID[b.ID] = b
+	}
+
+	round1, ok := byID["ddx-round-1"]
+	require.True(t, ok, "extras bead must be present after Axon read-back")
+	require.NotNil(t, round1.Extra)
+	assert.Equal(t, "custom-val", round1.Extra["custom-key"])
+	assert.Equal(t, "FEAT-RT", round1.Extra["spec-id"])
+	assert.Equal(t, true, round1.Extra["execution-eligible"])
+
+	round2, ok := byID["ddx-round-2"]
+	require.True(t, ok, "attachment bead must be present after Axon read-back")
+	require.NotNil(t, round2.Extra)
+	assert.Equal(t, "attached-extra", round2.Extra["custom-key"], "extras must survive on attachment-backed bead")
+	assert.Equal(t, "FEAT-ATTACH", round2.Extra["spec-id"])
+	events := decodeBeadEvents(round2.Extra["events"])
+	require.Len(t, events, 2, "attachment sidecar events must be inlined and readable after Axon read-back")
+	assert.Equal(t, "closed", events[0].Kind)
+	assert.Equal(t, "done", events[0].Summary)
+	assert.Equal(t, "closed body", events[0].Body)
+	assert.Equal(t, "importer", events[0].Actor)
+	assert.Equal(t, "fixture", events[0].Source)
+	assert.True(t, events[0].CreatedAt.Equal(now.Add(time.Minute)), "event created_at must round-trip")
+	assert.Equal(t, "review", events[1].Kind)
+	assert.Equal(t, "APPROVE", events[1].Summary)
+
+	// Sidecar bytes must also land under the Axon attachment tree when CopyAttachments is set.
+	targetAttachment := filepath.Join(target.Dir, AxonDirName, "attachments", "ddx-round-2", EventsAttachmentFileName)
+	gotAttachment, err := os.ReadFile(targetAttachment)
+	require.NoError(t, err, "copied events attachment must exist after clean import")
+	wantAttachment, err := os.ReadFile(filepath.Join(sourceDir, "attachments", "ddx-round-2", EventsAttachmentFileName))
+	require.NoError(t, err)
+	assert.Equal(t, string(wantAttachment), string(gotAttachment))
 }
