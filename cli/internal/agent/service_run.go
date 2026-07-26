@@ -247,10 +247,19 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		// classification (ddx-3b721804) so callers recover the taxonomy via
 		// errors.As instead of re-parsing free text, and so the failure
 		// surfaces as a typed outcome_reason rather than generic execution_failed.
-		return nil, &ProviderFailureError{
+		//
+		// The DDx-owned dispatching record published above is the canonical
+		// attempt state. Do not delete, overwrite, or replace it with
+		// provider-session-derived projections (ddx-02270d66). Verify the
+		// substrate still reads as phase=dispatching before returning.
+		pfErr := &ProviderFailureError{
 			Failure: ClassifyServiceExecuteError(err),
 			Err:     fmt.Errorf("agent: execute: %w", err),
 		}
+		if preserveErr := verifyDispatchingRunRecordPreserved(workDir, runtime); preserveErr != nil {
+			return nil, fmt.Errorf("%w; %v", pfErr, preserveErr)
+		}
+		return nil, pfErr
 	}
 
 	workPhase := strings.TrimSpace(runtime.WorkLogPhase)
