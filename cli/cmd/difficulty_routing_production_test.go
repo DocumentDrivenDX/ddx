@@ -535,13 +535,22 @@ func TestServerManagedDifficultyInferencePreservesMinPowerPresence(t *testing.T)
 			projectRoot := newRouteDelegationProject(t, beadID)
 			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 			require.NoError(t, store.Update(context.Background(), beadID, setProductionDifficulty("hard")))
+			const workerID = "worker-test"
 			spec := serverpkg.ExecuteLoopWorkerSpec{
 				ProjectRoot: projectRoot,
 				Mode:        "once",
 				NoReview:    true,
 				MinPowerSet: tc.explicitSet,
 			}
-			args := serverpkg.ManagedWorkerCommandArgs(spec, "worker-test")
+			// Server-managed entry loads execution params from the persisted
+			// worker spec; write it before launching like StartExecuteLoop does.
+			spec.ApplyDefaults()
+			workerDir := filepath.Join(ddxroot.JoinProject(projectRoot, "workers"), workerID)
+			require.NoError(t, os.MkdirAll(workerDir, 0o755))
+			specBytes, marshalErr := json.MarshalIndent(spec, "", "  ")
+			require.NoError(t, marshalErr)
+			require.NoError(t, os.WriteFile(filepath.Join(workerDir, "spec.json"), append(specBytes, '\n'), 0o644))
+			args := serverpkg.ManagedWorkerCommandArgs(spec, workerID)
 			factory := NewCommandFactory(projectRoot)
 			output, err := executeCommand(factory.NewRootCommand(), args...)
 			requests := capturedImplementationRequests(stub)
