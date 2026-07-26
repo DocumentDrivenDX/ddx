@@ -79,6 +79,80 @@ func waitForLifecycleEvent(t *testing.T, ch <-chan LifecycleEvent) LifecycleEven
 	}
 }
 
+// TestNewLifecycleSubscriberReturnsInterface proves the public lifecycle
+// entrypoint (TD-027 §21) returns bead.LifecycleSubscriber and that no
+// public non-test API in package bead exposes *lifecycle.WatcherHub.
+func TestNewLifecycleSubscriberReturnsInterface(t *testing.T) {
+	// Compile-time + runtime: factory returns the public interface only.
+	var sub LifecycleSubscriber = NewLifecycleSubscriber(func(string) (BeadReader, error) {
+		return &scriptedBeadReader{}, nil
+	}, time.Hour)
+	require.NotNil(t, sub)
+	closer, ok := sub.(interface{ Close() })
+	require.True(t, ok, "NewLifecycleSubscriber must return a closable LifecycleSubscriber")
+	t.Cleanup(closer.Close)
+
+	// Public package surface must not export WatcherHub / NewWatcherHub, and
+	// no exported function may return *lifecycle.WatcherHub.
+	entries, err := os.ReadDir(".")
+	require.NoError(t, err)
+	fset := token.NewFileSet()
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		require.NoError(t, err)
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch decl := n.(type) {
+			case *ast.FuncDecl:
+				if !decl.Name.IsExported() {
+					return true
+				}
+				assert.NotEqual(t, "NewWatcherHub", decl.Name.Name, "%s: NewWatcherHub must not be exported from package bead", name)
+				if decl.Type.Results != nil {
+					for _, field := range decl.Type.Results.List {
+						if exprNamesWatcherHub(field.Type) {
+							t.Errorf("%s: exported func %s must not return *lifecycle.WatcherHub", name, decl.Name.Name)
+						}
+					}
+				}
+			case *ast.TypeSpec:
+				if decl.Name.IsExported() {
+					assert.NotEqual(t, "WatcherHub", decl.Name.Name, "%s: WatcherHub must not be exported from package bead", name)
+				}
+			case *ast.Field:
+				// Exported struct fields must not expose the concrete hub.
+				if exprNamesWatcherHub(decl.Type) {
+					for _, id := range decl.Names {
+						if id.IsExported() {
+							t.Errorf("%s: exported field %s must not have type *lifecycle.WatcherHub", name, id.Name)
+						}
+					}
+				}
+			}
+			return true
+		})
+	}
+}
+
+func exprNamesWatcherHub(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.StarExpr:
+		return exprNamesWatcherHub(e.X)
+	case *ast.SelectorExpr:
+		if e.Sel != nil && e.Sel.Name == "WatcherHub" {
+			if id, ok := e.X.(*ast.Ident); ok && id.Name == "lifecycle" {
+				return true
+			}
+		}
+	case *ast.Ident:
+		return e.Name == "WatcherHub"
+	}
+	return false
+}
+
 // TestNewLifecycleSubscriber_ReturnsLifecycleSubscriber proves the factory
 // returns the public LifecycleSubscriber interface (TD-027 §21) and that the
 // returned value works end-to-end: subscribing yields lifecycle events
