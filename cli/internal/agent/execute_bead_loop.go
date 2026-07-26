@@ -6068,6 +6068,10 @@ func emitResourcePressure(emit func(string, map[string]any), log io.Writer, phas
 	}
 }
 
+// maxTextTopInodeConsumers caps how many top-inode consumers appear in the
+// compact text/log summary so logs stay bounded without dumping full lists.
+const maxTextTopInodeConsumers = 3
+
 func formatResourceRootChecks(checks []ExecutionResourceRootCheck) string {
 	if len(checks) == 0 {
 		return ""
@@ -6078,9 +6082,48 @@ func formatResourceRootChecks(checks []ExecutionResourceRootCheck) string {
 		if len(check.Notes) > 0 {
 			part += " notes=" + strings.Join(check.Notes, ",")
 		}
+		if hint := formatTopInodeConsumersCompact(check); hint != "" {
+			part += " " + hint
+		}
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, "; ")
+}
+
+// formatTopInodeConsumersCompact returns a bounded path/count summary of
+// top inode consumers for text logs. Paths, counts, ages, and cleanup-prefix
+// matches only — never file contents.
+func formatTopInodeConsumersCompact(check ExecutionResourceRootCheck) string {
+	if len(check.TopInodeConsumers) == 0 {
+		return ""
+	}
+	limit := maxTextTopInodeConsumers
+	if len(check.TopInodeConsumers) < limit {
+		limit = len(check.TopInodeConsumers)
+	}
+	items := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		c := check.TopInodeConsumers[i]
+		item := fmt.Sprintf("%s:entries=%d", c.Path, c.EntryCount)
+		if c.Bytes > 0 {
+			item += fmt.Sprintf(",bytes=%d", c.Bytes)
+		}
+		if c.AgeSeconds > 0 {
+			item += fmt.Sprintf(",age_s=%d", c.AgeSeconds)
+		}
+		if c.MatchesCleanup && c.CleanupPrefix != "" {
+			item += ",cleanup=" + c.CleanupPrefix
+		}
+		if c.EntriesTruncated {
+			item += ",entries_truncated"
+		}
+		items = append(items, item)
+	}
+	hint := "top_inode_consumers=[" + strings.Join(items, " ") + "]"
+	if check.TopInodeConsumersTruncated || len(check.TopInodeConsumers) > maxTextTopInodeConsumers {
+		hint += ",truncated"
+	}
+	return hint
 }
 
 func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, actor string, createdAt time.Time) {
