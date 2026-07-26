@@ -313,7 +313,10 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 	assert.Equal(t, string(want), string(got))
 }
 
-func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
+// TestImporter_Verify_DetectsDrift covers verifyImportedAxonCorpus after a
+// post-import mutation of Axon target data (read-back path, not in-memory
+// source-only compare). The error must name the bead ID and the drifted field.
+func TestImporter_Verify_DetectsDrift(t *testing.T) {
 	sourceDir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	now := time.Date(2026, time.January, 7, 15, 0, 0, 0, time.UTC)
 	sourceBeads := []Bead{
@@ -330,6 +333,8 @@ func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, stats.BeadsMigrated)
 
+	// Mutate the Axon transport store so verification must re-read target data
+	// through target.ReadAll (GraphQL/Axon path), not reuse the import write set.
 	transport := target.backend.(*AxonBackend).GraphQLTransport.(*fakeAxonGraphQLTransport)
 	transport.mu.Lock()
 	drift := transport.beads["ddx-drift-2"]
@@ -337,10 +342,18 @@ func TestBeadMigrateAxon_VerifyDetectsDrift(t *testing.T) {
 	transport.beads["ddx-drift-2"] = drift
 	transport.mu.Unlock()
 
+	// Prove the mutation is visible via read-back before verify runs.
+	readBack, err := target.Get(testCtx(), "ddx-drift-2")
+	require.NoError(t, err)
+	require.Equal(t, "drifted", readBack.Title, "post-import mutation must surface through Axon read-back")
+
 	err = verifyImportedAxonCorpus(testCtx(), target, sourceDir, sourceBeads)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ddx-drift-2")
-	assert.Contains(t, err.Error(), "drift")
+	msg := err.Error()
+	assert.Contains(t, msg, "ddx-drift-2", "error must name the drifted bead ID")
+	assert.Contains(t, msg, "field title", "error must indicate the specific field drift")
+	assert.Contains(t, msg, "drifted")
+	assert.Contains(t, msg, "two")
 }
 
 func TestImporter_Verify_RoundTripPassesOnCleanImport(t *testing.T) {

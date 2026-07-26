@@ -356,19 +356,86 @@ func verifyImportedAxonCorpus(ctx context.Context, target *Store, sourceDir stri
 			return err
 		}
 
-		wantJSON, err := marshalBead(wantNorm)
+		field, sourceVal, targetVal, err := firstImportedBeadFieldDrift(wantNorm, gotNorm)
 		if err != nil {
-			return fmt.Errorf("bead: verify marshal source %s: %w", id, err)
+			return fmt.Errorf("bead: verify compare %s: %w", id, err)
 		}
-		gotJSON, err := marshalBead(gotNorm)
-		if err != nil {
-			return fmt.Errorf("bead: verify marshal target %s: %w", id, err)
-		}
-		if string(wantJSON) != string(gotJSON) {
-			return fmt.Errorf("bead: verify drift for %s: source=%s target=%s", id, string(wantJSON), string(gotJSON))
+		if field != "" {
+			return fmt.Errorf("bead: verify drift for %s: field %s: source=%s target=%s", id, field, sourceVal, targetVal)
 		}
 	}
 	return nil
+}
+
+// firstImportedBeadFieldDrift compares two beads field-for-field after JSON
+// canonicalization and returns the first drifted field name with rendered
+// source/target values. An empty field means the beads match.
+func firstImportedBeadFieldDrift(want, got Bead) (field, sourceVal, targetVal string, err error) {
+	wantJSON, err := marshalBead(want)
+	if err != nil {
+		return "", "", "", fmt.Errorf("marshal source: %w", err)
+	}
+	gotJSON, err := marshalBead(got)
+	if err != nil {
+		return "", "", "", fmt.Errorf("marshal target: %w", err)
+	}
+	if bytes.Equal(wantJSON, gotJSON) {
+		return "", "", "", nil
+	}
+
+	var wantMap, gotMap map[string]any
+	if err := json.Unmarshal(wantJSON, &wantMap); err != nil {
+		return "", "", "", fmt.Errorf("decode source: %w", err)
+	}
+	if err := json.Unmarshal(gotJSON, &gotMap); err != nil {
+		return "", "", "", fmt.Errorf("decode target: %w", err)
+	}
+
+	keys := make(map[string]struct{}, len(wantMap)+len(gotMap))
+	for k := range wantMap {
+		keys[k] = struct{}{}
+	}
+	for k := range gotMap {
+		keys[k] = struct{}{}
+	}
+	ordered := make([]string, 0, len(keys))
+	for k := range keys {
+		ordered = append(ordered, k)
+	}
+	sort.Strings(ordered)
+
+	for _, k := range ordered {
+		w, wOK := wantMap[k]
+		g, gOK := gotMap[k]
+		if !wOK {
+			return k, "<missing>", renderImportedVerifyValue(g), nil
+		}
+		if !gOK {
+			return k, renderImportedVerifyValue(w), "<missing>", nil
+		}
+		wRaw, err := json.Marshal(w)
+		if err != nil {
+			return "", "", "", fmt.Errorf("marshal source field %s: %w", k, err)
+		}
+		gRaw, err := json.Marshal(g)
+		if err != nil {
+			return "", "", "", fmt.Errorf("marshal target field %s: %w", k, err)
+		}
+		if !bytes.Equal(wRaw, gRaw) {
+			return k, string(wRaw), string(gRaw), nil
+		}
+	}
+	// Maps matched field-for-field but raw JSON differed (e.g. key order only).
+	// Fall back to a generic payload marker so callers still get a drift error.
+	return "payload", string(wantJSON), string(gotJSON), nil
+}
+
+func renderImportedVerifyValue(v any) string {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return string(raw)
 }
 
 func sampledBeadIDs(sourceBeads []Bead) []string {
