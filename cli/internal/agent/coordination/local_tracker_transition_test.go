@@ -24,6 +24,8 @@ import (
 // (TransitionLifecycle).
 func TestCoordinationContract_LocalTrackerTransition(t *testing.T) {
 	projectRoot := t.TempDir()
+	execRoot := t.TempDir()
+	t.Setenv("DDX_EXEC_WT_DIR", execRoot)
 	initGitRepo(t, projectRoot)
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
 
