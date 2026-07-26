@@ -124,8 +124,19 @@ func newManagedIdleHandle(t *testing.T, m *WorkerManager, id string, beadID stri
 	h.managed = true
 	h.record.PID = 0
 	h.record.PGID = rootPID
+	h.record.ServerManaged = true
 	m.mu.Unlock()
 	return h, cancelled
+}
+
+// markServerOwnedProcessBoundary tags a synthetic handle as a server-owned
+// process boundary so stop/reap process-group targeting is enabled.
+func markServerOwnedProcessBoundary(t *testing.T, h *workerHandle, pid int) {
+	t.Helper()
+	h.managed = true
+	h.record.PID = pid
+	h.record.PGID = pid
+	h.record.ServerManaged = true
 }
 
 // TestWatchdogSweepReapsStalledWorker is the core AC test: a worker whose
@@ -386,7 +397,7 @@ func TestWatchdogSIGTERMtoSIGKILLEscalationOnWedgedSubprocess(t *testing.T) {
 	h, _ := newIdleHandle(t, m, "worker-wedged", "ddx-wd-wedged",
 		now.Add(-1*time.Second), now.Add(-1*time.Second))
 	m.mu.Lock()
-	h.record.PID = cmd.Process.Pid
+	markServerOwnedProcessBoundary(t, h, cmd.Process.Pid)
 	m.mu.Unlock()
 
 	m.watchdogSweep(now)
