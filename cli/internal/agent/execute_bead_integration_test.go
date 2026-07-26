@@ -196,7 +196,12 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 		}{result: result, err: err}
 	}()
 
-	leaseStore, ok := store.(*bead.Store)
+	// ClaimLease is optional on ExecuteBeadLoopStore; production stores
+	// (and makeLoopStore) expose it without requiring a *bead.Store assert.
+	type claimLeaseReader interface {
+		ClaimLease(id string) (bead.ClaimLeaseRecord, bool, error)
+	}
+	leaseStore, ok := store.(claimLeaseReader)
 	require.True(t, ok, "integration store must expose claim leases")
 	require.Eventually(t, func() bool {
 		lease, found, err := leaseStore.ClaimLease(beadID)

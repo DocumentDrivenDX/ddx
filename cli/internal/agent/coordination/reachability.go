@@ -81,7 +81,8 @@ func keepCoordinationReachability() {
 }
 
 // keepaliveClaimBackend is a process-local stub used only by the deadcode
-// reachability keepalive. Production LocalCoordinator uses *bead.Store.
+// reachability keepalive. Production LocalCoordinator uses a ClaimBackend
+// (typically a bead.Backend implementor constructed via bead.NewStore).
 type keepaliveClaimBackend struct {
 	claimed bool
 	owner   string
