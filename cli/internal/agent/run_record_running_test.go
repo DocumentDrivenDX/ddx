@@ -164,11 +164,15 @@ func TestRunRecordTransitionsRunningFromPublicFizeauEvent(t *testing.T) {
 	require.Nil(t, dispatchingAtStart.Fizeau)
 	startedAt := dispatchingAtStart.StartedAt
 
-	// AC1: existing record advanced to running.
+	// After a full Execute that emits routing_decision then final, the substrate
+	// advances running (from first public event) and is finalized to terminal
+	// (ddx-281ffb67). Prove public route fields survived and no session queries
+	// occurred; end phase is terminal with preserved PublicSessionRef.
 	loaded, err := runrecord.Read(projectRoot, attemptID)
 	require.NoError(t, err)
-	require.NotNil(t, loaded, "running record must be readable without session synthesis")
-	assert.Equal(t, runrecord.PhaseRunning, loaded.Phase)
+	require.NotNil(t, loaded, "record must be readable without session synthesis")
+	assert.Equal(t, runrecord.PhaseTerminal, loaded.Phase,
+		"full success path finalizes to terminal after public final event")
 	assert.Equal(t, attemptID, loaded.AttemptID)
 	assert.Equal(t, beadID, loaded.BeadID)
 	// Durable directory key / run_id identity (JSON) matches the attempt id.
@@ -178,14 +182,14 @@ func TestRunRecordTransitionsRunningFromPublicFizeauEvent(t *testing.T) {
 	assert.Equal(t, attemptID, key)
 	assert.Equal(t, attemptID, gotAttempt)
 	assert.Equal(t, beadID, gotBead)
-	assert.Equal(t, string(runrecord.PhaseRunning), phase)
+	assert.Equal(t, string(runrecord.PhaseTerminal), phase)
 	assert.True(t, loaded.StartedAt.Equal(startedAt),
-		"started_at from dispatching publish must survive the running transition")
+		"started_at from dispatching publish must survive running+terminal updates")
 	assert.False(t, loaded.UpdatedAt.IsZero())
 	assert.True(t, loaded.UpdatedAt.After(startedAt) || loaded.UpdatedAt.Equal(startedAt),
-		"updated_at must be set on running transition")
-	assert.Nil(t, loaded.FinishedAt, "running transition must not set finished_at")
-	assert.Nil(t, loaded.Outcome, "running transition must not invent terminal outcome")
+		"updated_at must be set on phase transitions")
+	require.NotNil(t, loaded.FinishedAt, "terminal finalize sets finished_at")
+	require.NotNil(t, loaded.Outcome, "terminal finalize sets outcome from public final")
 
 	// Exactly one substrate directory keyed by the DDx attempt id.
 	entries, err := os.ReadDir(filepath.Join(projectRoot, runrecord.StoreDir))
@@ -200,19 +204,16 @@ func TestRunRecordTransitionsRunningFromPublicFizeauEvent(t *testing.T) {
 	assert.EqualValues(t, 0, svc.replaySessionCalls.Load(), "must not ReplaySession")
 
 	// AC2: only public route/result fields from the typed Fizeau contract.
-	// First public event was routing_decision → PublicSessionRef from session_id.
-	// Concrete harness/provider/model must not appear as top-level record fields.
-	require.NotNil(t, loaded.Fizeau, "public Fizeau fields from routing_decision must be recorded")
+	// Routing session ref is preserved across the terminal merge; final fields
+	// are attached from the public final event (not from session queries).
+	require.NotNil(t, loaded.Fizeau, "public Fizeau fields must be recorded")
 	assert.Equal(t, publicSessionID, loaded.Fizeau.PublicSessionRef)
-	// Final-event fields are not required on the first-event transition (terminal
-	// outcome is a sibling bead). They must not be invented from session queries.
 	assert.Empty(t, loaded.Fizeau.ImmediateError)
-	// Session log path stays empty when the first public event was routing_decision
-	// (terminal outcome is a sibling bead).
-	assert.Empty(t, loaded.Fizeau.SessionLogPath)
+	assert.Equal(t, "/var/fizeau/sessions/a44bfc5b.jsonl", loaded.Fizeau.SessionLogPath)
+	assert.Equal(t, "success", loaded.Fizeau.FinalStatus)
 
 	raw := rawIdentity
-	require.True(t, json.Valid(raw), "running record must be complete atomic JSON")
+	require.True(t, json.Valid(raw), "record must be complete atomic JSON")
 
 	var asMap map[string]any
 	require.NoError(t, json.Unmarshal(raw, &asMap))
@@ -225,7 +226,7 @@ func TestRunRecordTransitionsRunningFromPublicFizeauEvent(t *testing.T) {
 		"provider_session_canonical_state", "canonical_state",
 	} {
 		_, ok := asMap[forbidden]
-		assert.False(t, ok, "running record must not contain forbidden field %q", forbidden)
+		assert.False(t, ok, "record must not contain forbidden field %q", forbidden)
 	}
 
 	// Nested fizeau object may only carry public contract keys.
@@ -240,10 +241,10 @@ func TestRunRecordTransitionsRunningFromPublicFizeauEvent(t *testing.T) {
 		// Public session ref from routing_decision.session_id.
 		assert.Equal(t, publicSessionID, fizeauRaw["public_session_ref"])
 	} else {
-		t.Fatal("expected fizeau object on running record")
+		t.Fatal("expected fizeau object on record")
 	}
 
-	// Evidence from dispatching publish survives the atomic update.
+	// Evidence from dispatching publish survives the atomic updates.
 	assert.Equal(t, ".ddx/executions/"+attemptID+"/prompt.md", evidencePathByName(loaded.Evidence, "prompt"))
 	assert.Equal(t, ".ddx/executions/"+attemptID, evidencePathByName(loaded.Evidence, "bundle"))
 }

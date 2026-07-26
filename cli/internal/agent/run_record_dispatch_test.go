@@ -104,12 +104,12 @@ func TestRunRecordExistsBeforeFizeauDispatch(t *testing.T) {
 	assert.Equal(t, beadID, gotBead)
 	assert.Equal(t, string(runrecord.PhaseDispatching), phase)
 
-	// Still present after the call returns. Public final event advances phase
-	// to running (ddx-a44bfc5b); pre-dispatch snapshot above remains dispatching.
+	// Still present after the call returns. Public final finalizes phase to
+	// terminal (ddx-281ffb67); pre-dispatch snapshot above remains dispatching.
 	loaded, err := runrecord.Read(projectRoot, attemptID)
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
-	assert.Equal(t, runrecord.PhaseRunning, loaded.Phase)
+	assert.Equal(t, runrecord.PhaseTerminal, loaded.Phase)
 	assert.Equal(t, attemptID, loaded.AttemptID)
 	assert.FileExists(t, runrecord.RecordPath(projectRoot, attemptID))
 }
@@ -307,7 +307,10 @@ func evidencePathByName(evidence []runrecord.EvidenceLink, name string) string {
 
 // TestRunRecordPreDispatchFailureLeavesDispatchingRecord makes svc.Execute
 // return a typed pre-dispatch error and proves the pre-existing
-// .ddx/runs/<run-id>/record.json remains present and valid JSON (AC1).
+// .ddx/runs/<run-id>/record.json remains present as valid JSON. After the
+// terminal-outcome wire-up (ddx-281ffb67) the same attempt record is finalized
+// to phase=terminal from the typed immediate-error taxonomy — not deleted and
+// not replaced with provider-session-derived state.
 func TestRunRecordPreDispatchFailureLeavesDispatchingRecord(t *testing.T) {
 	projectRoot := t.TempDir()
 	const (
@@ -340,8 +343,8 @@ func TestRunRecordPreDispatchFailureLeavesDispatchingRecord(t *testing.T) {
 	assert.Equal(t, runrecord.PhaseDispatching, svc.recordAtExecute.Phase)
 	require.True(t, json.Valid(svc.rawAtExecute), "record.json must be valid JSON at Execute entry")
 
-	// After the failure returns, the same path must still hold valid JSON with
-	// phase dispatching — not deleted, not torn.
+	// After the failure returns, the same path still holds valid JSON for the
+	// same attempt id — now terminalized from the typed immediate error.
 	path := runrecord.RecordPath(projectRoot, attemptID)
 	assert.FileExists(t, path)
 	rawAfter, err := os.ReadFile(path)
@@ -350,17 +353,15 @@ func TestRunRecordPreDispatchFailureLeavesDispatchingRecord(t *testing.T) {
 
 	loaded, err := runrecord.Read(projectRoot, attemptID)
 	require.NoError(t, err)
-	require.NotNil(t, loaded, "dispatching record must still be readable after failure")
-	assert.Equal(t, runrecord.PhaseDispatching, loaded.Phase)
+	require.NotNil(t, loaded, "run record must still be readable after failure")
+	assert.Equal(t, runrecord.PhaseTerminal, loaded.Phase)
 	assert.Equal(t, attemptID, loaded.AttemptID)
 	assert.Equal(t, beadID, loaded.BeadID)
 	keyAfter, _, _, _ := recordIdentityFromJSON(t, rawAfter)
 	assert.Equal(t, attemptID, keyAfter, "durable record key must remain the attempt id")
-
-	// Substrate bytes at Execute entry remain the durable record after failure
-	// (no rewrite/replace on the typed pre-dispatch path).
-	assert.Equal(t, string(svc.rawAtExecute), string(rawAfter),
-		"pre-dispatch failure must not rewrite the dispatching record")
+	require.NotNil(t, loaded.Outcome)
+	assert.Equal(t, "failure", loaded.Outcome.Status)
+	assert.Equal(t, FailureModeProviderModelUnavailable, loaded.Outcome.Reason)
 }
 
 // TestRunRecordPreDispatchFailureDoesNotProjectProviderSession proves the
@@ -395,9 +396,16 @@ func TestRunRecordPreDispatchFailureDoesNotProjectProviderSession(t *testing.T) 
 	loaded, err := runrecord.Read(projectRoot, attemptID)
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
-	assert.Equal(t, runrecord.PhaseDispatching, loaded.Phase)
-	assert.Nil(t, loaded.Fizeau, "pre-dispatch failure must not populate Fizeau public fields")
-	assert.Nil(t, loaded.Outcome, "pre-dispatch failure must not invent a terminal outcome from provider state")
+	assert.Equal(t, runrecord.PhaseTerminal, loaded.Phase)
+	// Typed immediate-error public field only — no provider-session projection.
+	require.NotNil(t, loaded.Fizeau)
+	assert.Equal(t, FailureModeProviderModelUnavailable, loaded.Fizeau.ImmediateError)
+	assert.Empty(t, loaded.Fizeau.SessionLogPath)
+	assert.Empty(t, loaded.Fizeau.PublicSessionRef)
+	require.NotNil(t, loaded.Outcome)
+	assert.Equal(t, "failure", loaded.Outcome.Status)
+	assert.Equal(t, FailureModeProviderModelUnavailable, loaded.Outcome.Reason)
+	assert.Equal(t, "immediate_error", loaded.Outcome.EvidenceVerdict)
 	assert.NotEqual(t, sessionID, loaded.AttemptID)
 
 	// No sibling run directory keyed by the provider session id.
@@ -479,17 +487,17 @@ func TestRunRecordPreDispatchFailureKeepsCorrelationFields(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, after)
 
-	// Identity / correlation fields survive unchanged.
+	// Identity / correlation fields survive the terminal immediate-error update.
 	assert.Equal(t, before.BeadID, after.BeadID)
 	assert.Equal(t, beadID, after.BeadID)
 	assert.Equal(t, before.AttemptID, after.AttemptID)
 	assert.Equal(t, attemptID, after.AttemptID)
-	assert.Equal(t, runrecord.PhaseDispatching, after.Phase)
+	assert.Equal(t, runrecord.PhaseTerminal, after.Phase)
 	assert.Equal(t, before.Version, after.Version)
 	assert.False(t, after.StartedAt.IsZero(), "started_at must survive")
 	assert.False(t, after.UpdatedAt.IsZero(), "updated_at must survive")
 	assert.True(t, before.StartedAt.Equal(after.StartedAt), "started_at must not be rewritten on failure")
-	assert.True(t, before.UpdatedAt.Equal(after.UpdatedAt), "updated_at must not be rewritten on failure")
+	require.NotNil(t, after.FinishedAt, "terminal finalize sets finished_at")
 
 	rawAfter, err := os.ReadFile(runrecord.RecordPath(projectRoot, attemptID))
 	require.NoError(t, err)
@@ -500,17 +508,18 @@ func TestRunRecordPreDispatchFailureKeepsCorrelationFields(t *testing.T) {
 
 	// Worker ID, base revision, and prompt evidence pointer (DDx correlation).
 	assert.Equal(t, workerID, evidencePathByName(after.Evidence, "worker_id"),
-		"worker_id correlation must survive on the dispatching record")
+		"worker_id correlation must survive on the terminal record")
 	assert.Equal(t, baseRev, evidencePathByName(after.Evidence, "base_rev"),
-		"base_rev correlation must survive on the dispatching record")
+		"base_rev correlation must survive on the terminal record")
 	assert.Equal(t, promptRel, evidencePathByName(after.Evidence, "prompt"),
 		"prompt evidence pointer must survive")
 	assert.Equal(t, evidencePathByName(before.Evidence, "worker_id"), evidencePathByName(after.Evidence, "worker_id"))
 	assert.Equal(t, evidencePathByName(before.Evidence, "base_rev"), evidencePathByName(after.Evidence, "base_rev"))
 	assert.Equal(t, evidencePathByName(before.Evidence, "prompt"), evidencePathByName(after.Evidence, "prompt"))
 
-	// Concrete harness-routing fields stay absent.
-	assert.Nil(t, after.Fizeau)
+	// Concrete harness-routing fields stay absent; only typed immediate error.
+	require.NotNil(t, after.Fizeau)
+	assert.Equal(t, FailureModeProviderModelUnavailable, after.Fizeau.ImmediateError)
 	var asMap map[string]any
 	require.NoError(t, json.Unmarshal(rawAfter, &asMap))
 	for _, forbidden := range []string{

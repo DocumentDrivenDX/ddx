@@ -79,35 +79,3 @@ func dispatchingEvidenceLinks(corr map[string]string) []runrecord.EvidenceLink {
 	return out
 }
 
-// verifyDispatchingRunRecordPreserved asserts the DDx-owned dispatching run
-// record still exists as valid JSON after a typed pre-dispatch Fizeau Execute
-// failure. It never rewrites, deletes, or replaces the record with
-// provider-session-derived state (ddx-02270d66).
-//
-// No-op when Correlation lacks attempt_id (plain ddx run / non-bead paths).
-func verifyDispatchingRunRecordPreserved(projectRoot string, runtime AgentRunRuntime) error {
-	corr := runtime.Correlation
-	if corr == nil {
-		return nil
-	}
-	attemptID := strings.TrimSpace(corr["attempt_id"])
-	if attemptID == "" {
-		return nil
-	}
-	if strings.TrimSpace(projectRoot) == "" {
-		return fmt.Errorf("agent: pre-dispatch failure: empty project root while verifying run record")
-	}
-
-	rec, err := runrecord.Read(projectRoot, attemptID)
-	if err != nil {
-		return fmt.Errorf("agent: pre-dispatch failure: read run record for attempt %s: %w", attemptID, err)
-	}
-	if rec == nil {
-		return fmt.Errorf("agent: pre-dispatch failure: dispatching run record missing for attempt %s", attemptID)
-	}
-	if rec.Phase != runrecord.PhaseDispatching {
-		return fmt.Errorf("agent: pre-dispatch failure: run record phase is %q, want %q (must not replace dispatching with provider-derived state)",
-			rec.Phase, runrecord.PhaseDispatching)
-	}
-	return nil
-}

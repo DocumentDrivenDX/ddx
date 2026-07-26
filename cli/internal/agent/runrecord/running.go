@@ -70,5 +70,10 @@ func (f *FizeauPublicResult) IsEmpty() bool {
 		f.ImmediateError == "" &&
 		f.FinalStatus == "" &&
 		f.FinalExitCode == nil &&
-		f.DurationMS == nil
+		f.DurationMS == nil &&
+		f.CostUSD == nil &&
+		f.InputTokens == nil &&
+		f.OutputTokens == nil &&
+		f.TotalTokens == nil &&
+		f.CachedTokens == nil
 }

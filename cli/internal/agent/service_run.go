@@ -248,16 +248,17 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		// errors.As instead of re-parsing free text, and so the failure
 		// surfaces as a typed outcome_reason rather than generic execution_failed.
 		//
-		// The DDx-owned dispatching record published above is the canonical
-		// attempt state. Do not delete, overwrite, or replace it with
-		// provider-session-derived projections (ddx-02270d66). Verify the
-		// substrate still reads as phase=dispatching before returning.
+		// Atomically finalize the existing DDx-owned record to terminal from
+		// the typed immediate-error taxonomy only — never provider-session
+		// projections (Phase 3 WB-2 / ddx-281ffb67; preserves ddx-02270d66
+		// identity/no-session-projection invariants).
+		pf := ClassifyServiceExecuteError(err)
 		pfErr := &ProviderFailureError{
-			Failure: ClassifyServiceExecuteError(err),
+			Failure: pf,
 			Err:     fmt.Errorf("agent: execute: %w", err),
 		}
-		if preserveErr := verifyDispatchingRunRecordPreserved(workDir, runtime); preserveErr != nil {
-			return nil, fmt.Errorf("%w; %v", pfErr, preserveErr)
+		if termErr := finalizeRunRecordFromImmediateError(workDir, runtime, pf); termErr != nil {
+			return nil, fmt.Errorf("%w; %v", pfErr, termErr)
 		}
 		return nil, pfErr
 	}
@@ -404,6 +405,15 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		result.PredictedCostSource = candidate.CostSource
 	}
 	normalizeServiceFinalExitCode(result)
+
+	// Atomically finalize the DDx-owned run substrate to terminal using the
+	// public final event plus project-local repository evaluation evidence.
+	// Fail closed so readers never observe a stuck running/dispatching record
+	// after a complete public final (Phase 3 WB-2 / ddx-281ffb67).
+	if termErr := finalizeRunRecordFromFinal(workDir, runtime, final); termErr != nil {
+		return nil, termErr
+	}
+
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,
 		Model:       model,
