@@ -118,17 +118,48 @@ func TestSpechonestyCommandExitsZeroForStampedDocs(t *testing.T) {
 			"status: Complete\n"+
 			"---\n"+
 			"# Technical Design: Frontmatter Status\n\n"+
-			"Frontmatter stamp only.\n")
+			"Frontmatter stamp only.\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-998 | TestFrontmatterStatus | go test ./tools/lint/spechonesty/... |\n")
 	writeFile(t, filepath.Join(dir, "adr", "ADR-998-both.md"),
 		"---\n"+
 			"status: \"In Progress\"\n"+
 			"---\n"+
 			"# ADR-998: Both Encodings\n\n"+
-			"**Status:** Implemented (body wins when both present)\n")
+			"**Status:** Implemented (body wins when both present)\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-998 | TestBothEncodings | go test ./tools/lint/spechonesty/... |\n")
 
 	code, stdout, stderr := runSpechonesty(t, dir)
 	if code != 0 {
 		t.Fatalf("expected exit 0 for stamped docs; exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
+// TestSpechonestyCommandExitsNonZeroOnZeroEvidence ensures a Complete
+// document with no Verification rows now surfaces the zero-evidence
+// diagnostic through the docs-directory CLI path.
+func TestSpechonestyCommandExitsNonZeroOnZeroEvidence(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "complete-zero-evidence.md"),
+		"# Complete Document Without Verification Rows\n\n"+
+			"**Status:** Complete\n\n"+
+			"The document claims completion but carries no Verification block.\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for zero-evidence document; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "zero_evidence") && !strings.Contains(strings.ToLower(combined), "zero evidence") {
+		t.Fatalf("expected zero-evidence diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, filepath.Join("notes", "complete-zero-evidence.md")) {
+		t.Fatalf("expected diagnostic to name the zero-evidence document, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
 }
 
