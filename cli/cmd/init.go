@@ -29,6 +29,12 @@ var initGitignoreRules = []string{
 	// the durable audit trail lives in the events stream, not the execution
 	// dirs. Ignore the whole tree with no un-ignore exceptions (ddx-*).
 	".ddx/executions/",
+	// Durable run-record substrate (.ddx/runs/<attempt-id>/record.json) is
+	// per-machine orchestration state. Concurrent try/work writers use
+	// atomic temp+rename under this tree; leaving it unignored makes
+	// pre-dispatch checkpoints race on disappearing temp paths and dirties
+	// the worktree after provider-connectivity failures (ddx-77385153 AC6).
+	".ddx/runs/",
 	// Ephemeral lock-contention metrics ledger: rewritten on every tracker
 	// lock acquisition (including the ones the pre-land checkpoint itself
 	// takes), so tracking it makes checkpointLandingWorktreeLocalChanges

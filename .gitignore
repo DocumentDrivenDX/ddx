@@ -438,6 +438,7 @@ cli/internal/agent/.ddx/
 
 .ddx/executions/
 .ddx/executions-archive/
+.ddx/runs/
 .ddx/harness-sessions/
 # Offline coordination journal (ADR-022 reconnecting client). Per-machine;
 # OpenOfflineJournal creates it on every try/work bootstrap.

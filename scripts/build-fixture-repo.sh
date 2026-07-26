@@ -103,6 +103,8 @@ YAML
 .ddx/.execute-bead-wt-*/
 .ddx/executions/*/embedded/
 .ddx/executions/**/scratch/
+.ddx/executions/
+.ddx/runs/
 .ddx/*.lock
 .ddx/*.tmp
 .ddx/server.env

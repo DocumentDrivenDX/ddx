@@ -120,12 +120,14 @@ var allowlistedLiterals = map[string]string{
 // allowedAgentSubpkgLeafs are the already-approved subpackages under
 // cli/internal/agent/. New leaf packages beneath that tree are rejected.
 var allowedAgentSubpkgLeafs = map[string]bool{
-	"escalation":  true,
-	"executeloop": true,
-	"failclass":   true,
-	"try":         true,
-	"work":        true,
-	"workerprobe": true,
+	"coordination": true, // offline coordination client (ADR-022)
+	"escalation":   true,
+	"executeloop":  true,
+	"failclass":    true,
+	"runrecord":    true, // Phase 3 WB-2 durable run substrate
+	"try":          true,
+	"work":         true,
+	"workerprobe":  true,
 }
 
 // selfPkgFragments lists path fragments that mark this analyzer's own
