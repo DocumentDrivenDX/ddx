@@ -104,11 +104,12 @@ func TestRunRecordExistsBeforeFizeauDispatch(t *testing.T) {
 	assert.Equal(t, beadID, gotBead)
 	assert.Equal(t, string(runrecord.PhaseDispatching), phase)
 
-	// Still present after the call returns.
+	// Still present after the call returns. Public final event advances phase
+	// to running (ddx-a44bfc5b); pre-dispatch snapshot above remains dispatching.
 	loaded, err := runrecord.Read(projectRoot, attemptID)
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
-	assert.Equal(t, runrecord.PhaseDispatching, loaded.Phase)
+	assert.Equal(t, runrecord.PhaseRunning, loaded.Phase)
 	assert.Equal(t, attemptID, loaded.AttemptID)
 	assert.FileExists(t, runrecord.RecordPath(projectRoot, attemptID))
 }

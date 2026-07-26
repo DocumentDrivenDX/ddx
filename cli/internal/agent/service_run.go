@@ -303,7 +303,20 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 			runtime.OnRouteResolved(harness, provider, model)
 		}
 	}
-	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, onRouteResolved)
+	// Advance the DDx-owned run substrate from dispatching → running on the
+	// first public Fizeau execution event. Uses only typed public fields —
+	// never provider-session list/tail APIs (Phase 3 WB-2 / ddx-a44bfc5b).
+	onPublicExecution := func(decoded agentlib.ServiceDecodedEvent) error {
+		public, ok := fizeauPublicFromDecoded(decoded)
+		if !ok {
+			return nil
+		}
+		return transitionRunRecordToRunning(workDir, runtime, public)
+	}
+	final, routing, _, drainErr := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, onRouteResolved, onPublicExecution)
+	if drainErr != nil {
+		return nil, drainErr
+	}
 	if final == nil {
 		// Provider process exited before emitting a final event — a harness-level
 		// failure (crash, OOM, binary restart) the model never saw. Classify as

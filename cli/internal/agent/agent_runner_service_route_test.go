@@ -50,7 +50,7 @@ func TestDrainServiceEvents_OnRouteResolved_FastPath(t *testing.T) {
 		calls = append(calls, []string{harness, provider, model})
 	}
 
-	final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, onRouteResolved)
+	final, _, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, onRouteResolved, nil)
 	require.NotNil(t, final)
 	require.Len(t, calls, 1, "onRouteResolved must fire exactly once in the fast path")
 	assert.Equal(t, []string{"fiz", "anthropic", "sonnet-4.6"}, calls[0])
@@ -73,7 +73,7 @@ func TestDrainServiceEvents_OnRouteResolved_WatchdogPath(t *testing.T) {
 		cancel:      func() {},
 		idleTimeout: 30 * time.Second,
 	}
-	final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, onRouteResolved)
+	final, _, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, onRouteResolved, nil)
 	require.NotNil(t, final)
 	require.Len(t, calls, 1, "onRouteResolved must fire exactly once in the watchdog path")
 	assert.Equal(t, []string{"fiz", "openrouter", "opus-4.8"}, calls[0])
@@ -89,7 +89,7 @@ func TestResolvedRouteRecordedInMetrics(t *testing.T) {
 	events <- makeFinalEvent("success")
 	close(events)
 
-	_, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, nil)
+	_, routing, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, nil, nil)
 	require.NotNil(t, routing, "drain must capture the routing decision")
 
 	// Build a result the way executeOnService does.
