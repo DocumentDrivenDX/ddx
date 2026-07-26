@@ -118,6 +118,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	// for operator-constrained power within which the agent selects the route.
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged")
+	cmd.Flags().Bool("allow-non-default-branch", false, "Allow draining when the current branch upstream is not the remote default branch (origin/HEAD); prints a warning naming both refs")
 
 	// Register "ddx work plan", "ddx work focus", "ddx work clear-cooldowns",
 	// "ddx work metrics", "ddx work analyze", and "ddx work status" as
@@ -157,6 +158,19 @@ func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
 		f.preflightWarnOnce.Do(func() {
 			emitPreflightWarning(cmd.ErrOrStderr(), preflightResult)
 		})
+	}
+
+	// Default-branch gate: refuse drain when upstream != origin/HEAD unless
+	// --allow-non-default-branch is set. Runs before any store claim.
+	allowNonDefault, _ := cmd.Flags().GetBool("allow-non-default-branch")
+	var warnWriter io.Writer
+	if !asJSON {
+		warnWriter = cmd.ErrOrStderr()
+	}
+	if err := enforceDefaultBranchPreflight(projectRoot, allowNonDefault, warnWriter); err != nil {
+		// Print explicitly: work uses SilenceErrors, so cobra will not echo the error.
+		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+		return err
 	}
 
 	return f.runAgentExecuteLoopImpl(cmd, true, "")

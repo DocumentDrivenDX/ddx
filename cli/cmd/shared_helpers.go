@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -96,6 +97,75 @@ func buildCLIPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx co
 		}
 		return nil
 	}
+}
+
+// isGitWorkTree reports whether dir is inside a git working tree. Used to skip
+// default-branch preflight on non-git fixtures (e.g. bare temp dirs in tests).
+func isGitWorkTree(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := gitpkg.Command(ctx, dir, "rev-parse", "--is-inside-work-tree").CombinedOutput()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+// enforceDefaultBranchPreflight runs the network-free default-branch diagnostic
+// once at ddx work / ddx try drain start, before any store claim.
+//
+// Hard-fail kinds (mismatched upstream, detached HEAD, missing upstream) exit
+// non-zero unless allowNonDefault is true. When allowed, a warning names the
+// current branch, its configured upstream, and origin/HEAD. Advisory results
+// (local behind / diverged / missing origin/HEAD) print a warning and do not
+// block. Non-git directories are skipped.
+func enforceDefaultBranchPreflight(projectRoot string, allowNonDefault bool, warn io.Writer) error {
+	if !isGitWorkTree(projectRoot) {
+		return nil
+	}
+	res := gitpkg.CheckDefaultBranchPreflight(projectRoot)
+	if res.HardFail() {
+		if allowNonDefault {
+			if warn != nil {
+				fmt.Fprintln(warn, formatAllowNonDefaultBranchWarning(res))
+			}
+			return nil
+		}
+		return fmt.Errorf("%s", res.Message)
+	}
+	if res.Warn() && warn != nil {
+		fmt.Fprintf(warn, "WARNING: %s\n", res.Message)
+	}
+	return nil
+}
+
+// formatAllowNonDefaultBranchWarning names the current branch, upstream, and
+// origin/HEAD so operators can confirm a deliberate non-default drain.
+func formatAllowNonDefaultBranchWarning(res gitpkg.DefaultBranchPreflight) string {
+	current := res.CurrentBranch
+	if current == "" {
+		current = "(detached HEAD)"
+	}
+	upstream := res.UpstreamRef
+	if upstream == "" {
+		if res.UpstreamBranch != "" {
+			upstream = "refs/heads/" + res.UpstreamBranch
+		} else {
+			upstream = "(none)"
+		}
+	}
+	originHEAD := res.OriginHEADRef
+	if originHEAD == "" {
+		if res.DefaultBranch != "" {
+			originHEAD = "refs/remotes/origin/" + res.DefaultBranch
+		} else {
+			originHEAD = "(unknown)"
+		}
+	}
+	return fmt.Sprintf(
+		"WARNING: --allow-non-default-branch: continuing on branch %q (upstream %s) while origin/HEAD is %s",
+		current, upstream, originHEAD,
+	)
 }
 
 func workTrackerSyncEnabled(cmd *cobra.Command) bool {

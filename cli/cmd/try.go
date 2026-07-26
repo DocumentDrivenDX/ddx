@@ -100,6 +100,7 @@ Exit codes:
 	cmd.Flags().Duration("request-timeout", 0, "Explicit per-request provider wall-clock timeout passed to Fizeau (default: unset)")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
+	cmd.Flags().Bool("allow-non-default-branch", false, "Allow execution when the current branch upstream is not the remote default branch (origin/HEAD); prints a warning naming both refs")
 
 	return cmd
 }
@@ -128,6 +129,15 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	f.preflightWarnOnce.Do(func() {
 		emitPreflightWarning(cmd.ErrOrStderr(), preflightResult)
 	})
+
+	// Default-branch gate: refuse try when upstream != origin/HEAD unless
+	// --allow-non-default-branch is set. Runs before any store claim.
+	allowNonDefault, _ := cmd.Flags().GetBool("allow-non-default-branch")
+	if err := enforceDefaultBranchPreflight(projectRoot, allowNonDefault, cmd.ErrOrStderr()); err != nil {
+		// Print explicitly: try uses SilenceErrors, so cobra will not echo the error.
+		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+		return err
+	}
 
 	fromRev, _ := cmd.Flags().GetString("from")
 	harness, _ := cmd.Flags().GetString("harness")
