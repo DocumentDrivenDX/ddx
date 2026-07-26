@@ -33,15 +33,16 @@ func TestWorkerManagerShutdownStopsManagedProcessTrees(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, workerID), 0o755))
 	startedAt := time.Now().UTC().Add(-time.Minute)
 	record := WorkerRecord{
-		ID:          workerID,
-		Kind:        "work",
-		State:       "running",
-		Status:      "running",
-		ProjectRoot: root,
-		StartedAt:   startedAt,
-		PID:         rootPID,
-		PGID:        rootPID,
-		CurrentBead: "ddx-shutdown-tree",
+		ID:            workerID,
+		Kind:          "work",
+		State:         "running",
+		Status:        "running",
+		ProjectRoot:   root,
+		StartedAt:     startedAt,
+		PID:           rootPID,
+		PGID:          rootPID,
+		ServerManaged: true,
+		CurrentBead:   "ddx-shutdown-tree",
 		CurrentAttempt: &CurrentAttemptInfo{
 			AttemptID: workerID + "-a1",
 			BeadID:    "ddx-shutdown-tree",

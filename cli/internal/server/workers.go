@@ -121,15 +121,22 @@ type WorkerRecord struct {
 	LastAttempt    *LastAttemptInfo       `json:"last_attempt,omitempty"`
 	Lifecycle      []WorkerLifecycleEvent `json:"lifecycle,omitempty"`
 	LandSummary    *CoordinatorMetrics    `json:"land_summary,omitempty"`
-	// PID is the OS process id of an external worker subprocess, if any.
-	// Zero for purely in-process (goroutine-only) workers. Surfaced so the
-	// autonomous watchdog can send SIGTERM/SIGKILL to the process group when
-	// cancelling the context is not enough.
+	// PID is the OS process id of a worker subprocess, if any.
+	// Zero for purely in-process (goroutine-only) workers. Process-group
+	// targeting on stop/reap is gated by ServerManaged — a nonzero PID alone
+	// does not make the worker server-owned.
 	PID int `json:"pid,omitempty"`
-	// PGID is the OS process-group id of an external worker subprocess, if any.
+	// PGID is the OS process-group id of a server-owned worker subprocess.
 	// For server-managed workers on Unix this matches PID because the child
-	// starts in its own process group. Zero for purely in-process workers.
+	// starts in its own process group. Zero for in-process workers and for
+	// externally reported workers (which must not invent PGID ownership).
 	PGID int `json:"pgid,omitempty"`
+	// ServerManaged is true only when the server launched this worker via the
+	// StartExecuteLoop managed subprocess path and therefore owns the process
+	// group boundary. External reported workers and interactive Claude/Codex
+	// sessions must leave this false so stop/reap never treat their PIDs as
+	// server-owned process groups.
+	ServerManaged bool `json:"server_managed,omitempty"`
 	// ReapReason is populated when the watchdog forcibly terminates a worker;
 	// set to "watchdog" today.
 	ReapReason string `json:"reap_reason,omitempty"`
@@ -137,6 +144,13 @@ type WorkerRecord struct {
 	// to disk. True when PID > 0 and the process is alive, false when PID > 0
 	// but the process has exited. Omitted (nil) when PID == 0 (goroutine-only).
 	PIDAlive *bool `json:"pid_alive,omitempty"`
+}
+
+// ownsProcessBoundary reports whether the server may target this record's
+// PID/PGID as a managed process group. Only workers launched by the managed
+// StartExecuteLoop path set ServerManaged.
+func (r WorkerRecord) ownsProcessBoundary() bool {
+	return r.ServerManaged
 }
 
 type WorkerExecutionResult struct {
@@ -632,6 +646,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 			failed.FinishedAt = now
 			failed.PID = 0
 			failed.PGID = 0
+			failed.ServerManaged = false
 			failed.Substate = ""
 			delete(m.workers, id)
 			m.mu.Unlock()
@@ -670,8 +685,12 @@ func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoo
 
 	m.mu.Lock()
 	record := handle.record
+	// Process-boundary metadata is reserved for server-owned subprocesses.
+	// External reported workers and interactive sessions must never inherit
+	// these fields from the managed launch path.
 	record.PID = cmd.Process.Pid
 	record.PGID = cmd.Process.Pid
+	record.ServerManaged = true
 	handle.managed = true
 	handle.record = record
 	m.mu.Unlock()
@@ -1503,7 +1522,10 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 		return m.writeRecord(dir, rec)
 	}
 
-	if pidAlive {
+	// Only server-owned process groups may be signalled. A stale disk record
+	// that merely carries an observed/external PID must not be treated as a
+	// managed process tree.
+	if pidAlive && rec.ownsProcessBoundary() {
 		cleanupManagedWorkerProcessTree(rec.PID, nil, 250*time.Millisecond)
 	}
 
@@ -1691,6 +1713,7 @@ func (m *WorkerManager) Stop(id string) error {
 		projectRoot = m.projectRoot
 	}
 	pid := handle.record.PID
+	ownsBoundary := handle.managed || handle.record.ownsProcessBoundary()
 	beadID := ""
 	if handle.record.CurrentAttempt != nil {
 		beadID = handle.record.CurrentAttempt.BeadID
@@ -1739,11 +1762,14 @@ func (m *WorkerManager) Stop(id string) error {
 		_ = store.Unclaim(beadID)
 	}
 
-	// Escalate to the worker process tree if we know any server-owned
-	// process groups. This keeps operator Stop scoped to the worker while
-	// still reaching provider shells and their descendants.
-	_, _, _, grace := m.watchdogDeadlines()
-	cleanupReport := cleanupManagedWorkerProcessTree(pid, cleanupPGIDs, grace)
+	// Escalate to the worker process tree only for server-owned process
+	// groups. Externally reported PIDs and interactive Claude/Codex
+	// sessions must not be process-group targeted from this path.
+	var cleanupReport managedProcessCleanupReport
+	if ownsBoundary {
+		_, _, _, grace := m.watchdogDeadlines()
+		cleanupReport = cleanupManagedWorkerProcessTree(pid, cleanupPGIDs, grace)
+	}
 
 	// Cancel the worker goroutine so any in-process code sees context.Canceled.
 	cancel()
@@ -1850,7 +1876,10 @@ func (m *WorkerManager) Shutdown() error {
 			if rec.State != "running" && rec.State != "stopping" {
 				continue
 			}
-			if rec.PID > 0 || rec.PGID > 0 {
+			// Process-tree cleanup is reserved for server-owned workers.
+			// A disk record with an observed PID/PGID but no ownership
+			// marker is reaped as a stale entry without signalling the PID.
+			if rec.ownsProcessBoundary() && (rec.PID > 0 || rec.PGID > 0) {
 				if err := m.shutdownManagedDiskEntry(rec); err != nil && firstErr == nil {
 					firstErr = err
 				}
@@ -1937,8 +1966,11 @@ func (m *WorkerManager) shutdownManagedDiskEntry(rec WorkerRecord) error {
 		_ = store.Unclaim(beadID)
 	}
 
-	_, _, _, grace := m.watchdogDeadlines()
-	cleanupReport := cleanupManagedWorkerProcessTree(rootPID, nil, grace)
+	var cleanupReport managedProcessCleanupReport
+	if rec.ownsProcessBoundary() {
+		_, _, _, grace := m.watchdogDeadlines()
+		cleanupReport = cleanupManagedWorkerProcessTree(rootPID, nil, grace)
+	}
 	cleanupSummary := cleanupReport.String()
 
 	rec.State = "stopped"
@@ -2043,7 +2075,7 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 		}
 
 		pid := rec.PID
-		if pid <= 0 && h.managed {
+		if pid <= 0 && (h.managed || rec.ownsProcessBoundary()) {
 			pid = rec.PGID
 		}
 
@@ -2080,8 +2112,9 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
+	ownsBoundary := handle.managed || rec.ownsProcessBoundary()
 	processRoot := pid
-	if processRoot <= 0 && handle.managed {
+	if processRoot <= 0 && ownsBoundary {
 		processRoot = rec.PGID
 	}
 	cleanupPGIDs := append([]int(nil), handle.cleanupPGIDs...)
@@ -2106,10 +2139,13 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 		_ = store.Unclaim(beadID)
 	}
 
-	// 2. Escalate to the worker process tree if we know any server-owned
-	//    process groups.
-	_, _, _, grace := m.watchdogDeadlines()
-	cleanupReport := cleanupManagedWorkerProcessTree(processRoot, cleanupPGIDs, grace)
+	// 2. Escalate to the worker process tree only for server-owned process
+	//    groups. External reported worker PIDs are never process-group targets.
+	var cleanupReport managedProcessCleanupReport
+	if ownsBoundary {
+		_, _, _, grace := m.watchdogDeadlines()
+		cleanupReport = cleanupManagedWorkerProcessTree(processRoot, cleanupPGIDs, grace)
+	}
 
 	// 3. Cancel the goroutine so any in-process code sees context.Canceled.
 	if handle.cancel != nil {

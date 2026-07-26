@@ -204,7 +204,7 @@ func TestWorkerManagerStopSIGTERMtoSIGKILL(t *testing.T) {
 	h, _ := newIdleHandle(t, m, "worker-stop-wedge", "ddx-stop-wedge",
 		now.Add(-1*time.Second), now.Add(-1*time.Second))
 	m.mu.Lock()
-	h.record.PID = cmd.Process.Pid
+	markServerOwnedProcessBoundary(t, h, cmd.Process.Pid)
 	m.mu.Unlock()
 
 	require.NoError(t, m.Stop("worker-stop-wedge"))
@@ -300,7 +300,7 @@ func TestManagedWorkerStopKillsClaudeCodexDescendants(t *testing.T) {
 	now := time.Now().UTC()
 	handle, cancelled := newIdleHandle(t, m, workerID, "ddx-stop-tree", now.Add(-time.Second), now.Add(-time.Second))
 	m.mu.Lock()
-	handle.record.PID = rootPID
+	markServerOwnedProcessBoundary(t, handle, rootPID)
 	m.mu.Unlock()
 
 	claudePID := waitForPIDFile(t, filepath.Join(pidDir, "claude.pid"))
@@ -360,7 +360,7 @@ func TestManagedWorkerStopIsIdempotent(t *testing.T) {
 	now := time.Now().UTC()
 	handle, cancelled := newIdleHandle(t, m, workerID, "ddx-stop-idem", now.Add(-time.Second), now.Add(-time.Second))
 	m.mu.Lock()
-	handle.record.PID = rootPID
+	markServerOwnedProcessBoundary(t, handle, rootPID)
 	m.mu.Unlock()
 
 	require.NoError(t, m.Stop(workerID))
@@ -406,7 +406,7 @@ func TestManagedWorkerStopSkipsExternalReportedWorkers(t *testing.T) {
 	now := time.Now().UTC()
 	handle, _ := newIdleHandle(t, m, workerID, "ddx-stop-skips", now.Add(-time.Second), now.Add(-time.Second))
 	m.mu.Lock()
-	handle.record.PID = managedPID
+	markServerOwnedProcessBoundary(t, handle, managedPID)
 	m.mu.Unlock()
 
 	binDir := t.TempDir()
