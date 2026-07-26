@@ -532,15 +532,15 @@ func TestStopStaleDiskEntry_ReapsLivePIDWithReclaimableStaleClaim(t *testing.T) 
 	dir := filepath.Join(m.rootDir, workerID)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	stale := WorkerRecord{
-		ID:             workerID,
-		Kind:           "work",
-		State:          "running",
-		Status:         "running",
-		ProjectRoot:    root,
-		StartedAt:      time.Now().UTC().Add(-1 * time.Hour),
-		PID:            pid,
-		ServerManaged:  true, // only server-owned process groups may be signalled
-		CurrentBead:    "ddx-stop-stale-reap",
+		ID:            workerID,
+		Kind:          "work",
+		State:         "running",
+		Status:        "running",
+		ProjectRoot:   root,
+		StartedAt:     time.Now().UTC().Add(-1 * time.Hour),
+		PID:           pid,
+		ServerManaged: true, // only server-owned process groups may be signalled
+		CurrentBead:   "ddx-stop-stale-reap",
 		CurrentAttempt: &CurrentAttemptInfo{
 			AttemptID: workerID + "-a1",
 			BeadID:    "ddx-stop-stale-reap",
