@@ -51,15 +51,29 @@ type Record struct {
 	BeadID string `json:"bead_id,omitempty"`
 	// AttemptID is the DDx attempt / execution id for this run.
 	AttemptID string `json:"attempt_id,omitempty"`
+	// WorkerID is the DDx worker that published this attempt record.
+	WorkerID string `json:"worker_id,omitempty"`
+	// BaseRev is the git base revision the attempt was prepared against.
+	BaseRev string `json:"base_rev,omitempty"`
 	// Phase is the typed lifecycle phase of the record.
 	Phase LifecyclePhase `json:"phase"`
 
+	// CreatedAt is when the record was first constructed/published (dispatching).
+	// Stable JSON name for CLI/server readers; equal to UpdatedAt on initial publish.
+	CreatedAt time.Time `json:"created_at,omitempty"`
 	// StartedAt is when the record was first published (typically dispatching).
+	// Kept for lifecycle transition callers that preserve the first-publish time;
+	// NewDispatchingRecord sets it equal to CreatedAt.
 	StartedAt time.Time `json:"started_at"`
 	// UpdatedAt is the last atomic publish time for this record.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// FinishedAt is set when the record enters a terminal or interrupted phase.
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
+
+	// Correlation holds additional stable DDx-owned key/value metadata
+	// (session_id, bundle_path, prompt_sha, …) without encoding provider
+	// transcript content or harness-routing policy.
+	Correlation map[string]string `json:"correlation,omitempty"`
 
 	// Outcome holds typed DDx-owned outcome fields once known.
 	Outcome *Outcome `json:"outcome,omitempty"`
@@ -67,6 +81,7 @@ type Record struct {
 	// refs, typed final status). Never raw provider streams or process metadata.
 	Fizeau *FizeauPublicResult `json:"fizeau,omitempty"`
 	// Evidence lists pointers to evidence artifacts for this run.
+	// The prompt entry is a DDx-owned path pointer, not provider transcript body.
 	Evidence []EvidenceLink `json:"evidence,omitempty"`
 }
 
