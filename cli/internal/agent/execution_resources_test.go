@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -545,4 +546,202 @@ func TestResourceTopInodeConsumerScanOmitsSensitiveContents(t *testing.T) {
 		assert.NotContains(t, c.CleanupPrefix, secret)
 		assert.Greater(t, c.EntryCount, int64(0))
 	}
+}
+
+// seedTopInodeConsumerRoot populates root with a DDx cleanup-prefix child and
+// a non-matching sibling so preflight attachment tests can assert ranking
+// fields (path, entry count, size, age, cleanup-prefix match).
+func seedTopInodeConsumerRoot(t *testing.T, root string, now time.Time) (heavyPath string) {
+	t.Helper()
+	old := now.Add(-3 * time.Hour)
+
+	heavyPath = filepath.Join(root, "ddx-home-heavy")
+	require.NoError(t, os.Mkdir(heavyPath, 0o755))
+	payload := []byte("payload-bytes")
+	for i := 0; i < 4; i++ {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(heavyPath, fmt.Sprintf("f%d", i)),
+			payload,
+			0o644,
+		))
+	}
+	require.NoError(t, os.Chtimes(heavyPath, old, old))
+
+	light := filepath.Join(root, "other-cache")
+	require.NoError(t, os.Mkdir(light, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(light, "one"), []byte("z"), 0o644))
+	require.NoError(t, os.Chtimes(light, old, old))
+	return heavyPath
+}
+
+func assertTopInodeConsumerFields(t *testing.T, check ExecutionResourceRootCheck, heavyPath string) {
+	t.Helper()
+	require.NotEmpty(t, check.TopInodeConsumers, "expected bounded top-consumers list on failing root")
+	assert.LessOrEqual(t, len(check.TopInodeConsumers), defaultTopInodeConsumerLimit)
+
+	byBase := make(map[string]ExecutionTopInodeConsumer, len(check.TopInodeConsumers))
+	for _, c := range check.TopInodeConsumers {
+		byBase[filepath.Base(c.Path)] = c
+	}
+	heavy, ok := byBase["ddx-home-heavy"]
+	require.True(t, ok, "expected ddx-home-heavy among top consumers")
+	assert.Equal(t, heavyPath, heavy.Path)
+	assert.GreaterOrEqual(t, heavy.EntryCount, int64(5), "dir + four files")
+	assert.GreaterOrEqual(t, heavy.Bytes, int64(len("payload-bytes")*4))
+	assert.False(t, heavy.ModTime.IsZero())
+	assert.GreaterOrEqual(t, heavy.AgeSeconds, int64(3*time.Hour/time.Second-5))
+	assert.True(t, heavy.MatchesCleanup, "ddx-home-* must match cleanup prefix")
+	assert.Equal(t, "ddx-home-", heavy.CleanupPrefix)
+}
+
+// TestResourcePreflightReportsTopInodeConsumersOnLowInodes proves a low-inode
+// preflight failure includes a bounded top-consumers list on the failing root
+// check with path, entry count, size, age, and cleanup-prefix match.
+func TestResourcePreflightReportsTopInodeConsumersOnLowInodes(t *testing.T) {
+	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+	tempRoot := t.TempDir()
+	now := time.Now()
+	heavyPath := seedTopInodeConsumerRoot(t, tempRoot, now)
+
+	checker := &ExecutionResourcePreflight{
+		ProjectRoot: projectRoot,
+		TempRoot:    tempRoot,
+		EvidenceRoots: []string{
+			filepath.Join(projectRoot, ExecuteBeadArtifactDir),
+		},
+		CleanupRunner: &fakeExecutionCleanupRunner{},
+		RootProbe: func(path string) (ExecutionResourceRootCheck, error) {
+			check := ExecutionResourceRootCheck{
+				Path:       path,
+				Writable:   true,
+				BytesFree:  executionResourceMinFreeBytes + 1,
+				InodesFree: executionResourceMinFreeInodes + 1,
+			}
+			if path == tempRoot {
+				check.InodesFree = executionResourceMinFreeInodes - 1
+			}
+			return check, nil
+		},
+	}
+
+	result, err := checker.Check(context.Background())
+	require.Error(t, err)
+
+	var resourceErr *ResourceExhaustedError
+	require.ErrorAs(t, err, &resourceErr)
+	assert.Contains(t, resourceErr.Detail, "free inodes")
+	assert.Contains(t, resourceErr.Detail, tempRoot)
+
+	var failing *ExecutionResourceRootCheck
+	for i := range result.RootChecks {
+		if result.RootChecks[i].Path == tempRoot {
+			failing = &result.RootChecks[i]
+			break
+		}
+	}
+	require.NotNil(t, failing, "expected root check for temp root %s", tempRoot)
+	assert.Equal(t, executionResourceMinFreeInodes-1, failing.InodesFree)
+	assertTopInodeConsumerFields(t, *failing, heavyPath)
+}
+
+// TestResourcePreflightReportsTopInodeConsumersOnENOSPCWritableProbe proves an
+// ENOSPC/no-space-left-device temp creation or writability-probe failure
+// includes the same bounded diagnostic when the failing root can be scanned.
+func TestResourcePreflightReportsTopInodeConsumersOnENOSPCWritableProbe(t *testing.T) {
+	original := createWritabilityProbeFile
+	t.Cleanup(func() { createWritabilityProbeFile = original })
+	createWritabilityProbeFile = func(dir, pattern string) (*os.File, error) {
+		return nil, &os.PathError{Op: "open", Path: dir, Err: unix.ENOSPC}
+	}
+
+	root := t.TempDir()
+	now := time.Now()
+	heavyPath := seedTopInodeConsumerRoot(t, root, now)
+
+	p := &ExecutionResourcePreflight{}
+	check, err := p.checkRoot(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writability check failed")
+	assert.True(t, isNoSpaceError(err) || isNoSpaceReason(check.WritableReason) || isNoSpaceReason(err.Error()),
+		"failure must classify as ENOSPC/no-space: err=%v reason=%q", err, check.WritableReason)
+	assert.False(t, check.Writable)
+	assert.False(t, check.FDExhausted, "ENOSPC must not be classified as fd exhaustion")
+	assertTopInodeConsumerFields(t, check, heavyPath)
+}
+
+// TestResourcePreflightTopInodeConsumerErrorsDoNotMaskOriginalFailure proves
+// scanner errors or truncation do not replace the original low-inode/ENOSPC
+// preflight error and do not change resource threshold values.
+func TestResourcePreflightTopInodeConsumerErrorsDoNotMaskOriginalFailure(t *testing.T) {
+	// Threshold constants stay at their hard-coded floors (not mutated by scan).
+	assert.Equal(t, uint64(64<<20), executionResourceMinFreeBytes)
+	assert.Equal(t, uint64(1024), executionResourceMinFreeInodes)
+	assert.Equal(t, uint64(512<<20), executionResourceSoftMinFreeBytes)
+	assert.Equal(t, uint64(4096), executionResourceSoftMinFreeInodes)
+	assert.Equal(t, 8, defaultTopInodeConsumerLimit)
+	assert.Equal(t, 4096, defaultTopInodeEntriesPerChild)
+
+	// --- Scanner error must not mask low-inode failure ---
+	// chmod wx-only so CreateTemp (needs write+search) can succeed but ReadDir
+	// (needs read) fails, forcing applyTopInodeConsumerDiagnostics to note the
+	// scan error without changing the original preflight error.
+	unreadableRoot := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(unreadableRoot, "ddx-home-blocked"), 0o755))
+	require.NoError(t, os.Chmod(unreadableRoot, 0o300))
+	t.Cleanup(func() { _ = os.Chmod(unreadableRoot, 0o755) })
+
+	p := &ExecutionResourcePreflight{
+		HardMinFreeInodes: executionResourceMinFreeInodes,
+		HardMinFreeBytes:  executionResourceMinFreeBytes,
+		RootProbe: func(path string) (ExecutionResourceRootCheck, error) {
+			return ExecutionResourceRootCheck{
+				Path:       path,
+				Writable:   true,
+				BytesFree:  executionResourceMinFreeBytes + 1,
+				InodesFree: executionResourceMinFreeInodes - 1,
+			}, nil
+		},
+	}
+	check, err := p.checkRoot(unreadableRoot)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "free inodes")
+	assert.Contains(t, err.Error(), fmt.Sprintf("%d < required %d",
+		executionResourceMinFreeInodes-1, executionResourceMinFreeInodes))
+	assert.Empty(t, check.TopInodeConsumers, "failed scan must not invent consumers")
+	require.NotEmpty(t, check.Notes)
+	var sawScanNote bool
+	for _, note := range check.Notes {
+		if strings.Contains(note, "top inode consumers:") {
+			sawScanNote = true
+			break
+		}
+	}
+	assert.True(t, sawScanNote, "scanner error should appear as a note, notes=%v", check.Notes)
+	// Thresholds still unchanged after the failed diagnostic path.
+	assert.Equal(t, uint64(1024), executionResourceMinFreeInodes)
+	assert.Equal(t, uint64(64<<20), executionResourceMinFreeBytes)
+
+	// --- Truncation must not mask ENOSPC failure ---
+	original := createWritabilityProbeFile
+	t.Cleanup(func() { createWritabilityProbeFile = original })
+	createWritabilityProbeFile = func(dir, pattern string) (*os.File, error) {
+		return nil, &os.PathError{Op: "open", Path: dir, Err: unix.ENOSPC}
+	}
+
+	crowded := t.TempDir()
+	for i := 0; i < defaultTopInodeConsumerLimit+5; i++ {
+		require.NoError(t, os.Mkdir(filepath.Join(crowded, fmt.Sprintf("ddx-home-%02d", i)), 0o755))
+	}
+	enospcCheck, enospcErr := (&ExecutionResourcePreflight{}).checkRoot(crowded)
+	require.Error(t, enospcErr)
+	assert.Contains(t, enospcErr.Error(), "writability check failed")
+	assert.True(t, isNoSpaceReason(enospcCheck.WritableReason) || isNoSpaceReason(enospcErr.Error()))
+	assert.True(t, enospcCheck.TopInodeConsumersTruncated,
+		"more children than the report cap must mark truncation")
+	assert.LessOrEqual(t, len(enospcCheck.TopInodeConsumers), defaultTopInodeConsumerLimit)
+	// Original ENOSPC error is the returned error; truncation is metadata only.
+	assert.NotContains(t, enospcErr.Error(), "top inode consumers")
+	assert.Equal(t, uint64(1024), executionResourceMinFreeInodes)
+	assert.Equal(t, uint64(64<<20), executionResourceMinFreeBytes)
 }
