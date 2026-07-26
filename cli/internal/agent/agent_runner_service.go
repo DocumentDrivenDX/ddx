@@ -87,10 +87,26 @@ func makeLoopKey(call agentlib.ServiceToolCallData, result agentlib.ServiceToolR
 //     an 8-entry window trigger wd.cancel.
 //  3. Per-tool-call timeout: a tool_call without a matching tool_result within
 //     wd.toolCallTimeout triggers wd.cancel.
-func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Writer, renderer WorkLogRenderer, wd *drainWatchdog, onRouteResolved func(harness, provider, model string)) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
+//
+// onPublicExecution, when non-nil, is invoked once for the first successfully
+// decoded public execution event (routing, progress, final, tool, etc.) so
+// callers can advance the DDx run substrate to phase running from public
+// Fizeau data only. Returning a non-nil error stops the drain immediately.
+func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Writer, renderer WorkLogRenderer, wd *drainWatchdog, onRouteResolved func(harness, provider, model string), onPublicExecution func(decoded agentlib.ServiceDecodedEvent) error) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData, error) {
 	var final *agentlib.ServiceFinalData
 	var routing *agentlib.ServiceRoutingDecisionData
 	var progress []agentlib.ServiceProgressData
+	publicSeen := false
+	notifyPublic := func(decoded agentlib.ServiceDecodedEvent) error {
+		if onPublicExecution == nil || publicSeen {
+			return nil
+		}
+		if _, ok := fizeauPublicFromDecoded(decoded); !ok {
+			return nil
+		}
+		publicSeen = true
+		return onPublicExecution(decoded)
+	}
 
 	// Fast path: no watchdog, simple range loop with no timer overhead.
 	if wd == nil || (wd.idleTimeout == 0 && wd.toolCallTimeout == 0) {
@@ -98,6 +114,9 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			decoded, err := agentlib.DecodeServiceEvent(ev)
 			if err != nil {
 				continue
+			}
+			if err := notifyPublic(decoded); err != nil {
+				return final, routing, progress, err
 			}
 			switch {
 			case decoded.RoutingDecision != nil:
@@ -119,7 +138,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 				final = decoded.Final
 			}
 		}
-		return final, routing, progress
+		return final, routing, progress, nil
 	}
 
 	// Watchdog path: select loop so timers can fire alongside event reads.
@@ -202,10 +221,10 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 	for {
 		select {
 		case <-ctxDone:
-			return final, routing, progress
+			return final, routing, progress, nil
 		case ev, ok := <-events:
 			if !ok {
-				return final, routing, progress
+				return final, routing, progress, nil
 			}
 			decoded, err := agentlib.DecodeServiceEvent(ev)
 			if err != nil {
@@ -213,6 +232,9 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			}
 			// Any received event resets the idle timer; only true silence fires it.
 			resetIdle()
+			if err := notifyPublic(decoded); err != nil {
+				return final, routing, progress, err
+			}
 			switch {
 			case decoded.ToolCall != nil:
 				startToolCallTimer()
@@ -228,7 +250,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 						if wd.cancel != nil {
 							wd.cancel()
 						}
-						return final, routing, progress
+						return final, routing, progress, nil
 					}
 					pendingCall = nil
 				}
@@ -260,7 +282,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			if wd.cancel != nil {
 				wd.cancel()
 			}
-			return final, routing, progress
+			return final, routing, progress, nil
 
 		case <-toolCallTimerC:
 			name := ""
@@ -271,7 +293,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			if wd.cancel != nil {
 				wd.cancel()
 			}
-			return final, routing, progress
+			return final, routing, progress, nil
 		}
 	}
 }

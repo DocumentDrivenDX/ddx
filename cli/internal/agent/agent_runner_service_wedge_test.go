@@ -93,7 +93,7 @@ func TestIdleTimer_TrueSilenceFiresTimeout(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
+		_, _, _, _ = drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil, nil)
 	}()
 
 	require.Eventually(t, func() bool {
@@ -124,7 +124,7 @@ func TestIdleTimer_ProgressEventsResetTimer(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
+		_, _, _, _ = drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil, nil)
 	}()
 
 	// Send tool_call/tool_result/progress events for 3× the idle window with
@@ -182,7 +182,7 @@ func TestLoopDetector_FiresAfterRepeatedIdenticalCommands(t *testing.T) {
 
 	close(events)
 
-	drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
+	_, _, _, _ = drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil, nil)
 
 	assert.True(t, cancelCalled.Load(), "loop detector must call cancel after ≥4 identical (command, result) pairs in the window")
 }
@@ -207,7 +207,7 @@ func TestToolCallTimeout_KillsLongHungSubprocess(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
+		_, _, _, _ = drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil, nil)
 	}()
 
 	// The tool-call timeout must fire and cancel within 500 ms.
@@ -253,7 +253,7 @@ func TestWedgeImmune_HardWorkRunsToCompletion(t *testing.T) {
 		close(events)
 	}()
 
-	final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
+	final, _, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil, nil)
 
 	assert.False(t, cancelCalled.Load(), "hard work with distinct results must NOT trigger any wedge-prevention mechanism")
 	require.NotNil(t, final, "final event must be received when execution completes naturally")
