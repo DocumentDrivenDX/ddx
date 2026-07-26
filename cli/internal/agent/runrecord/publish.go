@@ -157,6 +157,18 @@ func publish(projectRoot string, rec Record, h *publishHooks) error {
 	if err := validateRunID(rec.RunID); err != nil {
 		return err
 	}
+	// Pre-route boundary: a dispatching-phase record is published before Fizeau
+	// route/result data exists. Reject concrete routing, result, cost, and
+	// provider-process claims so DDx never persists knowledge it does not have.
+	if rec.Phase == PhaseDispatching {
+		if err := validateNoPreRouteFields(rec); err != nil {
+			return err
+		}
+		// Normalize empty Fizeau pointer so JSON omits the block entirely.
+		if rec.Fizeau != nil && rec.Fizeau.IsEmpty() {
+			rec.Fizeau = nil
+		}
+	}
 	if rec.Version == 0 {
 		rec.Version = SchemaVersion
 	}
