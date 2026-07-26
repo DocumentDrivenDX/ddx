@@ -70,6 +70,9 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "sequential_git_operations", any: []string{"Run git/index mutations sequentially", "Do not use parallel tool calls for"}},
 		{name: "no_red_code", any: []string{"Do not commit red code"}},
 		{name: "implementation_commit_single_gate", any: []string{"run `git commit` normally", "hook's output/exit status", "single authoritative staged gate"}},
+		{name: "no_hook_bypass", any: []string{"--no-verify", "git commit --no-verify"}},
+		{name: "no_hook_disabling", any: []string{"disable hooks"}},
+		{name: "no_commit_after_failed_gate", any: []string{"failed/interrupted required gate", "do not commit after"}},
 		{name: "no_modify_outside_scope", any: []string{"outside the bead's scope", "outside the bead's named scope"}},
 		{name: "never_ddx_init", any: []string{"Never run `ddx init`", "never `ddx init`"}},
 		{name: "executions_intact", any: []string{".ddx/executions/"}},
@@ -510,6 +513,94 @@ func anyContains(s string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// implementationHarnessPromptVariants lists every execute-bead prompt variant
+// that can reach an implementation harness. The instructions body is
+// harness-neutral today, but tests still walk each variant so a future
+// reintroduction of per-harness prompt selection cannot drop the gate-bypass
+// prohibitions from only some paths (rich + embedded).
+var implementationHarnessPromptVariants = []struct {
+	variant string
+	harness string
+}{
+	{variant: "claude", harness: "claude"},
+	{variant: "codex", harness: "codex"},
+	{variant: "opencode", harness: "opencode"},
+	{variant: "unknown", harness: "unknown"},
+	{variant: "agent", harness: "agent"},
+	{variant: "fiz", harness: "fiz"},
+	{variant: "embedded-empty", harness: ""},
+	{variant: "embedded-opaque", harness: " opaque-harness "},
+}
+
+// gateBypassForbiddenSubstrings are the load-bearing hook-bypass guardrails
+// every implementation-facing execute-bead prompt must carry (ddx-ca91ac5b).
+var gateBypassForbiddenSubstrings = []string{
+	"--no-verify",
+	"disable hooks",
+	"failed/interrupted required gate",
+	"do not commit after",
+}
+
+// TestExecuteBead_PromptForbidsNoVerify asserts every rich and embedded
+// execute-bead prompt explicitly forbids --no-verify, hook disabling, and
+// committing after failed or interrupted required gates.
+func TestExecuteBead_PromptForbidsNoVerify(t *testing.T) {
+	for _, c := range implementationHarnessPromptVariants {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range gateBypassForbiddenSubstrings {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing gate-bypass prohibition substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+// TestExecuteBead_PromptVariantsForbidGateBypass covers every execute-bead
+// prompt variant that can reach an implementation harness, including the
+// harness-neutral rich body and the embedded-empty / embedded-opaque paths.
+// It also checks the on-disk prompt snapshots so byte-identical gates stay
+// aligned with the live instructions text.
+func TestExecuteBead_PromptVariantsForbidGateBypass(t *testing.T) {
+	for _, c := range implementationHarnessPromptVariants {
+		c := c
+		t.Run("instructions/"+c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range gateBypassForbiddenSubstrings {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing gate-bypass prohibition substring %q", c.variant, sub)
+				}
+			}
+			// Full XML prompt path must also carry the prohibitions after
+			// buildPrompt wraps instructions (entity encoding preserves ASCII
+			// substrings like --no-verify).
+			full := renderFullPromptForGuardrails(t, c.harness, "")
+			for _, sub := range gateBypassForbiddenSubstrings {
+				if !strings.Contains(full, sub) {
+					t.Errorf("full %s prompt missing gate-bypass prohibition substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+
+	for _, name := range []string{"claude", "agent"} {
+		name := name
+		t.Run("snapshot/"+name, func(t *testing.T) {
+			// Reuse the same snapshot bytes the byte-identical tests gate on.
+			assertPromptSnapshot(t, name, executeBeadInstructionsText)
+			// And assert the live constant still carries the prohibitions so a
+			// stale-snapshot-only path cannot green-wash a dropped guardrail.
+			for _, sub := range gateBypassForbiddenSubstrings {
+				if !strings.Contains(executeBeadInstructionsText, sub) {
+					t.Errorf("executeBeadInstructionsText missing gate-bypass prohibition substring %q", sub)
+				}
+			}
+		})
+	}
 }
 
 // TestExecuteBeadPromptRequiresMatrixPlanForLongRunningWork verifies FEAT-010

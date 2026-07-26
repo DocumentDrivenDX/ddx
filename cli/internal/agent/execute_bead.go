@@ -2186,7 +2186,7 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // TestPromptGuardrails_AllPresent enforce this list; add a guardrail here
 // AND to both tests when you introduce one.
 //
-// 24 guardrails (FEAT-022 cross-reference):
+// 26 guardrails (FEAT-022 cross-reference):
 //  1. AC checkbox: every AC satisfied by a specific code/test/file (anti-handwave)
 //  2. Read named files / referenced specs first, before editing
 //  3. Missing-governing fallback note (non-minimal renders only — see
@@ -2204,27 +2204,30 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 //     reuse it when the fingerprint matches; otherwise rerun after staged-tree
 //     or hook-config changes. Pre-staging no-staged-files runs do not count as
 //     acceptance evidence
-// 11. Do not modify files outside bead scope
-// 12. Never run `ddx init`
-// 13. Keep .ddx/executions/ intact, local, and untracked
-// 14. Do not rewrite CLAUDE.md / AGENTS.md unless asked
-// 15. Bead description overrides CLAUDE.md / YAGNI defaults
-// 16. Reports go under the bead metadata bundle path, never /tmp, and remain
+// 11. Never use git commit --no-verify, disable hooks, or commit after a
+//     required gate fails or is interrupted; required gate evidence must
+//     control landing (ddx-ca91ac5b / regression:ddx-725b65b4)
+// 12. Do not modify files outside bead scope
+// 13. Never run `ddx init`
+// 14. Keep .ddx/executions/ intact, local, and untracked
+// 15. Do not rewrite CLAUDE.md / AGENTS.md unless asked
+// 16. Bead description overrides CLAUDE.md / YAGNI defaults
+// 17. Reports go under the bead metadata bundle path, never /tmp, and remain
 //     untracked local evidence
-// 17. Write no_changes_rationale.txt before exiting empty
-// 18. Step 0 size-check + decomposition (ddx bead create / dep add / update)
-// 19. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
+// 18. Write no_changes_rationale.txt before exiting empty
+// 19. Step 0 size-check + decomposition (ddx bead create / dep add / update)
+// 20. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
 //     parent-note updates may touch current-bead tracker state
-// 20. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
-// 21. Stop after the commit (Agent post-commit runaway guard)
-// 22. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
-// 23. Validation gates run sequentially: wait for a focused gate to finish
+// 21. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
+// 22. Stop after the commit (Agent post-commit runaway guard)
+// 23. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
+// 24. Validation gates run sequentially: wait for a focused gate to finish
 //     and pass before starting the broader gate, then wait again before lint
 //     or pre-commit. Do not overlap go test / cargo test / npm test / make test
 //     / lefthook invocations; parallelism inside a single command is fine
-// 24. Long-running matrix/benchmark beads (FEAT-010): require explicit matrix
+// 25. Long-running matrix/benchmark beads (FEAT-010): require explicit matrix
 //     plan before running expensive commands; document output path and completion criterion
-// 25. Prohibit rerunning identical long-running commands without documenting why
+// 26. Prohibit rerunning identical long-running commands without documenting why
 //     prior output is invalid and what changed before the retry
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
@@ -2329,7 +2332,7 @@ const executeBeadInstructionsText = `You are executing one bead in an isolated D
 - Parallelism inside one command is fine.
 - Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + `.
-- Treat the ` + "`git commit`" + ` hook as the single authoritative staged gate. Stage the exact commit set, run ` + "`git commit`" + ` normally, and use that hook's output/exit status as the acceptance evidence. If you already ran ` + "`lefthook run pre-commit`" + ` on the same staged tree and hook inputs, reuse it only when the fingerprint matches. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
+- Treat the ` + "`git commit`" + ` hook as the single authoritative staged gate. Stage the exact commit set, run ` + "`git commit`" + ` normally (never ` + "`--no-verify`" + `/disable hooks), and use that hook's output/exit status as the acceptance evidence. Reuse prior ` + "`lefthook run pre-commit`" + ` only when staged tree and hook inputs match. A ` + "`no-staged-files`" + ` or failed/interrupted required gate is not acceptance evidence; do not commit after.
 - Commit exactly once; subject ends with ` + "`[<bead-id>]`" + `.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
