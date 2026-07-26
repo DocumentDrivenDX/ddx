@@ -21,6 +21,104 @@ func TestGitAttributes_TrackerJSONLUnionMerge(t *testing.T) {
 	require.Contains(t, attrs, ".ddx/metrics/*.jsonl merge=union")
 }
 
+// TestGitAttributes_ArchiveAndAttachmentsUnionMerge guards against the
+// beads-archive.jsonl / attachments events.jsonl merge-driver gap: these
+// append-only logs were added by the bead migrate feature but never got the
+// same union-merge treatment as beads.jsonl and metrics/*.jsonl, so
+// concurrent appends (e.g. two workers on diverged tracker state) hit an
+// unresolvable recursive-merge conflict on every pre-claim tracker sync.
+func TestGitAttributes_ArchiveAndAttachmentsUnionMerge(t *testing.T) {
+	repoRoot := gitattributesRepoRoot(t)
+
+	data, err := os.ReadFile(filepath.Join(repoRoot, ".gitattributes"))
+	require.NoError(t, err)
+
+	attrs := string(data)
+	require.Contains(t, attrs, ".ddx/beads-archive.jsonl merge=union")
+	require.Contains(t, attrs, ".ddx/attachments/**/events.jsonl merge=union")
+}
+
+func TestGitAttributes_BeadsArchiveUnionMergeKeepsBothBranches(t *testing.T) {
+	repoRoot := gitattributesRepoRoot(t)
+	attrs := mustReadFile(t, filepath.Join(repoRoot, ".gitattributes"))
+
+	repoDir := t.TempDir()
+	trackerDir := filepath.Join(repoDir, trackerDirName())
+	require.NoError(t, os.MkdirAll(trackerDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".gitattributes"), attrs, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(trackerDir, "beads-archive.jsonl"), nil, 0o644))
+
+	runGitInDir(t, repoDir, "init")
+	runGitInDir(t, repoDir, "config", "user.email", "test@example.com")
+	runGitInDir(t, repoDir, "config", "user.name", "Test User")
+	runGitInDir(t, repoDir, "add", ".gitattributes", trackerRelFile("beads-archive.jsonl"))
+	runGitInDir(t, repoDir, "commit", "-m", "base")
+
+	runGitInDir(t, repoDir, "checkout", "-b", "branch-a")
+	appendJSONLLine(t, filepath.Join(trackerDir, "beads-archive.jsonl"), `{"id":"ddx-archive-a","status":"closed"}`)
+	runGitInDir(t, repoDir, "add", trackerRelFile("beads-archive.jsonl"))
+	runGitInDir(t, repoDir, "commit", "-m", "branch-a")
+
+	runGitInDir(t, repoDir, "checkout", "-b", "branch-b", "HEAD~1")
+	appendJSONLLine(t, filepath.Join(trackerDir, "beads-archive.jsonl"), `{"id":"ddx-archive-b","status":"closed"}`)
+	runGitInDir(t, repoDir, "add", trackerRelFile("beads-archive.jsonl"))
+	runGitInDir(t, repoDir, "commit", "-m", "branch-b")
+
+	runGitInDir(t, repoDir, "checkout", "branch-a")
+	runGitInDir(t, repoDir, "merge", "--no-edit", "branch-b")
+
+	merged := mustReadFile(t, filepath.Join(trackerDir, "beads-archive.jsonl"))
+	lines := nonEmptyLines(string(merged))
+	require.Len(t, lines, 2)
+	require.Contains(t, lines, `{"id":"ddx-archive-a","status":"closed"}`)
+	require.Contains(t, lines, `{"id":"ddx-archive-b","status":"closed"}`)
+
+	status := strings.TrimSpace(runGitInDirOutput(t, repoDir, "diff", "--name-only", "--diff-filter=U"))
+	require.Empty(t, status, "merge should not leave conflict markers")
+}
+
+func TestGitAttributes_AttachmentEventsUnionMergeKeepsBothBranches(t *testing.T) {
+	repoRoot := gitattributesRepoRoot(t)
+	attrs := mustReadFile(t, filepath.Join(repoRoot, ".gitattributes"))
+
+	repoDir := t.TempDir()
+	trackerDir := filepath.Join(repoDir, trackerDirName())
+	attachmentDir := filepath.Join(trackerDir, "attachments", "ddx-e425b11f")
+	require.NoError(t, os.MkdirAll(attachmentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".gitattributes"), attrs, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(attachmentDir, "events.jsonl"), nil, 0o644))
+
+	eventsRel := trackerRelFile(filepath.Join("attachments", "ddx-e425b11f", "events.jsonl"))
+
+	runGitInDir(t, repoDir, "init")
+	runGitInDir(t, repoDir, "config", "user.email", "test@example.com")
+	runGitInDir(t, repoDir, "config", "user.name", "Test User")
+	runGitInDir(t, repoDir, "add", ".gitattributes", eventsRel)
+	runGitInDir(t, repoDir, "commit", "-m", "base")
+
+	runGitInDir(t, repoDir, "checkout", "-b", "branch-a")
+	appendJSONLLine(t, filepath.Join(attachmentDir, "events.jsonl"), `{"kind":"event-a"}`)
+	runGitInDir(t, repoDir, "add", eventsRel)
+	runGitInDir(t, repoDir, "commit", "-m", "branch-a")
+
+	runGitInDir(t, repoDir, "checkout", "-b", "branch-b", "HEAD~1")
+	appendJSONLLine(t, filepath.Join(attachmentDir, "events.jsonl"), `{"kind":"event-b"}`)
+	runGitInDir(t, repoDir, "add", eventsRel)
+	runGitInDir(t, repoDir, "commit", "-m", "branch-b")
+
+	runGitInDir(t, repoDir, "checkout", "branch-a")
+	runGitInDir(t, repoDir, "merge", "--no-edit", "branch-b")
+
+	merged := mustReadFile(t, filepath.Join(attachmentDir, "events.jsonl"))
+	lines := nonEmptyLines(string(merged))
+	require.Len(t, lines, 2)
+	require.Contains(t, lines, `{"kind":"event-a"}`)
+	require.Contains(t, lines, `{"kind":"event-b"}`)
+
+	status := strings.TrimSpace(runGitInDirOutput(t, repoDir, "diff", "--name-only", "--diff-filter=U"))
+	require.Empty(t, status, "merge should not leave conflict markers")
+}
+
 func TestGitAttributes_TrackerJSONLUnionMergeKeepsBothBranches(t *testing.T) {
 	repoRoot := gitattributesRepoRoot(t)
 	attrs := mustReadFile(t, filepath.Join(repoRoot, ".gitattributes"))
