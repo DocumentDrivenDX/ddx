@@ -1637,14 +1637,29 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// merging) and an operator can tell the DDx validation rejection apart from
 	// an implementation failure. Execution evidence stays outside Git, so the
 	// reflog carries only candidate implementation commits.
+	//
+	// Gate-run and implementation-command evidence come from the harness
+	// session tool stream (ddx-7d6883cd). Without that wiring, a provider that
+	// commits after a failed required gate or uses git commit --no-verify would
+	// still pass validation.
 	if res.Outcome == ExecuteBeadOutcomeTaskSucceeded && res.ExitCode == 0 && res.ImplementationRev != "" {
-		verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
-			BaseRev:           baseRev,
-			ImplementationRev: res.ImplementationRev,
-			CommitEvents:      readWorktreeCommitEvents(wtPath),
-			DirtyPaths:        integrityDirtyPaths(wtPath),
-			CodeChanging:      true,
-		})
+		var toolCalls []ToolCallEntry
+		if agentResult != nil {
+			toolCalls = agentResult.ToolCalls
+		}
+		integrityIn := AttemptIntegrityInput{
+			BaseRev:              baseRev,
+			ImplementationRev:    res.ImplementationRev,
+			CommitEvents:         readWorktreeCommitEvents(wtPath),
+			DirtyPaths:           integrityDirtyPaths(wtPath),
+			CodeChanging:         true,
+			GateEvidenceRequired: beadRequiresStagedGateEvidence(beadCtx),
+			GateRuns:             harnessGateEvidenceFromToolCalls(toolCalls),
+		}
+		if attemptIntegrityInputHook != nil {
+			attemptIntegrityInputHook(integrityIn)
+		}
+		verdict := ValidateAttemptIntegrity(integrityIn)
 		if !verdict.OK {
 			res.Outcome = ExecuteBeadOutcomeTaskFailed
 			res.Reason = AttemptIntegrityPreserveReason

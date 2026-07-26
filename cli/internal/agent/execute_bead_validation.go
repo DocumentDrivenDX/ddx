@@ -31,10 +31,15 @@ type CommitEvent struct {
 
 // PreCommitGateRun captures one invocation of a pre-commit gate (e.g.
 // `lefthook run pre-commit`) and the output it produced, so DDx can tell a
-// meaningful staged-file gate from a no-op "no staged files" run.
+// meaningful staged-file gate from a no-op "no staged files" run. ExitCode is
+// the observed process exit status from the harness session (0 = success).
+// Slice order is chronological: final staged mutation, then gate run(s), then
+// the implementation commit, so callers can reason about ordering without a
+// separate timeline structure.
 type PreCommitGateRun struct {
-	Command string
-	Output  string
+	Command  string
+	Output   string
+	ExitCode int
 }
 
 // AttemptIntegrityInput is the structured snapshot the post-agent validation
