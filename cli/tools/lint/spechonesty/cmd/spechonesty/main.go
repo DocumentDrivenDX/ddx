@@ -56,7 +56,7 @@ func main() {
 		}
 		// Keep verification / waiver / observation-freshness /
 		// zero-evidence / test-symbol / citation-granularity /
-		// runtime-artifact / command-allowlist symbols
+		// runtime-artifact / static-check / command-allowlist symbols
 		// production-reachable (read-only). These probes must not
 		// change the status-gate exit contract.
 		_ = touchSiblingParsers(root)
@@ -66,7 +66,7 @@ func main() {
 
 // touchSiblingParsers exercises verification, waiver, observation-
 // freshness, zero-evidence, test-symbol, citation-granularity,
-// runtime-artifact, and command-allowlist passes on markdown under
+// runtime-artifact, static-check, and command-allowlist passes on markdown under
 // root so those package symbols remain reachable from main. Read-only;
 // never changes the status-gate exit path.
 func touchSiblingParsers(root string) error {
@@ -124,6 +124,7 @@ func probeFile(path, repoRoot string) {
 		_ = spechonesty.CheckDocumentZeroEvidence(path, string(data))
 		_ = spechonesty.CheckDocumentCoverageCardinality(path, string(data))
 		_ = spechonesty.CheckDocumentTestSymbols(path, string(data), repoRoot)
+		_ = spechonesty.CheckDocumentStaticChecks(path, string(data))
 		_ = spechonesty.CheckDocumentCommandAllowlist(path, string(data))
 		_ = spechonesty.CheckDocumentRuntimeArtifacts(path, string(data), repoRoot)
 	}

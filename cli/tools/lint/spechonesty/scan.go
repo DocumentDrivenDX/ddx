@@ -1,11 +1,10 @@
 // Docs-directory scan for the spechonesty CLI (WB-1 validation path).
 //
-// Walks a docs tree for Markdown files, runs the status parser, and
-// collects parse / missing-status diagnostics. Read-only: never writes.
+// Walks a docs tree for Markdown files, runs the status parser and the
+// zero-evidence pass, and collects diagnostics. Read-only: never writes.
 package spechonesty
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -41,14 +40,14 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 		return nil, err
 	}
 	if !info.IsDir() {
-		diag, err := scanOne(root)
+		diags, err := scanOne(root)
 		if err != nil {
 			return nil, err
 		}
-		if diag == nil {
+		if len(diags) == 0 {
 			return nil, nil
 		}
-		return []Diagnostic{*diag}, nil
+		return diags, nil
 	}
 
 	var diags []Diagnostic
@@ -62,7 +61,7 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 			return nil
 		}
-		diag, scanErr := scanOne(path)
+		fileDiags, scanErr := scanOne(path)
 		if scanErr != nil {
 			diags = append(diags, Diagnostic{
 				Path:    path,
@@ -71,9 +70,7 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 			})
 			return nil
 		}
-		if diag != nil {
-			diags = append(diags, *diag)
-		}
+		diags = append(diags, fileDiags...)
 		return nil
 	})
 	if err != nil {
@@ -96,20 +93,47 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 	return diags, nil
 }
 
-// scanOne parses status for a single markdown file. Returns a diagnostic
-// when the document fails the missing-status rule; nil when clean.
-func scanOne(path string) (*Diagnostic, error) {
-	res, err := ParseDocumentStatus(path)
+// scanOne parses a single markdown file and returns diagnostics for the
+// status gate plus the zero-evidence coverage pass.
+func scanOne(path string) ([]Diagnostic, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("parse status %s: %w", path, err)
+		return nil, err
 	}
-	if res.MissingDesignStatus {
-		return &Diagnostic{
+
+	content := string(data)
+	statusRes := ParseDocumentStatusMarkdown(path, content)
+	var diags []Diagnostic
+	if statusRes.MissingDesignStatus {
+		diags = append(diags, Diagnostic{
 			Path:    path,
 			Line:    1,
 			Kind:    string(FindingMissingStatus),
 			Message: "missing status stamp: SD/TD/ADR documents require a body **Status:** line or frontmatter status: key",
-		}, nil
+		})
 	}
-	return nil, nil
+
+	model := ParseVerificationMarkdown(path, content)
+	for _, finding := range CheckZeroEvidence(ZeroEvidenceInput{
+		Path:       path,
+		Status:     statusRes.Status,
+		StatusLine: statusRes.Line,
+		Rows:       model.Rows,
+	}) {
+		diags = append(diags, Diagnostic{
+			Path:    finding.Path,
+			Line:    finding.Line,
+			Kind:    string(finding.Kind),
+			Message: finding.Message,
+		})
+	}
+	for _, finding := range CheckDocumentStaticChecks(path, content) {
+		diags = append(diags, Diagnostic{
+			Path:    finding.Path,
+			Line:    finding.Line,
+			Kind:    string(finding.Kind),
+			Message: finding.Message,
+		})
+	}
+	return diags, nil
 }

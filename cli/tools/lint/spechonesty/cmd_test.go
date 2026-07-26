@@ -118,17 +118,115 @@ func TestSpechonestyCommandExitsZeroForStampedDocs(t *testing.T) {
 			"status: Complete\n"+
 			"---\n"+
 			"# Technical Design: Frontmatter Status\n\n"+
-			"Frontmatter stamp only.\n")
+			"Frontmatter stamp only.\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-998 | TestFrontmatterStatus | go test ./tools/lint/spechonesty/... |\n")
 	writeFile(t, filepath.Join(dir, "adr", "ADR-998-both.md"),
 		"---\n"+
 			"status: \"In Progress\"\n"+
 			"---\n"+
 			"# ADR-998: Both Encodings\n\n"+
-			"**Status:** Implemented (body wins when both present)\n")
+			"**Status:** Implemented (body wins when both present)\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-998 | TestBothEncodings | go test ./tools/lint/spechonesty/... |\n")
 
 	code, stdout, stderr := runSpechonesty(t, dir)
 	if code != 0 {
 		t.Fatalf("expected exit 0 for stamped docs; exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
+// TestSpechonestyCommandExitsNonZeroOnZeroEvidence ensures a Complete
+// document with no Verification rows now surfaces the zero-evidence
+// diagnostic through the docs-directory CLI path.
+func TestSpechonestyCommandExitsNonZeroOnZeroEvidence(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "complete-zero-evidence.md"),
+		"# Complete Document Without Verification Rows\n\n"+
+			"**Status:** Complete\n\n"+
+			"The document claims completion but carries no Verification block.\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for zero-evidence document; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "zero_evidence") && !strings.Contains(strings.ToLower(combined), "zero evidence") {
+		t.Fatalf("expected zero-evidence diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, filepath.Join("notes", "complete-zero-evidence.md")) {
+		t.Fatalf("expected diagnostic to name the zero-evidence document, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
+// TestSpechonestyCommandExitsNonZeroOnMissingStaticCheck ensures the
+// docs-directory CLI surfaces a missing static-check target.
+func TestSpechonestyCommandExitsNonZeroOnMissingStaticCheck(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "complete-missing-static-check.md"),
+		"# Complete Document With Missing Static Check\n\n"+
+			"**Status:** Complete\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-001 | check:phantom-but-named | go run ./tools/lint/deletecheck |\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for missing static check; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "missing_static_check") && !strings.Contains(strings.ToLower(combined), "missing static check") {
+		t.Fatalf("expected missing-static-check diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, "phantom-but-named") {
+		t.Fatalf("expected diagnostic to name the missing check, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
+// TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID ensures the
+// docs-directory CLI surfaces duplicate US-id collisions across feature
+// documents and names both offending files in the diagnostic.
+func TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "01-frame", "features", "FEAT-087-alpha.md"),
+		"---\n"+
+			"ddx:\n"+
+			"  id: FEAT-087\n"+
+			"---\n"+
+			"# FEAT-087 Alpha\n\n"+
+			"**Status:** Proposed\n\n"+
+			"## User Stories\n\n"+
+			"### US-087: Alpha user story\n\n"+
+			"Alpha acceptance criteria.\n")
+	writeFile(t, filepath.Join(dir, "01-frame", "features", "FEAT-088-beta.md"),
+		"---\n"+
+			"ddx:\n"+
+			"  id: FEAT-088\n"+
+			"---\n"+
+			"# FEAT-088 Beta\n\n"+
+			"**Status:** Proposed\n\n"+
+			"## User Stories\n\n"+
+			"### US-087: Beta user story\n\n"+
+			"Beta acceptance criteria.\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for duplicate US-id; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "duplicate_us_id") && !strings.Contains(strings.ToLower(combined), "duplicate user-story id") {
+		t.Fatalf("expected duplicate US-id diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, filepath.Join("01-frame", "features", "FEAT-087-alpha.md")) {
+		t.Fatalf("expected diagnostic to name first feature file, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, filepath.Join("01-frame", "features", "FEAT-088-beta.md")) {
+		t.Fatalf("expected diagnostic to name second feature file, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
 }
 
