@@ -132,6 +132,48 @@ func TestSpechonestyCommandExitsZeroForStampedDocs(t *testing.T) {
 	}
 }
 
+// TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID ensures the
+// docs-directory CLI surfaces duplicate US-id collisions across feature
+// documents and names both offending files in the diagnostic.
+func TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "01-frame", "features", "FEAT-087-alpha.md"),
+		"---\n"+
+			"ddx:\n"+
+			"  id: FEAT-087\n"+
+			"---\n"+
+			"# FEAT-087 Alpha\n\n"+
+			"**Status:** Proposed\n\n"+
+			"## User Stories\n\n"+
+			"### US-087: Alpha user story\n\n"+
+			"Alpha acceptance criteria.\n")
+	writeFile(t, filepath.Join(dir, "01-frame", "features", "FEAT-088-beta.md"),
+		"---\n"+
+			"ddx:\n"+
+			"  id: FEAT-088\n"+
+			"---\n"+
+			"# FEAT-088 Beta\n\n"+
+			"**Status:** Proposed\n\n"+
+			"## User Stories\n\n"+
+			"### US-087: Beta user story\n\n"+
+			"Beta acceptance criteria.\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for duplicate US-id; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "duplicate_us_id") && !strings.Contains(strings.ToLower(combined), "duplicate user-story id") {
+		t.Fatalf("expected duplicate US-id diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, filepath.Join("01-frame", "features", "FEAT-087-alpha.md")) {
+		t.Fatalf("expected diagnostic to name first feature file, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, filepath.Join("01-frame", "features", "FEAT-088-beta.md")) {
+		t.Fatalf("expected diagnostic to name second feature file, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
 // TestSpechonestyCommandIsReadOnly asserts fixture file contents are
 // byte-identical before and after command execution.
 func TestSpechonestyCommandIsReadOnly(t *testing.T) {
