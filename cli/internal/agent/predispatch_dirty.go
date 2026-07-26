@@ -466,8 +466,6 @@ func preDispatchCheckpointAllowedPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/metrics/"):
 		return true
-	case strings.HasPrefix(path, ".ddx/runs/"):
-		return true
 	case path == ExecutionCleanupMetadataFileName:
 		return true
 	default:
@@ -531,6 +529,13 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		// offline-journal.jsonl on every try/work entry.
 		return true
 	case strings.HasPrefix(path, ".ddx/coordination/"):
+		return true
+	case path == ".ddx/runs":
+		// Run-record substrate is per-machine orchestration state (atomic
+		// temp+rename writers). Never absorb into pre-dispatch checkpoints —
+		// concurrent workers race on disappearing .tmp paths otherwise.
+		return true
+	case strings.HasPrefix(path, ".ddx/runs/"):
 		return true
 	default:
 		return false
