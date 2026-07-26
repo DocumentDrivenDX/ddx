@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // errPublishKilled is returned when a test-injected fault aborts publish mid-flight.
@@ -111,12 +113,49 @@ func Read(projectRoot, runID string) (*Record, error) {
 	return &rec, nil
 }
 
+// validateRunID rejects empty and path-unsafe run identifiers before any
+// directory or file is created. A run ID must be a single path segment (the
+// directory name under .ddx/runs/), not an absolute path, not "."/"..", and
+// not contain separators, null bytes, or cleaned-path escapes.
+func validateRunID(runID string) error {
+	if runID == "" || strings.TrimSpace(runID) == "" {
+		return fmt.Errorf("runrecord: empty run_id")
+	}
+	if strings.TrimSpace(runID) != runID {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	if !utf8.ValidString(runID) {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	if strings.ContainsRune(runID, 0) {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	if runID == "." || runID == ".." {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	if filepath.IsAbs(runID) {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	// Reject OS separators and the alternate slash so callers cannot escape
+	// .ddx/runs/ on either Unix or Windows path semantics.
+	if strings.ContainsAny(runID, `/\`) {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	if filepath.Base(runID) != runID {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	if cleaned := filepath.Clean(runID); cleaned != runID {
+		return fmt.Errorf("runrecord: path-unsafe run_id %q", runID)
+	}
+	return nil
+}
+
 func publish(projectRoot string, rec Record, h *publishHooks) error {
 	if projectRoot == "" {
 		return fmt.Errorf("runrecord: empty project root")
 	}
-	if rec.RunID == "" {
-		return fmt.Errorf("runrecord: empty run_id")
+	if err := validateRunID(rec.RunID); err != nil {
+		return err
 	}
 	if rec.Version == 0 {
 		rec.Version = SchemaVersion
