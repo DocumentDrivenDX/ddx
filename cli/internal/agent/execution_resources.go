@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -18,7 +22,34 @@ const (
 
 	executionResourceSoftMinFreeBytes  uint64 = 512 << 20
 	executionResourceSoftMinFreeInodes uint64 = 4096
+
+	// defaultTopInodeConsumerLimit caps how many immediate children of a
+	// failing root are reported as top inode consumers.
+	defaultTopInodeConsumerLimit = 8
+	// defaultTopInodeEntriesPerChild caps how many immediate entries are
+	// counted inside each child directory. Nested trees are never walked.
+	defaultTopInodeEntriesPerChild = 4096
+
+	// claimLivenessDiagnosticPrefix matches the claim-liveness namespace
+	// (bead.claimLivenessNamespace) so operators can identify
+	// ddx-claim-heartbeats consumers without treating them as scratch
+	// cleanup targets.
+	claimLivenessDiagnosticPrefix = "ddx-claim-heartbeats"
 )
+
+// ExecutionTopInodeConsumer is one immediate child of a resource root ranked
+// by entry/inode consumption for operator diagnostics. Fields are paths and
+// counts only; file contents are never read or reported.
+type ExecutionTopInodeConsumer struct {
+	Path             string    `json:"path"`
+	EntryCount       int64     `json:"entry_count"`
+	Bytes            int64     `json:"bytes,omitempty"`
+	ModTime          time.Time `json:"mod_time,omitempty"`
+	AgeSeconds       int64     `json:"age_seconds,omitempty"`
+	CleanupPrefix    string    `json:"cleanup_prefix,omitempty"`
+	MatchesCleanup   bool      `json:"matches_cleanup,omitempty"`
+	EntriesTruncated bool      `json:"entries_truncated,omitempty"`
+}
 
 // ExecutionResourceRootCheck captures the health of one execution root.
 type ExecutionResourceRootCheck struct {
@@ -37,6 +68,14 @@ type ExecutionResourceRootCheck struct {
 	FDSoftLimit uint64   `json:"fd_soft_limit,omitempty"`
 	FDHardLimit uint64   `json:"fd_hard_limit,omitempty"`
 	FDSample    []string `json:"fd_sample,omitempty"`
+
+	// TopInodeConsumers is a bounded ranking of immediate children by
+	// entry/inode count. Populated by callers that run scanTopInodeConsumers
+	// on a failing root; empty when the diagnostic was not collected.
+	TopInodeConsumers []ExecutionTopInodeConsumer `json:"top_inode_consumers,omitempty"`
+	// TopInodeConsumersTruncated is true when the root had more immediate
+	// children than the consumer report cap.
+	TopInodeConsumersTruncated bool `json:"top_inode_consumers_truncated,omitempty"`
 }
 
 // ExecutionResourceCheckResult captures the roots and cleanup summary observed
@@ -414,4 +453,162 @@ func probeRootCapacity(root string) (bytesFree uint64, inodesFree uint64, err er
 	bytesFree = uint64(stat.Bavail) * uint64(stat.Bsize)
 	inodesFree = uint64(stat.Ffree)
 	return bytesFree, inodesFree, nil
+}
+
+// matchDDxCleanupPrefix reports the DDx cleanup/scratch prefix that matches
+// basename, or the claim-liveness diagnostic prefix. Empty means no match.
+// Matching is diagnostic only and does not authorize deletion.
+func matchDDxCleanupPrefix(name string) string {
+	name = filepath.Base(name)
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return ""
+	}
+	for _, prefix := range defaultExecutionCleanupScratchPrefixes {
+		if prefix != "" && strings.HasPrefix(name, prefix) {
+			return prefix
+		}
+	}
+	if name == claimLivenessDiagnosticPrefix || strings.HasPrefix(name, claimLivenessDiagnosticPrefix) {
+		return claimLivenessDiagnosticPrefix
+	}
+	return ""
+}
+
+// scanTopInodeConsumers ranks immediate children of root by entry count.
+// maxConsumers caps how many children are returned (default
+// defaultTopInodeConsumerLimit). maxEntriesPerChild caps how many immediate
+// entries are counted inside each child directory (default
+// defaultTopInodeEntriesPerChild). Nested directories are never walked: only
+// one level of children under root and one level of entries under each child.
+// The boolean return is true when root has more immediate children than
+// maxConsumers (the reported list was truncated). Paths and counts only;
+// file contents are never opened for reading.
+func scanTopInodeConsumers(root string, maxConsumers, maxEntriesPerChild int, now time.Time) ([]ExecutionTopInodeConsumer, bool, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, false, fmt.Errorf("scan top inode consumers: empty root")
+	}
+	if maxConsumers <= 0 {
+		maxConsumers = defaultTopInodeConsumerLimit
+	}
+	if maxEntriesPerChild <= 0 {
+		maxEntriesPerChild = defaultTopInodeEntriesPerChild
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, false, fmt.Errorf("scan top inode consumers: read %s: %w", root, err)
+	}
+
+	consumers := make([]ExecutionTopInodeConsumer, 0, len(entries))
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		consumer, measureErr := measureTopInodeConsumer(path, entry, maxEntriesPerChild, now)
+		if measureErr != nil {
+			// Best-effort: skip children that disappear or cannot be measured.
+			continue
+		}
+		consumers = append(consumers, consumer)
+	}
+
+	sort.SliceStable(consumers, func(i, j int) bool {
+		if consumers[i].EntryCount != consumers[j].EntryCount {
+			return consumers[i].EntryCount > consumers[j].EntryCount
+		}
+		if consumers[i].Bytes != consumers[j].Bytes {
+			return consumers[i].Bytes > consumers[j].Bytes
+		}
+		return consumers[i].Path < consumers[j].Path
+	})
+
+	truncated := len(consumers) > maxConsumers
+	if truncated {
+		consumers = consumers[:maxConsumers]
+	}
+	return consumers, truncated, nil
+}
+
+func measureTopInodeConsumer(path string, entry os.DirEntry, maxEntriesPerChild int, now time.Time) (ExecutionTopInodeConsumer, error) {
+	info, err := entry.Info()
+	if err != nil {
+		return ExecutionTopInodeConsumer{}, err
+	}
+
+	consumer := ExecutionTopInodeConsumer{
+		Path:    path,
+		ModTime: info.ModTime(),
+	}
+	if !info.ModTime().IsZero() && !now.Before(info.ModTime()) {
+		consumer.AgeSeconds = int64(now.Sub(info.ModTime()).Seconds())
+	}
+	if prefix := matchDDxCleanupPrefix(entry.Name()); prefix != "" {
+		consumer.CleanupPrefix = prefix
+		consumer.MatchesCleanup = true
+	}
+
+	if !entry.IsDir() {
+		// Symlinks and files: one entry, size from Lstat metadata only.
+		consumer.EntryCount = 1
+		consumer.Bytes = info.Size()
+		return consumer, nil
+	}
+
+	// Directory: count the directory inode plus a bounded sample of its
+	// immediate children. Do not recurse into nested trees.
+	entryCount := int64(1)
+	bytes := info.Size()
+	truncated := false
+
+	dir, err := os.Open(path)
+	if err != nil {
+		consumer.EntryCount = entryCount
+		consumer.Bytes = bytes
+		return consumer, nil
+	}
+	defer dir.Close()
+
+	const batch = 256
+	counted := 0
+	for counted < maxEntriesPerChild {
+		remaining := maxEntriesPerChild - counted
+		n := batch
+		if remaining < n {
+			n = remaining
+		}
+		// Read one extra entry when at the last batch to detect truncation
+		// without loading the whole directory.
+		readN := n
+		if counted+n >= maxEntriesPerChild {
+			readN = n + 1
+		}
+		batchEntries, readErr := dir.ReadDir(readN)
+		if len(batchEntries) > n {
+			truncated = true
+			batchEntries = batchEntries[:n]
+		}
+		for _, child := range batchEntries {
+			counted++
+			entryCount++
+			if childInfo, infoErr := child.Info(); infoErr == nil {
+				bytes += childInfo.Size()
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			// Partial measure is still useful.
+			break
+		}
+		if truncated || len(batchEntries) < n {
+			break
+		}
+	}
+
+	consumer.EntryCount = entryCount
+	consumer.Bytes = bytes
+	consumer.EntriesTruncated = truncated
+	return consumer, nil
 }

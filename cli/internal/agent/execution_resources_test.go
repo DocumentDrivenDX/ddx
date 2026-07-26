@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -362,4 +364,185 @@ func TestResourcePreflightPreservesOrdinaryUnwritableRoot(t *testing.T) {
 	assert.False(t, check.FDExhausted)
 	assert.Zero(t, check.FDCount)
 	assert.NotEmpty(t, check.WritableReason)
+}
+
+// TestResourceTopInodeConsumerScanReportsPathCountSizeAgeAndCleanupPrefix
+// proves the bounded scanner reports child path, entry count, byte size when
+// available, age/mtime, and DDx cleanup-prefix match for children including
+// ddx-home-* and ddx-claim-heartbeats-style names.
+func TestResourceTopInodeConsumerScanReportsPathCountSizeAgeAndCleanupPrefix(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	old := now.Add(-2 * time.Hour)
+
+	home := filepath.Join(root, "ddx-home-scan-abc")
+	require.NoError(t, os.Mkdir(home, 0o755))
+	payload := []byte("xx")
+	require.NoError(t, os.WriteFile(filepath.Join(home, "a"), payload, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, "b"), payload, 0o644))
+	require.NoError(t, os.Chtimes(home, old, old))
+
+	claimHB := filepath.Join(root, "ddx-claim-heartbeats")
+	require.NoError(t, os.Mkdir(claimHB, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(claimHB, "lease.json"), []byte("{}"), 0o644))
+	require.NoError(t, os.Chtimes(claimHB, old, old))
+
+	other := filepath.Join(root, "other-app-cache")
+	require.NoError(t, os.Mkdir(other, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(other, "blob"), []byte("z"), 0o644))
+
+	consumers, truncated, err := scanTopInodeConsumers(root, 8, 4096, now)
+	require.NoError(t, err)
+	assert.False(t, truncated)
+
+	byBase := make(map[string]ExecutionTopInodeConsumer, len(consumers))
+	for _, c := range consumers {
+		byBase[filepath.Base(c.Path)] = c
+	}
+
+	homeC, ok := byBase["ddx-home-scan-abc"]
+	require.True(t, ok, "expected ddx-home-* consumer")
+	assert.Equal(t, home, homeC.Path)
+	assert.GreaterOrEqual(t, homeC.EntryCount, int64(3), "dir + two files")
+	assert.GreaterOrEqual(t, homeC.Bytes, int64(len(payload)*2))
+	assert.False(t, homeC.ModTime.IsZero())
+	assert.GreaterOrEqual(t, homeC.AgeSeconds, int64(2*time.Hour/time.Second-5))
+	assert.True(t, homeC.MatchesCleanup)
+	assert.Equal(t, "ddx-home-", homeC.CleanupPrefix)
+
+	hbC, ok := byBase["ddx-claim-heartbeats"]
+	require.True(t, ok, "expected ddx-claim-heartbeats consumer")
+	assert.Equal(t, claimHB, hbC.Path)
+	assert.GreaterOrEqual(t, hbC.EntryCount, int64(2), "dir + lease file")
+	assert.True(t, hbC.MatchesCleanup)
+	assert.Equal(t, "ddx-claim-heartbeats", hbC.CleanupPrefix)
+	assert.GreaterOrEqual(t, hbC.AgeSeconds, int64(2*time.Hour/time.Second-5))
+
+	otherC, ok := byBase["other-app-cache"]
+	require.True(t, ok, "expected non-DDx consumer")
+	assert.False(t, otherC.MatchesCleanup)
+	assert.Empty(t, otherC.CleanupPrefix)
+
+	// Diagnostic type is JSON-ready for later root-check attachment.
+	check := ExecutionResourceRootCheck{
+		Path:                       root,
+		TopInodeConsumers:          consumers,
+		TopInodeConsumersTruncated: truncated,
+	}
+	raw, err := json.Marshal(check)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "top_inode_consumers")
+	assert.Contains(t, string(raw), "ddx-home-")
+}
+
+// TestResourcePreflightTopInodeConsumerScanIsBounded proves the diagnostic
+// stops at the configured or hard-coded safe limit, marks truncated results,
+// and does not recursively walk unbounded trees.
+func TestResourcePreflightTopInodeConsumerScanIsBounded(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+
+	for i := 0; i < 20; i++ {
+		dir := filepath.Join(root, fmt.Sprintf("ddx-home-%02d", i))
+		require.NoError(t, os.Mkdir(dir, 0o755))
+		for j := 0; j < i+1; j++ {
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dir, fmt.Sprintf("f%d", j)),
+				[]byte("x"),
+				0o644,
+			))
+		}
+	}
+
+	const maxConsumers = 3
+	consumers, truncated, err := scanTopInodeConsumers(root, maxConsumers, 4096, now)
+	require.NoError(t, err)
+	assert.True(t, truncated, "more than maxConsumers children must mark report truncation")
+	require.Len(t, consumers, maxConsumers)
+	assert.Equal(t, "ddx-home-19", filepath.Base(consumers[0].Path))
+	assert.Equal(t, "ddx-home-18", filepath.Base(consumers[1].Path))
+	assert.Equal(t, "ddx-home-17", filepath.Base(consumers[2].Path))
+	// Defaults apply when limits are non-positive.
+	defaulted, defaultTruncated, err := scanTopInodeConsumers(root, 0, 0, now)
+	require.NoError(t, err)
+	assert.True(t, defaultTruncated)
+	assert.Len(t, defaulted, defaultTopInodeConsumerLimit)
+
+	// Wide child: entry sampling stops at maxEntriesPerChild.
+	wideRoot := t.TempDir()
+	wide := filepath.Join(wideRoot, "ddx-home-wide")
+	require.NoError(t, os.Mkdir(wide, 0o755))
+	const maxEntries = 5
+	for i := 0; i < 100; i++ {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(wide, fmt.Sprintf("e%03d", i)),
+			[]byte("y"),
+			0o644,
+		))
+	}
+	wideConsumers, _, err := scanTopInodeConsumers(wideRoot, 8, maxEntries, now)
+	require.NoError(t, err)
+	require.NotEmpty(t, wideConsumers)
+	assert.True(t, wideConsumers[0].EntriesTruncated)
+	assert.Equal(t, int64(1+maxEntries), wideConsumers[0].EntryCount,
+		"directory inode + capped immediate children")
+
+	// Deep nested tree: only the first-level child under the top consumer is
+	// counted; nested files must not inflate the entry count.
+	deepRoot := t.TempDir()
+	deepChild := filepath.Join(deepRoot, "ddx-home-deep")
+	nested := deepChild
+	for i := 0; i < 40; i++ {
+		nested = filepath.Join(nested, fmt.Sprintf("n%d", i))
+	}
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	for i := 0; i < 100; i++ {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(nested, fmt.Sprintf("leaf%d", i)),
+			[]byte("nested-secret"),
+			0o644,
+		))
+	}
+	deepConsumers, deepTruncated, err := scanTopInodeConsumers(deepRoot, 8, 4096, now)
+	require.NoError(t, err)
+	assert.False(t, deepTruncated)
+	require.Len(t, deepConsumers, 1)
+	// Immediate children of ddx-home-deep: only n0 → entry count = dir + 1.
+	assert.Equal(t, int64(2), deepConsumers[0].EntryCount)
+	assert.False(t, deepConsumers[0].EntriesTruncated)
+	assert.Less(t, deepConsumers[0].EntryCount, int64(50),
+		"must not recursively walk nested trees")
+}
+
+// TestResourceTopInodeConsumerScanOmitsSensitiveContents proves the diagnostic
+// includes paths and counts only and never reads or reports file contents.
+func TestResourceTopInodeConsumerScanOmitsSensitiveContents(t *testing.T) {
+	root := t.TempDir()
+	const secret = "SUPER_SECRET_PAYLOAD_do_not_leak_42"
+	child := filepath.Join(root, "ddx-home-secret")
+	require.NoError(t, os.Mkdir(child, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(child, "credentials.txt"), []byte(secret), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(child, "token.bin"), []byte(secret+secret), 0o644))
+
+	consumers, _, err := scanTopInodeConsumers(root, 8, 4096, time.Now())
+	require.NoError(t, err)
+	require.NotEmpty(t, consumers)
+
+	raw, err := json.Marshal(consumers)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), secret)
+
+	check := ExecutionResourceRootCheck{
+		Path:              root,
+		TopInodeConsumers: consumers,
+	}
+	checkRaw, err := json.Marshal(check)
+	require.NoError(t, err)
+	assert.NotContains(t, string(checkRaw), secret)
+
+	for _, c := range consumers {
+		assert.NotContains(t, c.Path, secret)
+		assert.NotContains(t, c.CleanupPrefix, secret)
+		assert.Greater(t, c.EntryCount, int64(0))
+	}
 }
