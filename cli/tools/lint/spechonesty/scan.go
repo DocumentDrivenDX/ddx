@@ -127,5 +127,13 @@ func scanOne(path string) ([]Diagnostic, error) {
 			Message: finding.Message,
 		})
 	}
+	for _, finding := range CheckDocumentStaticChecks(path, content) {
+		diags = append(diags, Diagnostic{
+			Path:    finding.Path,
+			Line:    finding.Line,
+			Kind:    string(finding.Kind),
+			Message: finding.Message,
+		})
+	}
 	return diags, nil
 }

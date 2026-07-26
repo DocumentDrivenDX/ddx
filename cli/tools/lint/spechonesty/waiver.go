@@ -69,6 +69,11 @@ const (
 	// mapping row whose command is outside the executable verification
 	// allowlist. Non-waivable; emitted by the command-allowlist pass.
 	FindingNonAllowlistedCommand CoverageFindingKind = "non_allowlisted_command"
+	// FindingMissingStaticCheck is a Complete/Implemented Verification
+	// mapping row whose static check target is not registered in the
+	// spechonesty verification model. Non-waivable; emitted by the
+	// static-check resolver.
+	FindingMissingStaticCheck CoverageFindingKind = "missing_static_check"
 	// FindingMissingStatus is non-waivable (WB-1 step 5).
 	FindingMissingStatus CoverageFindingKind = "missing_status"
 	// FindingDuplicateID is non-waivable (WB-1 step 5).

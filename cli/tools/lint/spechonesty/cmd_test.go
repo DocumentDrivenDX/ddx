@@ -163,6 +163,31 @@ func TestSpechonestyCommandExitsNonZeroOnZeroEvidence(t *testing.T) {
 	}
 }
 
+// TestSpechonestyCommandExitsNonZeroOnMissingStaticCheck ensures the
+// docs-directory CLI surfaces a missing static-check target.
+func TestSpechonestyCommandExitsNonZeroOnMissingStaticCheck(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "complete-missing-static-check.md"),
+		"# Complete Document With Missing Static Check\n\n"+
+			"**Status:** Complete\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-001 | check:phantom-but-named | go run ./tools/lint/deletecheck |\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for missing static check; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "missing_static_check") && !strings.Contains(strings.ToLower(combined), "missing static check") {
+		t.Fatalf("expected missing-static-check diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, "phantom-but-named") {
+		t.Fatalf("expected diagnostic to name the missing check, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
 // TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID ensures the
 // docs-directory CLI surfaces duplicate US-id collisions across feature
 // documents and names both offending files in the diagnostic.

@@ -14,8 +14,6 @@
 // allowlists are out of scope. Read-only: pure over the row fields.
 package spechonesty
 
-import "strings"
-
 // IsCoveringCitation reports whether a Verification mapping row names
 // evidence at sufficient citation granularity to count as covering a
 // requirement for the coverage-cardinality exclusion predicate.
@@ -68,17 +66,8 @@ func testCitationCovering(row VerificationRow) (covering bool, recognized bool) 
 // static check of the form check:<name> (non-empty name after the prefix).
 // Existence of the check on disk is not resolved.
 func isStaticCheckTarget(evidenceTarget string) bool {
-	target := stripEvidenceMarkup(evidenceTarget)
-	if target == "" {
-		return false
-	}
-	lower := strings.ToLower(target)
-	if !strings.HasPrefix(lower, "check:") {
-		return false
-	}
-	// Require a non-empty check name after the prefix.
-	name := strings.TrimSpace(target[len("check:"):])
-	return name != ""
+	_, ok := parseStaticCheckTarget(evidenceTarget)
+	return ok
 }
 
 // isArtifactTarget reports whether evidence names an exact inspectable
