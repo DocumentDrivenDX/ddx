@@ -69,6 +69,18 @@ func TestCoordinationContract_LocalClaimContention(t *testing.T) {
 	assert.Equal(t, beadID, second.BeadID)
 	assert.Equal(t, "worker-a", second.Owner, "conflict reports the durable winning owner")
 
+	replay, err := coordB.Claim(ctx, coordination.ClaimRequest{
+		BeadID:         beadID,
+		Assignee:       "worker-b",
+		IdempotencyKey: "claim-key-worker-b-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, coordination.OutcomeAlreadyApplied, replay.Code,
+		"same-key replay must be already_applied")
+	assert.Equal(t, coordination.ReasonAlreadyClaimed, replay.Reason)
+	assert.Equal(t, beadID, replay.BeadID)
+	assert.Equal(t, "worker-a", replay.Owner, "replay preserves the prior durable owner")
+
 	// Durable store truth: only worker-a holds the claim.
 	got, err := store.Get(ctx, beadID)
 	require.NoError(t, err)
@@ -88,6 +100,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Env = cleanGitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), err)

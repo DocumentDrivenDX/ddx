@@ -80,6 +80,45 @@ func TestCoordinationContract_LocalTrackerTransition(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 
+	// Rejected transition: invalid lifecycle status. The local coordinator
+	// should remember the conflict outcome and replay it as already_applied.
+	const conflictKey = "transition-key-invalid-status"
+	conflict, err := coord.Transition(ctx, coordination.TransitionRequest{
+		BeadID:         beadID,
+		ToStatus:       "not-a-status",
+		IdempotencyKey: conflictKey,
+		Reason:         "invalid transition",
+		Actor:          "worker-transition",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, coordination.OutcomeConflict, conflict.Code, "invalid transition must conflict")
+	assert.Equal(t, beadID, conflict.BeadID)
+	assert.Equal(t, bead.StatusOpen, conflict.FromStatus)
+	assert.Equal(t, "not-a-status", conflict.ToStatus)
+	assert.Equal(t, coordination.ReasonTransitionRejected, conflict.Reason)
+	assert.Equal(t, conflictKey, conflict.IdempotencyKey)
+
+	got, err = store.Get(ctx, beadID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, bead.StatusOpen, got.Status, "rejected transition must not mutate durable state")
+
+	conflictReplay, err := coord.Transition(ctx, coordination.TransitionRequest{
+		BeadID:         beadID,
+		ToStatus:       "not-a-status",
+		IdempotencyKey: conflictKey,
+		Reason:         "invalid transition",
+		Actor:          "worker-transition",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, coordination.OutcomeAlreadyApplied, conflictReplay.Code,
+		"same-key replay must be already_applied")
+	assert.Equal(t, beadID, conflictReplay.BeadID)
+	assert.Equal(t, bead.StatusOpen, conflictReplay.FromStatus)
+	assert.Equal(t, "not-a-status", conflictReplay.ToStatus)
+	assert.Equal(t, coordination.ReasonTransitionRejected, conflictReplay.Reason)
+	assert.Equal(t, conflictKey, conflictReplay.IdempotencyKey)
+
 	// Replay same idempotency key: already_applied without re-mutating.
 	replay, err := coord.Transition(ctx, coordination.TransitionRequest{
 		BeadID:         beadID,

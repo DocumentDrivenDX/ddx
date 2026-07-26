@@ -50,9 +50,10 @@ type LocalCoordinator struct {
 	land  LandBackend
 
 	mu sync.Mutex
-	// claimByKey / transitionByKey / landByKey are process-local idempotency
-	// memory for this coordinator instance. Durable journaling is a sibling
-	// bead (ADR-022 offline journal).
+	// claimByKey / transitionByKey / landByKey remember the first observed
+	// outcome for each idempotency key. Replays return already_applied
+	// without re-invoking the store or land backend. Durable journaling is a
+	// sibling bead (ADR-022 offline journal).
 	claimByKey      map[string]ClaimResult
 	transitionByKey map[string]TransitionResult
 	landByKey       map[string]LandResult
@@ -138,6 +139,7 @@ func (c *LocalCoordinator) Claim(ctx context.Context, req ClaimRequest) (ClaimRe
 			if owner := c.lookupOwner(ctx, beadID); owner != "" {
 				result.Owner = owner
 			}
+			c.rememberClaimResult(key, result)
 			return result, nil
 		}
 		return ClaimResult{}, err
@@ -154,9 +156,7 @@ func (c *LocalCoordinator) Claim(ctx context.Context, req ClaimRequest) (ClaimRe
 		IdempotencyKey: key,
 	}
 
-	c.mu.Lock()
-	c.claimByKey[key] = result
-	c.mu.Unlock()
+	c.rememberClaimResult(key, result)
 
 	return result, nil
 }
@@ -219,6 +219,7 @@ func (c *LocalCoordinator) Transition(ctx context.Context, req TransitionRequest
 	err := c.store.SetLifecycleStatus(beadID, toStatus, opts)
 	if err != nil {
 		if result, handled := mapTransitionRejection(err, beadID, fromStatus, toStatus, key); handled {
+			c.rememberTransitionResult(key, result)
 			return result, nil
 		}
 		return TransitionResult{}, err
@@ -237,9 +238,7 @@ func (c *LocalCoordinator) Transition(ctx context.Context, req TransitionRequest
 		IdempotencyKey: key,
 	}
 
-	c.mu.Lock()
-	c.transitionByKey[key] = result
-	c.mu.Unlock()
+	c.rememberTransitionResult(key, result)
 
 	return result, nil
 }
@@ -334,6 +333,18 @@ func (c *LocalCoordinator) lookupStatus(ctx context.Context, beadID string) stri
 		return ""
 	}
 	return strings.TrimSpace(b.Status)
+}
+
+func (c *LocalCoordinator) rememberClaimResult(key string, result ClaimResult) {
+	c.mu.Lock()
+	c.claimByKey[key] = result
+	c.mu.Unlock()
+}
+
+func (c *LocalCoordinator) rememberTransitionResult(key string, result TransitionResult) {
+	c.mu.Lock()
+	c.transitionByKey[key] = result
+	c.mu.Unlock()
 }
 
 // mapClaimContention translates bead-store claim rejections into the

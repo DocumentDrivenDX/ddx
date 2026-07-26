@@ -135,6 +135,7 @@ func commitOnBase(t *testing.T, repo, baseSHA, path, content, msg string) string
 	writeFile(t, wt, path, content)
 	cmd := exec.Command("git", "add", "-A")
 	cmd.Dir = wt
+	cmd.Env = cleanGitEnv()
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git add: %s", out)
 
@@ -143,11 +144,13 @@ func commitOnBase(t *testing.T, repo, baseSHA, path, content, msg string) string
 		"-c", "user.email=coordination@test.local",
 		"commit", "-m", msg)
 	cmd.Dir = wt
+	cmd.Env = cleanGitEnv()
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, "git commit: %s", out)
 
 	cmd = exec.Command("git", "rev-parse", "HEAD")
 	cmd.Dir = wt
+	cmd.Env = cleanGitEnv()
 	out, err = cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(out))
@@ -164,9 +167,22 @@ func runGitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Env = cleanGitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), err)
 	}
 	return string(out)
+}
+
+func cleanGitEnv() []string {
+	env := os.Environ()
+	cleaned := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "GIT_") {
+			continue
+		}
+		cleaned = append(cleaned, kv)
+	}
+	return cleaned
 }
