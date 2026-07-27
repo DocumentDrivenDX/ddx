@@ -2,7 +2,6 @@ extends: existence
 message: "Remove the filler transition unless it carries information."
 level: suggestion
 ignorecase: true
-scope: summary
 tokens:
   - to be clear
   - first, we should note
