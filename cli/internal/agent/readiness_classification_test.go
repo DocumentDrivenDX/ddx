@@ -420,6 +420,23 @@ func TestPreClaimReadiness_NormalizesScalarReadinessChecksString(t *testing.T) {
 	assert.NotContains(t, got.Detail, "Go struct field")
 }
 
+// TestPreClaimReadiness_NestedCheckableBeforeAttemptStringIsActionable locks the
+// ddx-442c48e3 regression: a string checkable_before_attempt must not abort the
+// whole readiness decode with a raw encoding/json struct error. The payload stays
+// usable enough to surface a structured nested-field diagnostic.
+func TestPreClaimReadiness_NestedCheckableBeforeAttemptStringIsActionable(t *testing.T) {
+	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test","checkable_before_attempt":"yes"}]}`
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeError, got.Outcome)
+	assert.Equal(t, ReadinessReasonSystemUnready, got.Reason)
+	assert.Equal(t, ReadinessSystemReasonUnavailable, got.SystemReason)
+	assert.Contains(t, got.Detail, "readiness_checks[0].checkable_before_attempt")
+	assert.Contains(t, got.Detail, "string")
+	assert.NotContains(t, got.Detail, "cannot unmarshal")
+	assert.NotContains(t, got.Detail, "Go struct field")
+}
+
 func TestReadinessClassification_NeedsRefineBlocksInBlockMode(t *testing.T) {
 	got := ClassifyReadinessWithMode(
 		ReadinessClassificationNeedsRefine,

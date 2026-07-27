@@ -423,6 +423,9 @@ func (p *preClaimReadinessWaiversPayload) UnmarshalJSON(data []byte) error {
 
 // preClaimReadinessChecksPayload mirrors cli/internal/agent/schema/readiness-checks.schema.json
 // so the producer prompt and this decoder stay aligned on the same readiness payload shape.
+// Nested field violations (for example a string checkable_before_attempt) are recorded on
+// Malformed rather than aborting UnmarshalJSON with a raw encoding/json struct error, so
+// classification and check evidence survive for operator diagnostics (ddx-442c48e3).
 type preClaimReadinessChecksPayload struct {
 	Checks    []preClaimReadinessCheck
 	Present   bool
@@ -439,11 +442,34 @@ func (p *preClaimReadinessChecksPayload) UnmarshalJSON(data []byte) error {
 	p.Present = true
 	switch trimmed[0] {
 	case '[':
-		return json.Unmarshal(data, &p.Checks)
-	case '{':
-		var check preClaimReadinessCheck
-		if err := json.Unmarshal(data, &check); err != nil {
+		var rawItems []json.RawMessage
+		if err := json.Unmarshal(data, &rawItems); err != nil {
 			return err
+		}
+		checks := make([]preClaimReadinessCheck, 0, len(rawItems))
+		for i, item := range rawItems {
+			itemTrimmed := strings.TrimSpace(string(item))
+			if itemTrimmed == "" || itemTrimmed == "null" {
+				continue
+			}
+			check, violation, err := decodePreClaimReadinessCheck(item, i)
+			if err != nil {
+				return err
+			}
+			if violation != "" && p.Malformed == "" {
+				p.Malformed = violation
+			}
+			checks = append(checks, check)
+		}
+		p.Checks = checks
+		return nil
+	case '{':
+		check, violation, err := decodePreClaimReadinessCheck(data, 0)
+		if err != nil {
+			return err
+		}
+		if violation != "" {
+			p.Malformed = violation
 		}
 		p.Checks = []preClaimReadinessCheck{check}
 		return nil
@@ -459,6 +485,79 @@ func (p *preClaimReadinessChecksPayload) UnmarshalJSON(data []byte) error {
 		p.Malformed = "readiness_checks must be an object or array"
 		p.Evidence = trimmed
 		return nil
+	}
+}
+
+// decodePreClaimReadinessCheck normalizes one readiness_checks entry. Boolean-only
+// nested fields that arrive with the wrong JSON kind are preserved as structured
+// Malformed diagnostics (indexed field path + observed kind) without widening the
+// shared schema or emitting raw Go struct decoder text.
+func decodePreClaimReadinessCheck(data []byte, index int) (preClaimReadinessCheck, string, error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return preClaimReadinessCheck{}, "", nil
+	}
+	if trimmed[0] != '{' {
+		return preClaimReadinessCheck{}, "", fmt.Errorf("readiness_checks[%d] must be an object, got %s", index, jsonKindName(trimmed[0]))
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return preClaimReadinessCheck{}, "", err
+	}
+
+	var check preClaimReadinessCheck
+	var violation string
+
+	if v, ok := raw["reason"]; ok {
+		if err := json.Unmarshal(v, &check.Reason); err != nil {
+			return preClaimReadinessCheck{}, "", err
+		}
+		check.Reason = strings.TrimSpace(check.Reason)
+	}
+	if v, ok := raw["evidence"]; ok {
+		if err := json.Unmarshal(v, &check.Evidence); err != nil {
+			return preClaimReadinessCheck{}, "", err
+		}
+		check.Evidence = strings.TrimSpace(check.Evidence)
+	}
+	if v, ok := raw["verdict"]; ok {
+		if err := json.Unmarshal(v, &check.Verdict); err != nil {
+			return preClaimReadinessCheck{}, "", err
+		}
+	}
+	if v, ok := raw["checkable_before_attempt"]; ok {
+		fieldPath := fmt.Sprintf("readiness_checks[%d].checkable_before_attempt", index)
+		value, fieldViolation, err := decodeCheckableBeforeAttempt(v, fieldPath)
+		if err != nil {
+			return preClaimReadinessCheck{}, "", err
+		}
+		check.CheckableBeforeAttempt = value
+		violation = fieldViolation
+	}
+
+	return check, violation, nil
+}
+
+// decodeCheckableBeforeAttempt keeps checkable_before_attempt boolean-only
+// (matching readiness-checks.schema.json). Non-boolean kinds become a nested
+// field violation rather than a hard encoding/json failure or silent widening.
+func decodeCheckableBeforeAttempt(data []byte, fieldPath string) (bool, string, error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		// Absent/null map to the zero value; the shared schema still rejects
+		// explicit null as canonical producer output.
+		return false, "", nil
+	}
+	switch trimmed[0] {
+	case 't', 'f':
+		var b bool
+		if err := json.Unmarshal(data, &b); err != nil {
+			return false, "", err
+		}
+		return b, "", nil
+	default:
+		return false, fmt.Sprintf("%s must be a boolean, got %s", fieldPath, jsonKindName(trimmed[0])), nil
 	}
 }
 
