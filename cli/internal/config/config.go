@@ -250,9 +250,7 @@ func mergeExecutionsConfig(projectCfg, globalCfg *Config) {
 		return
 	}
 	if projectCfg.Executions == nil {
-		cp := *globalCfg.Executions
-		cp.Docker = globalCfg.Executions.Docker.Clone()
-		projectCfg.Executions = &cp
+		projectCfg.Executions = globalCfg.Executions.Clone()
 		return
 	}
 	if projectCfg.Executions.AttemptBackend == "" {
@@ -260,6 +258,9 @@ func mergeExecutionsConfig(projectCfg, globalCfg *Config) {
 	}
 	if projectCfg.Executions.TempWorktreeRoot == "" {
 		projectCfg.Executions.TempWorktreeRoot = globalCfg.Executions.TempWorktreeRoot
+	}
+	if projectCfg.Executions.ReusableWorkspace == nil {
+		projectCfg.Executions.ReusableWorkspace = globalCfg.Executions.ReusableWorkspace.Clone()
 	}
 	if projectCfg.Executions.Docker == nil {
 		projectCfg.Executions.Docker = globalCfg.Executions.Docker.Clone()
