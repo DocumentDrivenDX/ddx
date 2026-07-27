@@ -23,10 +23,47 @@ the DDx surface correctly.
 The skill body you're reading is an **overview** plus an **intent
 router**. The real domain guidance lives in `reference/*.md` files.
 
+Install locations: install DDx's agent-facing skills through the Claude/plugin
+marketplace path, preferably `npx claude-plugins install
+@DocumentDrivenDX/ddx-library/ddx`, or Claude Code's native `/plugin`
+marketplace flow. Do not tell users to run `ddx plugin install ddx --force` to get
+skills.
+
+Plugin and package resource lookup is separate from that marketplace path. DDx
+resolves project plugins and personas with **project > global > baked-in**
+precedence (`ddx-937de9fc`): project-local
+(`ddxroot.Path()/plugins/<name>/`) wins over the global install cache
+(`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`), which wins over the
+baked-in binary default (only for the `ddx` plugin). See **Install topology**
+below for paths and doctor reporting.
+
 **Directive: before responding to any DDx-related request, read the
 matching reference file from the router table below. The router is
 not optional — your answer must be grounded in the reference file's
 guidance, not this overview alone.**
+
+## Install topology
+
+DDx resolves package resources in three layers (`ddx-937de9fc`): the
+project-local tier at `ddxroot.Path()/plugins/ddx/` (in-tree or convention
+mode), then the global install cache at
+`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in package
+embedded in the binary. This is project > global > baked-in precedence.
+`ddx doctor` reports the active layers.
+
+Agent-facing skill distribution is separate from that DDx package cache. For
+Claude Code and marketplace-compatible setups, use the DDx Library marketplace:
+
+```bash
+npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
+```
+
+Claude Code's native flow is also valid:
+
+```text
+/plugin marketplace add DocumentDrivenDX/ddx-library
+/plugin install ddx@ddx-library
+```
 
 ## Vocabulary
 
@@ -90,7 +127,7 @@ exact definitions.
 - **Plugin** — a self-contained extension installed to
   `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
   prompts, patterns, templates) is auto-installed by `ddx init`.
-  `ddx install <name>`.
+  `ddx plugin install <name>`.
 - **Skill** — an agentskills.io-standard directory (SKILL.md +
   optional `reference/`, `evals/`, `scripts/`). This `ddx` skill is
   the one DDx ships. Plugins can ship additional skills.

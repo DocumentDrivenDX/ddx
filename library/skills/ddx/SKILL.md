@@ -27,8 +27,15 @@ Install locations: install DDx's agent-facing skills through the Claude/plugin
 marketplace path, preferably `npx claude-plugins install
 @DocumentDrivenDX/ddx-library/ddx`, or Claude Code's native `/plugin`
 marketplace flow. Do not tell users to run `ddx plugin install ddx --force` to get
-skills. DDx still resolves project plugin resources from project/global/baked-in
-package layers — see **Install topology** below.
+skills.
+
+Plugin and package resource lookup is separate from that marketplace path. DDx
+resolves project plugins and personas with **project > global > baked-in**
+precedence (`ddx-937de9fc`): project-local
+(`ddxroot.Path()/plugins/<name>/`) wins over the global install cache
+(`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`), which wins over the
+baked-in binary default (only for the `ddx` plugin). See **Install topology**
+below for paths and doctor reporting.
 
 **Directive: before responding to any DDx-related request, read the
 matching reference file from the router table below. The router is
@@ -37,10 +44,11 @@ guidance, not this overview alone.**
 
 ## Install topology
 
-DDx resolves package resources in three layers: the project-local tier at
-`ddxroot.Path()/plugins/ddx/` (in-tree or convention mode), then the global install
-cache at `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in
-package embedded in the binary. This is project > global > baked-in precedence.
+DDx resolves package resources in three layers (`ddx-937de9fc`): the
+project-local tier at `ddxroot.Path()/plugins/ddx/` (in-tree or convention
+mode), then the global install cache at
+`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in package
+embedded in the binary. This is project > global > baked-in precedence.
 `ddx doctor` reports the active layers.
 
 Agent-facing skill distribution is separate from that DDx package cache. For
