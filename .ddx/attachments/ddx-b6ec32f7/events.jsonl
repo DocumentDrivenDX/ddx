@@ -1,0 +1,1 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"grok\",\"fallback_chain\":[],\"requested_harness\":\"grok\",\"requested_min_power\":7}","created_at":"2026-07-27T21:12:53.431227855Z","kind":"routing","source":"legacy agent execute-bead","summary":"provider=grok"}
