@@ -754,15 +754,15 @@ func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
 }
 
 // TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth verifies
-// that the post-attempt orchestrator checks the queue-level max_decomposition_depth
-// (from config) and not the implementation-level depth cap (hardcoded 2 in the
-// execute-bead prompt). A bead at depth 1 with max_decomposition_depth=3 must
-// still be split even if the rationale mentions the implementation depth cap.
+// that post-attempt recovery uses the same unified depth policy as prompt
+// rendering (decompositionDepthCap / agent.triage.max_decomposition_depth).
+// A bead under an explicit max of 3 is still split when depth < 3, and the
+// prompt text for that config states 3 — not a separate prompt-only cap.
 func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
-	// Create bead at depth 1: child of a closed root bead.
+	// Decomposed child at consecutive depth 1 under a closed root.
 	root := &bead.Bead{ID: "ddx-qdepth-root", Title: "Root bead", Status: bead.StatusClosed}
 	require.NoError(t, store.Create(context.Background(), root))
 
@@ -770,15 +770,17 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 		ID:         "ddx-qdepth-child",
 		Title:      "Child bead at depth 1",
 		Parent:     "ddx-qdepth-root",
+		Labels:     []string{"decomposed"},
 		Acceptance: "1. implement part A of the work\n2. implement part B of the work",
 	}
 	require.NoError(t, store.Create(context.Background(), candidate))
+	require.Equal(t, 1, storeBeadDepth(context.Background(), store, candidate))
 
 	var hookCalls int32
 	// Material scope-reducing split: distinct implementation children so the
 	// material-scope gate accepts while the depth assertion still holds.
 	decomp := &PreClaimDecomposition{
-		Rationale: "orchestrator split at depth 1",
+		Rationale: "orchestrator split at depth 1 under unified policy max 3",
 		Children: []PreClaimDecompositionChild{
 			{Title: "Subtask A", Description: "implement part A only", Acceptance: "1. implement part A of the work"},
 			{Title: "Subtask B", Description: "implement part B only", Acceptance: "1. implement part B of the work"},
@@ -795,9 +797,9 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 			return ExecuteBeadReport{
 				BeadID: beadID,
 				Status: ExecuteBeadStatusNoChanges,
-				// Rationale mentions implementation depth cap as a red herring;
-				// the orchestrator must use queue-level max_decomposition_depth (3).
-				NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: implementation depth cap reached at depth 2",
+				// Rationale may mention depth 2 as operator-facing narrative;
+				// the orchestrator must apply the unified configured policy (3).
+				NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: bead still too large after attempt",
 			}, nil
 		}),
 	}
@@ -807,6 +809,11 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 		MaxDecompositionDepth: 3, // depth 1 < 3, so orchestrator may still split
 	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	// Unified policy: prompt helper and orchestrator share the same resolved cap.
+	assert.Equal(t, 3, decompositionDepthCap(rcfg),
+		"orchestrator must resolve explicit max_decomposition_depth=3")
+	assert.Equal(t, 3, rcfg.MaxDecompositionDepth())
+	assert.Equal(t, 3, rcfg.DecompositionPolicy().MaxDepth)
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:         true,
@@ -819,13 +826,13 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Hook must have been called: depth 1 < max_decomposition_depth 3.
+	// Hook must have been called: depth 1 < unified max_decomposition_depth 3.
 	assert.Equal(t, int32(1), atomic.LoadInt32(&hookCalls),
-		"PostAttemptDecompositionHook must run: queue depth 1 < max_decomposition_depth 3")
+		"PostAttemptDecompositionHook must run when depth 1 < unified policy max 3")
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Failures)
 
-	// Children must be created when queue depth is under the configured cap.
+	// Children must be created when under the unified configured cap.
 	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
@@ -834,7 +841,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 			children = append(children, b)
 		}
 	}
-	assert.Len(t, children, 2, "children must be created when queue depth < max_decomposition_depth")
+	assert.Len(t, children, 2, "children must be created when depth < unified max_decomposition_depth")
 }
 
 func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {

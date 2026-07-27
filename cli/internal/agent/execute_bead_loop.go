@@ -489,12 +489,12 @@ type postAttemptDecompositionDecision struct {
 }
 
 // handlePostAttemptDecomposition runs the orchestrator-level splitter when a
-// no_changes attempt signals orchestrator_action: decompose. It checks the
-// queue-level max_decomposition_depth (not the implementation prompt cap),
-// validates the AC map for completeness, and either creates children+deps or
-// parks the parent for operator review if the split is lossy, depth-capped, or
-// introduces a parent back-edge. The bead must already be unclaimed before
-// this is called.
+// no_changes attempt signals orchestrator_action: decompose (queue-drain /
+// post-attempt recovery path). It checks the unified decompositionDepthCap
+// policy shared with preclaim intake and prompt rendering, validates the AC
+// map for completeness, and either creates children+deps or parks the parent
+// for operator review if the split is lossy, depth-capped, or introduces a
+// parent back-edge. The bead must already be unclaimed before this is called.
 func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) postAttemptDecompositionDecision {
 	decision := postAttemptDecompositionDecision{ExecutionDecision: "proposed"}
 	emit := func(kind string, body map[string]any) {
@@ -520,11 +520,11 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		}
 	}
 
-	// Queue-level depth check: orchestrator uses its own cap, not the
-	// implementation prompt's hardcoded depth-2 cap. At the cap, prefer
-	// execution for already-actionable beads over another expansion layer.
+	// Unified depth policy: same cap as preclaim intake and prompt rendering.
+	// At the cap, prefer execution for already-actionable beads over another
+	// expansion layer.
 	policy := rcfg.DecompositionPolicy()
-	maxDepth := policy.MaxDepth
+	maxDepth := decompositionDepthCap(rcfg)
 	if maxDepth > 0 && storeBeadDepth(ctx, w.Store, candidate) >= maxDepth {
 		if beadActionableAtDecompositionCap(candidate) {
 			if runtime.Log != nil {
@@ -2893,12 +2893,13 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	skipPreClaimIntake := false
 	readinessEstimatedDifficulty := ""
 
-	// Queue-level decomposition depth cap: when the bead has already been split
-	// to the configured limit, prefer execution if it is already an actionable
-	// atomic unit; only park non-actionable beads for human decomposition
-	// without invoking the classifier or splitter.
-	if runtime.PreClaimIntakeHook != nil && rcfg.MaxDecompositionDepth() > 0 {
-		maxDepth := rcfg.MaxDecompositionDepth()
+	// Unified decomposition depth cap (same policy as post-attempt recovery,
+	// queue drain, and executeBeadDynamicStep0Hints): when the bead has already
+	// been split to the configured limit, prefer execution if it is already an
+	// actionable atomic unit; only park non-actionable beads for human
+	// decomposition without invoking the classifier or splitter.
+	if runtime.PreClaimIntakeHook != nil && decompositionDepthCap(rcfg) > 0 {
+		maxDepth := decompositionDepthCap(rcfg)
 		depth := storeBeadDepth(ctx, w.Store, &candidate)
 		if depth >= maxDepth {
 			if beadActionableAtDecompositionCap(&candidate) {
@@ -3272,7 +3273,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				break
 			}
 			// too_large_decomposed with concrete child specs: validate material
-			// scope reduction + AC map, check the queue-level depth cap and the
+			// scope reduction + AC map, check the unified depth policy and the
 			// family-wide expansion budget, then create children. At the depth
 			// cap, an already-actionable bead is dispatched rather than parked
 			// or expanded. Rejected splits reuse the lossy-split refusal path
@@ -3280,7 +3281,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			refuseReason := preClaimDecompositionRefuseReason(&candidate, decomp)
 			lossyOrEmpty := refuseReason != ""
 			policy := rcfg.DecompositionPolicy()
-			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= policy.MaxDepth
+			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= decompositionDepthCap(rcfg)
 			familyStats := storeBeadFamilyStats(ctx, w.Store, &candidate)
 			proposedChildren := 0
 			if decomp != nil {
@@ -4567,11 +4568,10 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			return executeBeadIterationOutcome{Continue: true}, nil
 		}
 
-		// Post-attempt orchestrator decomposition: when the implementation
-		// attempt signals orchestrator_action: decompose (because it hit the
-		// implementation depth cap or the bead is too large for the worktree),
-		// invoke the queue-level splitter. The orchestrator checks the
-		// queue-level max_decomposition_depth, not the implementation cap.
+		// Post-attempt / queue-drain orchestrator decomposition: when the
+		// implementation attempt signals orchestrator_action: decompose,
+		// invoke the splitter under the same unified depth policy used by
+		// preclaim intake and prompt rendering (decompositionDepthCap).
 		if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
 			parsed := ParseNoChangesRationale(report.NoChangesRationale)
 			if parsed.OrchestratorAction == "decompose" {

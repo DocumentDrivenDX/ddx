@@ -2480,12 +2480,21 @@ const executeBeadLargeDescriptionHintThreshold = 8000
 
 // resolveMaxDecompositionDepthForPrompt returns the queue-level
 // agent.triage.max_decomposition_depth policy for workDir. Prompt rendering
-// must use this resolved value so the implementer instruction cannot drift
-// from ResolvedConfig.MaxDecompositionDepth(). Explicit configured values
+// must use the same resolved policy as preclaim intake, post-attempt recovery,
+// and the queue drain path (decompositionDepthCap). Explicit configured values
 // are preserved exactly; unset/zero fall through to the binary default.
 func resolveMaxDecompositionDepthForPrompt(workDir string) int {
 	rcfg, _ := config.LoadAndResolve(workDir, config.CLIOverrides{})
-	return rcfg.MaxDecompositionDepth()
+	return decompositionDepthCap(rcfg)
+}
+
+// decompositionDepthCap is the single resolved depth policy used by every
+// orchestrator decomposition decision (preclaim intake early gate, mid-intake
+// too_large application, post-attempt / queue-drain recovery) and by prompt
+// rendering via resolveMaxDecompositionDepthForPrompt. Call sites must not
+// invent a separate hard-coded or prompt-only cap.
+func decompositionDepthCap(rcfg config.ResolvedConfig) int {
+	return rcfg.DecompositionPolicy().MaxDepth
 }
 
 func executeBeadDynamicStep0Hints(workDir string, b *bead.Bead) string {
@@ -2502,8 +2511,8 @@ func executeBeadDynamicStep0Hints(workDir string, b *bead.Bead) string {
 	}
 
 	maxDepth := resolveMaxDecompositionDepthForPrompt(workDir)
-	// Always emit the resolved policy number so the prompt cannot disagree
-	// with ResolvedConfig.MaxDecompositionDepth().
+	// Always emit the unified policy number so the prompt cannot disagree with
+	// preclaim intake, post-attempt recovery, or the queue drain path.
 	fmt.Fprintf(&sb, "\n\nAuto-decomposition is capped at depth %d (agent.triage.max_decomposition_depth).\n",
 		maxDepth)
 
