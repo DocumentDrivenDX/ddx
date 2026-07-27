@@ -19,22 +19,37 @@
       },
       "fontFamily": {
         "h1": [
-          "Inter"
+          "Inter Variable",
+          "Inter",
+          "system-ui",
+          "sans-serif"
         ],
         "h2": [
-          "Inter"
+          "Inter Variable",
+          "Inter",
+          "system-ui",
+          "sans-serif"
         ],
         "body-md": [
-          "Inter"
+          "Inter Variable",
+          "Inter",
+          "system-ui",
+          "sans-serif"
         ],
         "body-sm": [
-          "Inter"
+          "Inter Variable",
+          "Inter",
+          "system-ui",
+          "sans-serif"
         ],
         "code": [
           "JetBrains Mono"
         ],
         "label": [
-          "Inter"
+          "Inter Variable",
+          "Inter",
+          "system-ui",
+          "sans-serif"
         ]
       },
       "fontSize": {
