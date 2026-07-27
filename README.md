@@ -29,11 +29,14 @@ DDx + HELIX takes a project from zero to working software:
 # Install DDx
 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 
+# Install agent-facing DDx skills (marketplace)
+npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
+
 # Initialize your project
 cd your-project
 ddx init
 
-# Install HELIX workflow plugin
+# Install HELIX workflow plugin (project package)
 ddx plugin install helix
 
 # Explore

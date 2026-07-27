@@ -71,7 +71,7 @@ narrate "ACT 1: Setup — Install DDx and HELIX"
 setup_demo_dir
 
 type_command ddx init
-type_command ddx install helix
+type_command ddx plugin install helix
 type_command ddx doctor
 
 echo ""
@@ -138,7 +138,7 @@ type_command git log --oneline
 narrate "Demo Complete!"
 
 echo "What you just saw:"
-echo "  1. Setup: ddx init + ddx install helix"
+echo "  1. Setup: ddx init + ddx plugin install helix"
 echo "  2. Frame: HELIX created PRD, feature spec, and tracker beads"
 echo "  3. Build: Agent implemented a Go task tracker with TDD"
 echo "  4. Evolve: Added priorities — spec updated, code extended"

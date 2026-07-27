@@ -39,12 +39,12 @@ check "ddx list"           ddx list
 echo ""
 echo "=== Package registry ==="
 check "ddx search workflow" ddx search workflow
-check "ddx installed"       ddx installed
-# ddx install helix requires network — skip in quick mode
+check "ddx plugin list"     ddx plugin list
+# ddx plugin install helix requires network — skip in quick mode
 if [ "${FULL_TEST:-0}" = "1" ]; then
-  check "ddx install helix" ddx install helix
+  check "ddx plugin install helix" ddx plugin install helix
 else
-  skip "ddx install helix" "set FULL_TEST=1 for network tests"
+  skip "ddx plugin install helix" "set FULL_TEST=1 for network tests"
 fi
 
 echo ""
