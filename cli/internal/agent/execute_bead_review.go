@@ -176,6 +176,9 @@ type ReviewResult struct {
 	DurationMS       int        `json:"duration_ms,omitempty"`
 	Error            string     `json:"error,omitempty"`
 	CostUSD          float64    `json:"cost_usd,omitempty"`
+	// CostSource is Fizeau public provenance for CostUSD ("reported",
+	// "configured", or "unknown"). Empty means legacy/unset.
+	CostSource string `json:"cost_source,omitempty"`
 	// InputBytes and OutputBytes are the FEAT-022 §16 byte counters used to
 	// populate the compact summary appended to review and review-error event
 	// bodies. InputBytes is the assembled prompt size; OutputBytes is the
@@ -1146,6 +1149,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			ExecutionDir: artifacts.DirRel,
 			DurationMS:   durationMS,
 			CostUSD:      resultCost(result),
+			CostSource:   resultCostSource(result),
 			InputBytes:   transportTelemetry.InputBytes,
 			OutputBytes:  transportTelemetry.OutputBytes,
 		}
@@ -1241,6 +1245,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 		ExecutionDir:     artifacts.DirRel,
 		DurationMS:       durationMS,
 		CostUSD:          resultCost(result),
+		CostSource:       resultCostSource(result),
 		InputBytes:       telemetry.InputBytes,
 		OutputBytes:      telemetry.OutputBytes,
 	}
@@ -1364,4 +1369,11 @@ func resultCost(result *Result) float64 {
 		return 0
 	}
 	return result.CostUSD
+}
+
+func resultCostSource(result *Result) string {
+	if result == nil || result.CostSource == "" {
+		return CostSourceUnknown
+	}
+	return result.CostSource
 }

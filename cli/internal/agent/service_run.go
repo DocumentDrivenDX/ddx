@@ -374,6 +374,13 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 				result.Tokens = *final.Usage.TotalTokens
 			}
 		}
+		// Project cost provenance always. Fizeau refuses to decode cost_usd
+		// without cost_source (v0.15+); a zero CostUSD is only authoritative
+		// when CostSource is reported/configured, not when unknown.
+		result.CostSource = string(final.CostSource)
+		if result.CostSource == "" {
+			result.CostSource = string(agentlib.CostSourceUnknown)
+		}
 		if final.CostUSD != nil && *final.CostUSD > 0 {
 			result.CostUSD = *final.CostUSD
 		}

@@ -216,6 +216,7 @@ func buildAttemptMetricsRow(store durableAuditBeadReader, report ExecuteBeadRepo
 		SpecID:        specID,
 		Outcome:       report.Status,
 		CostUSD:       report.CostUSD,
+		CostSource:    report.CostSource,
 		DurationMS:    int(report.DurationMS),
 		ReviewVerdict: report.ReviewVerdict,
 	}

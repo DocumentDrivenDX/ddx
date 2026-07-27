@@ -832,6 +832,10 @@ type ExecuteBeadReport struct {
 	// Power-escalating executors propagate this so the escalation trace can
 	// compute wasted/effective spend.
 	CostUSD float64 `json:"cost_usd,omitempty"`
+	// CostSource is Fizeau public cost provenance for CostUSD ("reported",
+	// "configured", or "unknown"). Zero CostUSD with unknown provenance is not
+	// authoritative billing evidence.
+	CostSource string `json:"cost_source,omitempty"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	// Profile routing telemetry. Populated when work uses a profile
@@ -8258,9 +8262,17 @@ func ReviewErrorEventBodyForSlot(class string, attemptCount int, resultRev strin
 
 // ReviewCostDeferredEventBody records that review would have exceeded the
 // configured cost cap after charging the reviewer cost against the shared
-// loop accumulator.
-func ReviewCostDeferredEventBody(resultRev string, reviewCostUSD, spentUSD, maxCostUSD float64) string {
-	return fmt.Sprintf("result_rev=%s\nreview_cost_usd=%.4f\nspent_usd=%.4f\nmax_cost_usd=%.4f", resultRev, reviewCostUSD, spentUSD, maxCostUSD)
+// loop accumulator. costSource is Fizeau public provenance for reviewCostUSD
+// ("reported", "configured", "unknown"); empty is normalized to "unknown" so
+// a zero review cost is never silently treated as free without provenance.
+func ReviewCostDeferredEventBody(resultRev string, reviewCostUSD, spentUSD, maxCostUSD float64, costSource string) string {
+	if costSource == "" {
+		costSource = CostSourceUnknown
+	}
+	return fmt.Sprintf(
+		"result_rev=%s\nreview_cost_usd=%.4f\nspent_usd=%.4f\nmax_cost_usd=%.4f\ncost_source=%s",
+		resultRev, reviewCostUSD, spentUSD, maxCostUSD, costSource,
+	)
 }
 
 // consecutiveLadderExhaustionsKey is the Extra field key that tracks how many

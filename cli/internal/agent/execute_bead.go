@@ -127,9 +127,13 @@ type ExecuteBeadResult struct {
 	DurationMS                  int     `json:"duration_ms"`
 	Tokens                      int     `json:"tokens,omitempty"`
 	CostUSD                     float64 `json:"cost_usd,omitempty"`
-	ExitCode                    int     `json:"exit_code"`
-	Error                       string  `json:"error,omitempty"`
-	ProjectRoot                 string  `json:"project_root,omitempty"`
+	// CostSource is Fizeau public cost provenance for CostUSD ("reported",
+	// "configured", or "unknown"). Distinguishes genuine free calls from
+	// discarded source-less cost. See Result.CostSource.
+	CostSource  string `json:"cost_source,omitempty"`
+	ExitCode    int    `json:"exit_code"`
+	Error       string `json:"error,omitempty"`
+	ProjectRoot string `json:"project_root,omitempty"`
 
 	// FailureMode classifies why an execution did not land cleanly. Empty
 	// when the bead was merged (task_succeeded landing outcome). Populated
@@ -474,6 +478,9 @@ func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadRepor
 	res.CycleIndex = report.CycleIndex
 	res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
 	res.CostUSD = report.CostUSD
+	if report.CostSource != "" {
+		res.CostSource = report.CostSource
+	}
 	res.DurationMS = int(report.DurationMS)
 }
 
@@ -660,8 +667,12 @@ type costEventBody struct {
 	OutputTokens int     `json:"output_tokens"`
 	TotalTokens  int     `json:"total_tokens"`
 	CostUSD      float64 `json:"cost_usd"`
-	DurationMS   int     `json:"duration_ms"`
-	ExitCode     int     `json:"exit_code"`
+	// CostSource is Fizeau public cost provenance ("reported", "configured",
+	// "unknown"). Historical rows without this field are treated as unknown
+	// when backfilled into attempt metrics.
+	CostSource string `json:"cost_source,omitempty"`
+	DurationMS int    `json:"duration_ms"`
+	ExitCode   int    `json:"exit_code"`
 }
 
 // appendBeadCostEvidence records a kind:cost evidence entry on the bead with
@@ -1312,6 +1323,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	cachedTokens := 0
 	outputTokens := 0
 	costUSD := 0.0
+	costSource := ""
 	resultModel := rcfg.Model()
 	resultHarness := rcfg.Harness()
 	resultProvider := ""
@@ -1329,6 +1341,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		cachedTokens = agentResult.CachedTokens
 		outputTokens = agentResult.OutputTokens
 		costUSD = agentResult.CostUSD
+		costSource = agentResult.CostSource
 		if agentResult.Error != "" {
 			agentErrMsg = agentResult.Error
 		}
@@ -1391,6 +1404,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
 			Tokens:                      tokens,
 			CostUSD:                     costUSD,
+			CostSource:                  costSource,
 			ExitCode:                    1,
 			Error:                       strings.TrimSpace(strings.Join([]string{agentErrMsg, headRevErr}, "\n")),
 			Stderr:                      agentStderr,
@@ -1490,6 +1504,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
 				Tokens:                      tokens,
 				CostUSD:                     costUSD,
+				CostSource:                  costSource,
 				ExitCode:                    exitCode,
 				Error:                       agentErrMsg,
 				Stderr:                      agentStderr,
@@ -1538,6 +1553,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
 		Tokens:                      tokens,
 		CostUSD:                     costUSD,
+		CostSource:                  costSource,
 		ExitCode:                    exitCode,
 		Error:                       agentErrMsg,
 		Stderr:                      agentStderr,
@@ -1707,6 +1723,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		OutputTokens: outputTokens,
 		TotalTokens:  tokens,
 		CostUSD:      costUSD,
+		CostSource:   costSource,
 		DurationMS:   res.DurationMS,
 		ExitCode:     exitCode,
 	})

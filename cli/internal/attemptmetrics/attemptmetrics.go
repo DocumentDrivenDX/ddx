@@ -41,6 +41,10 @@ type AttemptRow struct {
 	Outcome  string  `json:"outcome"`
 	ExitCode int     `json:"exit_code"`
 	CostUSD  float64 `json:"cost_usd,omitempty"`
+	// CostSource is Fizeau public cost provenance for CostUSD ("reported",
+	// "configured", or "unknown"). Absent on historical rows written before
+	// cost provenance was projected into attempt metrics.
+	CostSource string `json:"cost_source,omitempty"`
 
 	DurationMS   int `json:"duration_ms"`
 	InputTokens  int `json:"input_tokens,omitempty"`
@@ -91,6 +95,7 @@ type costEventBody struct {
 	OutputTokens int     `json:"output_tokens"`
 	TotalTokens  int     `json:"total_tokens"`
 	CostUSD      float64 `json:"cost_usd"`
+	CostSource   string  `json:"cost_source,omitempty"`
 	DurationMS   int     `json:"duration_ms"`
 	ExitCode     int     `json:"exit_code"`
 }
@@ -262,6 +267,7 @@ func extractRowsFromEvents(b BeadAttemptEvents) []AttemptRow {
 			Outcome:       outcome,
 			ExitCode:      cost.ExitCode,
 			CostUSD:       cost.CostUSD,
+			CostSource:    cost.CostSource,
 			DurationMS:    cost.DurationMS,
 			InputTokens:   cost.InputTokens,
 			OutputTokens:  cost.OutputTokens,

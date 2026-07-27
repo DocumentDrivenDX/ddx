@@ -261,6 +261,7 @@ func ReportFromExecuteBeadResult(res *ExecuteBeadResult, powerClass string) Exec
 		CycleTrace:                  append([]ExecutionCycleTrace(nil), res.CycleTrace...),
 		PowerClass:                  powerClass,
 		CostUSD:                     res.CostUSD,
+		CostSource:                  res.CostSource,
 		DurationMS:                  int64(res.DurationMS),
 		ResourceExhausted:           res.ResourceExhausted,
 		OutcomeReason:               res.FailureMode,

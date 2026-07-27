@@ -126,7 +126,7 @@ func TestMetrics_BackfillFromEvents(t *testing.T) {
 	dir := newAttemptMetricsProjectRoot(t)
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	costBody := `{"attempt_id":"20260101T120000-abcd1234","harness":"claude","provider":"anthropic","model":"claude-sonnet-4-6","input_tokens":1000,"output_tokens":500,"total_tokens":1500,"cost_usd":0.75,"duration_ms":60000,"exit_code":0}`
+	costBody := `{"attempt_id":"20260101T120000-abcd1234","harness":"claude","provider":"anthropic","model":"claude-sonnet-4-6","input_tokens":1000,"output_tokens":500,"total_tokens":1500,"cost_usd":0.75,"cost_source":"reported","duration_ms":60000,"exit_code":0}`
 	events := []bead.BeadEvent{
 		{Kind: "cost", Body: costBody, CreatedAt: now},
 		{Kind: "execute-bead", Summary: "task_succeeded", CreatedAt: now.Add(time.Minute)},
@@ -182,6 +182,9 @@ func TestMetrics_BackfillFromEvents(t *testing.T) {
 	if row.CostUSD != 0.75 {
 		t.Errorf("cost_usd=%v, want 0.75", row.CostUSD)
 	}
+	if row.CostSource != "reported" {
+		t.Errorf("cost_source=%q, want reported", row.CostSource)
+	}
 	if row.DurationMS != 60000 {
 		t.Errorf("duration_ms=%d, want 60000", row.DurationMS)
 	}
@@ -190,6 +193,61 @@ func TestMetrics_BackfillFromEvents(t *testing.T) {
 	}
 	if row.TSEnd == "" {
 		t.Error("ts_end should be set from cost event created_at")
+	}
+}
+
+// TestMetrics_BackfillConsumesCostSource proves the durable attempt-metrics
+// row projects cost_source from kind:cost evidence, distinguishing genuine
+// zero cost (reported) from unknown provenance.
+func TestMetrics_BackfillConsumesCostSource(t *testing.T) {
+	dir := newAttemptMetricsProjectRoot(t)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	reportedBody := `{"attempt_id":"attempt-reported","harness":"claude","input_tokens":10,"output_tokens":5,"total_tokens":15,"cost_usd":0,"cost_source":"reported","duration_ms":100,"exit_code":0}`
+	unknownBody := `{"attempt_id":"attempt-unknown","harness":"claude","input_tokens":10,"output_tokens":5,"total_tokens":15,"cost_usd":0,"cost_source":"unknown","duration_ms":100,"exit_code":0}`
+
+	beads := []attemptmetrics.BeadAttemptEvents{
+		{
+			BeadID: "ddx-reported",
+			Events: []bead.BeadEvent{
+				{Kind: "cost", Body: reportedBody, CreatedAt: now},
+				{Kind: "execute-bead", Summary: "task_succeeded", CreatedAt: now},
+			},
+		},
+		{
+			BeadID: "ddx-unknown",
+			Events: []bead.BeadEvent{
+				{Kind: "cost", Body: unknownBody, CreatedAt: now},
+				{Kind: "execute-bead", Summary: "task_succeeded", CreatedAt: now},
+			},
+		},
+	}
+
+	added, err := attemptmetrics.BackfillFromEvents(dir, beads)
+	require.NoError(t, err)
+	require.Equal(t, 2, added)
+
+	rows, err := attemptmetrics.LoadRows(dir)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	byID := map[string]attemptmetrics.AttemptRow{}
+	for _, r := range rows {
+		byID[r.AttemptID] = r
+	}
+	reported := byID["attempt-reported"]
+	unknown := byID["attempt-unknown"]
+	if reported.CostUSD != 0 || unknown.CostUSD != 0 {
+		t.Fatalf("both rows should have zero cost_usd; got reported=%v unknown=%v", reported.CostUSD, unknown.CostUSD)
+	}
+	if reported.CostSource != "reported" {
+		t.Fatalf("reported row cost_source=%q, want reported", reported.CostSource)
+	}
+	if unknown.CostSource != "unknown" {
+		t.Fatalf("unknown row cost_source=%q, want unknown", unknown.CostSource)
+	}
+	if reported.CostSource == unknown.CostSource {
+		t.Fatal("durable metrics must distinguish reported zero cost from unknown provenance")
 	}
 }
 

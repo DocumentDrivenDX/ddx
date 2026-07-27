@@ -191,12 +191,19 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				if slot.Result == nil {
 					continue
 				}
-				capTracker.Add(slot.Result.ReviewerHarness, slot.Result.CostUSD)
+				// Unknown provenance is not authoritative billing evidence:
+				// do not accumulate it as free spend; still surface cost_source
+				// in the deferred event so zero cost is not ambiguous.
+				if CostSourceAuthoritative(slot.Result.CostSource) || slot.Result.CostSource == "" {
+					// Empty CostSource keeps legacy callers (tests/stubs that
+					// only set CostUSD) on the prior Add path.
+					capTracker.Add(slot.Result.ReviewerHarness, slot.Result.CostUSD)
+				}
 				if detail, capped := capTracker.Tripped(); capped && !deferred {
 					_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 						Kind:      "review-cost-deferred",
 						Summary:   "review-cost-deferred",
-						Body:      ReviewCostDeferredEventBody(report.ResultRev, slot.Result.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
+						Body:      ReviewCostDeferredEventBody(report.ResultRev, slot.Result.CostUSD, capTracker.Spent(), capTracker.MaxUSD, slot.Result.CostSource),
 						Actor:     in.Assignee,
 						Source:    "ddx work",
 						CreatedAt: now().UTC(),

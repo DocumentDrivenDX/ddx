@@ -104,6 +104,25 @@ const (
 	DDXAttemptIDEnvKey   = "DDX_ATTEMPT_ID"
 )
 
+// CostSource values mirror Fizeau public cost provenance (fizeau.CostSource).
+// Kept as plain strings on Result so agent types stay free of a fizeau import.
+const (
+	CostSourceReported   = "reported"
+	CostSourceConfigured = "configured"
+	CostSourceUnknown    = "unknown"
+)
+
+// CostSourceAuthoritative reports whether costSource is durable billing
+// evidence. Unknown/empty provenance must not be treated as a genuine free call.
+func CostSourceAuthoritative(costSource string) bool {
+	switch costSource {
+	case CostSourceReported, CostSourceConfigured:
+		return true
+	default:
+		return false
+	}
+}
+
 // Result holds the output of an agent invocation.
 type Result struct {
 	Harness                     string  `json:"harness"`
@@ -121,17 +140,22 @@ type Result struct {
 	Stderr                      string  `json:"stderr,omitempty"`
 	// Audit-only routing evidence returned by Fizeau. Used by ExecuteBead to
 	// record kind:routing evidence on the bead; never fed back into selection.
-	RouteReason     string          `json:"route_reason,omitempty"`
-	ResolvedBaseURL string          `json:"resolved_base_url,omitempty"`
-	Tokens          int             `json:"tokens,omitempty"`
-	InputTokens     int             `json:"input_tokens,omitempty"`
-	CachedTokens    int             `json:"cached_tokens,omitempty"`
-	OutputTokens    int             `json:"output_tokens,omitempty"`
-	CostUSD         float64         `json:"cost_usd,omitempty"`
-	DurationMS      int             `json:"duration_ms"`
-	Error           string          `json:"error,omitempty"`
-	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`       // populated by agent, nil for subprocess
-	AgentSessionID  string          `json:"agent_session_id,omitempty"` // agent session ID for event log cross-reference
+	RouteReason     string  `json:"route_reason,omitempty"`
+	ResolvedBaseURL string  `json:"resolved_base_url,omitempty"`
+	Tokens          int     `json:"tokens,omitempty"`
+	InputTokens     int     `json:"input_tokens,omitempty"`
+	CachedTokens    int     `json:"cached_tokens,omitempty"`
+	OutputTokens    int     `json:"output_tokens,omitempty"`
+	CostUSD         float64 `json:"cost_usd,omitempty"`
+	// CostSource is the Fizeau public cost provenance for CostUSD
+	// ("reported", "configured", or "unknown"). Zero CostUSD with
+	// CostSource "unknown" means provenance was absent and the amount was
+	// discarded; zero with "reported"/"configured" is a genuine free call.
+	CostSource     string          `json:"cost_source,omitempty"`
+	DurationMS     int             `json:"duration_ms"`
+	Error          string          `json:"error,omitempty"`
+	ToolCalls      []ToolCallEntry `json:"tool_calls,omitempty"`       // populated by agent, nil for subprocess
+	AgentSessionID string          `json:"agent_session_id,omitempty"` // agent session ID for event log cross-reference
 }
 
 // SessionEntry is written to the session log.
