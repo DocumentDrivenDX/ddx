@@ -132,6 +132,20 @@ func isCommitObjectPresent(projectRoot, rev string) bool {
 	return err == nil
 }
 
+// pushPreserveRefToOrigin publishes a local preserve ref to origin so operators
+// on other machines can fetch the result commit. Best-effort only: callers must
+// treat any returned error as non-fatal (local preserve remains authoritative).
+func pushPreserveRefToOrigin(projectRoot, ref string) error {
+	if projectRoot == "" || ref == "" {
+		return fmt.Errorf("projectRoot and ref are required")
+	}
+	out, err := internalgit.Command(context.Background(), projectRoot, "push", "origin", ref).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push origin %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
 // DetectDanglingSuccessBeads scans all in_progress beads in the store and
 // returns findings for any that have a prior task_succeeded result. Called by
 // ddx bead doctor --dangling to surface operator-actionable cases.
@@ -314,13 +328,25 @@ func recoverDanglingSuccess(
 		if err := (&RealGitOps{}).UpdateRef(projectRoot, ref, prior.ResultRev); err == nil {
 			payload["preserve_ref"] = ref
 			payload["action"] = "preserve_and_park"
+			// Best-effort: push the preserve ref so operators on other machines
+			// can fetch the result_rev. Offline / network failure must not undo
+			// local preserve or block parking (ddx-d9bf40c8).
+			body := fmt.Sprintf("attempt_id=%s\nresult_rev=%s\npreserve_ref=%s", prior.AttemptID, prior.ResultRev, ref)
+			if pushErr := pushPreserveRefToOrigin(projectRoot, ref); pushErr != nil {
+				payload["pushed"] = false
+				payload["push_error"] = pushErr.Error()
+				body += fmt.Sprintf("\npushed=false\npush_error=%s", pushErr.Error())
+			} else {
+				payload["pushed"] = true
+				body += "\npushed=true"
+			}
 			if emit != nil {
 				emit("bead.dangling_success_preserved", payload)
 			}
 			appendDanglingSuccessEvent(store, beadID, bead.BeadEvent{
 				Kind:      "dangling-success-preserved",
 				Summary:   "successful detached result preserved for operator landing",
-				Body:      fmt.Sprintf("attempt_id=%s\nresult_rev=%s\npreserve_ref=%s", prior.AttemptID, prior.ResultRev, ref),
+				Body:      body,
 				Actor:     assignee,
 				Source:    "ddx work",
 				CreatedAt: t,

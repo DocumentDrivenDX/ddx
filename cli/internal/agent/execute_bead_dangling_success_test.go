@@ -397,6 +397,170 @@ func TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry(t *testing.T)
 	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
 }
 
+// TestRecoverDanglingSuccess_PushesPreserveRefToOrigin proves that a preserved
+// dangling success publishes refs/ddx/iterations/<bead>/<ts> to origin and
+// records pushed=true in the event body (ddx-d9bf40c8 AC1).
+func TestRecoverDanglingSuccess_PushesPreserveRefToOrigin(t *testing.T) {
+	workDir, originDir, _ := setupBareOrigin(t)
+	const beadID = "ddx-preserve-push-1"
+
+	ddxDir := testutils.MakeInitializedDDxRoot(t, workDir)
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "preserve push test",
+		IssueType: "task",
+	}))
+	require.NoError(t, store.Claim(beadID, "worker"))
+
+	baseSHA, resultSHA := gitDetachedBranchCommit(
+		t,
+		workDir,
+		"worker-result-push",
+		"worker-output.txt",
+		"detached result for push\n",
+		"chore: detached worker result for "+beadID,
+	)
+
+	const attemptID = "20260727T120000-pushok"
+	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		SessionID: "sess-push-ok",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: resultSHA,
+		BaseRev:   baseSHA,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+
+	frozen := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	prevNow := NowFunc
+	NowFunc = func() time.Time { return frozen }
+	t.Cleanup(func() { NowFunc = prevNow })
+
+	var payload map[string]any
+	emit := func(kind string, data map[string]any) {
+		if kind == "bead.dangling_success_preserved" {
+			payload = data
+		}
+	}
+
+	recovery, err := recoverDanglingSuccess(store, workDir, beadID, "worker", nil, emit)
+	require.NoError(t, err)
+	require.NotNil(t, recovery)
+	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome)
+
+	preserveRef := PreserveRef(beadID, baseSHA)
+	assert.Equal(t, preserveRef, recovery.PreserveRef)
+	assert.Equal(t, resultSHA, mustGitRevParse(t, workDir, preserveRef), "local preserve ref must exist")
+
+	// Origin must have the same ref at the same SHA (cross-machine fetchable).
+	originRefSHA := runGitInteg(t, originDir, "show-ref", "--hash", preserveRef)
+	assert.Equal(t, resultSHA, originRefSHA, "preserve ref must be pushed to origin")
+
+	require.NotNil(t, payload)
+	assert.Equal(t, true, payload["pushed"])
+	assert.Equal(t, preserveRef, payload["preserve_ref"])
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	var preservedEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "dangling-success-preserved" {
+			preservedEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, preservedEvent)
+	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
+	assert.Contains(t, preservedEvent.Body, "pushed=true")
+	assert.NotContains(t, preservedEvent.Body, "pushed=false")
+}
+
+// TestRecoverDanglingSuccess_PushFailureStillPreservesLocally proves that when
+// origin is unreachable, local preserve still succeeds and the event records
+// pushed=false with the error (ddx-d9bf40c8 AC2).
+func TestRecoverDanglingSuccess_PushFailureStillPreservesLocally(t *testing.T) {
+	projectRoot, beadID := newExecuteLoopProjectRoot(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	// Point origin at an unreachable path so push fails without network.
+	unreachable := filepath.Join(t.TempDir(), "no-such-remote.git")
+	runGitInteg(t, projectRoot, "remote", "add", "origin", "file://"+unreachable)
+
+	baseSHA, resultSHA := gitDetachedBranchCommit(
+		t,
+		projectRoot,
+		"worker-result-pushfail",
+		"worker-output.txt",
+		"detached result for push fail\n",
+		"chore: detached worker result for "+beadID,
+	)
+
+	const attemptID = "20260727T120000-pushfail"
+	writeResultJSON(t, projectRoot, attemptID, ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		SessionID: "sess-push-fail",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: resultSHA,
+		BaseRev:   baseSHA,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+
+	frozen := time.Date(2026, 7, 27, 12, 5, 0, 0, time.UTC)
+	prevNow := NowFunc
+	NowFunc = func() time.Time { return frozen }
+	t.Cleanup(func() { NowFunc = prevNow })
+
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Claim(beadID, "worker"))
+
+	var payload map[string]any
+	emit := func(kind string, data map[string]any) {
+		if kind == "bead.dangling_success_preserved" {
+			payload = data
+		}
+	}
+
+	recovery, err := recoverDanglingSuccess(store, projectRoot, beadID, "worker", nil, emit)
+	require.NoError(t, err)
+	require.NotNil(t, recovery)
+	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome,
+		"push failure must not block local preserve")
+
+	preserveRef := PreserveRef(beadID, baseSHA)
+	assert.Equal(t, resultSHA, mustGitRevParse(t, projectRoot, preserveRef),
+		"local preserve ref must exist despite push failure")
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "bead must still park for operator landing")
+
+	require.NotNil(t, payload)
+	assert.Equal(t, false, payload["pushed"])
+	pushErr, _ := payload["push_error"].(string)
+	assert.NotEmpty(t, pushErr, "payload must record the push error")
+	assert.Contains(t, pushErr, "git push origin")
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	var preservedEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "dangling-success-preserved" {
+			preservedEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, preservedEvent)
+	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
+	assert.Contains(t, preservedEvent.Body, "pushed=false")
+	assert.Contains(t, preservedEvent.Body, "push_error=")
+}
+
 // ---------------------------------------------------------------------------
 // AC1: a bead with no prior success re-executes normally
 // ---------------------------------------------------------------------------
