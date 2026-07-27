@@ -89,8 +89,11 @@ func (r *queryResolver) Run(ctx context.Context, id string) (*Run, error) {
 	return run, nil
 }
 
-func (r *queryResolver) projectIDForWorkingDir(workingDir string) (string, bool) {
-	if r.State == nil || workingDir == "" {
+// projectIDForWorkingDir maps a request working directory to a registered
+// project id. Shared by query and mutation resolvers (bead federation
+// forwarding uses the same lookup to decide owner routing).
+func (r *Resolver) projectIDForWorkingDir(workingDir string) (string, bool) {
+	if r == nil || r.State == nil || workingDir == "" {
 		return "", false
 	}
 	for _, proj := range r.State.GetProjectSnapshots(false) {

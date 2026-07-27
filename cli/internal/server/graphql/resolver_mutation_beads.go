@@ -74,6 +74,21 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 		return nil, fmt.Errorf("title is required")
 	}
 
+	// Hub mode: forward to the project owner unless this request was already
+	// forwarded (loop prevention via X-DDx-Origin-Server-ID). Offline and
+	// missing-owner targets refuse without a hub-local phantom bead.
+	if !beadMutationIsForwarded(ctx) {
+		projectID, owner, err := r.beadMutationOwner(r.workingDir(ctx))
+		if err != nil {
+			return nil, err
+		}
+		if owner != nil {
+			return r.forwardBeadMutation(ctx, owner, projectID, "beadCreate", beadMutationForwardQueryCreate(), map[string]any{
+				"input": input,
+			})
+		}
+	}
+
 	b := &bead.Bead{
 		Title: input.Title,
 	}
@@ -113,6 +128,21 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input BeadUpdateInput) (*Bead, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
+	}
+
+	// Hub mode: forward owner-targeted updates; never write a hub-local
+	// phantom when the project is owned by a remote spoke.
+	if !beadMutationIsForwarded(ctx) {
+		projectID, owner, err := r.beadMutationOwner(r.workingDir(ctx))
+		if err != nil {
+			return nil, err
+		}
+		if owner != nil {
+			return r.forwardBeadMutation(ctx, owner, projectID, "beadUpdate", beadMutationForwardQueryUpdate(), map[string]any{
+				"id":    id,
+				"input": input,
+			})
+		}
 	}
 
 	store := r.beadStore(ctx)
