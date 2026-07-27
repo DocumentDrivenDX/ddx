@@ -521,9 +521,24 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	}
 
 	// Queue-level depth check: orchestrator uses its own cap, not the
-	// implementation prompt's hardcoded depth-2 cap.
+	// implementation prompt's hardcoded depth-2 cap. At the cap, prefer
+	// execution for already-actionable beads over another expansion layer.
 	maxDepth := rcfg.MaxDecompositionDepth()
 	if maxDepth > 0 && storeBeadDepth(ctx, w.Store, candidate) >= maxDepth {
+		if beadActionableAtDecompositionCap(candidate) {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition skipped: bead %s at depth cap is actionable; prefer execution\n", candidate.ID)
+			}
+			emit("post_attempt_decomposition.skipped", map[string]any{
+				"bead_id": candidate.ID,
+				"reason":  "depth_cap_actionable",
+				"detail":  "bead is at the decomposition depth cap and already actionable; refusing further split",
+			})
+			// Leave reclaimable: no children, no park. The no_changes attempt
+			// already released the claim; a later drain can dispatch again.
+			decision.ExecutionDecision = "actionable_at_depth_cap"
+			return decision
+		}
 		overflowBody, _ := json.Marshal(map[string]any{
 			"depth": storeBeadDepth(ctx, w.Store, candidate),
 			"max":   maxDepth,
@@ -536,6 +551,9 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			Source:    "ddx work",
 			CreatedAt: at,
 		})
+		if lerr := addBeadLabel(ctx, w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
+		}
 		parkOperator("queue-level depth cap exceeded; operator must split")
 		return decision
 	}
@@ -2847,54 +2865,71 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	readinessEstimatedDifficulty := ""
 
 	// Queue-level decomposition depth cap: when the bead has already been split
-	// to the configured limit, block it for operator review without invoking
-	// the classifier or splitter (docs/triage/decomposition.md §Recursion depth cap).
+	// to the configured limit, prefer execution if it is already an actionable
+	// atomic unit; only park non-actionable beads for human decomposition
+	// without invoking the classifier or splitter.
 	if runtime.PreClaimIntakeHook != nil && rcfg.MaxDecompositionDepth() > 0 {
 		maxDepth := rcfg.MaxDecompositionDepth()
 		depth := storeBeadDepth(ctx, w.Store, &candidate)
 		if depth >= maxDepth {
-			body, _ := json.Marshal(map[string]any{"depth": depth, "max": maxDepth})
-			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-				Kind:      "triage-overflow",
-				Summary:   "depth cap exceeded",
-				Body:      string(body),
-				Actor:     assignee,
-				Source:    "ddx work",
-				CreatedAt: now().UTC(),
-			})
-			if lerr := addBeadLabel(ctx, w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
-			}
-			overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
-			if strictIntakeBlocking() {
-				if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-				} else if parked {
-					_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-					if stopAfterNonAttemptSkip() {
-						applyStop(work.StopInput{Once: true})
+			if beadActionableAtDecompositionCap(&candidate) {
+				// At-cap and actionable: skip intake/decomposition and dispatch.
+				skipPreClaimIntake = true
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"depth cap reached with actionable bead %s (depth=%d max=%d); dispatching without further decomposition\n",
+						candidate.ID, depth, maxDepth)
+				}
+				emit("pre_claim_intake.depth_cap_execute", map[string]any{
+					"bead_id": candidate.ID,
+					"depth":   depth,
+					"max":     maxDepth,
+					"detail":  "bead is at the decomposition depth cap and already actionable; dispatching without further split",
+				})
+			} else {
+				body, _ := json.Marshal(map[string]any{"depth": depth, "max": maxDepth})
+				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+					Kind:      "triage-overflow",
+					Summary:   "depth cap exceeded",
+					Body:      string(body),
+					Actor:     assignee,
+					Source:    "ddx work",
+					CreatedAt: now().UTC(),
+				})
+				if lerr := addBeadLabel(ctx, w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
+				}
+				overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
+				if strictIntakeBlocking() {
+					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					} else if parked {
+						_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+						if stopAfterNonAttemptSkip() {
+							applyStop(work.StopInput{Once: true})
+							return executeBeadIterationOutcome{Stop: true}, nil
+						}
+						return executeBeadIterationOutcome{Continue: true}, nil
+					}
+				} else {
+					if appendPreClaimWarn(candidate.ID, "decomposition_depth_cap", overflowDetail, now().UTC()) {
 						return executeBeadIterationOutcome{Stop: true}, nil
 					}
-					return executeBeadIterationOutcome{Continue: true}, nil
+					emit("pre_claim_intake.warn", readinessDecisionBody(
+						"pre_claim_intake.decomposition_depth_cap",
+						"too_large",
+						"pre_claim_intake",
+						"best-effort",
+						"attempt",
+						"continue with implementation; operator attention is reserved for explicit targeted execution",
+						map[string]any{
+							"bead_id": candidate.ID,
+							"outcome": string(PreClaimIntakeTooLargeDecomposed),
+							"detail":  overflowDetail,
+						},
+					))
+					skipPreClaimIntake = true
 				}
-			} else {
-				if appendPreClaimWarn(candidate.ID, "decomposition_depth_cap", overflowDetail, now().UTC()) {
-					return executeBeadIterationOutcome{Stop: true}, nil
-				}
-				emit("pre_claim_intake.warn", readinessDecisionBody(
-					"pre_claim_intake.decomposition_depth_cap",
-					"too_large",
-					"pre_claim_intake",
-					"best-effort",
-					"attempt",
-					"continue with implementation; operator attention is reserved for explicit targeted execution",
-					map[string]any{
-						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeTooLargeDecomposed),
-						"detail":  overflowDetail,
-					},
-				))
-				skipPreClaimIntake = true
 			}
 		}
 	}
@@ -3209,8 +3244,23 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			// too_large_decomposed with concrete child specs: validate the AC map,
 			// check the queue-level depth cap, then create children and wire deps.
+			// At the depth cap, an already-actionable bead is dispatched rather
+			// than parked or expanded.
 			lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
 			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
+			if depthAtCap && !lossyOrEmpty && beadActionableAtDecompositionCap(&candidate) {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"bead decomposition skipped: depth cap with actionable bead %s; continuing with attempt\n",
+						candidate.ID)
+				}
+				emit("pre_claim_intake.depth_cap_execute", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeTooLargeDecomposed),
+					"detail":  "depth cap reached with actionable bead; dispatching without creating descendants",
+				})
+				break
+			}
 			if lossyOrEmpty || depthAtCap {
 				// Cannot produce a lossless split: block for operator.
 				blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
@@ -6325,6 +6375,35 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.Disrupted = true
 		report.DisruptionReason = FailureModeLockContention
 	}
+}
+
+// beadActionableAtDecompositionCap reports whether a bead at the queue-level
+// decomposition depth cap should be dispatched rather than parked or split.
+// Actionable means non-empty numbered acceptance criteria plus a concrete
+// implementation outcome (PROPOSED FIX in the description, matching the existing
+// authoring / readiness template signal). Empty or non-actionable acceptance
+// fails this check so the at-cap park path still fires.
+func beadActionableAtDecompositionCap(b *bead.Bead) bool {
+	if b == nil {
+		return false
+	}
+	if len(numberedAcceptanceItems(b.Acceptance)) == 0 {
+		return false
+	}
+	// Concrete implementation outcome: description carries PROPOSED FIX, or the
+	// acceptance already names a mechanical deliverable (Test*, go test, path).
+	if strings.Contains(b.Description, "PROPOSED FIX") {
+		return true
+	}
+	for _, item := range numberedAcceptanceItems(b.Acceptance) {
+		if strings.Contains(item, "Test") ||
+			strings.Contains(item, "go test") ||
+			strings.Contains(item, "/") ||
+			strings.Contains(item, ".go") {
+			return true
+		}
+	}
+	return false
 }
 
 // storeBeadDepth walks the parent chain of b using the loop's store and returns
