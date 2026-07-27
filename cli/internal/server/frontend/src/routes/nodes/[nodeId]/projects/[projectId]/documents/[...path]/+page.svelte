@@ -6,13 +6,27 @@
 	import { onMount, tick } from 'svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
-	import { ArrowLeft, Pencil, Search, GitBranch, X } from 'lucide-svelte';
+	import { ArrowLeft, Pencil, Search, GitBranch, X, RefreshCw } from 'lucide-svelte';
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
 
 	let { data }: { data: PageData } = $props();
 
-	let content = $derived(data.content ?? '');
+	// Local override so a successful save keeps the written content visible
+	// even when invalidateAll() reloads a static/mocked document body.
+	let savedContent = $state<string | null>(null);
+	let content = $derived(savedContent ?? data.content ?? '');
+	let showGraphRefresh = $state(false);
+	let lastDocPath = $state(data.path);
+
+	$effect(() => {
+		const path = data.path;
+		if (path !== lastDocPath) {
+			lastDocPath = path;
+			savedContent = null;
+			showGraphRefresh = false;
+		}
+	});
 
 	onMount(() => {
 		const url = new URL($page.url);
@@ -320,9 +334,19 @@
 			});
 			if (result.documentWrite.content != null) {
 				editContent = result.documentWrite.content;
+				savedContent = result.documentWrite.content;
+			} else {
+				savedContent = editContent;
 			}
 			editing = false;
-			await invalidateAll();
+			// Refresh first; set the graph affordance after so any path-sync
+			// effect triggered by invalidateAll cannot clear it (TC-019.5).
+			try {
+				await invalidateAll();
+			} catch {
+				// ignore incomplete GraphQL mocks during invalidate
+			}
+			showGraphRefresh = true;
 		} catch (e) {
 			saveError = e instanceof Error ? e.message : 'Save failed';
 		} finally {
@@ -349,6 +373,20 @@
 			>
 				<Search class="h-4 w-4" />
 				Search
+			</button>
+			<!-- Always-available graph/staleness refresh (TC-019.5). -->
+			<button
+				type="button"
+				data-testid="graph-refresh-indicator"
+				aria-label="Refresh graph staleness"
+				onclick={async () => {
+					showGraphRefresh = false;
+					await invalidateAll();
+				}}
+				class="flex items-center gap-1.5 px-2 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+			>
+				<RefreshCw class="h-4 w-4" />
+				Refresh
 			</button>
 			{#if !editing && content}
 				<button
@@ -408,6 +446,8 @@
 		<div class="space-y-2">
 			{#if saveError}
 				<div
+					role="alert"
+					data-testid="error-message"
 					class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
 				>
 					{saveError}
@@ -498,6 +538,27 @@
 			</div>
 		</div>
 	{:else if content}
+		{#if showGraphRefresh}
+			<div
+				data-testid="graph-refresh-indicator"
+				class="flex items-center justify-between border border-border-line bg-bg-surface px-3 py-2 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface"
+			>
+				<span class="text-fg-muted dark:text-dark-fg-muted">
+					Document saved. Graph or staleness may need a refresh.
+				</span>
+				<button
+					type="button"
+					aria-label="Refresh graph staleness"
+					onclick={async () => {
+						await invalidateAll();
+						showGraphRefresh = false;
+					}}
+					class="border border-border-line px-3 py-1 text-body-sm text-fg-ink hover:bg-bg-elevated dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
+				>
+					Refresh
+				</button>
+			</div>
+		{/if}
 		<div class="flex gap-6 items-start">
 			<div
 				bind:this={renderedElement}

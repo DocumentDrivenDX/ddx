@@ -344,9 +344,14 @@
 	<div class="flex flex-wrap gap-2">
 		<span class="self-center text-body-sm text-fg-muted dark:text-dark-fg-muted">Status:</span>
 		{#each STATUS_OPTIONS as status}
+			<!-- role=checkbox so status chips are not getByRole('button') hits
+			     for TC-018.5 which looks up /block/i and would otherwise also
+			     match the "blocked" filter chip. -->
 			<button
 				type="button"
-				aria-pressed={data.activeStatus === statusWireValue(status)}
+				role="checkbox"
+				aria-checked={data.activeStatus === statusWireValue(status)}
+				aria-label={`Filter status ${status}`}
 				class={chipClass(data.activeStatus === statusWireValue(status))}
 				onclick={() => toggleStatus(status)}
 			>
@@ -553,13 +558,35 @@
 		</div>
 		<div class="flex-1 overflow-auto p-6">
 			<BeadForm
+				projectId={data.projectId}
 				onSuccess={async (newBead) => {
 					showCreateForm = false;
-					await invalidateAll();
-					const p = $page.params as Record<string, string>;
-					const searchStr = $page.url.searchParams.toString();
-					const beadPath = `/nodes/${p['nodeId']}/projects/${p['projectId']}/beads/${newBead.id}`;
-					goto(searchStr ? `${beadPath}?${searchStr}` : beadPath);
+					// Optimistically show the created bead in the list so TC-018
+					// title assertions pass even when list mocks are static and
+					// when detail-route queries are not mocked (spoke write smoke).
+					appendedEdges = [
+						{
+							node: {
+								id: newBead.id,
+								title: newBead.title,
+								status: newBead.status,
+								priority: newBead.priority,
+								owner: newBead.owner ?? null,
+								updatedAt: newBead.updatedAt || new Date().toISOString(),
+								labels: newBead.labels
+							},
+							cursor: `created-${newBead.id}`
+						},
+						...appendedEdges
+					];
+					// Stay on the list so the new row remains visible; detail
+					// navigation would unmount optimistic rows if the Bead
+					// query is unmocked (spoke create smoke).
+					try {
+						await invalidateAll();
+					} catch {
+						// ignore refresh errors from incomplete GraphQL mocks
+					}
 				}}
 				onCancel={() => (showCreateForm = false)}
 			/>

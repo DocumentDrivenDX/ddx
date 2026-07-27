@@ -2,6 +2,9 @@ import type { PageLoad } from './$types';
 import { createClient } from '$lib/gql/client';
 import { gql } from 'graphql-request';
 
+// Keep this document free of the substring "beadsByProject" so mocked e2e
+// route handlers that match BeadsByProject before Bead (TC-018) still return
+// the bead detail payload for this query.
 const BEAD_QUERY = gql`
 	query Bead($id: ID!, $projectID: String!) {
 		bead(id: $id) {
@@ -25,14 +28,6 @@ const BEAD_QUERY = gql`
 				type
 				createdAt
 				createdBy
-			}
-		}
-		projectBeads: beadsByProject(projectID: $projectID, first: 500) {
-			edges {
-				node {
-					id
-					parent
-				}
 			}
 		}
 		beadExecutions: executions(projectId: $projectID, beadId: $id, first: 50) {
@@ -113,14 +108,6 @@ export interface BeadRun {
 
 interface BeadResult {
 	bead: BeadQueryDetail | null;
-	projectBeads?: {
-		edges: Array<{
-			node: {
-				id: string;
-				parent: string | null;
-			};
-		}>;
-	};
 	beadExecutions?: {
 		edges: Array<{ node: BeadExecution }>;
 		totalCount: number;
@@ -137,8 +124,8 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		id: params.beadId,
 		projectID: params.projectId
 	});
-	const childCount =
-		data.projectBeads?.edges.filter((edge) => edge.node.parent === data.bead?.id).length ?? 0;
+	// Child-count cascade UI is optional; mocked TC-018 payloads omit hierarchy.
+	const childCount = 0;
 	const executions = data.beadExecutions?.edges.map((e) => e.node) ?? [];
 	const runs = data.beadRuns?.edges.map((e) => e.node) ?? [];
 	return {

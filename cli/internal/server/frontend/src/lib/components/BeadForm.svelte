@@ -31,10 +31,12 @@
 
 	let {
 		bead = null,
+		projectId = undefined,
 		onSuccess,
 		onCancel
 	}: {
 		bead?: Bead | null;
+		projectId?: string;
 		onSuccess: (bead: Bead) => void;
 		onCancel: () => void;
 	} = $props();
@@ -104,6 +106,9 @@
 				});
 				onSuccess(result.beadUpdate);
 			} else {
+				// Include projectId so hub/spoke create mutations identify the
+				// selected project (TC-018.1 / TC-018.4). Extra input fields are
+				// ignored by the server unmarshaller when not in BeadInput.
 				const result = await client.request<{ beadCreate: Bead }>(CREATE_MUTATION, {
 					input: {
 						title,
@@ -114,7 +119,8 @@
 						parent: parent || undefined,
 						description: description || undefined,
 						acceptance: acceptance || undefined,
-						notes: notes || undefined
+						notes: notes || undefined,
+						...(projectId ? { projectId } : {})
 					}
 				});
 				onSuccess(result.beadCreate);
