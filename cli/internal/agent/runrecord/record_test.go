@@ -274,6 +274,77 @@ func TestRunRecordSchemaRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRunRecordOptionalFizeauFieldsOmitted asserts that a record with unset
+// Fizeau public-result fields and no evidence links omits those keys from the
+// serialized JSON (omitempty contract for optional opaque refs and evidence).
+func TestRunRecordOptionalFizeauFieldsOmitted(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, 7, 27, 8, 0, 0, 0, time.UTC)
+	in := Record{
+		Version:   SchemaVersion,
+		RunID:     "run_20260727T080000Z_omit",
+		BeadID:    "ddx-6d682d7d",
+		AttemptID: "20260727T080000-omit",
+		Phase:     PhaseDispatching,
+		StartedAt: started,
+		UpdatedAt: started,
+		// Fizeau left nil; Evidence left nil/empty — both must omit.
+	}
+
+	raw, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var asMap map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &asMap); err != nil {
+		t.Fatalf("unmarshal map: %v", err)
+	}
+
+	// Top-level optional keys must be absent when unset.
+	for _, key := range []string{"fizeau", "evidence", "outcome"} {
+		if _, ok := asMap[key]; ok {
+			t.Errorf("serialized JSON contains optional key %q when unset: %s", key, string(raw))
+		}
+	}
+
+	// Nested public Fizeau result field names must not appear as top-level keys
+	// and must not appear anywhere when the Fizeau object is unset.
+	serialized := string(raw)
+	for _, key := range []string{
+		"public_session_ref",
+		"public_result_ref",
+		"session_log_path",
+		"immediate_error",
+		"final_status",
+		"final_exit_code",
+		"duration_ms",
+	} {
+		needle := `"` + key + `"`
+		if strings.Contains(serialized, needle) {
+			t.Errorf("serialized JSON contains unset Fizeau field key %q: %s", key, serialized)
+		}
+	}
+
+	// Empty (non-nil) evidence slice must also omit.
+	in.Evidence = []EvidenceLink{}
+	rawEmpty, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal empty evidence: %v", err)
+	}
+	var emptyMap map[string]json.RawMessage
+	if err := json.Unmarshal(rawEmpty, &emptyMap); err != nil {
+		t.Fatalf("unmarshal empty evidence map: %v", err)
+	}
+	if _, ok := emptyMap["evidence"]; ok {
+		t.Errorf("empty evidence slice must omit evidence key: %s", string(rawEmpty))
+	}
+	if _, ok := emptyMap["fizeau"]; ok {
+		t.Errorf("unset fizeau must still omit fizeau key: %s", string(rawEmpty))
+	}
+}
+
 // TestRunRecordRejectsProviderProcessFields proves raw provider output,
 // provider PID, provider process-tree metadata, and provider-session
 // canonical-state fields are not part of the v1 schema (AC2).
