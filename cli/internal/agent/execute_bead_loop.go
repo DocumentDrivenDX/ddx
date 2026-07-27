@@ -7153,13 +7153,20 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 
 func parkNoEvidenceForOperator(store ExecuteBeadLoopStore, beadID, actor string, report ExecuteBeadReport, detail string, at time.Time) error {
 	reason := FailureModeNoEvidenceProduced
+	summary := strings.TrimSpace(detail)
+	if summary == "" {
+		summary = "agent exited without a commit or no_changes_rationale.txt"
+	}
+	suggestedAction := "inspect the attempt, ensure the agent commits work or writes no_changes_rationale.txt, then move the bead back to open if another automated attempt is needed"
 	if strings.TrimSpace(report.PreserveRef) != "" || len(report.NoEvidencePaths) > 0 {
 		reason = "no_evidence_dirty_rescue"
+		summary = "attempt produced dirty rescue but no landed evidence"
+		suggestedAction = "inspect the dirty rescue patch, commit valid work manually, then move the bead back to open if another automated attempt is needed"
 	}
 	if err := parkToProposedWithOperatorMeta(store, beadID, bead.ParkNoChangesOperatorRequired, ParkToProposedOpts{
 		Reason:          reason,
-		Summary:         "attempt produced dirty rescue but no landed evidence",
-		SuggestedAction: "inspect the dirty rescue patch, commit valid work manually, then move the bead back to open if another automated attempt is needed",
+		Summary:         summary,
+		SuggestedAction: suggestedAction,
 		Since:           at,
 		CleanupLabels:   false,
 	}); err != nil {

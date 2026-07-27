@@ -596,6 +596,65 @@ func TestExecuteBeadWorker_NoEvidenceDirtyRescueStopsWatchForOperatorAttention(t
 	assert.True(t, sawExecuteBead, "execute-bead event must preserve terminal attempt evidence")
 }
 
+// TestParkNoEvidenceForOperator_PlainNoEvidenceUsesActualDetail proves that a
+// plain no-evidence park (no PreserveRef, no NoEvidencePaths) writes the actual
+// detail into needs-human-summary instead of the dirty-rescue narrative, and
+// that needs-human-suggested-action does not mention a dirty rescue patch.
+func TestParkNoEvidenceForOperator_PlainNoEvidenceUsesActualDetail(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	detail := "agent exited without a commit or no_changes_rationale.txt"
+	at := time.Date(2026, 7, 25, 21, 33, 2, 0, time.UTC)
+
+	err := parkNoEvidenceForOperator(store, first.ID, "worker", ExecuteBeadReport{
+		BeadID:    first.ID,
+		AttemptID: "attempt-plain-no-evidence",
+		Status:    ExecuteBeadStatusNoEvidenceProduced,
+		Detail:    detail,
+		// PreserveRef and NoEvidencePaths intentionally empty.
+	}, detail, at)
+	require.NoError(t, err)
+
+	got, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Equal(t, detail, meta.Summary,
+		"plain no-evidence park must surface the actual detail, not the dirty-rescue summary")
+	assert.NotContains(t, meta.Summary, "attempt produced dirty rescue but no landed evidence")
+	assert.NotContains(t, meta.SuggestedAction, "dirty rescue patch",
+		"plain no-evidence suggested action must not tell operators to inspect a dirty rescue patch")
+	assert.Equal(t, FailureModeNoEvidenceProduced, meta.Reason)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+}
+
+// TestParkNoEvidenceForOperator_DirtyRescueRetainsExistingNarrative proves that
+// when PreserveRef or NoEvidencePaths is set, needs-human-summary and
+// needs-human-suggested-action retain the existing dirty-rescue text.
+func TestParkNoEvidenceForOperator_DirtyRescueRetainsExistingNarrative(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	detail := "agent exited without a commit or no_changes_rationale.txt; dirty paths: foo.go"
+	at := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+
+	err := parkNoEvidenceForOperator(store, first.ID, "worker", ExecuteBeadReport{
+		BeadID:          first.ID,
+		AttemptID:       "attempt-dirty-rescue",
+		Status:          ExecuteBeadStatusNoEvidenceProduced,
+		Detail:          detail,
+		PreserveRef:     ".ddx/executions/attempt-dirty-rescue/dirty_rescue.patch",
+		NoEvidencePaths: []string{"cli/internal/agent/foo.go"},
+	}, detail, at)
+	require.NoError(t, err)
+
+	got, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Equal(t, "attempt produced dirty rescue but no landed evidence", meta.Summary)
+	assert.Equal(t,
+		"inspect the dirty rescue patch, commit valid work manually, then move the bead back to open if another automated attempt is needed",
+		meta.SuggestedAction)
+	assert.Equal(t, "no_evidence_dirty_rescue", meta.Reason)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+}
+
 func TestFormatLoopResultLine_SuccessUsesSuccessMarker(t *testing.T) {
 	success := ExecuteBeadReport{
 		Status:    ExecuteBeadStatusSuccess,
