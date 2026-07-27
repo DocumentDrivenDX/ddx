@@ -16,6 +16,12 @@ func (a *AgentConfig) Clone() *AgentConfig {
 		}
 		out.Virtual = &v
 	}
+	if a.Triage != nil {
+		t := *a.Triage
+		t.MaxDecompositionDepth = clonePtrInt(a.Triage.MaxDecompositionDepth)
+		t.MaxFamilyExpansion = clonePtrInt(a.Triage.MaxFamilyExpansion)
+		out.Triage = &t
+	}
 	return &out
 }
 

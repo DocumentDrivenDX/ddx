@@ -135,6 +135,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 
 	r.triagePolicy = c.ResolveTriagePolicy()
 	r.maxDecompositionDepth = c.ResolveMaxDecompositionDepth()
+	r.maxFamilyExpansion = c.ResolveMaxFamilyExpansion()
 	r.acQualityMinScore = c.ResolveACQualityMinScore()
 
 	return r
@@ -208,6 +209,7 @@ type ResolvedConfig struct {
 	beadQualityMode                    string
 	triagePolicy                       triage.TriagePolicy
 	maxDecompositionDepth              int
+	maxFamilyExpansion                 int
 	acQualityMinScore                  float64
 }
 
@@ -401,6 +403,26 @@ func (r ResolvedConfig) TriagePolicy() triage.TriagePolicy {
 func (r ResolvedConfig) MaxDecompositionDepth() int {
 	r.requireSealed()
 	return r.maxDecompositionDepth
+}
+
+// MaxFamilyExpansion returns the family-wide descendant budget for the triage
+// gate. The default is DefaultMaxFamilyExpansion (8). Before creating
+// children, decomposition paths must refuse a split that would push the
+// family's descendant count past this budget.
+func (r ResolvedConfig) MaxFamilyExpansion() int {
+	r.requireSealed()
+	return r.maxFamilyExpansion
+}
+
+// DecompositionPolicy returns the unified depth + family-expansion policy
+// resolved from agent.triage. Prefer this over reading the individual
+// accessors when applying decomposition control decisions.
+func (r ResolvedConfig) DecompositionPolicy() DecompositionPolicy {
+	r.requireSealed()
+	return DecompositionPolicy{
+		MaxDepth:           r.maxDecompositionDepth,
+		MaxFamilyExpansion: r.maxFamilyExpansion,
+	}
 }
 
 // BeadQualityLintBlockThresholdScore returns the lint threshold used by the

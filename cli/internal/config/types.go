@@ -479,26 +479,75 @@ type AgentConfig struct {
 	Triage        *TriageConfig  `yaml:"triage,omitempty" json:"triage,omitempty"`
 }
 
-// TriageConfig controls the bead readiness gate decomposition depth.
+// TriageConfig controls the bead readiness gate decomposition policy:
+// depth recursion cap and family-wide expansion budget.
 type TriageConfig struct {
 	// MaxDecompositionDepth caps recursive bead splitting. Children re-enter
 	// the gate; at cap the parent is blocked with label=needs-human-decomposition.
 	// Zero or unset uses the binary default (3). Configurable as
 	// agent.triage.max_decomposition_depth in .ddx/config.yaml.
 	MaxDecompositionDepth *int `yaml:"max_decomposition_depth,omitempty" json:"max_decomposition_depth,omitempty"`
+	// MaxFamilyExpansion is the family-wide descendant budget: the maximum
+	// number of descendants allowed under a bead family's root. Depth alone
+	// cannot stop queue widening when repeated preclaim/post-attempt splits
+	// keep adding siblings. Zero or unset uses the conservative default (8).
+	// Configurable as agent.triage.max_family_expansion in .ddx/config.yaml.
+	MaxFamilyExpansion *int `yaml:"max_family_expansion,omitempty" json:"max_family_expansion,omitempty"`
+}
+
+// DefaultMaxDecompositionDepth is the binary default for
+// agent.triage.max_decomposition_depth when unset or non-positive.
+const DefaultMaxDecompositionDepth = 3
+
+// DefaultMaxFamilyExpansion is the conservative family-wide descendant budget
+// used when agent.triage.max_family_expansion is unset or non-positive.
+// Depth caps alone do not bound queue growth; this budget stops a single
+// family from widening unboundedly via repeated preclaim/post-attempt splits.
+const DefaultMaxFamilyExpansion = 8
+
+// DecompositionPolicy is the resolved decomposition control surface shared by
+// preclaim intake, post-attempt recovery, prompt rendering, and family
+// expansion checks. Callers should resolve both caps from this object rather
+// than reading individual knobs independently.
+type DecompositionPolicy struct {
+	// MaxDepth is the queue-level recursive child-layer cap.
+	MaxDepth int
+	// MaxFamilyExpansion is the maximum number of descendants allowed under a
+	// bead family's root (not including the root itself).
+	MaxFamilyExpansion int
 }
 
 // ResolveMaxDecompositionDepth returns the effective depth cap for the triage
-// gate. Defaults to 3 when unset or non-positive.
+// gate. Defaults to DefaultMaxDecompositionDepth when unset or non-positive.
 func (c *NewConfig) ResolveMaxDecompositionDepth() int {
-	const defaultDepth = 3
 	if c == nil || c.Agent == nil || c.Agent.Triage == nil || c.Agent.Triage.MaxDecompositionDepth == nil {
-		return defaultDepth
+		return DefaultMaxDecompositionDepth
 	}
 	if *c.Agent.Triage.MaxDecompositionDepth <= 0 {
-		return defaultDepth
+		return DefaultMaxDecompositionDepth
 	}
 	return *c.Agent.Triage.MaxDecompositionDepth
+}
+
+// ResolveMaxFamilyExpansion returns the effective family-wide descendant
+// budget. Defaults to DefaultMaxFamilyExpansion when unset or non-positive.
+func (c *NewConfig) ResolveMaxFamilyExpansion() int {
+	if c == nil || c.Agent == nil || c.Agent.Triage == nil || c.Agent.Triage.MaxFamilyExpansion == nil {
+		return DefaultMaxFamilyExpansion
+	}
+	if *c.Agent.Triage.MaxFamilyExpansion <= 0 {
+		return DefaultMaxFamilyExpansion
+	}
+	return *c.Agent.Triage.MaxFamilyExpansion
+}
+
+// ResolveDecompositionPolicy returns the unified depth + family-expansion
+// policy resolved from agent.triage.
+func (c *NewConfig) ResolveDecompositionPolicy() DecompositionPolicy {
+	return DecompositionPolicy{
+		MaxDepth:           c.ResolveMaxDecompositionDepth(),
+		MaxFamilyExpansion: c.ResolveMaxFamilyExpansion(),
+	}
 }
 
 // RoutingConfig is the agent routing policy block.

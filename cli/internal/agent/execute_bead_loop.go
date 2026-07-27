@@ -523,7 +523,8 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	// Queue-level depth check: orchestrator uses its own cap, not the
 	// implementation prompt's hardcoded depth-2 cap. At the cap, prefer
 	// execution for already-actionable beads over another expansion layer.
-	maxDepth := rcfg.MaxDecompositionDepth()
+	policy := rcfg.DecompositionPolicy()
+	maxDepth := policy.MaxDepth
 	if maxDepth > 0 && storeBeadDepth(ctx, w.Store, candidate) >= maxDepth {
 		if beadActionableAtDecompositionCap(candidate) {
 			if runtime.Log != nil {
@@ -558,6 +559,27 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return decision
 	}
 
+	// Family-wide budget already full: refuse before invoking the splitter so
+	// repeated rounds do not cycle through decompose attempts.
+	familyStats := storeBeadFamilyStats(ctx, w.Store, candidate)
+	if familyExpansionWouldExceed(familyStats, 1, policy.MaxFamilyExpansion) {
+		// Even a single additional child would exceed; refuse with the same
+		// stable reason used after a concrete proposal is rejected.
+		reason := familyExpansionRefusalReason(familyStats, 1, policy)
+		_ = appendTriageDecomposedEvent(w.Store, candidate.ID, assignee, at, map[string]any{
+			"child_ids":         []string{},
+			"family_size":       familyStats.FamilySize,
+			"family_depth":      familyStats.FamilyDepth,
+			"descendant_count":  familyStats.DescendantCount,
+			"family_budget":     policy.MaxFamilyExpansion,
+			"proposed_children": 0,
+			"split_reason":      "",
+			"refusal_reason":    reason,
+		}, fmt.Sprintf("decomposition refused: %s", familyExpansionBudgetRefusal))
+		parkOperator(reason)
+		return decision
+	}
+
 	decomp, err := runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
 	if err != nil {
 		parkOperator(fmt.Sprintf("decomposition hook error: %s", err.Error()))
@@ -573,10 +595,17 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return decision
 	}
 
-	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
+	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at, rcfg)
 	decision.ChildIDs = append([]string(nil), childIDs...)
 	if decompErr != nil {
-		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
+		// Budget refusals use a stable park reason so repeated post-attempt
+		// rounds produce the same parked/refusal outcome rather than cycling.
+		detail := decompErr.Error()
+		if strings.Contains(detail, familyExpansionBudgetRefusal) {
+			parkOperator(detail)
+			return decision
+		}
+		parkOperator(fmt.Sprintf("decomposition apply error: %s", detail))
 		return decision
 	}
 	decision.ExecutionDecision = "execution_ineligible"
@@ -3243,14 +3272,22 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				break
 			}
 			// too_large_decomposed with concrete child specs: validate material
-			// scope reduction + AC map, check the queue-level depth cap, then
-			// create children. At the depth cap, an already-actionable bead is
-			// dispatched rather than parked or expanded. Rejected splits reuse
-			// the lossy-split refusal path and never call applyPreClaimDecomposition.
+			// scope reduction + AC map, check the queue-level depth cap and the
+			// family-wide expansion budget, then create children. At the depth
+			// cap, an already-actionable bead is dispatched rather than parked
+			// or expanded. Rejected splits reuse the lossy-split refusal path
+			// and never create children.
 			refuseReason := preClaimDecompositionRefuseReason(&candidate, decomp)
 			lossyOrEmpty := refuseReason != ""
-			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
-			if depthAtCap && !lossyOrEmpty && beadActionableAtDecompositionCap(&candidate) {
+			policy := rcfg.DecompositionPolicy()
+			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= policy.MaxDepth
+			familyStats := storeBeadFamilyStats(ctx, w.Store, &candidate)
+			proposedChildren := 0
+			if decomp != nil {
+				proposedChildren = len(decomp.Children)
+			}
+			familyBudgetRefuse := familyExpansionRefusalReason(familyStats, proposedChildren, policy)
+			if depthAtCap && !lossyOrEmpty && familyBudgetRefuse == "" && beadActionableAtDecompositionCap(&candidate) {
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log,
 						"bead decomposition skipped: depth cap with actionable bead %s; continuing with attempt\n",
@@ -3263,17 +3300,36 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				})
 				break
 			}
-			if lossyOrEmpty || depthAtCap {
-				// Cannot produce a lossless / material split: block for operator.
+			if lossyOrEmpty || depthAtCap || familyBudgetRefuse != "" {
+				// Cannot produce a lossless / material split, or family budget
+				// would be exceeded: block for operator with a stable reason.
 				blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
 				if lossyOrEmpty && refuseReason != "" {
 					blockedDetail = refuseReason
 				}
-				if depthAtCap && !lossyOrEmpty {
+				if depthAtCap && !lossyOrEmpty && familyBudgetRefuse == "" {
 					blockedDetail = "depth cap reached during decomposition; operator must split"
+				}
+				if familyBudgetRefuse != "" && !lossyOrEmpty {
+					// Prefer the budget refusal so repeated rounds stay identical.
+					blockedDetail = familyBudgetRefuse
 				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (%s)\n", blockedDetail, candidate.ID)
+				}
+				if familyBudgetRefuse != "" && !lossyOrEmpty {
+					// Emit the same triage-decomposed refusal telemetry that
+					// applyPreClaimDecomposition would emit, without creating children.
+					_ = appendTriageDecomposedEvent(w.Store, candidate.ID, assignee, now().UTC(), map[string]any{
+						"child_ids":         []string{},
+						"family_size":       familyStats.FamilySize,
+						"family_depth":      familyStats.FamilyDepth,
+						"descendant_count":  familyStats.DescendantCount,
+						"family_budget":     policy.MaxFamilyExpansion,
+						"proposed_children": proposedChildren,
+						"split_reason":      "",
+						"refusal_reason":    familyBudgetRefuse,
+					}, fmt.Sprintf("decomposition refused: %s", familyExpansionBudgetRefusal))
 				}
 				operatorOverrideDecompBlocked, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
 				emit("pre_claim_intake.blocked", map[string]any{
@@ -3301,7 +3357,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				}
 				break
 			}
-			childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, &candidate, decomp, assignee, now().UTC())
+			childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, &candidate, decomp, assignee, now().UTC(), rcfg)
 			if decompErr != nil {
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (%s)\n", decompErr, candidate.ID)
@@ -6445,14 +6501,220 @@ func storeBeadDepth(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bea
 	return depth
 }
 
+// familyExpansionBudgetRefusal is the stable refusal reason emitted when a
+// proposed split would push a bead family's descendant count past the
+// configured family-wide budget. Callers and tests match this exact string so
+// repeated rounds produce an identical parked/refusal outcome.
+const familyExpansionBudgetRefusal = "family expansion budget exceeded"
+
+// beadFamilyStats summarizes a bead family's current expansion state for
+// budget checks and triage-decomposed telemetry.
+type beadFamilyStats struct {
+	RootID          string
+	FamilySize      int // root + all descendants
+	DescendantCount int // descendants only (budget denominator)
+	FamilyDepth     int // max consecutive decomposed depth under the root
+}
+
+// allBeadsReader is the optional store capability used to count family
+// descendants. Production *bead.Store implements ReadAll; test stubs that do
+// not can still run depth-only paths without a family budget enforcement.
+type allBeadsReader interface {
+	ReadAll(ctx context.Context) ([]bead.Bead, error)
+}
+
+// storeBeadFamilyRoot walks the parent chain to the ultimate ancestor of b.
+func storeBeadFamilyRoot(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bead) string {
+	if b == nil {
+		return ""
+	}
+	rootID := strings.TrimSpace(b.ID)
+	seen := map[string]struct{}{rootID: {}}
+	current := b
+	for {
+		parentID := strings.TrimSpace(current.Parent)
+		if parentID == "" {
+			return rootID
+		}
+		if _, ok := seen[parentID]; ok {
+			return rootID
+		}
+		seen[parentID] = struct{}{}
+		parent, err := store.Get(ctx, parentID)
+		if err != nil || parent == nil {
+			return rootID
+		}
+		rootID = parent.ID
+		current = parent
+	}
+}
+
+// storeBeadFamilyStats counts descendants of the bead's family root and the
+// deepest decomposed depth observed in that family. When the store cannot
+// enumerate beads, DescendantCount stays 0 and FamilySize is 1 (the bead
+// alone) so callers without ReadAll do not spuriously refuse.
+func storeBeadFamilyStats(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bead) beadFamilyStats {
+	stats := beadFamilyStats{}
+	if b == nil {
+		return stats
+	}
+	stats.RootID = storeBeadFamilyRoot(ctx, store, b)
+	if stats.RootID == "" {
+		stats.RootID = b.ID
+	}
+	stats.FamilySize = 1
+	stats.FamilyDepth = storeBeadDepth(ctx, store, b)
+
+	reader, ok := store.(allBeadsReader)
+	if !ok {
+		return stats
+	}
+	all, err := reader.ReadAll(ctx)
+	if err != nil {
+		return stats
+	}
+
+	childrenOf := make(map[string][]bead.Bead, len(all))
+	byID := make(map[string]bead.Bead, len(all))
+	for _, item := range all {
+		byID[item.ID] = item
+		parentID := strings.TrimSpace(item.Parent)
+		if parentID == "" {
+			continue
+		}
+		childrenOf[parentID] = append(childrenOf[parentID], item)
+	}
+
+	// BFS under the family root; count every reachable descendant.
+	queue := append([]bead.Bead(nil), childrenOf[stats.RootID]...)
+	seen := map[string]struct{}{stats.RootID: {}}
+	maxDepth := 0
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if _, ok := seen[cur.ID]; ok {
+			continue
+		}
+		seen[cur.ID] = struct{}{}
+		stats.DescendantCount++
+		// Depth relative to family root via parent chain among known beads.
+		depth := 0
+		walk := cur
+		for {
+			pid := strings.TrimSpace(walk.Parent)
+			if pid == "" || pid == stats.RootID {
+				if pid == stats.RootID {
+					depth++
+				}
+				break
+			}
+			parent, ok := byID[pid]
+			if !ok {
+				break
+			}
+			depth++
+			if depth > 64 {
+				break
+			}
+			walk = parent
+		}
+		if depth > maxDepth {
+			maxDepth = depth
+		}
+		queue = append(queue, childrenOf[cur.ID]...)
+	}
+	stats.FamilySize = 1 + stats.DescendantCount
+	if maxDepth > stats.FamilyDepth {
+		stats.FamilyDepth = maxDepth
+	}
+	return stats
+}
+
+// familyExpansionWouldExceed reports whether creating proposedChildren more
+// descendants under the bead's family would exceed the resolved family budget.
+// When proposedChildren is 0, it reports whether the family is already at or
+// over the budget (used for stable repeated-round refusal).
+func familyExpansionWouldExceed(stats beadFamilyStats, proposedChildren int, budget int) bool {
+	if budget <= 0 {
+		return false
+	}
+	if proposedChildren < 0 {
+		proposedChildren = 0
+	}
+	return stats.DescendantCount+proposedChildren > budget
+}
+
+// familyExpansionRefusalReason returns the stable budget-refusal detail when
+// the proposed split would exceed the family expansion budget; empty otherwise.
+func familyExpansionRefusalReason(stats beadFamilyStats, proposedChildren int, policy config.DecompositionPolicy) string {
+	if !familyExpansionWouldExceed(stats, proposedChildren, policy.MaxFamilyExpansion) {
+		return ""
+	}
+	return fmt.Sprintf("%s: %d existing descendants + %d proposed exceeds budget %d (family_size=%d family_depth=%d)",
+		familyExpansionBudgetRefusal,
+		stats.DescendantCount,
+		proposedChildren,
+		policy.MaxFamilyExpansion,
+		stats.FamilySize,
+		stats.FamilyDepth,
+	)
+}
+
+// appendTriageDecomposedEvent writes a triage-decomposed event with family
+// telemetry for both accepted splits and budget refusals.
+func appendTriageDecomposedEvent(store ExecuteBeadLoopStore, parentID, actor string, at time.Time, body map[string]any, summary string) error {
+	if body == nil {
+		body = map[string]any{}
+	}
+	raw, _ := json.Marshal(body)
+	return store.AppendEvent(parentID, bead.BeadEvent{
+		Kind:      "triage-decomposed",
+		Summary:   summary,
+		Body:      string(raw),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
+}
+
 // applyPreClaimDecomposition creates child beads, parks the parent as
 // execution-ineligible, and appends a triage-decomposed event to the parent.
 // It returns the IDs of the created children so the caller can log or record
-// them.
-func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
+// them. When the family expansion budget would be exceeded, it creates no
+// children, emits a triage-decomposed refusal with family telemetry, and
+// returns an error whose message includes familyExpansionBudgetRefusal so
+// subsequent rounds produce the same parked/refusal outcome.
+func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time, rcfg config.ResolvedConfig) ([]string, error) {
 	if refuse := preClaimDecompositionRefuseReason(parent, decomp); refuse != "" {
 		return nil, fmt.Errorf("decompose refused: %s", refuse)
 	}
+
+	policy := rcfg.DecompositionPolicy()
+	stats := storeBeadFamilyStats(ctx, store, parent)
+	proposed := 0
+	if decomp != nil {
+		proposed = len(decomp.Children)
+	}
+	if reason := familyExpansionRefusalReason(stats, proposed, policy); reason != "" {
+		body := map[string]any{
+			"child_ids":         []string{},
+			"family_size":       stats.FamilySize,
+			"family_depth":      stats.FamilyDepth,
+			"descendant_count":  stats.DescendantCount,
+			"family_budget":     policy.MaxFamilyExpansion,
+			"proposed_children": proposed,
+			"split_reason":      "",
+			"refusal_reason":    reason,
+		}
+		if decomp != nil {
+			body["rationale"] = decomp.Rationale
+			body["ac_map"] = decomp.ACMap
+		}
+		_ = appendTriageDecomposedEvent(store, parent.ID, actor, at, body,
+			fmt.Sprintf("decomposition refused: %s", familyExpansionBudgetRefusal))
+		return nil, fmt.Errorf("decompose refused: %s", reason)
+	}
+
 	childIDs := make([]string, 0, len(decomp.Children))
 	for _, child := range decomp.Children {
 		nb := &bead.Bead{
@@ -6477,19 +6739,26 @@ func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore,
 		return childIDs, fmt.Errorf("decompose: park parent %s after decomposition: %w", parent.ID, err)
 	}
 
-	body, _ := json.Marshal(map[string]any{
-		"child_ids": childIDs,
-		"rationale": decomp.Rationale,
-		"ac_map":    decomp.ACMap,
-	})
-	return childIDs, store.AppendEvent(parent.ID, bead.BeadEvent{
-		Kind:      "triage-decomposed",
-		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
-		Body:      string(body),
-		Actor:     actor,
-		Source:    "ddx work",
-		CreatedAt: at,
-	})
+	// Post-create family telemetry: size after the accepted split.
+	afterStats := storeBeadFamilyStats(ctx, store, parent)
+	splitReason := strings.TrimSpace(decomp.Rationale)
+	if splitReason == "" {
+		splitReason = "accepted material scope reduction split"
+	}
+	body := map[string]any{
+		"child_ids":         childIDs,
+		"rationale":         decomp.Rationale,
+		"ac_map":            decomp.ACMap,
+		"family_size":       afterStats.FamilySize,
+		"family_depth":      afterStats.FamilyDepth,
+		"descendant_count":  afterStats.DescendantCount,
+		"family_budget":     policy.MaxFamilyExpansion,
+		"proposed_children": proposed,
+		"split_reason":      splitReason,
+		"refusal_reason":    "",
+	}
+	return childIDs, appendTriageDecomposedEvent(store, parent.ID, actor, at, body,
+		fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")))
 }
 
 // parkBeadPostIntakeRejection moves the bead to proposed and appends an
