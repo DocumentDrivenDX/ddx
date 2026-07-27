@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -93,45 +93,119 @@ func TestRecoverGitIndexLock_FreshUnowned(t *testing.T) {
 	}
 }
 
-// TestRecoverGitIndexLock_DeadOwner removes the lock when lsof identifies
-// a pid that is not alive. This test requires lsof and is skipped if
-// unavailable.
-func TestRecoverGitIndexLock_DeadOwner(t *testing.T) {
-	if _, err := exec.LookPath("lsof"); err != nil {
-		t.Skip("lsof not available on PATH")
+// deadOwnerPID is a high, non-allocated PID that processAlive treats as dead
+// on Linux (syscall.Kill ESRCH). Real lsof never reports it for our lock file;
+// tests inject it via a PATH-first fake lsof so the dead-owner path is proven
+// without racing host process-table latency.
+const deadOwnerPID = 2147483000
+
+// installFakeLsof puts a deterministic lsof shim first on PATH for the test.
+// body is a shell script body (receives the same args as real lsof).
+func installFakeLsof(t *testing.T, body string) {
+	t.Helper()
+	binDir := t.TempDir()
+	path := filepath.Join(binDir, "lsof")
+	script := "#!/bin/sh\n" + body + "\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake lsof: %v", err)
 	}
-	// This test asserts the probe reaches a positive outcome, so it must not
-	// race host lsof latency — querying a file no process holds costs 1.5s+ on
-	// WSL2 and can exceed even the 2s production default. Only tests asserting
-	// non-removal may shorten this.
-	prevLsof := gitlock.LsofTimeout
-	gitlock.LsofTimeout = 10 * time.Second
-	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// TestRecoverGitIndexLock_DeadOwner removes the lock when the owner probe
+// identifies a pid that is not alive. Uses a PATH-first fake lsof so the
+// outcome is independent of host lsof scheduling (the prior 100ms real-lsof
+// window made this flaky on slow Linux hosts).
+func TestRecoverGitIndexLock_DeadOwner(t *testing.T) {
+	// Fake lsof immediately reports a single dead PID — no scan latency, no
+	// scheduling race. Production still invokes real lsof via LookPath.
+	// Intentionally leave gitlock.LsofTimeout at the production default; the
+	// fake returns instantly so we do not depend on a shortened scheduling window.
+	installFakeLsof(t, "echo "+strconv.Itoa(deadOwnerPID)+"; exit 0")
 
 	dir := initGitLockTestRepo(t)
 	lockPath := filepath.Join(dir, ".git", "index.lock")
-
-	// Spawn a short-lived process that opens the lock file, then exits.
-	cmd := exec.Command("sh", "-c", "exec 9>>"+lockPath+"; sleep 0.05")
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start helper: %v", err)
+	if err := os.WriteFile(lockPath, []byte("dead-owner"), 0o644); err != nil {
+		t.Fatalf("create lock: %v", err)
 	}
-	if err := cmd.Wait(); err != nil {
-		t.Fatalf("helper exited with error: %v", err)
-	}
-	// Helper is dead; age the lock past stale threshold so the unowned-stale branch removes it.
-	prev := gitlock.StaleAge
-	gitlock.StaleAge = 1 * time.Millisecond
-	t.Cleanup(func() { gitlock.StaleAge = prev })
 
-	time.Sleep(5 * time.Millisecond)
 	result, err := recoverGitIndexLock(dir)
 	if err != nil {
 		t.Fatalf("recoverGitIndexLock: %v", err)
 	}
 	if !result.Removed {
-		t.Fatalf("expected removal, reason=%q owner=%d alive=%v",
+		t.Fatalf("expected removal for dead owner, reason=%q owner=%d alive=%v",
 			result.Reason, result.OwnerPID, result.OwnerAlive)
+	}
+	if result.OwnerPID != deadOwnerPID {
+		t.Fatalf("OwnerPID=%d, want %d", result.OwnerPID, deadOwnerPID)
+	}
+	if result.OwnerAlive {
+		t.Fatalf("OwnerAlive=true for dead owner pid")
+	}
+	if !strings.Contains(result.Reason, "not alive") {
+		t.Fatalf("Reason should prove dead-owner path, got %q", result.Reason)
+	}
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("lock still exists after dead-owner recovery: %v", err)
+	}
+}
+
+// TestRecoverGitIndexLock_LsofTimeoutPreservesLock proves that when the owner
+// probe times out (unknown ownership), recovery fails closed and leaves the
+// lock in place. Production must not remove a lock without a dead-owner or
+// proven-absent-and-stale proof.
+func TestRecoverGitIndexLock_LsofTimeoutPreservesLock(t *testing.T) {
+	// exec replaces the shell so CommandContext's kill targets sleep itself;
+	// a bare "sleep 60" under sh can leave Wait hung after the shell dies.
+	installFakeLsof(t, "exec sleep 60")
+
+	prevLsof := gitlock.LsofTimeout
+	// Short but non-zero: long enough for sleep to start, short enough that
+	// the test stays fast. Does not change the production default permanently.
+	gitlock.LsofTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
+
+	// Even a very old lock must survive unknown ownership.
+	prevAge := gitlock.StaleAge
+	gitlock.StaleAge = 1 * time.Millisecond
+	t.Cleanup(func() { gitlock.StaleAge = prevAge })
+
+	dir := initGitLockTestRepo(t)
+	lockPath := filepath.Join(dir, ".git", "index.lock")
+	payload := []byte("must-survive-lsof-timeout")
+	if err := os.WriteFile(lockPath, payload, 0o644); err != nil {
+		t.Fatalf("create lock: %v", err)
+	}
+	old := time.Now().Add(-1 * time.Hour)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	started := time.Now()
+	result, err := recoverGitIndexLock(dir)
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("recoverGitIndexLock: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("lsof timeout path took %v; expected ~LsofTimeout (50ms)", elapsed)
+	}
+	if result.Removed {
+		t.Fatalf("timeout/unknown owner must not remove lock, reason=%q", result.Reason)
+	}
+	if !strings.Contains(result.Reason, "unknown") {
+		t.Fatalf("Reason should report unknown ownership, got %q", result.Reason)
+	}
+	if !strings.Contains(result.Reason, "timed out") {
+		t.Fatalf("Reason should mention lsof timeout, got %q", result.Reason)
+	}
+	got, readErr := os.ReadFile(lockPath)
+	if readErr != nil {
+		t.Fatalf("lock should still exist: %v", readErr)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("lock payload changed: got %q want %q", got, payload)
 	}
 }
 
