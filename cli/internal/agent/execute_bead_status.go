@@ -125,6 +125,12 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 	switch {
 	case IsLockContentionError(errMsg):
 		return FailureModeLockContention
+	case isRetryablePreDispatchStagingError(errMsg):
+		// Concurrent pathspec races during pre-dispatch checkpoint staging
+		// (sibling deleted a temp path between enum and git add). Retryable
+		// repo-concurrency class, not a hard implementation failure
+		// (ddx-84efd50b).
+		return FailureModeLockContention
 	case IsWorktreeLostError(errMsg):
 		return FailureModeWorktreeLost
 	case containsAny(lower,

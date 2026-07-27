@@ -10,6 +10,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,13 +265,14 @@ func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testin
 	writeCheckpointTestFile(t, projectRoot, manifestRel, `{"attempt_id":"`+attemptID+`"}`+"\n")
 	writeCheckpointTestFile(t, projectRoot, embeddedRel, "private git runtime\n")
 
+	// Entire .ddx/executions/** tree is per-machine runtime state and must not
+	// appear in pre-dispatch dirt (ddx-84efd50b / ddx-d10073a8).
 	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
 	require.NoError(t, err)
-	assert.Contains(t, paths, filepath.ToSlash(manifestRel))
+	assert.NotContains(t, paths, filepath.ToSlash(manifestRel))
 	assert.NotContains(t, paths, filepath.ToSlash(embeddedRel))
 
-	// Only execution evidence is dirty, and evidence is never checkpointed
-	// (ddx-d10073a8), so there is nothing to commit.
+	// Only execution evidence is dirty — nothing to commit.
 	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
 	require.NoError(t, err)
 	require.False(t, committed, "execution evidence must not be checkpointed")
@@ -305,8 +307,14 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 
 	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
 	require.NoError(t, err)
-	for _, rel := range []string{beadsRel, manifestRel, promptRel, usageRel, resultRel, metricsRel} {
+	// Tracker + metrics remain checkpoint dirt; executions are never enumerated
+	// (ddx-84efd50b).
+	for _, rel := range []string{beadsRel, metricsRel} {
 		assert.Contains(t, paths, filepath.ToSlash(rel))
+	}
+	for _, rel := range []string{manifestRel, promptRel, usageRel, resultRel} {
+		assert.NotContains(t, paths, filepath.ToSlash(rel),
+			"execution evidence must not appear in pre-dispatch dirt")
 	}
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
@@ -525,6 +533,103 @@ func TestPreDispatchCheckpoint_IgnoresCollectionLockSiblingSidecar(t *testing.T)
 	require.NoError(t, err)
 	assert.False(t, committed)
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+}
+
+// TestPreDispatchCheckpoint_DoesNotEnumerateExecutionsDir asserts that
+// .ddx/executions/** is runtime scratch and never appears in the checkpoint
+// staging pathspec list — same exclusion class as the collection-lock sibling
+// sidecar (ddx-84efd50b).
+func TestPreDispatchCheckpoint_DoesNotEnumerateExecutionsDir(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260721T000001-executions-exclude"
+
+	// Resource-preflight temp + ordinary attempt evidence under executions/.
+	preflightRel := filepath.Join(ddxroot.DirName, "executions", ".ddx-resource-preflight-1822793358")
+	manifestRel := filepath.Join(ddxroot.DirName, "executions", attemptID, "manifest.json")
+	writeCheckpointTestFile(t, projectRoot, preflightRel, "preflight temp\n")
+	writeCheckpointTestFile(t, projectRoot, manifestRel, `{"attempt_id":"`+attemptID+`"}`+"\n")
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(preflightRel),
+		".ddx/executions/** must not appear in pre-dispatch checkpoint dirt")
+	assert.NotContains(t, paths, filepath.ToSlash(manifestRel),
+		".ddx/executions/** must not appear in pre-dispatch checkpoint dirt")
+	for _, p := range paths {
+		assert.False(t, strings.HasPrefix(p, ".ddx/executions/"),
+			"no path under .ddx/executions/ may be enumerated as checkpoint dirt, got %q", p)
+	}
+
+	// Production checkpoint path: only executions dirt → no-op success.
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	assert.False(t, committed,
+		"checkpoint must be a no-op when only .ddx/executions/ paths are dirty")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"),
+		"HEAD must not advance when only execution scratch is dirty")
+}
+
+// TestPreDispatchCheckpoint_IgnoresConcurrentlyDeletedExecutionTempFile
+// recreates the observed TOCTOU race: a sibling deletes a path that was
+// present at dirty-enumeration time before git add runs. The checkpoint must
+// succeed rather than return "pathspec did not match any files" (ddx-84efd50b).
+func TestPreDispatchCheckpoint_IgnoresConcurrentlyDeletedExecutionTempFile(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260721T000002-race-temp"
+
+	// Legitimate bookkeeping dirt so staging actually runs.
+	beadsRel := filepath.Join(ddxroot.DirName, "beads.jsonl")
+	beadsPath := filepath.Join(projectRoot, beadsRel)
+	beadsBefore, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(beadsPath, append(beadsBefore, '\n'), 0o644))
+
+	tempRel := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", ".ddx-resource-preflight-1822793358"))
+	writeCheckpointTestFile(t, projectRoot, tempRel, "sibling preflight temp\n")
+
+	// Inject the temp path into the dirty list (simulating a snapshot that still
+	// saw it) then delete it before the caller proceeds to staging — the same
+	// gap that produced the production failure under concurrent try/work.
+	orig := preDispatchDirtyPathLister
+	t.Cleanup(func() { preDispatchDirtyPathLister = orig })
+	preDispatchDirtyPathLister = func(root string) ([]string, error) {
+		paths, listErr := preDispatchCheckpointDirtyPaths(root)
+		if listErr != nil {
+			return nil, listErr
+		}
+		// Ensure the vanishing path is in the snapshot even though the
+		// production enumerator now excludes .ddx/executions/**.
+		paths = append(paths, tempRel)
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(tempRel)))
+		return paths, nil
+	}
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err, "concurrently-deleted execution temp must not fail the checkpoint")
+	require.True(t, committed, "legitimate beads dirt must still checkpoint")
+	assert.NotEqual(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "--pretty=format:", "--name-only", "HEAD"),
+		filepath.ToSlash(beadsRel))
+}
+
+// TestPreDispatchCheckpoint_MissingPathspecIsRetryableNotExecutionFailed
+// asserts residual "did not match any files" staging errors classify as
+// retryable lock_contention rather than ExecuteBeadStatus execution_failed.
+func TestPreDispatchCheckpoint_MissingPathspecIsRetryableNotExecutionFailed(t *testing.T) {
+	msg := "pre-execute-bead checkpoint: staging checkpoint changes: " +
+		"fatal: pathspec '.ddx/executions/.ddx-resource-preflight-1822793358' did not match any files: exit status 128"
+	err := fmt.Errorf("%s", msg)
+
+	require.True(t, isRetryablePreDispatchStagingError(msg),
+		"residual pathspec-missing staging error must be classified retryable")
+	status := statusForPreDispatchCheckpointError(err)
+	assert.NotEqual(t, ExecuteBeadStatusExecutionFailed, status,
+		"residual pathspec race must not map to execution_failed")
+	mode := ClassifyFailureMode(ExecuteBeadOutcomeTaskFailed, 1, msg)
+	assert.Equal(t, FailureModeLockContention, mode,
+		"residual pathspec race maps to retryable lock_contention failure mode")
 }
 
 // TestPreDispatchCheckpoint_IgnoresCoordinationJournalWithoutGitignore guards

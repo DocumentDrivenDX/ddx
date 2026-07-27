@@ -947,6 +947,12 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		// here so parent checkout hooks and runtime artifacts cannot fail the
 		// dispatch before the isolated worker worktree exists.
 		if _, err := checkpointPreDispatchDirt(projectRoot, attemptID); err != nil {
+			// Residual concurrent pathspec races are soft-handled inside the
+			// checkpoint; if one still escapes, do not wrap it as a raw error
+			// that defaults to execution_failed (ddx-84efd50b).
+			if isRetryablePreDispatchStagingError(err.Error()) {
+				return err
+			}
 			return fmt.Errorf("pre-execute-bead checkpoint: %w", err)
 		}
 		return nil
@@ -967,6 +973,23 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Reason:      err.Error(),
 				Outcome:     ExecuteBeadOutcomeTaskFailed,
 				Status:      ExecuteBeadStatusResourceExhausted,
+				ProjectRoot: projectRoot,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
+		}
+		// Concurrent pathspec race during pre-dispatch checkpoint staging:
+		// classify as retryable lock_contention, not execution_failed.
+		if isRetryablePreDispatchStagingError(err.Error()) {
+			res := &ExecuteBeadResult{
+				BeadID:      beadID,
+				WorkerID:    runtime.WorkerID,
+				AttemptID:   attemptID,
+				ExitCode:    1,
+				Error:       err.Error(),
+				Reason:      err.Error(),
+				Outcome:     ExecuteBeadOutcomeTaskFailed,
+				Status:      statusForPreDispatchCheckpointError(err),
 				ProjectRoot: projectRoot,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)

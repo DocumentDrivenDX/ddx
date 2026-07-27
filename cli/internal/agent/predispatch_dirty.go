@@ -203,6 +203,10 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// Drop paths that vanished between status and this check (sibling workers
+	// delete ephemeral scratch under .ddx/executions/ and similar). A path
+	// that no longer exists is not checkpoint-worthy dirt.
+	dirtyPaths = filterExistingPreDispatchPaths(projectRoot, dirtyPaths)
 	if len(dirtyPaths) == 0 {
 		return false, nil
 	}
@@ -220,8 +224,12 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 				strings.Join(stableBlockedPaths, ", "),
 			)
 		}
-		allowedPaths, _ = classifyPreDispatchDirtyPaths(currentDirtyPaths)
+		allowedPaths, _ = classifyPreDispatchDirtyPaths(filterExistingPreDispatchPaths(projectRoot, currentDirtyPaths))
 	}
+	// Re-filter immediately before staging: a concurrent sibling can delete a
+	// path between classify and git add (TOCTOU). Missing pathspecs must not
+	// abort the attempt (ddx-84efd50b).
+	allowedPaths = filterExistingPreDispatchPaths(projectRoot, allowedPaths)
 	if len(allowedPaths) == 0 {
 		return false, nil
 	}
@@ -251,7 +259,16 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	// even by this --force add (ddx-d10073a8).
 	addArgs = append(addArgs, ":(exclude,glob).ddx/executions/**")
 	if out, err := gitWithIndex(addArgs...); err != nil {
-		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
+		// Residual concurrent-delete race: pathspecs can still vanish between
+		// the existence filter and git add. Soft-handle like the land
+		// checkpoint (execute_bead_land.go) so the attempt is not
+		// execution_failed over ephemeral scratch (ddx-84efd50b).
+		combined := strings.TrimSpace(string(out))
+		if isRetryablePreDispatchStagingError(combined + "\n" + err.Error()) {
+			// Fall through: staged set may be empty; treat as no checkpoint.
+		} else {
+			return false, fmt.Errorf("staging checkpoint changes: %s: %w", combined, err)
+		}
 	}
 
 	changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
@@ -457,12 +474,13 @@ func preDispatchCheckpointAllowedPath(path string) bool {
 	if isLockMetricsPath(path) {
 		return false
 	}
+	// .ddx/executions/** is per-machine working state (Execution Evidence
+	// Convention) — never checkpoint-worthy, even if force-staged historically.
+	// See preDispatchCheckpointIgnoredPath and ddx-84efd50b.
 	switch {
 	case path == ".ddx/beads.jsonl":
 		return true
 	case path == ".ddx/beads-archive.jsonl":
-		return true
-	case strings.HasPrefix(path, ".ddx/executions/"):
 		return true
 	case strings.HasPrefix(path, ".ddx/metrics/"):
 		return true
@@ -513,7 +531,12 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/run-state/"):
 		return true
-	case preDispatchCheckpointIgnoredExecutionEmbeddedPath(path):
+	case path == ".ddx/executions", strings.HasPrefix(path, ".ddx/executions/"):
+		// Per-machine execution evidence and resource-preflight temp files.
+		// Concurrent ddx try/work attempts create and delete these under each
+		// other (e.g. .ddx/executions/.ddx-resource-preflight-*). Never
+		// enumerate as checkpoint dirt — staging a path a sibling already
+		// removed aborts the attempt with execution_failed (ddx-84efd50b).
 		return true
 	case strings.HasPrefix(path, ".ddx/beads.jsonl.tmp-"):
 		return true
@@ -542,15 +565,52 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 	}
 }
 
-func preDispatchCheckpointIgnoredExecutionEmbeddedPath(path string) bool {
-	const prefix = ".ddx/executions/"
-	if !strings.HasPrefix(path, prefix) {
+// filterExistingPreDispatchPaths drops pathspecs that no longer resolve on
+// disk. Used between dirty enumeration and git add so a concurrent sibling's
+// deleted temp file cannot turn into "pathspec did not match any files".
+func filterExistingPreDispatchPaths(projectRoot string, paths []string) []string {
+	if projectRoot == "" || len(paths) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" {
+			continue
+		}
+		full := filepath.Join(projectRoot, filepath.FromSlash(path))
+		if _, err := os.Lstat(full); err != nil {
+			continue
+		}
+		out = append(out, path)
+	}
+	return out
+}
+
+// isRetryablePreDispatchStagingError reports residual git-add failures of the
+// form "pathspec '…' did not match any files" — concurrent path deletion
+// between the existence filter and git add. These must not map to
+// ExecuteBeadStatus execution_failed (ddx-84efd50b).
+func isRetryablePreDispatchStagingError(msg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(msg))
+	if lower == "" {
 		return false
 	}
-	rest := strings.TrimPrefix(path, prefix)
-	attemptID, remainder, ok := strings.Cut(rest, "/")
-	if !ok || attemptID == "" {
-		return false
+	return strings.Contains(lower, "did not match any files")
+}
+
+// statusForPreDispatchCheckpointError maps a pre-dispatch checkpoint error to
+// a supervisor-visible status. Residual pathspec races are retryable and must
+// not surface as execution_failed.
+func statusForPreDispatchCheckpointError(err error) string {
+	if err == nil {
+		return ""
 	}
-	return remainder == "embedded" || strings.HasPrefix(remainder, "embedded/")
+	if isRetryablePreDispatchStagingError(err.Error()) {
+		// Non-execution_failed sentinel: callers treat empty-or-disrupted as
+		// smart-retry rather than a hard bead failure. Pair with
+		// FailureModeLockContention via ClassifyFailureMode.
+		return ""
+	}
+	return ExecuteBeadStatusExecutionFailed
 }
