@@ -345,6 +345,109 @@ type CostConfig struct {
 	LocalPer1KTokens *float64 `yaml:"local_per_1k_tokens,omitempty" json:"local_per_1k_tokens,omitempty"`
 }
 
+// Reusable-workspace slot-pool defaults. Applied when the corresponding
+// ReusableWorkspaceConfig field is absent or (for MaxSlots) non-positive.
+const (
+	// DefaultReusableWorkspaceEnabled is the default when Enabled is nil:
+	// the slot pool is available for sequential reuse.
+	DefaultReusableWorkspaceEnabled = true
+	// DefaultReusableWorkspaceMaxSlots bounds concurrent pooled slots per
+	// (project, backend, worker-slot, trust-boundary) key.
+	DefaultReusableWorkspaceMaxSlots = 4
+	// DefaultReusableWorkspaceMaxAge is the max age of a pooled slot before
+	// age-based eviction removes its directory.
+	DefaultReusableWorkspaceMaxAge = 24 * time.Hour
+	// DefaultReusableWorkspaceDiskHighWaterBytes is the pool-wide disk
+	// high-water mark (50 GiB). Slots are evicted oldest-first when total
+	// usage for a key exceeds this mark.
+	DefaultReusableWorkspaceDiskHighWaterBytes int64 = 50 * 1024 * 1024 * 1024
+)
+
+// ReusableWorkspaceConfig bounds and controls the attempt workspace slot
+// pool used for sequential reuse of isolated workspaces. Absent/nil means
+// documented defaults apply; Enabled=false disables reuse entirely so every
+// allocation yields a fresh non-pooled workspace.
+type ReusableWorkspaceConfig struct {
+	// Enabled turns sequential slot reuse on/off. Nil defaults to
+	// DefaultReusableWorkspaceEnabled (true). Explicit false disables the
+	// pool: the allocator returns non-pooled workspaces only.
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// MaxSlots is the max number of pooled slots per
+	// (project, backend, worker-slot, trust-boundary) key. Nil or non-positive
+	// values resolve to DefaultReusableWorkspaceMaxSlots.
+	MaxSlots *int `yaml:"max_slots,omitempty" json:"max_slots,omitempty"`
+	// MaxAge is the max age of a slot before eviction (time.ParseDuration,
+	// e.g. "24h"). Empty resolves to DefaultReusableWorkspaceMaxAge. A
+	// parsed zero duration disables age-based eviction.
+	MaxAge string `yaml:"max_age,omitempty" json:"max_age,omitempty"`
+	// DiskHighWaterBytes is the pool-wide disk high-water mark in bytes for
+	// one key's slots. Nil resolves to
+	// DefaultReusableWorkspaceDiskHighWaterBytes. Explicit zero disables
+	// disk-based eviction.
+	DiskHighWaterBytes *int64 `yaml:"disk_high_water_bytes,omitempty" json:"disk_high_water_bytes,omitempty"`
+}
+
+// Clone returns a deep copy of c. Returns nil when c is nil.
+func (c *ReusableWorkspaceConfig) Clone() *ReusableWorkspaceConfig {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	if c.Enabled != nil {
+		v := *c.Enabled
+		cp.Enabled = &v
+	}
+	cp.MaxSlots = clonePtrInt(c.MaxSlots)
+	if c.DiskHighWaterBytes != nil {
+		v := *c.DiskHighWaterBytes
+		cp.DiskHighWaterBytes = &v
+	}
+	return &cp
+}
+
+// ResolveEnabled returns whether reusable workspace slots are enabled.
+// Nil receiver or nil Enabled defaults to DefaultReusableWorkspaceEnabled.
+func (c *ReusableWorkspaceConfig) ResolveEnabled() bool {
+	if c == nil || c.Enabled == nil {
+		return DefaultReusableWorkspaceEnabled
+	}
+	return *c.Enabled
+}
+
+// ResolveMaxSlots returns the effective slot bound for one key.
+// Nil receiver or nil/non-positive MaxSlots defaults to
+// DefaultReusableWorkspaceMaxSlots.
+func (c *ReusableWorkspaceConfig) ResolveMaxSlots() int {
+	if c == nil || c.MaxSlots == nil || *c.MaxSlots <= 0 {
+		return DefaultReusableWorkspaceMaxSlots
+	}
+	return *c.MaxSlots
+}
+
+// ResolveMaxAge returns the effective max slot age. Empty MaxAge uses
+// DefaultReusableWorkspaceMaxAge. Invalid duration strings also fall back
+// to the default. A successfully parsed zero duration disables age eviction.
+func (c *ReusableWorkspaceConfig) ResolveMaxAge() time.Duration {
+	if c == nil || strings.TrimSpace(c.MaxAge) == "" {
+		return DefaultReusableWorkspaceMaxAge
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(c.MaxAge))
+	if err != nil {
+		return DefaultReusableWorkspaceMaxAge
+	}
+	return d
+}
+
+// ResolveDiskHighWaterBytes returns the effective disk high-water mark.
+// Nil receiver or nil pointer uses DefaultReusableWorkspaceDiskHighWaterBytes.
+// Explicit zero disables disk-based eviction.
+func (c *ReusableWorkspaceConfig) ResolveDiskHighWaterBytes() int64 {
+	if c == nil || c.DiskHighWaterBytes == nil {
+		return DefaultReusableWorkspaceDiskHighWaterBytes
+	}
+	return *c.DiskHighWaterBytes
+}
+
 // ExecutionsConfig configures the execute-bead bundle archive (mirror).
 type ExecutionsConfig struct {
 	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
@@ -362,6 +465,23 @@ type ExecutionsConfig struct {
 	// Docker configures the docker-clone attempt backend. The backend still
 	// uses the centralized execution temp root for local attempt clones.
 	Docker *ExecutionsDockerConfig `yaml:"docker,omitempty" json:"docker,omitempty"`
+	// ReusableWorkspace configures the bounded attempt workspace slot pool
+	// used for sequential reuse. Nil applies documented defaults; set
+	// enabled: false to disable reuse entirely.
+	ReusableWorkspace *ReusableWorkspaceConfig `yaml:"reusable_workspace,omitempty" json:"reusable_workspace,omitempty"`
+}
+
+// Clone returns a deep copy of e. Returns nil when e is nil.
+func (e *ExecutionsConfig) Clone() *ExecutionsConfig {
+	if e == nil {
+		return nil
+	}
+	cp := *e
+	cp.Mirror = e.Mirror.Clone()
+	cp.RetainDays = clonePtrInt(e.RetainDays)
+	cp.Docker = e.Docker.Clone()
+	cp.ReusableWorkspace = e.ReusableWorkspace.Clone()
+	return &cp
 }
 
 // ExecutionsDockerConfig configures the experimental docker-clone attempt

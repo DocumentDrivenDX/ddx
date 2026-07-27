@@ -90,4 +90,61 @@ func keepAgentSupportReachability() {
 	_, _ = LoadOfflineJournalRecords(root)
 	_, _ = LoadOfflineJournalPending(root)
 	_, _ = LoadOfflineJournalAcknowledgedThrough(root)
+
+	// Bounded reusable workspace slot pool (ddx-2db79e6b) is package-level
+	// production API ahead of backend Prepare/Cleanup wiring; keep keying,
+	// allocate, release, and eviction on the static graph.
+	keepAttemptWorkspaceSlotReachability(root)
+}
+
+// keepAttemptWorkspaceSlotReachability exercises AttemptWorkspaceSlotKey and
+// AttemptWorkspaceSlotPool so deadcode RTA sees the allocator surface as
+// reachable from main() before execute_bead integration lands.
+func keepAttemptWorkspaceSlotReachability(root string) {
+	slotRoot := filepath.Join(root, "slots")
+	if err := os.MkdirAll(slotRoot, 0o755); err != nil {
+		return
+	}
+
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   root,
+		Backend:       AttemptBackendLocalClone,
+		WorkerSlot:    "keepalive",
+		TrustBoundary: "default",
+	}
+	_ = key.Fingerprint()
+	_ = key.PoolRoot()
+	_ = key.SlotPath(0)
+
+	enabled := true
+	maxSlots := 2
+	highWater := int64(1024 * 1024)
+	policy := &config.ReusableWorkspaceConfig{
+		Enabled:            &enabled,
+		MaxSlots:           &maxSlots,
+		MaxAge:             "1h",
+		DiskHighWaterBytes: &highWater,
+	}
+	// Resolve helpers are the documented config surface for the pool policy.
+	_ = policy.ResolveEnabled()
+	_ = policy.ResolveMaxSlots()
+	_ = policy.ResolveMaxAge()
+	_ = policy.ResolveDiskHighWaterBytes()
+
+	pool := NewAttemptWorkspaceSlotPool(policy).
+		withRoot(slotRoot).
+		withNow(func() time.Time { return time.Unix(0, 0).UTC() })
+	slot, err := pool.Allocate(key)
+	if err == nil && slot != nil {
+		_ = pool.Release(slot)
+	}
+	// Disabled policy path returns non-pooled workspaces only.
+	disabled := false
+	disabledPool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{Enabled: &disabled}).
+		withRoot(slotRoot)
+	ephemeral, err := disabledPool.Allocate(key)
+	if err == nil && ephemeral != nil {
+		_ = disabledPool.Release(ephemeral)
+	}
+	_ = pool.Evict(key)
 }
