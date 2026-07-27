@@ -40,6 +40,19 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 		return nil, fmt.Errorf("path is required")
 	}
 
+	// Hub mode: forward to the project owner unless this request was already
+	// forwarded (loop prevention via X-DDx-Origin-Server-ID). Offline and
+	// missing-owner targets refuse without a hub-local phantom file.
+	if !beadMutationIsForwarded(ctx) {
+		projectID, owner, err := r.beadMutationOwner(r.workingDir(ctx))
+		if err != nil {
+			return nil, err
+		}
+		if owner != nil {
+			return r.forwardDocumentWrite(ctx, owner, projectID, path, content)
+		}
+	}
+
 	libPath, err := r.libraryPath(ctx)
 	if err != nil {
 		return nil, err
