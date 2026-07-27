@@ -76,6 +76,9 @@ running with the requested default execution spec.`,
 				state.Restart.MaxRestartsPerHour = restartMaxPerHour
 			}
 			if err := sup.SaveDesiredState(&state); err != nil {
+				if errors.Is(err, server.ErrManagementDisabled) {
+					return err
+				}
 				return fmt.Errorf("worker set: %w", err)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s (desired_count=%d, restart_enabled=%t)\n",
@@ -110,6 +113,11 @@ func (f *CommandFactory) newWorkerEnableCommand() *cobra.Command {
 			state.DesiredCount = 1
 			state.Restart.Enabled = true
 			if err := sup.SaveDesiredState(&state); err != nil {
+				// Surface the typed management_disabled result without wrapping
+				// so callers (and tests) can errors.Is against ErrManagementDisabled.
+				if errors.Is(err, server.ErrManagementDisabled) {
+					return err
+				}
 				return fmt.Errorf("worker enable: %w", err)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "enabled server-managed workers for %s (desired_count=1, restart enabled)\n", projectRoot)

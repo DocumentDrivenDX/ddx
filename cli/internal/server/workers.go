@@ -261,6 +261,12 @@ type WorkerManager struct {
 	// server-managed launch path. Tests keep the default in-process behavior;
 	// the CLI server enables this when it wants real process-group ownership.
 	managedLaunch bool
+
+	// manageWorkersOverride, when non-nil, overrides server.manage_workers from
+	// project config for this manager. nil means consult ManageWorkersEnabled.
+	// Default (nil + missing/false config) disables managed spawn during the
+	// Phase 3 rebuild observer demotion.
+	manageWorkersOverride *bool
 }
 
 const (
@@ -536,6 +542,13 @@ func (m *WorkerManager) watchdogDeadlines() (watchdog, stall, check, grace time.
 }
 
 func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerRecord, error) {
+	// Phase 3 WB-1: refuse managed spawn when server.manage_workers is off.
+	// Supervisor scale-up, GraphQL/REST start, and watchdog restart all enter
+	// here; observer repair paths (Prune, ReconcileStaleWorkers, Stop) do not.
+	if err := m.RequireManageWorkers(); err != nil {
+		return WorkerRecord{}, err
+	}
+
 	// Resolve the effective project root: spec override takes priority over the
 	// manager's default so callers can target any registered project.
 	effectiveRoot := spec.ProjectRoot

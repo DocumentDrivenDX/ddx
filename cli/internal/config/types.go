@@ -631,6 +631,12 @@ type ExecutionsMirrorConfig struct {
 type ServerConfig struct {
 	Addr  string       `yaml:"addr,omitempty" json:"addr,omitempty"`
 	Tsnet *TsnetConfig `yaml:"tsnet,omitempty" json:"tsnet,omitempty"`
+	// ManageWorkers gates server-managed DDx worker spawning (StartExecuteLoop,
+	// supervisor scale-up / restart, and worker enable/start mutations).
+	// Default is false (nil or omitted) so the server can run as an observer
+	// during the Phase 3 rebuild without spawning managed workers.
+	// Observer ingestion, prune, stale-claim repair, and stop remain active.
+	ManageWorkers *bool `yaml:"manage_workers,omitempty" json:"manage_workers,omitempty"`
 	// WatchdogDeadline bounds total worker lifetime before the autonomous
 	// watchdog considers reaping it. Parsed via time.ParseDuration (e.g. "6h").
 	// Empty string uses the built-in default (6h).

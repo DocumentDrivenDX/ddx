@@ -460,6 +460,10 @@
           },
           "additionalProperties": false
         },
+        "manage_workers": {
+          "type": "boolean",
+          "description": "When true, allow server-managed DDx worker spawning (StartExecuteLoop, supervisor scale-up/restart, worker enable/start). Default false demotes the server to observer mode during the Phase 3 rebuild: ingestion, prune, and repair stay active; managed spawn is refused with management_disabled."
+        },
         "watchdog_deadline": {
           "type": "string",
           "description": "Total worker runtime budget before the autonomous watchdog considers reaping (time.ParseDuration, e.g. '6h'). Empty uses the built-in default."

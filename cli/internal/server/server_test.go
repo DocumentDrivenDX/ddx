@@ -39,6 +39,9 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
+	// Omitted server.manage_workers defaults to enabled under package tests so
+	// existing spawn suites stay green. Production leaves packageUnderTest false.
+	packageUnderTest = true
 	cleanupTemp := isolateServerTestTempRoot()
 	code := m.Run()
 	cleanupTemp()
