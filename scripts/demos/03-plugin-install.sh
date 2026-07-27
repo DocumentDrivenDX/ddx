@@ -9,9 +9,9 @@ type_command ddx search workflow
 
 # Network-dependent — failure is expected in offline environments
 echo ""
-echo "$ ddx install helix"
+echo "$ ddx plugin install helix"
 sleep 0.5
-ddx install helix || echo "(install skipped — no network or repo unavailable)"
+ddx plugin install helix || echo "(install skipped — no network or repo unavailable)"
 sleep 1
 
-type_command ddx installed
+type_command ddx plugin list

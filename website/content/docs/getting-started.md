@@ -18,9 +18,27 @@ Run the install script to set up DDx globally:
 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 ```
 
-This installs the `ddx` CLI binary to `~/.local/bin/ddx`. DDx skills
-are installed per-project by `ddx init` and `ddx plugin install <plugin>` —
-nothing is written under `~/` outside the binary itself.
+This installs the `ddx` CLI binary to `~/.local/bin/ddx`. Nothing else is
+written under `~/` by the binary installer.
+
+### Agent-facing skills (marketplace)
+
+Install the DDx Library skills through the plugin marketplace so coding
+agents discover the `ddx` skill outside a single repository:
+
+```bash
+npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
+```
+
+Claude Code's native flow is equivalent:
+
+```text
+/plugin marketplace add DocumentDrivenDX/ddx-library
+/plugin install ddx@ddx-library
+```
+
+Do not use the removed top-level install / installed / uninstall verbs for
+skills or plugins.
 
 Verify the installation:
 
@@ -40,7 +58,7 @@ ddx init
 This creates:
 - `.ddx/` - DDx configuration and project-local plugin tree
 - `.agents/skills/` and `.claude/skills/` - copied skill files for
-  Claude Code (real files, no symlinks)
+  coding agents (real files, no symlinks)
 
 ## Install HELIX Workflow
 
@@ -48,8 +66,10 @@ This creates:
 ddx plugin install helix
 ```
 
-This installs HELIX to `.ddx/plugins/helix/` and copies its skills
-into the project's `.agents/skills/` and `.claude/skills/` trees.
+This installs the HELIX **project package** to `.ddx/plugins/helix/` and
+copies its skills into the project's `.agents/skills/` and `.claude/skills/`
+trees. Agent-facing DDx skills themselves still come from the marketplace
+path above, not from a top-level install command.
 
 ## Plan
 

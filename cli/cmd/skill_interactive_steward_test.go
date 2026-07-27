@@ -173,6 +173,7 @@ func TestDDxSkillCopiedTreesMatchSource(t *testing.T) {
 
 	touchedFiles := []string{
 		"SKILL.md",
+		"reference/agents.md",
 		"reference/interactive.md",
 		"reference/status.md",
 		"reference/work.md",

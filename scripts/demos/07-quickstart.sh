@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DDx Quickstart — bootstrap → beads → work loop
-# Covers: ddx init, ddx install helix, bead create, ddx work draining the queue
+# Covers: ddx init, ddx plugin install helix, bead create, ddx work draining the queue
 # with agent dispatch visible. Uses the script harness so the demo runs without
 # any external API keys; agent-dispatch lines mirror real session-log output.
 set -e
@@ -31,8 +31,8 @@ git add . && git commit -q -m "init"
 
 # Bootstrap
 type_command ddx init
-type_command ddx install helix
-type_command ddx installed
+type_command ddx plugin install helix
+type_command ddx plugin list
 
 # Create the work
 type_command ddx bead create "Design auth system" --type epic --priority 1 \

@@ -6,8 +6,24 @@ weight: 7
 DDx ships a single built-in skill, `ddx`, that any
 [agentskills.io](https://agentskills.io)-compatible coding agent (Claude Code,
 OpenAI Codex, Gemini CLI, etc.) discovers and uses to operate the DDx surface
-correctly. The skill is installed automatically by `ddx init` to the project's
-`.agents/skills/` and `.claude/skills/` directories as real files.
+correctly.
+
+**Preferred install** is the DDx Library marketplace package:
+
+```bash
+npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
+```
+
+Claude Code users can also run:
+
+```text
+/plugin marketplace add DocumentDrivenDX/ddx-library
+/plugin install ddx@ddx-library
+```
+
+`ddx init` still materializes a project-local copy under `.agents/skills/` and
+`.claude/skills/` as real files. Do not recommend the removed top-level install
+/ installed / uninstall verbs for skill distribution.
 
 ## Structure
 

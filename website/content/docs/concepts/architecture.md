@@ -211,9 +211,10 @@ After `ddx init`:
 ```
 
 `ddx plugin install <plugin>` only writes under those three trees. There is no
-`~/.ddx`. There is no `ddx plugin install --global`. Cloning the repo gives a
-collaborator the entire DDx surface for the project; deleting `.ddx/`
-removes it.
+`~/.ddx` home install tree. Package installs are project-scoped (a separate
+global package cache under XDG data may exist for multi-project reuse, but it
+is not a home-directory install). Cloning the repo gives a collaborator the
+entire DDx surface for the project; deleting `.ddx/` removes it.
 
 This is a deliberate inversion of the usual CLI pattern. It makes:
 
