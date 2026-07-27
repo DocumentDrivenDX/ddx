@@ -142,14 +142,14 @@ Claude Code's native marketplace flow is equivalent for Claude Code users:
 /plugin install ddx@ddx-library
 ```
 
-`ddx install <name>` remains for DDx project package resources: personas,
+`ddx plugin install <name>` remains for DDx project package resources: personas,
 prompts, patterns, templates, and project-scoped workflow packages.
 
 ```bash
-ddx install helix              # HELIX workflow plugin
+ddx plugin install helix       # HELIX workflow plugin
 ddx search <term>              # discover available plugins
-ddx installed                  # list installed plugins
-ddx uninstall <name>           # remove
+ddx plugin list                # list installed plugins
+ddx plugin show <name>         # inspect an installed plugin
 ```
 
 Custom personas go in `.ddx/plugins/<plugin>/personas/<name>.md`
@@ -167,7 +167,7 @@ then the baked-in default package for `ddx` itself. This is project > global > b
 separately so operators can distinguish a real project install from a global
 fallback.
 
-Do not use `ddx install ddx --force` as skill-install guidance. Agent-facing
+Do not use `ddx plugin install ddx --force` as skill-install guidance. Agent-facing
 skills are distributed through `ddx-library` as a plugin marketplace package;
 DDx package lookup is for runtime resources and project-local package state.
 The global install layer remains a DDx package cache, not the universal skills
@@ -213,11 +213,11 @@ ddx persona bindings
 
 # Plugin install
 npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx
-ddx install <plugin>
+ddx plugin install <plugin>
 ddx search <term>
-ddx installed
-ddx uninstall <name>
+ddx plugin list
+ddx plugin show <name>
 ```
 
 Full flag list: `ddx run --help`, `ddx persona --help`,
-`ddx install --help`.
+`ddx plugin install --help`.

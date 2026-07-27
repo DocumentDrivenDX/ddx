@@ -26,7 +26,7 @@ router**. The real domain guidance lives in `reference/*.md` files.
 Install locations: install DDx's agent-facing skills through the Claude/plugin
 marketplace path, preferably `npx claude-plugins install
 @DocumentDrivenDX/ddx-library/ddx`, or Claude Code's native `/plugin`
-marketplace flow. Do not tell users to run `ddx install ddx --force` to get
+marketplace flow. Do not tell users to run `ddx plugin install ddx --force` to get
 skills. DDx still resolves project plugin resources from project/global/baked-in
 package layers — see **Install topology** below.
 
@@ -119,7 +119,7 @@ exact definitions.
 - **Plugin** — a self-contained extension installed to
   `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
   prompts, patterns, templates) is auto-installed by `ddx init`.
-  `ddx install <name>`.
+  `ddx plugin install <name>`.
 - **Skill** — an agentskills.io-standard directory (SKILL.md +
   optional `reference/`, `evals/`, `scripts/`). This `ddx` skill is
   the one DDx ships. Plugins can ship additional skills.

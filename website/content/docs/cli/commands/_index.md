@@ -19,8 +19,6 @@ Auto-generated reference for every `ddx` command.
 | [`ddx exec`](/docs/cli/commands/ddx_exec/) | Validate and run DDx execution definitions |
 | [`ddx help`](/docs/cli/commands/ddx_help/) | Help about any command |
 | [`ddx init`](/docs/cli/commands/ddx_init/) | Initialize DDx in current project |
-| [`ddx install`](/docs/cli/commands/ddx_install/) | Install a package or resource |
-| [`ddx installed`](/docs/cli/commands/ddx_installed/) | List installed packages |
 | [`ddx jq`](/docs/cli/commands/ddx_jq/) | Process JSON with jq expressions |
 | [`ddx list`](/docs/cli/commands/ddx_list/) | List available DDx resources |
 | [`ddx log`](/docs/cli/commands/ddx_log/) | Show DDX asset history |
@@ -36,7 +34,6 @@ Auto-generated reference for every `ddx` command.
 | [`ddx status`](/docs/cli/commands/ddx_status/) | Show version and status information |
 | [`ddx sync`](/docs/cli/commands/ddx_sync/) | Synchronize DDx-managed files with origin |
 | [`ddx try`](/docs/cli/commands/ddx_try/) | Execute a specific bead through the production machinery |
-| [`ddx uninstall`](/docs/cli/commands/ddx_uninstall/) | Remove an installed package |
 | [`ddx update`](/docs/cli/commands/ddx_update/) | Update shipped skills and installed plugins |
 | [`ddx upgrade`](/docs/cli/commands/ddx_upgrade/) | Upgrade DDx to the latest version |
 | [`ddx verify`](/docs/cli/commands/ddx_verify/) | Verify installed package integrity |

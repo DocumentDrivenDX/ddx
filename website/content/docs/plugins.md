@@ -46,7 +46,7 @@ plugin like HELIX ships skills, a CLI, prompts, templates, and action docs.
 
 ## How Installation Works
 
-When you run `ddx install <name>`:
+When you run `ddx plugin install <name>`:
 
 1. DDx fetches the latest release tarball from the plugin's GitHub repo
 2. Extracts it to a temp directory
@@ -250,11 +250,11 @@ itself.
 
 ```bash
 ddx search <query>           # Search available packages
-ddx install <name>           # Install a plugin or workflow
-ddx install <name> --force   # Reinstall even if up to date
-ddx installed                # List installed packages
+ddx plugin install <name>           # Install a plugin or workflow
+ddx plugin install <name> --force   # Reinstall even if up to date
+ddx plugin list                # List installed packages
 ddx outdated                 # Check for available updates
-ddx uninstall <name>         # Remove an installed package
+ddx plugin show <name>         # Remove an installed package
 ```
 
 ### Individual resources
@@ -263,8 +263,8 @@ You can also install individual resources from the DDx library without creating
 a full plugin:
 
 ```bash
-ddx install persona/strict-code-reviewer   # Install one persona
-ddx install template/go-service            # Install one template
+ddx plugin install persona/strict-code-reviewer   # Install one persona
+ddx plugin install template/go-service            # Install one template
 ```
 
 These are fetched directly from the
@@ -332,7 +332,7 @@ pre-commit:
 
 ```bash
 # Install your plugin from the registry
-ddx install my-plugin
+ddx plugin install my-plugin
 
 # Verify the plugin root
 ls .ddx/plugins/my-plugin/
@@ -348,7 +348,7 @@ my-plugin doctor
 ## Version Management
 
 - DDx checks GitHub for the latest tagged release when installing
-- `ddx install <name>` skips if already at the latest version (use `--force`
+- `ddx plugin install <name>` skips if already at the latest version (use `--force`
   to reinstall)
 - `ddx outdated` compares installed versions against latest releases
 - Plugin repos should use semver tags (`v1.0.0`, `v1.1.0`, etc.)

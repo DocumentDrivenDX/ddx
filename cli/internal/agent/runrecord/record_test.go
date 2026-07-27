@@ -345,39 +345,90 @@ func TestRunRecordOptionalFizeauFieldsOmitted(t *testing.T) {
 	}
 }
 
-// TestRunRecordRejectsProviderProcessFields proves raw provider output,
-// provider PID, provider process-tree metadata, and provider-session
-// canonical-state fields are not part of the v1 schema (AC2).
+// v1RecordJSONAllowlist is the complete set of JSON field names permitted on
+// the v1 run-record surface (Record plus nested Outcome, FizeauPublicResult,
+// and EvidenceLink). Any newly added schema field must be listed here
+// intentionally; the guard test fails until the allowlist is updated.
+//
+// Provider process internals (raw output, PID, process-tree metadata,
+// provider-session canonical state) must never appear here.
+var v1RecordJSONAllowlist = map[string]struct{}{
+	// Record
+	"version": {}, "run_id": {}, "bead_id": {}, "attempt_id": {},
+	"worker_id": {}, "base_rev": {}, "phase": {},
+	"created_at": {}, "started_at": {}, "updated_at": {}, "finished_at": {},
+	"correlation": {}, "outcome": {}, "fizeau": {}, "evidence": {},
+	// Outcome
+	"status": {}, "reason": {}, "evidence_verdict": {},
+	// FizeauPublicResult (public refs only)
+	"session_log_path": {}, "public_session_ref": {}, "public_result_ref": {},
+	"immediate_error": {}, "final_status": {}, "final_exit_code": {},
+	"duration_ms": {}, "cost_usd": {},
+	"input_tokens": {}, "output_tokens": {}, "total_tokens": {}, "cached_tokens": {},
+	// EvidenceLink
+	"name": {}, "path": {}, "media_type": {},
+}
+
+// providerProcessForbiddenJSONTags are field names that represent provider
+// process internals and must never appear on the v1 schema.
+var providerProcessForbiddenJSONTags = []string{
+	// raw provider output
+	"raw_output", "provider_output", "output_excerpt", "stdout", "stderr",
+	// provider PID
+	"pid", "provider_pid",
+	// provider process-tree metadata
+	"process_tree", "provider_process_tree", "children_pids", "process_tree_metadata",
+	// provider-session canonical state
+	"session_canonical_state", "provider_session_state",
+	"provider_session_canonical_state", "canonical_state",
+}
+
+// TestRunRecordRejectsProviderProcessFields reflects over the v1 record type,
+// asserts its full JSON tag set equals the explicit v1 allowlist (so any new
+// field fails), asserts provider process-internal field names are absent, and
+// proves unmarshaling JSON that contains those keys populates no Record field
+// and re-marshaling drops them.
 func TestRunRecordRejectsProviderProcessFields(t *testing.T) {
 	t.Parallel()
 
-	// 1) Struct schema (JSON tags) must not declare forbidden fields.
-	forbiddenTags := []string{
-		"raw_output",
-		"provider_output",
-		"output_excerpt",
-		"stdout",
-		"stderr",
-		"pid",
-		"provider_pid",
-		"process_tree",
-		"provider_process_tree",
-		"children_pids",
-		"process_tree_metadata",
-		"session_canonical_state",
-		"provider_session_state",
-		"provider_session_canonical_state",
-		"canonical_state",
-	}
+	// 1) Full JSON tag set of Record (and nested named structs) must equal the
+	// explicit v1 allowlist. Adding any field without updating the allowlist fails.
 	tags := collectJSONTags(reflect.TypeOf(Record{}))
-	for _, tag := range forbiddenTags {
-		if _, ok := tags[tag]; ok {
-			t.Errorf("v1 schema declares forbidden field %q", tag)
+	if !reflect.DeepEqual(tags, v1RecordJSONAllowlist) {
+		for name := range tags {
+			if _, ok := v1RecordJSONAllowlist[name]; !ok {
+				t.Errorf("v1 schema declares unexpected JSON field %q (update allowlist only if intentional and non-process)", name)
+			}
+		}
+		for name := range v1RecordJSONAllowlist {
+			if _, ok := tags[name]; !ok {
+				t.Errorf("v1 allowlist field %q is missing from Record JSON tags", name)
+			}
 		}
 	}
 
-	// 2) Extra forbidden keys in input JSON are dropped on round-trip
-	// (unknown fields are not retained by the typed Record).
+	// 2) Specifically: no field represents raw provider output, provider PID,
+	// provider process-tree metadata, or provider-session canonical state.
+	for _, tag := range providerProcessForbiddenJSONTags {
+		if _, ok := tags[tag]; ok {
+			t.Errorf("v1 schema declares forbidden provider-process field %q", tag)
+		}
+		if _, ok := v1RecordJSONAllowlist[tag]; ok {
+			t.Errorf("v1 allowlist must not include provider-process field %q", tag)
+		}
+	}
+
+	// Nested public Fizeau result also must not grow process fields.
+	fizeauTags := collectJSONTags(reflect.TypeOf(FizeauPublicResult{}))
+	for _, tag := range []string{"pid", "provider_pid", "raw_output", "process_tree", "canonical_state"} {
+		if _, ok := fizeauTags[tag]; ok {
+			t.Errorf("FizeauPublicResult declares forbidden field %q", tag)
+		}
+	}
+
+	// 3) Unmarshal a document containing provider PID, raw provider output,
+	// provider process-tree, and provider-session-state keys: no field of the
+	// v1 type is populated by them, and re-marshaling drops them.
 	const toxicJSON = `{
 		"version": 1,
 		"run_id": "run_toxic",
@@ -404,28 +455,67 @@ func TestRunRecordRejectsProviderProcessFields(t *testing.T) {
 	if err := json.Unmarshal([]byte(toxicJSON), &rec); err != nil {
 		t.Fatalf("unmarshal toxic JSON: %v", err)
 	}
-	if rec.RunID != "run_toxic" || rec.Phase != PhaseRunning {
-		t.Fatalf("unexpected core fields after toxic unmarshal: %+v", rec)
+
+	// Legitimate core keys from the document are populated.
+	if rec.Version != SchemaVersion {
+		t.Errorf("version=%d, want %d", rec.Version, SchemaVersion)
+	}
+	if rec.RunID != "run_toxic" {
+		t.Errorf("run_id=%q, want run_toxic", rec.RunID)
+	}
+	if rec.Phase != PhaseRunning {
+		t.Errorf("phase=%q, want %q", rec.Phase, PhaseRunning)
+	}
+	wantStarted := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	if !rec.StartedAt.Equal(wantStarted) {
+		t.Errorf("started_at=%v, want %v", rec.StartedAt, wantStarted)
 	}
 
+	// Toxic keys must not populate any other v1 field (all remain zero).
+	if rec.BeadID != "" || rec.AttemptID != "" || rec.WorkerID != "" || rec.BaseRev != "" {
+		t.Errorf("toxic keys must not populate identity fields: bead=%q attempt=%q worker=%q base=%q",
+			rec.BeadID, rec.AttemptID, rec.WorkerID, rec.BaseRev)
+	}
+	if !rec.CreatedAt.IsZero() || !rec.UpdatedAt.IsZero() || rec.FinishedAt != nil {
+		t.Errorf("toxic keys must not populate optional timestamps: created=%v updated=%v finished=%v",
+			rec.CreatedAt, rec.UpdatedAt, rec.FinishedAt)
+	}
+	if len(rec.Correlation) != 0 {
+		t.Errorf("toxic keys must not populate correlation: %+v", rec.Correlation)
+	}
+	if rec.Outcome != nil {
+		t.Errorf("toxic keys must not populate outcome: %+v", rec.Outcome)
+	}
+	if rec.Fizeau != nil {
+		t.Errorf("toxic keys must not populate fizeau: %+v", rec.Fizeau)
+	}
+	if len(rec.Evidence) != 0 {
+		t.Errorf("toxic keys must not populate evidence: %+v", rec.Evidence)
+	}
+
+	// Zero-value Record fields that toxic input might have aliased onto via a
+	// mistaken schema tag would leave the typed value non-zero; the field-level
+	// zero checks above plus remashal coverage below close that gap.
 	rewritten, err := json.Marshal(rec)
 	if err != nil {
 		t.Fatalf("re-marshal: %v", err)
 	}
 	rewrittenStr := string(rewritten)
-	for _, tag := range forbiddenTags {
-		// JSON object keys appear as "tag":
+	for _, tag := range providerProcessForbiddenJSONTags {
 		needle := `"` + tag + `"`
 		if strings.Contains(rewrittenStr, needle) {
 			t.Errorf("re-marshaled record retains forbidden field %q: %s", tag, rewrittenStr)
 		}
 	}
 
-	// 3) Nested Fizeau public result also must not grow process fields.
-	fizeauTags := collectJSONTags(reflect.TypeOf(FizeauPublicResult{}))
-	for _, tag := range []string{"pid", "provider_pid", "raw_output", "process_tree", "canonical_state"} {
-		if _, ok := fizeauTags[tag]; ok {
-			t.Errorf("FizeauPublicResult declares forbidden field %q", tag)
+	// Re-marshaled surface may only use allowlisted keys.
+	var rewrittenMap map[string]json.RawMessage
+	if err := json.Unmarshal(rewritten, &rewrittenMap); err != nil {
+		t.Fatalf("unmarshal rewritten map: %v", err)
+	}
+	for key := range rewrittenMap {
+		if _, ok := v1RecordJSONAllowlist[key]; !ok {
+			t.Errorf("re-marshaled record contains non-allowlisted key %q", key)
 		}
 	}
 }

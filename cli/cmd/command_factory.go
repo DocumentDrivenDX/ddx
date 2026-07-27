@@ -526,7 +526,7 @@ func (f *CommandFactory) displayPluginStalenessHints(cmd *cobra.Command) {
 		needsUpgrade, err := update.NeedsUpgrade(entry.Version, latestVersion)
 		if err == nil && needsUpgrade {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-				"\n💡 %s %s installed, %s available. Run 'ddx install %s' to update.\n",
+				"\n💡 %s %s installed, %s available. Run 'ddx plugin install %s' to update.\n",
 				entry.Name, entry.Version, latestVersion, entry.Name)
 		}
 	}
@@ -648,9 +648,6 @@ PowerShell:
 	rootCmd.AddCommand(f.newWorkerCommand())
 	rootCmd.AddCommand(f.newSkillsCommand())
 	rootCmd.AddCommand(f.newPluginCommand())
-	rootCmd.AddCommand(f.newInstallCommand())
-	rootCmd.AddCommand(f.newInstalledCommand())
-	rootCmd.AddCommand(f.newUninstallCommand())
 	rootCmd.AddCommand(f.newSearchCommand())
 	rootCmd.AddCommand(f.newOutdatedCommand())
 	rootCmd.AddCommand(f.newVerifyCommand())
