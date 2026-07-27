@@ -32,6 +32,16 @@ type federationHub struct {
 	warnings       []string // captured plain-HTTP warnings (test introspection)
 	conflictsLog   []string // captured 409 conflict log lines (test introspection)
 	now            func() time.Time
+	// forwardReplay caches successful and typed-refusal ForwardMutation
+	// outcomes keyed by RequestID/IdempotencyKey so retries do not double-POST
+	// the owning spoke.
+	forwardReplay map[string]forwardMutationReplay
+}
+
+// forwardMutationReplay stores one cached ForwardMutation outcome.
+type forwardMutationReplay struct {
+	response *federation.ForwardMutationResponse
+	err      error
 }
 
 // EnableHubMode mounts the /api/federation/* routes on this server, switches

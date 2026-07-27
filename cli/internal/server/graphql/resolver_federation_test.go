@@ -38,6 +38,13 @@ func (s *stubFederation) FanOut(ctx context.Context, req *federation.FanOutReque
 	return s.client.Execute(ctx, s.spokes, req)
 }
 
+// ForwardMutation is not exercised by the read-fan-out suite; the method exists
+// so stubFederation continues to satisfy FederationProvider after the write
+// contract was restored on the interface.
+func (s *stubFederation) ForwardMutation(ctx context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
+	return nil, federation.ErrForwardMutationOffline
+}
+
 // newSpokeServer spins up an httptest server whose /graphql endpoint returns
 // the canned JSON payload supplied by handler.
 func newSpokeServer(t *testing.T, handlerFn func(req map[string]any) any) *httptest.Server {
