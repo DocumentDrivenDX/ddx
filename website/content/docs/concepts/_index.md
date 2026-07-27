@@ -124,7 +124,7 @@ documents. Better documents produce better code, every time.
   and adversarial review compose `ddx run` at the skill layer.
 - **Queue drain** — `ddx work` drains the bead queue with isolated worktrees,
   automatic review, and recovery. `ddx try` handles one bead attempt.
-- **Project-local install** — `ddx init` and `ddx install <plugin>` only touch
+- **Project-local install** — `ddx init` and `ddx plugin install <plugin>` only touch
   `<projectRoot>`. The only global artifact is `ddx-server`.
 - **Single `ddx` skill** — one consolidated skill, not a fleet. One surface
   for agents to learn.

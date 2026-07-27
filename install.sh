@@ -400,7 +400,7 @@ show_getting_started() {
     echo "   npx claude-plugins install @DocumentDrivenDX/ddx-library/ddx"
     echo "                        Install DDx skills through the plugin marketplace"
     echo "   ddx init             Initialize DDx in a project"
-    echo "   ddx install helix    Install a workflow plugin into your project"
+    echo "   ddx plugin install helix    Install a workflow plugin into your project"
     echo "   ddx doctor           Check installation and diagnose issues"
     echo ""
     echo "📖 Documentation:"

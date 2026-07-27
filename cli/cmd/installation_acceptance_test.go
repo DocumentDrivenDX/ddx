@@ -353,12 +353,12 @@ func (env *InstallationTestEnvironment) RunCommand(command string) InstallationR
 	}
 
 	// Handle uninstall commands
-	if strings.Contains(command, "ddx uninstall") {
+	if strings.Contains(command, "remove ddx binary") {
 		return env.simulateUninstall(command)
 	}
 
 	// Handle offline install commands
-	if strings.Contains(command, "ddx install --offline") {
+	if strings.Contains(command, "offline binary install") {
 		// Simulate offline installation by executing our install simulation
 		result := env.ExecuteInstallCommand("install")
 		// FEAT-015: simulate project-local plugin layout under the
@@ -702,7 +702,7 @@ func TestAcceptance_US033_UninstallDDX(t *testing.T) {
 			require.NoError(t, err)
 
 			// When: I run uninstall command
-			command := "ddx uninstall " + strings.Join(tt.uninstallOptions, " ")
+			command := "remove ddx binary " + strings.Join(tt.uninstallOptions, " ")
 			result := env.RunCommand(command)
 
 			// Then: Uninstallation succeeds (will fail in Red phase)
@@ -757,7 +757,7 @@ func TestAcceptance_US034_OfflineInstallation(t *testing.T) {
 			packagePath := filepath.Join(env.TempDir, fmt.Sprintf("ddx-offline.%s", tt.packageType))
 
 			// When: I install from offline package (will fail in Red phase)
-			command := fmt.Sprintf("ddx install --offline %s", packagePath)
+			command := fmt.Sprintf("offline binary install %s", packagePath)
 			result := env.RunCommand(command)
 
 			// Then: Installation succeeds (will fail in Red phase)
@@ -867,7 +867,7 @@ func TestInstallationWorkflow_EndToEnd(t *testing.T) {
 			assert.Equal(t, 0, downloadResult.ExitCode, "Binary download should succeed")
 
 			// 3. Installation
-			installResult := env.RunCommand("ddx install-binary")
+			installResult := env.RunCommand("binary install helper")
 			assert.Equal(t, 0, installResult.ExitCode, "Binary installation should succeed")
 
 			// 4. PATH configuration
@@ -908,7 +908,7 @@ func TestInstallationCommandContracts(t *testing.T) {
 			validExitCodes: []int{0, 1}, // Success or error
 		},
 		{
-			command:        "ddx uninstall",
+			command:        "remove ddx binary",
 			flags:          []string{"--preserve-data", "--remove-all", "--force"},
 			validExitCodes: []int{0, 1}, // Success or error
 		},

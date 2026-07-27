@@ -98,7 +98,7 @@ On top of that lineage, DDx provides a concrete operating model:
   record of how the commit was produced. This is what makes the
   [Audit Trail Required](../../principles/audit-trail-required/)
   principle enforceable rather than aspirational.
-- **Project-local install.** `ddx init` and `ddx install <plugin>`
+- **Project-local install.** `ddx init` and `ddx plugin install <plugin>`
   only touch `<projectRoot>`. The factory's machinery lives next to
   the work it produces, not in a developer's home directory or a
   vendor's cloud. The only global artifact is `ddx-server`.

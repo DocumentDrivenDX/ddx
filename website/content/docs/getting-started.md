@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.s
 ```
 
 This installs the `ddx` CLI binary to `~/.local/bin/ddx`. DDx skills
-are installed per-project by `ddx init` and `ddx install <plugin>` —
+are installed per-project by `ddx init` and `ddx plugin install <plugin>` —
 nothing is written under `~/` outside the binary itself.
 
 Verify the installation:
@@ -45,7 +45,7 @@ This creates:
 ## Install HELIX Workflow
 
 ```bash
-ddx install helix
+ddx plugin install helix
 ```
 
 This installs HELIX to `.ddx/plugins/helix/` and copies its skills

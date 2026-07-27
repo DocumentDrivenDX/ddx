@@ -210,8 +210,8 @@ After `ddx init`:
     └── skills/              # Claude-specific skill installs
 ```
 
-`ddx install <plugin>` only writes under those three trees. There is no
-`~/.ddx`. There is no `ddx install --global`. Cloning the repo gives a
+`ddx plugin install <plugin>` only writes under those three trees. There is no
+`~/.ddx`. There is no `ddx plugin install --global`. Cloning the repo gives a
 collaborator the entire DDx surface for the project; deleting `.ddx/`
 removes it.
 
@@ -237,9 +237,9 @@ flowchart TB
     end
 
     Bin -->|"ddx init"| Project
-    Bin -->|"ddx install &lt;plugin&gt;"| DDxDir
-    Bin -->|"ddx install &lt;plugin&gt;"| AgentsDir
-    Bin -->|"ddx install &lt;plugin&gt;"| ClaudeDir
+    Bin -->|"ddx plugin install &lt;plugin&gt;"| DDxDir
+    Bin -->|"ddx plugin install &lt;plugin&gt;"| AgentsDir
+    Bin -->|"ddx plugin install &lt;plugin&gt;"| ClaudeDir
 
     classDef global fill:#e5e7eb,stroke:#4b5563,color:#1f2937;
     classDef local fill:#dbeafe,stroke:#1d4ed8,color:#1e293b;
