@@ -678,7 +678,7 @@ type AgentConfig struct {
 type TriageConfig struct {
 	// MaxDecompositionDepth caps recursive bead splitting. Children re-enter
 	// the gate; at cap the parent is blocked with label=needs-human-decomposition.
-	// Zero or unset uses the binary default (3). Configurable as
+	// Zero or unset uses the binary default (2). Configurable as
 	// agent.triage.max_decomposition_depth in .ddx/config.yaml.
 	MaxDecompositionDepth *int `yaml:"max_decomposition_depth,omitempty" json:"max_decomposition_depth,omitempty"`
 	// MaxFamilyExpansion is the family-wide descendant budget: the maximum
@@ -691,7 +691,9 @@ type TriageConfig struct {
 
 // DefaultMaxDecompositionDepth is the binary default for
 // agent.triage.max_decomposition_depth when unset or non-positive.
-const DefaultMaxDecompositionDepth = 3
+// Two generated child levels (root may split once, children once more)
+// keeps the queue from growing a third automated layer by default.
+const DefaultMaxDecompositionDepth = 2
 
 // DefaultMaxFamilyExpansion is the conservative family-wide descendant budget
 // used when agent.triage.max_family_expansion is unset or non-positive.

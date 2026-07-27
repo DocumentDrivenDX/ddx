@@ -83,7 +83,9 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "no_changes_rationale", any: []string{"no_changes_rationale.txt"}},
 		{name: "step0_size_check", any: []string{"## Step 0: size check"}},
 		{name: "step0_large_description_hint", any: []string{"exceeds 8000 bytes", "split-first pass"}},
-		{name: "step0_depth_cap", any: []string{"Auto-decomposition is capped at depth 2", "third-level split"}},
+		// Depth policy number is rendered dynamically from ResolvedConfig; the
+		// static block only keeps the split-first description trigger.
+		{name: "step0_depth_cap", any: []string{"split-first pass", "exceeds 8000 bytes"}},
 		{name: "decompose_bead_create", any: []string{"ddx bead create"}},
 		{name: "decompose_bead_dep_add", any: []string{"ddx bead dep add"}},
 		{name: "decompose_dep_edges_are_child_specific", any: []string{"legitimate child-to-child or sibling/replacement edges", "never the parent"}},
@@ -341,7 +343,7 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
 		"ddx bead create",
 		"ddx bead dep add",
 		"ddx bead update",
-		"Auto-decomposition is capped at depth 2",
+		"split-first pass",
 	}
 	for _, c := range cases {
 		c := c
@@ -351,6 +353,14 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
 				if !strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt missing required substring %q", c.variant, sub)
 				}
+			}
+			// Depth policy is dynamic (ResolvedConfig); assert it on the full prompt.
+			full := renderFullPromptForGuardrails(t, c.harness, "")
+			if !strings.Contains(full, "Auto-decomposition is capped at depth") {
+				t.Errorf("full %s prompt missing resolved depth policy line", c.variant)
+			}
+			if !strings.Contains(full, "agent.triage.max_decomposition_depth") {
+				t.Errorf("full %s prompt missing agent.triage.max_decomposition_depth", c.variant)
 			}
 		})
 	}

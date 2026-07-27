@@ -9,7 +9,6 @@ Too big if any holds:
 - Description names multiple feature pieces.
 - More than ~500 lines across ~5+ unrelated package files.
 - If the bead description exceeds 8000 bytes, use a split-first pass.
-- Auto-decomposition is capped at depth 2: root beads may split once, children once more; reject third-level splits.
 
 If too big, decompose:
 
