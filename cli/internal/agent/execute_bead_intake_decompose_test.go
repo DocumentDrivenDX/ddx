@@ -770,18 +770,22 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 		ID:         "ddx-qdepth-child",
 		Title:      "Child bead at depth 1",
 		Parent:     "ddx-qdepth-root",
-		Acceptance: "1. do the work",
+		Acceptance: "1. implement part A of the work\n2. implement part B of the work",
 	}
 	require.NoError(t, store.Create(context.Background(), candidate))
 
 	var hookCalls int32
+	// Material scope-reducing split: distinct implementation children so the
+	// material-scope gate accepts while the depth assertion still holds.
 	decomp := &PreClaimDecomposition{
 		Rationale: "orchestrator split at depth 1",
 		Children: []PreClaimDecompositionChild{
-			{Title: "Subtask", Description: "subtask desc", Acceptance: "1. do the work"},
+			{Title: "Subtask A", Description: "implement part A only", Acceptance: "1. implement part A of the work"},
+			{Title: "Subtask B", Description: "implement part B only", Acceptance: "1. implement part B of the work"},
 		},
 		ACMap: []ACMapEntry{
-			{ParentAC: "1. do the work", Coverage: "fully covered by Subtask"},
+			{ParentAC: "1. implement part A of the work", Coverage: "covered by Subtask A"},
+			{ParentAC: "2. implement part B of the work", Coverage: "covered by Subtask B"},
 		},
 	}
 
@@ -821,7 +825,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Failures)
 
-	// Child must be created.
+	// Children must be created when queue depth is under the configured cap.
 	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
@@ -830,7 +834,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 			children = append(children, b)
 		}
 	}
-	assert.Len(t, children, 1, "child must be created when queue depth < max_decomposition_depth")
+	assert.Len(t, children, 2, "children must be created when queue depth < max_decomposition_depth")
 }
 
 func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {
@@ -906,4 +910,309 @@ func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {
 	// decomposition.blocked event must be emitted.
 	assert.Contains(t, eventSink.String(), "post_attempt_decomposition.blocked",
 		"blocked event must be emitted for lossy split")
+}
+
+// TestPreClaimDecompositionRequiresMaterialScopeReduction is table-driven over
+// the four rejected split shapes: verification-only children, children
+// duplicating the parent outcome, children missing acceptance mapping, and
+// children that do not reduce implementation scope. Each shape is rejected by
+// validatePreClaimDecomposition, creates zero child beads, and records exactly
+// one refusal outcome via the existing lossy-split park path.
+func TestPreClaimDecompositionRequiresMaterialScopeReduction(t *testing.T) {
+	parentTitle := "Implement dual-path auth token refresh"
+	parentDesc := "PROBLEM\nAuth refresh spans two packages.\n\nROOT CAUSE\ncli/internal/auth/refresh.go:40.\n\nPROPOSED FIX\nSplit the work into independent implementation boundaries.\n\nNON-SCOPE\nDo not change login UI."
+	parentAcc := "1. implement token refresh in cli/internal/auth/refresh.go\n2. implement retry backoff in cli/internal/auth/retry.go\n3. cd cli && go test ./internal/auth/... -count=1"
+
+	type shapeCase struct {
+		name   string
+		decomp *PreClaimDecomposition
+		// substrings expected in validatePreClaimDecomposition error
+		errSubstrings []string
+	}
+
+	cases := []shapeCase{
+		{
+			name: "verification_only_children",
+			decomp: &PreClaimDecomposition{
+				Rationale: "split for verification only",
+				Children: []PreClaimDecompositionChild{
+					{
+						Title:       "Verify auth tests pass",
+						Description: "Run the auth package test suite and review the diff for regressions.",
+						Acceptance:  "1. Run go test ./internal/auth/...\n2. Verify tests pass\n3. lefthook run pre-commit passes",
+					},
+					{
+						Title:       "Review the auth PR",
+						Description: "Validate the change set and ensure the regression suite is green.",
+						Acceptance:  "1. Review the PR\n2. Validate coverage reports",
+					},
+				},
+				ACMap: []ACMapEntry{
+					{ParentAC: "1. implement token refresh in cli/internal/auth/refresh.go", Coverage: "covered by Verify auth tests pass"},
+					{ParentAC: "2. implement retry backoff in cli/internal/auth/retry.go", Coverage: "covered by Review the auth PR"},
+					{ParentAC: "3. cd cli && go test ./internal/auth/... -count=1", Coverage: "covered by Verify auth tests pass"},
+				},
+			},
+			errSubstrings: []string{"verification-only"},
+		},
+		{
+			name: "children_duplicate_parent_outcome",
+			decomp: &PreClaimDecomposition{
+				Rationale: "cosmetic re-title of the same outcome",
+				Children: []PreClaimDecompositionChild{
+					{
+						Title:       parentTitle,
+						Description: parentDesc,
+						Acceptance:  parentAcc,
+					},
+					{
+						Title:       "Also implement dual-path auth token refresh",
+						Description: "Same full parent outcome restated.",
+						Acceptance:  parentAcc,
+					},
+				},
+				ACMap: []ACMapEntry{
+					{ParentAC: "1. implement token refresh in cli/internal/auth/refresh.go", Coverage: "covered by both children"},
+					{ParentAC: "2. implement retry backoff in cli/internal/auth/retry.go", Coverage: "covered by both children"},
+					{ParentAC: "3. cd cli && go test ./internal/auth/... -count=1", Coverage: "covered by both children"},
+				},
+			},
+			errSubstrings: []string{"duplicates the parent outcome"},
+		},
+		{
+			name: "children_missing_acceptance_mapping",
+			decomp: &PreClaimDecomposition{
+				Rationale: "children without an AC map",
+				Children: []PreClaimDecompositionChild{
+					{
+						Title:       "Implement token refresh path",
+						Description: "PROBLEM\nRefresh path.\n\nPROPOSED FIX\nImplement refresh.go only.\n",
+						Acceptance:  "1. implement token refresh in cli/internal/auth/refresh.go\n2. TestAuthRefresh",
+					},
+					{
+						Title:       "Implement retry backoff path",
+						Description: "PROBLEM\nRetry path.\n\nPROPOSED FIX\nImplement retry.go only.\n",
+						Acceptance:  "1. implement retry backoff in cli/internal/auth/retry.go\n2. TestAuthRetry",
+					},
+				},
+				ACMap: nil, // missing mapping
+			},
+			errSubstrings: []string{"missing acceptance mapping"},
+		},
+		{
+			name: "children_do_not_reduce_implementation_scope",
+			// Each child restates every parent AC item in distinct wording so
+			// duplicate-parent does not fire, but no scope partition occurs.
+			decomp: &PreClaimDecomposition{
+				Rationale: "siblings each restate the full parent AC set without partitioning",
+				Children: []PreClaimDecompositionChild{
+					{
+						Title:       "Full-scope framing A",
+						Description: "PROBLEM\nOwns the entire dual-path work.\n\nPROPOSED FIX\nImplement refresh, retry, and the go test gate under framing A.\n",
+						Acceptance: "1. implement token refresh in cli/internal/auth/refresh.go and implement retry backoff in cli/internal/auth/retry.go\n" +
+							"2. also cover cd cli && go test ./internal/auth/... -count=1 under framing A",
+					},
+					{
+						Title:       "Full-scope framing B",
+						Description: "PROBLEM\nAlso owns the entire dual-path work.\n\nPROPOSED FIX\nImplement refresh, retry, and the go test gate under framing B.\n",
+						Acceptance: "1. implement token refresh in cli/internal/auth/refresh.go together with implement retry backoff in cli/internal/auth/retry.go\n" +
+							"2. also cover cd cli && go test ./internal/auth/... -count=1 under framing B",
+					},
+				},
+				ACMap: []ACMapEntry{
+					{ParentAC: "1. implement token refresh in cli/internal/auth/refresh.go", Coverage: "covered by framing A and B"},
+					{ParentAC: "2. implement retry backoff in cli/internal/auth/retry.go", Coverage: "covered by framing A and B"},
+					{ParentAC: "3. cd cli && go test ./internal/auth/... -count=1", Coverage: "covered by framing A and B"},
+				},
+			},
+			errSubstrings: []string{"does not reduce implementation scope"},
+		},
+	}
+
+	// Ensure the four required shapes are represented.
+	required := map[string]bool{
+		"verification_only_children":                  false,
+		"children_duplicate_parent_outcome":           false,
+		"children_missing_acceptance_mapping":         false,
+		"children_do_not_reduce_implementation_scope": false,
+	}
+	for _, tc := range cases {
+		if _, ok := required[tc.name]; ok {
+			required[tc.name] = true
+		}
+	}
+	for name, present := range required {
+		require.True(t, present, "table must include shape %s", name)
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			parent := &bead.Bead{
+				ID:          "ddx-msr-" + tc.name,
+				Title:       parentTitle,
+				Description: parentDesc,
+				Acceptance:  parentAcc,
+			}
+
+			// Gate-level assertion: validatePreClaimDecomposition rejects the shape.
+			err := validatePreClaimDecomposition(tc.decomp, parent)
+			require.Error(t, err, "validatePreClaimDecomposition must reject shape %s", tc.name)
+			for _, sub := range tc.errSubstrings {
+				assert.Contains(t, err.Error(), sub, "rejection reason for %s", tc.name)
+			}
+
+			// Integration: refused split creates zero children and one refusal outcome.
+			store := bead.NewStore(t.TempDir())
+			require.NoError(t, store.Init(context.Background()))
+			require.NoError(t, store.Create(context.Background(), parent))
+
+			worker := &ExecuteBeadWorker{
+				Store: store,
+				Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+					t.Error("executor must not run for refused material-scope split")
+					return ExecuteBeadReport{}, nil
+				}),
+			}
+			cfgOpts := config.TestLoopConfigOpts{
+				Assignee:              "worker",
+				MaxDecompositionDepth: 3,
+			}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+			result, runErr := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+				Once:         true,
+				TargetBeadID: parent.ID,
+				PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+					return PreClaimIntakeResult{
+						Outcome:       PreClaimIntakeTooLargeDecomposed,
+						Detail:        "too large; proposed split",
+						Decomposition: tc.decomp,
+					}, nil
+				},
+			})
+			require.NoError(t, runErr)
+			require.NotNil(t, result)
+			assert.Equal(t, 0, result.Attempts, "refused split must not count as an attempt")
+
+			all, readErr := store.ReadAll(context.Background())
+			require.NoError(t, readErr)
+			for _, b := range all {
+				assert.NotEqual(t, parent.ID, b.Parent,
+					"no child beads must be created for refused shape %s", tc.name)
+			}
+
+			got, getErr := store.Get(context.Background(), parent.ID)
+			require.NoError(t, getErr)
+			assert.Equal(t, bead.StatusProposed, got.Status,
+				"refused split must park parent for operator review")
+
+			events, evErr := store.Events(parent.ID)
+			require.NoError(t, evErr)
+			refusalCount := 0
+			for _, ev := range events {
+				if ev.Kind == "intake.blocked" {
+					refusalCount++
+				}
+			}
+			assert.Equal(t, 1, refusalCount,
+				"exactly one refusal outcome (intake.blocked) must be recorded for shape %s", tc.name)
+		})
+	}
+}
+
+// TestPreClaimDecompositionAcceptsIndependentImplementationBoundaries asserts
+// a split whose children each carry a distinct concrete implementation outcome
+// and full AC mapping is accepted and creates the expected children.
+func TestPreClaimDecompositionAcceptsIndependentImplementationBoundaries(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	parent := &bead.Bead{
+		ID:    "ddx-msr-accept-independent",
+		Title: "Implement dual-path auth token refresh",
+		Description: "PROBLEM\nAuth refresh spans two packages.\n\nROOT CAUSE\ncli/internal/auth/refresh.go:40.\n\n" +
+			"PROPOSED FIX\nSplit into independent implementation boundaries.\n\nNON-SCOPE\nLogin UI.",
+		Acceptance: "1. implement token refresh in cli/internal/auth/refresh.go\n" +
+			"2. implement retry backoff in cli/internal/auth/retry.go\n" +
+			"3. cd cli && go test ./internal/auth/... -count=1",
+	}
+	require.NoError(t, store.Create(context.Background(), parent))
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "independent implementation boundaries for refresh and retry",
+		Children: []PreClaimDecompositionChild{
+			{
+				Title: "Implement auth token refresh",
+				Description: "PROBLEM\nRefresh path is incomplete.\n\nROOT CAUSE\ncli/internal/auth/refresh.go:40.\n\n" +
+					"PROPOSED FIX\nImplement refresh only.\n\nNON-SCOPE\nRetry backoff.",
+				Acceptance: "1. implement token refresh in cli/internal/auth/refresh.go\n" +
+					"2. TestAuthTokenRefresh\n3. cd cli && go test ./internal/auth/... -run TestAuthTokenRefresh -count=1",
+			},
+			{
+				Title: "Implement auth retry backoff",
+				Description: "PROBLEM\nRetry backoff is incomplete.\n\nROOT CAUSE\ncli/internal/auth/retry.go:12.\n\n" +
+					"PROPOSED FIX\nImplement retry only.\n\nNON-SCOPE\nToken refresh.",
+				Acceptance: "1. implement retry backoff in cli/internal/auth/retry.go\n" +
+					"2. TestAuthRetryBackoff\n3. cd cli && go test ./internal/auth/... -run TestAuthRetryBackoff -count=1",
+			},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. implement token refresh in cli/internal/auth/refresh.go", Coverage: "covered by Implement auth token refresh AC 1"},
+			{ParentAC: "2. implement retry backoff in cli/internal/auth/retry.go", Coverage: "covered by Implement auth retry backoff AC 1"},
+			{ParentAC: "3. cd cli && go test ./internal/auth/... -count=1", Coverage: "covered by both children go test gates"},
+		},
+	}
+
+	// Gate accepts.
+	require.NoError(t, validatePreClaimDecomposition(decomp, parent))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Error("executor must not run after successful decomposition intake")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		MaxDecompositionDepth: 3,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: parent.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome:       PreClaimIntakeTooLargeDecomposed,
+				Detail:        "too large; independent boundaries",
+				Decomposition: decomp,
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Attempts)
+
+	all, err := store.ReadAll(context.Background())
+	require.NoError(t, err)
+	var children []bead.Bead
+	for _, b := range all {
+		if b.Parent == parent.ID {
+			children = append(children, b)
+		}
+	}
+	require.Len(t, children, 2, "accepted split must create both independent children")
+	titles := map[string]bool{}
+	for _, c := range children {
+		titles[c.Title] = true
+	}
+	assert.True(t, titles["Implement auth token refresh"])
+	assert.True(t, titles["Implement auth retry backoff"])
+
+	got, err := store.Get(context.Background(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "successful decomp keeps parent open")
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig])
 }

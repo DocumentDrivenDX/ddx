@@ -567,9 +567,9 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		parkOperator("decomposition hook returned no split")
 		return decision
 	}
-	lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
-	if lossyOrEmpty {
-		parkOperator("decomposition AC map is incomplete; operator must produce a lossless split")
+	if refuse := preClaimDecompositionRefuseReason(candidate, decomp); refuse != "" {
+		// Reuse the lossy-split refusal path: park for operator, create no children.
+		parkOperator(refuse)
 		return decision
 	}
 
@@ -3242,11 +3242,13 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				})
 				break
 			}
-			// too_large_decomposed with concrete child specs: validate the AC map,
-			// check the queue-level depth cap, then create children and wire deps.
-			// At the depth cap, an already-actionable bead is dispatched rather
-			// than parked or expanded.
-			lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
+			// too_large_decomposed with concrete child specs: validate material
+			// scope reduction + AC map, check the queue-level depth cap, then
+			// create children. At the depth cap, an already-actionable bead is
+			// dispatched rather than parked or expanded. Rejected splits reuse
+			// the lossy-split refusal path and never call applyPreClaimDecomposition.
+			refuseReason := preClaimDecompositionRefuseReason(&candidate, decomp)
+			lossyOrEmpty := refuseReason != ""
 			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
 			if depthAtCap && !lossyOrEmpty && beadActionableAtDecompositionCap(&candidate) {
 				if runtime.Log != nil {
@@ -3262,9 +3264,12 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				break
 			}
 			if lossyOrEmpty || depthAtCap {
-				// Cannot produce a lossless split: block for operator.
+				// Cannot produce a lossless / material split: block for operator.
 				blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
-				if depthAtCap {
+				if lossyOrEmpty && refuseReason != "" {
+					blockedDetail = refuseReason
+				}
+				if depthAtCap && !lossyOrEmpty {
 					blockedDetail = "depth cap reached during decomposition; operator must split"
 				}
 				if runtime.Log != nil {
@@ -6445,6 +6450,9 @@ func storeBeadDepth(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bea
 // It returns the IDs of the created children so the caller can log or record
 // them.
 func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
+	if refuse := preClaimDecompositionRefuseReason(parent, decomp); refuse != "" {
+		return nil, fmt.Errorf("decompose refused: %s", refuse)
+	}
 	childIDs := make([]string, 0, len(decomp.Children))
 	for _, child := range decomp.Children {
 		nb := &bead.Bead{

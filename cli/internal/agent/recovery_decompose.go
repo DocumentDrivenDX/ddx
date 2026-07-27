@@ -104,7 +104,7 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 		}
 		return nil, fmt.Errorf("decomposer: invalid output")
 	}
-	if err := validatePreClaimDecomposition(decomp); err != nil {
+	if err := validatePreClaimDecomposition(decomp, b); err != nil {
 		reason := err.Error()
 		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, reason); fallbackErr == nil {
 			appendPreClaimDecomposeEvent(store, b.ID, result, rcfg, reason)
@@ -450,7 +450,13 @@ func parsePreClaimDecompositionOutput(output string) (*PreClaimDecomposition, bo
 	return &decomp, true
 }
 
-func validatePreClaimDecomposition(decomp *PreClaimDecomposition) error {
+// validatePreClaimDecomposition checks structural shape and, when parent is
+// non-nil, material scope reduction. A split is accepted only when every child
+// owns a concrete implementation outcome, parent ACs are mapped, children do
+// not merely restate the parent outcome, and the split reduces implementation
+// scope relative to the parent. Callers must treat a non-nil error as a hard
+// refusal: do not create child beads (reuse the lossy-split refusal path).
+func validatePreClaimDecomposition(decomp *PreClaimDecomposition, parent *bead.Bead) error {
 	if decomp == nil {
 		return fmt.Errorf("decomposer: nil decomposition")
 	}
@@ -471,7 +477,293 @@ func validatePreClaimDecomposition(decomp *PreClaimDecomposition) error {
 		decomp.ACMap[i].Coverage = strings.TrimSpace(decomp.ACMap[i].Coverage)
 	}
 	decomp.Rationale = strings.TrimSpace(decomp.Rationale)
+
+	if parent == nil {
+		return nil
+	}
+
+	// Missing or incomplete acceptance mapping (lossy split).
+	if strings.TrimSpace(parent.Acceptance) != "" {
+		if len(decomp.ACMap) == 0 {
+			return fmt.Errorf("decomposer: missing acceptance mapping")
+		}
+		if isDecompositionLossy(decomp.ACMap) {
+			return fmt.Errorf("decomposer: incomplete acceptance mapping")
+		}
+		if !parentAcceptanceMapped(parent, decomp.ACMap) {
+			return fmt.Errorf("decomposer: missing acceptance mapping for parent criteria")
+		}
+	}
+
+	for i := range decomp.Children {
+		child := decomp.Children[i]
+		if isVerificationOnlyChild(child) {
+			return fmt.Errorf("decomposer: child %d is verification-only with no implementation deliverable", i+1)
+		}
+		if childDuplicatesParentOutcome(child, parent) {
+			return fmt.Errorf("decomposer: child %d duplicates the parent outcome", i+1)
+		}
+		if !childHasConcreteImplementationOutcome(child) {
+			return fmt.Errorf("decomposer: child %d lacks a concrete implementation outcome", i+1)
+		}
+	}
+
+	if !splitReducesImplementationScope(parent, decomp) {
+		return fmt.Errorf("decomposer: split does not reduce implementation scope relative to the parent")
+	}
 	return nil
+}
+
+// preClaimDecompositionRefuseReason returns a non-empty reason when a proposed
+// split must not create children. It folds structural validation, material
+// scope reduction, and the existing lossy AC-map check into one refusal signal
+// so callers reuse a single park/block path.
+func preClaimDecompositionRefuseReason(parent *bead.Bead, decomp *PreClaimDecomposition) string {
+	if decomp == nil {
+		return "decomposition is nil"
+	}
+	if err := validatePreClaimDecomposition(decomp, parent); err != nil {
+		return err.Error()
+	}
+	parentAcceptance := ""
+	if parent != nil {
+		parentAcceptance = parent.Acceptance
+	}
+	if isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(parentAcceptance) != "") {
+		return "decomposition AC map is incomplete; operator must produce a lossless split"
+	}
+	return ""
+}
+
+func normalizeDecompText(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), " ")
+}
+
+func parentAcceptanceMapped(parent *bead.Bead, acMap []ACMapEntry) bool {
+	items := numberedAcceptanceItems(parent.Acceptance)
+	if len(items) == 0 {
+		// Freeform acceptance: non-empty, non-lossy map is sufficient.
+		return len(acMap) > 0 && !isDecompositionLossy(acMap)
+	}
+	for _, item := range items {
+		itemNorm := normalizeDecompText(item)
+		found := false
+		for _, entry := range acMap {
+			parentAC := normalizeDecompText(entry.ParentAC)
+			if parentAC == "" || strings.TrimSpace(entry.Coverage) == "" {
+				continue
+			}
+			if parentAC == itemNorm || strings.Contains(parentAC, itemNorm) || strings.Contains(itemNorm, parentAC) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// isVerificationOnlyChild reports children that are test/validate/review-shaped
+// with no implementation deliverable — pure queue bookkeeping. Named Test*
+// symbols in acceptance are treated as implementation deliverables (DDx AC
+// convention: author the named test), not as verification-only work.
+func isVerificationOnlyChild(child PreClaimDecompositionChild) bool {
+	blob := normalizeDecompText(child.Title + " " + child.Description + " " + child.Acceptance)
+	if blob == "" {
+		return true
+	}
+	if strings.Contains(child.Description, "PROPOSED FIX") {
+		return false
+	}
+	if childHasImplementationSignal(blob) {
+		return false
+	}
+	for _, item := range numberedAcceptanceItems(child.Acceptance) {
+		if acceptanceNamesTestSymbol(item) {
+			return false
+		}
+	}
+	return childHasVerificationSignal(blob)
+}
+
+func acceptanceNamesTestSymbol(item string) bool {
+	// Match TestFoo / Test_Foo style identifiers used in bead AC.
+	fields := strings.Fields(item)
+	for _, f := range fields {
+		f = strings.Trim(f, "`\"'.,;:()[]")
+		if strings.HasPrefix(f, "Test") && len(f) > len("Test") {
+			rest := f[len("Test"):]
+			if rest[0] == '_' || (rest[0] >= 'A' && rest[0] <= 'Z') {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func childHasImplementationSignal(blob string) bool {
+	// "do " / "add " etc. are deliberate prefixes to avoid matching "todo".
+	signals := []string{
+		"implement", "implementation", "add ", "fix ", "create ", "wire ",
+		"update ", "refactor", "change ", "write ", "build ", "do ", "make ",
+		"introduce", "replace", "remove ", "migrate", "extend", "proposed fix",
+		"part a", "part b", "part c", "child scope", "bounded slice",
+	}
+	for _, s := range signals {
+		if strings.Contains(blob, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func childHasVerificationSignal(blob string) bool {
+	signals := []string{
+		"verify", "verification", "validate", "validation", "review",
+		"run tests", "go test", "lefthook", "check that", "ensure tests",
+		"test coverage", "assert ", "only test", "test-only", "tests pass",
+		"run the suite", "regression suite",
+	}
+	for _, s := range signals {
+		if strings.Contains(blob, s) {
+			return true
+		}
+	}
+	title := blob
+	// Title-leading verify/test/review/validate patterns.
+	for _, p := range []string{"verify ", "test ", "review ", "validate ", "check "} {
+		if strings.HasPrefix(title, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func childHasConcreteImplementationOutcome(child PreClaimDecompositionChild) bool {
+	if isVerificationOnlyChild(child) {
+		return false
+	}
+	if strings.Contains(child.Description, "PROPOSED FIX") {
+		return true
+	}
+	blob := normalizeDecompText(child.Title + " " + child.Description + " " + child.Acceptance)
+	if childHasImplementationSignal(blob) {
+		return true
+	}
+	for _, item := range numberedAcceptanceItems(child.Acceptance) {
+		if acceptanceNamesTestSymbol(item) ||
+			strings.Contains(item, "/") ||
+			strings.Contains(item, ".go") {
+			return true
+		}
+	}
+	// Non-empty description that is not pure verification counts as a scoped outcome.
+	if strings.TrimSpace(child.Description) != "" {
+		return true
+	}
+	return false
+}
+
+func childDuplicatesParentOutcome(child PreClaimDecompositionChild, parent *bead.Bead) bool {
+	if parent == nil {
+		return false
+	}
+	cTitle := normalizeDecompText(child.Title)
+	pTitle := normalizeDecompText(parent.Title)
+	cAcc := normalizeDecompText(child.Acceptance)
+	pAcc := normalizeDecompText(parent.Acceptance)
+	cDesc := normalizeDecompText(child.Description)
+	pDesc := normalizeDecompText(parent.Description)
+
+	if cAcc != "" && pAcc != "" && cAcc == pAcc {
+		return true
+	}
+	if cTitle != "" && cTitle == pTitle && (cAcc == pAcc || cAcc == "" || pAcc == "") {
+		return true
+	}
+	if cDesc != "" && pDesc != "" && cDesc == pDesc && cAcc == pAcc {
+		return true
+	}
+	return false
+}
+
+// splitReducesImplementationScope reports whether children carve a smaller or
+// partitioned implementation boundary rather than restating the full parent.
+func splitReducesImplementationScope(parent *bead.Bead, decomp *PreClaimDecomposition) bool {
+	if parent == nil || decomp == nil || len(decomp.Children) == 0 {
+		return false
+	}
+	parentAcc := normalizeDecompText(parent.Acceptance)
+	parentItems := numberedAcceptanceItems(parent.Acceptance)
+
+	// All children restate the full parent acceptance → no reduction.
+	allRestateFull := true
+	for _, child := range decomp.Children {
+		cAcc := normalizeDecompText(child.Acceptance)
+		if parentAcc != "" && cAcc == parentAcc {
+			continue
+		}
+		// Child owns every parent numbered item verbatim.
+		if len(parentItems) > 0 && childOwnsAllParentItems(child, parentItems) {
+			continue
+		}
+		allRestateFull = false
+		break
+	}
+	if allRestateFull {
+		// Exception: single child with some parent ACs marked non_scope /
+		// operator_required is a deliberate scope drop.
+		if len(decomp.Children) == 1 && acMapDropsParentScope(decomp.ACMap) {
+			return true
+		}
+		return false
+	}
+
+	if len(decomp.Children) >= 2 {
+		// Distinct child scopes (title+acceptance) evidence independent boundaries.
+		seen := make(map[string]struct{}, len(decomp.Children))
+		for _, child := range decomp.Children {
+			key := normalizeDecompText(child.Title) + "\x00" + normalizeDecompText(child.Acceptance)
+			seen[key] = struct{}{}
+		}
+		if len(seen) < 2 {
+			// Identical siblings: no independent boundary.
+			return false
+		}
+		return true
+	}
+
+	// Single child with acceptance distinct from parent.
+	cAcc := normalizeDecompText(decomp.Children[0].Acceptance)
+	if parentAcc != "" && cAcc == parentAcc && !acMapDropsParentScope(decomp.ACMap) {
+		return false
+	}
+	return true
+}
+
+func childOwnsAllParentItems(child PreClaimDecompositionChild, parentItems []string) bool {
+	if len(parentItems) == 0 {
+		return false
+	}
+	blob := normalizeDecompText(child.Acceptance)
+	for _, item := range parentItems {
+		if !strings.Contains(blob, normalizeDecompText(item)) {
+			return false
+		}
+	}
+	return true
+}
+
+func acMapDropsParentScope(acMap []ACMapEntry) bool {
+	for _, entry := range acMap {
+		cov := normalizeDecompText(entry.Coverage)
+		if cov == "non_scope" || cov == "operator_required" {
+			return true
+		}
+	}
+	return false
 }
 
 func fallbackPreClaimDecomposition(b *bead.Bead, reason string) (*PreClaimDecomposition, error) {
