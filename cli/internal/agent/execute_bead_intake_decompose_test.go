@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -452,6 +453,227 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	// needs-human-decomposition label must be present.
 	assert.Contains(t, got.Labels, "needs-human-decomposition",
 		"needs-human-decomposition label must be added when depth cap fires")
+}
+
+// TestPreClaimDecompositionAlreadyDecomposedAtomicChildExecutes proves that an
+// already-decomposed child sitting at the configured depth cap with numbered
+// acceptance criteria and a concrete implementation outcome is dispatched to
+// the executor once — without invoking the decomposition hook or creating
+// descendants.
+func TestPreClaimDecompositionAlreadyDecomposedAtomicChildExecutes(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	root := &bead.Bead{ID: "ddx-atcap-root", Title: "Root", Status: bead.StatusClosed}
+	require.NoError(t, store.Create(context.Background(), root))
+
+	parent := &bead.Bead{
+		ID:     "ddx-atcap-parent",
+		Title:  "Parent (depth 1)",
+		Parent: "ddx-atcap-root",
+		Status: bead.StatusClosed,
+		Labels: []string{"decomposed"},
+	}
+	require.NoError(t, store.Create(context.Background(), parent))
+
+	// Candidate at depth 2 with max_decomposition_depth=2: at the cap, but
+	// actionable (numbered AC + PROPOSED FIX implementation outcome).
+	candidate := &bead.Bead{
+		ID:     "ddx-atcap-atomic",
+		Title:  "Atomic child at decomposition cap",
+		Parent: "ddx-atcap-parent",
+		Labels: []string{"decomposed"},
+		Description: "PROBLEM\nAt-cap bead was parked instead of executed.\n\n" +
+			"ROOT CAUSE\ncli/internal/agent/execute_bead_loop.go:2860 parks all at-cap beads.\n\n" +
+			"PROPOSED FIX\nDispatch when numbered AC and PROPOSED FIX are present.\n\n" +
+			"NON-SCOPE\nDepth policy unification.",
+		Acceptance: "1. TestPreClaimDecompositionAlreadyDecomposedAtomicChildExecutes\n" +
+			"2. cd cli && go test ./internal/agent/... -run TestPreClaimDecompositionAlreadyDecomposedAtomicChildExecutes -count=1",
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	var execCalls int32
+	var decompHookCalls int32
+	var intakeCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			assert.Equal(t, candidate.ID, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-atcap-atomic",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		MaxDecompositionDepth: 2,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			atomic.AddInt32(&intakeCalls, 1)
+			t.Errorf("preclaim intake must not run for actionable at-cap bead (called for %s)", beadID)
+			return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed}, nil
+		},
+		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+			atomic.AddInt32(&decompHookCalls, 1)
+			t.Errorf("decomposition hook must not run for actionable at-cap bead (called for %s)", beadID)
+			return &PreClaimDecomposition{
+				Children: []PreClaimDecompositionChild{
+					{Title: "should-not-exist", Description: "x", Acceptance: "1. no"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls),
+		"executor must be invoked exactly once for the actionable at-cap bead")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&decompHookCalls),
+		"decomposition hook must not be called at the cap")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&intakeCalls),
+		"preclaim intake must be skipped when at-cap and actionable")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+
+	all, err := store.ReadAll(context.Background())
+	require.NoError(t, err)
+	for _, b := range all {
+		assert.NotEqual(t, candidate.ID, b.Parent,
+			"no descendants must be created for an actionable bead at the cap")
+	}
+
+	got, err := store.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.NotContains(t, got.Labels, "needs-human-decomposition",
+		"actionable at-cap bead must not be labeled needs-human-decomposition")
+}
+
+// TestPreClaimDecompositionAtCapNonActionableParksOnce asserts that a bead at
+// the configured depth cap with empty or non-actionable acceptance is parked
+// exactly once with the needs-human-decomposition label and an explicit reason,
+// and is never dispatched.
+func TestPreClaimDecompositionAtCapNonActionableParksOnce(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	root := &bead.Bead{ID: "ddx-park-root", Title: "Root", Status: bead.StatusClosed}
+	require.NoError(t, store.Create(context.Background(), root))
+
+	parent := &bead.Bead{
+		ID:     "ddx-park-parent",
+		Title:  "Parent",
+		Parent: "ddx-park-root",
+		Status: bead.StatusClosed,
+		Labels: []string{"decomposed"},
+	}
+	require.NoError(t, store.Create(context.Background(), parent))
+
+	// At depth 2 with max=2, empty acceptance → non-actionable at cap.
+	candidate := &bead.Bead{
+		ID:         "ddx-park-nonactionable",
+		Title:      "Non-actionable bead at decomposition cap",
+		Parent:     "ddx-park-parent",
+		Labels:     []string{"decomposed"},
+		Acceptance: "", // empty / non-actionable
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	var execCalls int32
+	var intakeCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			t.Error("executor must not run for non-actionable at-cap bead")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		MaxDecompositionDepth: 2,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			atomic.AddInt32(&intakeCalls, 1)
+			t.Errorf("intake hook must not run when non-actionable depth cap parks (called for %s)", beadID)
+			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must not be dispatched")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&intakeCalls), "intake must not run when depth-cap park fires")
+	assert.Equal(t, 0, result.Attempts)
+
+	got, err := store.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "non-actionable at-cap bead must be parked once as proposed")
+	assert.Contains(t, got.Labels, "needs-human-decomposition",
+		"needs-human-decomposition label must be present when non-actionable depth cap fires")
+
+	events, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	var overflowCount int
+	var foundExplicitReason bool
+	for _, ev := range events {
+		if ev.Kind == "triage-overflow" {
+			overflowCount++
+			if strings.Contains(ev.Body, "max") || strings.Contains(ev.Summary, "depth cap") {
+				foundExplicitReason = true
+			}
+		}
+		// Intake park events also carry the explicit reason.
+		if strings.Contains(ev.Kind, "intake") || ev.Kind == "triage-overflow" {
+			if strings.Contains(ev.Body, "max_decomposition_depth") ||
+				strings.Contains(ev.Body, `"max"`) ||
+				strings.Contains(ev.Summary, "depth") {
+				foundExplicitReason = true
+			}
+		}
+	}
+	assert.Equal(t, 1, overflowCount, "triage-overflow must be recorded exactly once")
+	assert.True(t, foundExplicitReason, "park must carry an explicit depth-cap reason")
+
+	// Re-run once more: parked proposed bead must not be re-dispatched or re-parked into a loop.
+	result2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			atomic.AddInt32(&intakeCalls, 1)
+			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "second pass must not dispatch either")
+
+	events2, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	overflowCount2 := 0
+	for _, ev := range events2 {
+		if ev.Kind == "triage-overflow" {
+			overflowCount2++
+		}
+	}
+	// Parks once: either no new overflow, or at most the original one remains dominant.
+	assert.LessOrEqual(t, overflowCount2, 1,
+		"non-actionable at-cap bead must be parked once, not re-overflowed on every drain")
 }
 
 func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
