@@ -85,12 +85,13 @@ func TestDocProseValeConfig_ProjectVocabularyRendered(t *testing.T) {
 	}
 	defer cfg.Cleanup()
 
-	// accept.txt must contain each accept term.
+	// Vale 3.x: vocabulary lives under <StylesPath>/config/vocabularies/<name>/.
 	stylesDir := filepath.Join(filepath.Dir(cfg.INIPath()), "styles")
-	acceptPath := filepath.Join(stylesDir, "Vocab", "Project", "accept.txt")
+	vocabDir := filepath.Join(stylesDir, "config", "vocabularies", "Project")
+	acceptPath := filepath.Join(vocabDir, "accept.txt")
 	data, err := os.ReadFile(acceptPath)
 	if err != nil {
-		t.Fatalf("read accept.txt: %v", err)
+		t.Fatalf("read accept.txt at Vale 3.x path: %v", err)
 	}
 	acceptContent := string(data)
 	for _, term := range []string{"DDx", "bead", "Quartz"} {
@@ -100,22 +101,36 @@ func TestDocProseValeConfig_ProjectVocabularyRendered(t *testing.T) {
 	}
 
 	// reject.txt must contain each reject term.
-	rejectPath := filepath.Join(stylesDir, "Vocab", "Project", "reject.txt")
+	rejectPath := filepath.Join(vocabDir, "reject.txt")
 	data, err = os.ReadFile(rejectPath)
 	if err != nil {
-		t.Fatalf("read reject.txt: %v", err)
+		t.Fatalf("read reject.txt at Vale 3.x path: %v", err)
 	}
 	if !strings.Contains(string(data), "system") {
 		t.Error("reject.txt missing term 'system'")
 	}
 
-	// The INI must declare the Vocab directive.
+	// Must not write the pre-3.x Vocab/ layout (would leave Vale 3.x looking at an empty path).
+	legacyVocabDir := filepath.Join(stylesDir, "Vocab", "Project")
+	if _, err := os.Stat(legacyVocabDir); !os.IsNotExist(err) {
+		t.Errorf("vocabulary must not be written under legacy path %s (err=%v)", legacyVocabDir, err)
+	}
+
+	// The INI must declare Vocab = Project, and that name must resolve to the dir we wrote.
 	iniData, err := os.ReadFile(cfg.INIPath())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(iniData), "Vocab") {
-		t.Error("generated .vale.ini does not declare Vocab directive")
+	iniContent := string(iniData)
+	if !strings.Contains(iniContent, "Vocab = Project") {
+		t.Errorf("generated .vale.ini does not declare Vocab = Project\ncontent:\n%s", iniContent)
+	}
+	info, err := os.Stat(vocabDir)
+	if err != nil {
+		t.Fatalf("Vocab = Project must resolve to on-disk dir %s: %v", vocabDir, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected %s to be a directory", vocabDir)
 	}
 }
 

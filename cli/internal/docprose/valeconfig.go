@@ -27,7 +27,8 @@ func (t *TempValeConfig) Cleanup() {
 
 // NewTempValeConfig generates a temporary Vale configuration from DDx settings.
 // StylesPath is pointed at the packaged DDx styles via a symlink so no copy is needed.
-// Project vocabulary is rendered into Vale accept/reject files under Vocab/Project/.
+// Project vocabulary is rendered into Vale accept/reject files under
+// config/vocabularies/Project/ (Vale 3.x layout).
 // The caller must call Cleanup() when done.
 func NewTempValeConfig(settings Settings) (*TempValeConfig, error) {
 	assetRoot, err := defaultAssetRoot()
@@ -56,7 +57,9 @@ func NewTempValeConfig(settings Settings) (*TempValeConfig, error) {
 	vocabName := ""
 	if len(settings.Vocabulary.Accept) > 0 || len(settings.Vocabulary.Reject) > 0 {
 		vocabName = "Project"
-		vocabDir := filepath.Join(stylesDir, "Vocab", vocabName)
+		// Vale 3.x looks under <StylesPath>/config/vocabularies/<name>/
+		// (not the pre-3.x <StylesPath>/Vocab/<name>/ layout).
+		vocabDir := filepath.Join(stylesDir, "config", "vocabularies", vocabName)
 		if err := os.MkdirAll(vocabDir, 0o755); err != nil {
 			os.RemoveAll(dir)
 			return nil, fmt.Errorf("create vocab dir: %w", err)
