@@ -1,4 +1,5 @@
 @custom-variant dark (&:where(.dark, .dark *));
+@import '@fontsource-variable/inter';
 @import 'tailwindcss';
 @config '../tailwind.config.js';
 

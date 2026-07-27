@@ -21,9 +21,10 @@ const semanticColors = {
 	'dark-bg-elevated': '#2E2A25',
 
 	'fg-ink': colors.text,
-	'fg-muted': '#4B5563',
+	'fg-muted': '#6B6558',
 	'dark-fg-ink': '#EDE6D6',
-	'dark-fg-muted': '#B8AF9C',
+	'dark-fg-muted': '#8E8674',
+
 
 	'border-line': '#E4DDD0',
 	'dark-border-line': '#34302A',
