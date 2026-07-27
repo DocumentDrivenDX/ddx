@@ -96,13 +96,13 @@ lane without creating an open↔proposed downgrade loop.
 
 ## Recursion depth cap
 
-Default depth cap: **3** levels. Configurable in `.ddx/config.yaml` at
+Default depth cap: **2** levels. Configurable in `.ddx/config.yaml` at
 `agent.triage.max_decomposition_depth`:
 
 ```yaml
 agent:
   triage:
-    max_decomposition_depth: 3
+    max_decomposition_depth: 2
 ```
 
 When a bead at the queue-level depth cap is evaluated, the gate:

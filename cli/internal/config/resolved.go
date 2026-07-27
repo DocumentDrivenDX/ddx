@@ -397,9 +397,10 @@ func (r ResolvedConfig) TriagePolicy() triage.TriagePolicy {
 }
 
 // MaxDecompositionDepth returns the queue-level recursion cap for the triage
-// gate. The default is 3. When a bead's parent-chain depth reaches this value
-// the gate emits a triage-overflow event and parks to status=proposed instead
-// of invoking the classifier or splitter.
+// gate. The default is DefaultMaxDecompositionDepth (2). When a bead's
+// parent-chain depth reaches this value the gate emits a triage-overflow
+// event and parks to status=proposed instead of invoking the classifier or
+// splitter.
 func (r ResolvedConfig) MaxDecompositionDepth() int {
 	r.requireSealed()
 	return r.maxDecompositionDepth

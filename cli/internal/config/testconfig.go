@@ -21,7 +21,7 @@ type TestLoopConfigOpts struct {
 	BeadQualityLintBlockThresholdScore int
 	EvidenceCaps                       EvidenceCapsConfig
 	// MaxDecompositionDepth, when non-zero, sets agent.triage.max_decomposition_depth
-	// in the resolved config. Zero uses the binary default (3).
+	// in the resolved config. Zero uses the binary default (DefaultMaxDecompositionDepth).
 	MaxDecompositionDepth int
 	// MaxFamilyExpansion, when non-zero, sets agent.triage.max_family_expansion
 	// in the resolved config. Zero uses the conservative default (8).

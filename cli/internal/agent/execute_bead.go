@@ -2243,7 +2243,6 @@ Too big if any holds:
 - Description names multiple feature pieces.
 - More than ~500 lines across ~5+ unrelated package files.
 - If the bead description exceeds 8000 bytes, use a split-first pass.
-- Auto-decomposition is capped at depth 2: root beads may split once, children once more; reject third-level splits.
 
 If too big, decompose:
 
@@ -2478,7 +2477,16 @@ func buildPromptWithCaps(workDir string, b *bead.Bead, refs []executeBeadGoverni
 }
 
 const executeBeadLargeDescriptionHintThreshold = 8000
-const executeBeadAutoDecompositionDepthCap = 2
+
+// resolveMaxDecompositionDepthForPrompt returns the queue-level
+// agent.triage.max_decomposition_depth policy for workDir. Prompt rendering
+// must use this resolved value so the implementer instruction cannot drift
+// from ResolvedConfig.MaxDecompositionDepth(). Explicit configured values
+// are preserved exactly; unset/zero fall through to the binary default.
+func resolveMaxDecompositionDepthForPrompt(workDir string) int {
+	rcfg, _ := config.LoadAndResolve(workDir, config.CLIOverrides{})
+	return rcfg.MaxDecompositionDepth()
+}
 
 func executeBeadDynamicStep0Hints(workDir string, b *bead.Bead) string {
 	if b == nil {
@@ -2493,11 +2501,16 @@ func executeBeadDynamicStep0Hints(workDir string, b *bead.Bead) string {
 			len(desc), executeBeadLargeDescriptionHintThreshold)
 	}
 
+	maxDepth := resolveMaxDecompositionDepthForPrompt(workDir)
+	// Always emit the resolved policy number so the prompt cannot disagree
+	// with ResolvedConfig.MaxDecompositionDepth().
+	fmt.Fprintf(&sb, "\n\nAuto-decomposition is capped at depth %d (agent.triage.max_decomposition_depth).\n",
+		maxDepth)
+
 	depth := beadDecompositionDepth(workDir, b)
-	if depth >= executeBeadAutoDecompositionDepthCap {
-		fmt.Fprintf(&sb, "\n\n## Decomposition depth cap\n")
-		fmt.Fprintf(&sb, "This bead is already at decomposition depth %d. Do not create another child layer; if it is still too large, reject the split with a short explanation and write no_changes_rationale.txt instead.\n",
-			depth)
+	if depth >= maxDepth {
+		fmt.Fprintf(&sb, "\n\nThis bead is already at decomposition depth %d (policy max %d). Do not create another child layer; if it is still too large, reject the split with a short explanation and write no_changes_rationale.txt instead.\n",
+			depth, maxDepth)
 	}
 
 	return sb.String()
