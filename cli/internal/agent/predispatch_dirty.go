@@ -3,12 +3,15 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -177,7 +180,7 @@ func preservePreDispatchDirtyPathsLocked(projectRoot string, dirtyPaths []string
 	}, nil
 }
 
-func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
+func checkpointPreDispatchDirt(projectRoot, attemptID, currentBeadID string) (bool, error) {
 	workTreeOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").CombinedOutput()
 	if err != nil {
 		return false, nil
@@ -212,11 +215,16 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	}
 
 	allowedPaths, blockedPaths := classifyPreDispatchDirtyPaths(dirtyPaths)
+	// Paths owned by another live attempt are not operator dirt for this bead
+	// (ddx-8a936f36). Concurrent try/work shares the project worktree; a
+	// sibling's in-flight out-<beadID> file must not release a healthy claim.
+	blockedPaths = filterOtherLiveAttemptOwnedPaths(projectRoot, currentBeadID, blockedPaths)
 	if len(blockedPaths) > 0 {
 		stableBlockedPaths, currentDirtyPaths, err := stablePreDispatchImplementationDirtyPaths(projectRoot, blockedPaths)
 		if err != nil {
 			return false, err
 		}
+		stableBlockedPaths = filterOtherLiveAttemptOwnedPaths(projectRoot, currentBeadID, stableBlockedPaths)
 		if len(stableBlockedPaths) > 0 {
 			return false, fmt.Errorf(
 				"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
@@ -563,6 +571,132 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 	default:
 		return false
 	}
+}
+
+// filterOtherLiveAttemptOwnedPaths drops implementation paths that belong to
+// another currently live attempt. Ownership is established from the run-state
+// registry and claim leases; path attribution uses the concurrent-try
+// convention out-<beadID>[.ext] and any path containing the other bead id as a
+// path segment. Unowned dirt is left intact so genuine operator edits still
+// refuse the checkpoint.
+func filterOtherLiveAttemptOwnedPaths(projectRoot, currentBeadID string, paths []string) []string {
+	if len(paths) == 0 {
+		return paths
+	}
+	otherIDs := otherLiveAttemptBeadIDs(projectRoot, currentBeadID)
+	if len(otherIDs) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if pathOwnedByOtherLiveAttempt(path, otherIDs) {
+			continue
+		}
+		out = append(out, path)
+	}
+	return out
+}
+
+// otherLiveAttemptBeadIDs returns bead IDs with a live run-state record or a
+// fresh claim lease, excluding currentBeadID.
+func otherLiveAttemptBeadIDs(projectRoot, currentBeadID string) map[string]struct{} {
+	ids := make(map[string]struct{})
+	currentBeadID = strings.TrimSpace(currentBeadID)
+	now := time.Now().UTC()
+
+	if states, err := ReadRunStates(projectRoot); err == nil {
+		for _, state := range states {
+			id := strings.TrimSpace(state.BeadID)
+			if id == "" || id == currentBeadID {
+				continue
+			}
+			if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt.UTC()) {
+				continue
+			}
+			ids[id] = struct{}{}
+		}
+	}
+
+	for _, id := range liveClaimLeaseBeadIDs(projectRoot) {
+		id = strings.TrimSpace(id)
+		if id == "" || id == currentBeadID {
+			continue
+		}
+		ids[id] = struct{}{}
+	}
+	return ids
+}
+
+// liveClaimLeaseBeadIDs lists bead IDs with a non-stale claim-lease sidecar.
+// Best-effort: missing roots or unreadable entries are ignored.
+func liveClaimLeaseBeadIDs(projectRoot string) []string {
+	if strings.TrimSpace(projectRoot) == "" {
+		return nil
+	}
+	ddxDir := ddxroot.JoinProject(projectRoot)
+	root := bead.ClaimLivenessRoot(ddxDir)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			continue
+		}
+		var rec bead.ClaimLeaseRecord
+		if err := json.Unmarshal(data, &rec); err != nil {
+			continue
+		}
+		id := strings.TrimSpace(rec.BeadID)
+		if id == "" {
+			id = strings.TrimSuffix(name, ".json")
+		}
+		if id == "" || rec.UpdatedAt.IsZero() {
+			continue
+		}
+		if time.Since(rec.UpdatedAt) > bead.HeartbeatTTL {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// pathOwnedByOtherLiveAttempt reports whether path is attributable to one of
+// the other live bead IDs. Matches the fixture naming out-<beadID>[.ext] and
+// path segments equal to the bead id.
+func pathOwnedByOtherLiveAttempt(path string, otherIDs map[string]struct{}) bool {
+	if len(otherIDs) == 0 {
+		return false
+	}
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" {
+		return false
+	}
+	base := filepath.Base(path)
+	for id := range otherIDs {
+		if id == "" {
+			continue
+		}
+		// Concurrent-try / concurrent-work fixtures write out-<beadID>.txt.
+		if base == "out-"+id || strings.HasPrefix(base, "out-"+id+".") {
+			return true
+		}
+		// Path segment ownership (e.g. artifacts/<beadID>/result.txt).
+		if path == id || strings.HasPrefix(path, id+"/") || strings.Contains(path, "/"+id+"/") || strings.HasSuffix(path, "/"+id) {
+			return true
+		}
+	}
+	return false
 }
 
 // filterExistingPreDispatchPaths drops pathspecs that no longer resolve on

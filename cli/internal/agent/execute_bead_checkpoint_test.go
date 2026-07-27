@@ -194,7 +194,7 @@ func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
 	assert.Contains(t, paths, filepath.ToSlash(metricsRel))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	require.True(t, committed, "durable metrics dirt should still checkpoint")
 	assert.NotEqual(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
@@ -224,7 +224,7 @@ func TestCheckpointPreDispatchDirtIgnoresLockMetrics(t *testing.T) {
 	assert.NotContains(t, paths, filepath.ToSlash(rotatedRel))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	require.False(t, committed, "lock metrics must not create a pre-dispatch checkpoint")
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
@@ -247,7 +247,7 @@ func TestCheckpointPreDispatchDirtIgnoresHarnessSessionFiles(t *testing.T) {
 	assert.NotContains(t, paths, filepath.ToSlash(harnessRel))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	require.False(t, committed, "harness session metadata should not checkpoint by itself")
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
@@ -273,7 +273,7 @@ func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testin
 	assert.NotContains(t, paths, filepath.ToSlash(embeddedRel))
 
 	// Only execution evidence is dirty — nothing to commit.
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	require.False(t, committed, "execution evidence must not be checkpointed")
 
@@ -319,7 +319,7 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	require.True(t, committed, "tracker dirt should checkpoint")
 
@@ -347,7 +347,7 @@ func TestPreDispatchCheckpointRejectsImplementationDirtyPaths(t *testing.T) {
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.Error(t, err)
 	require.False(t, committed)
 	assert.Contains(t, err.Error(), "cli/internal/agent/dirty_impl.go")
@@ -407,7 +407,7 @@ func TestCheckpointPreDispatchDirtIgnoresGitIgnoredGeneratedPaths(t *testing.T) 
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	assert.False(t, committed, "ignored generated paths should not create a checkpoint")
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
@@ -432,7 +432,7 @@ func TestCheckpointPreDispatchDirtPreservesSkipWorktreeLocalOverlay(t *testing.T
 
 	writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl"),
 		`{"attempt_id":"overlay","outcome":"success"}`+"\n")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	require.True(t, committed, "allowed DDx bookkeeping should still checkpoint")
 
@@ -489,7 +489,7 @@ func TestPreDispatchCheckpoint_IgnoresWorkerSidecarsWithoutGitignore(t *testing.
 		"worker liveness sidecars must not appear in pre-dispatch checkpoint dirt")
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	assert.False(t, committed,
 		"checkpoint must be a no-op when only worker sidecars are dirty")
@@ -507,7 +507,7 @@ func TestPreDispatchCheckpoint_IgnoresWorkerSidecarsWithoutGitignore(t *testing.
 		"ordinary untracked files must still surface as checkpoint dirt")
 	assert.NotContains(t, paths, ".ddx/workers/agent-loop-test/status.json")
 
-	committed, err = checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err = checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.Error(t, err)
 	require.False(t, committed)
 	assert.Contains(t, err.Error(), "checkpoint refused to absorb implementation changes outside DDx bookkeeping")
@@ -529,7 +529,7 @@ func TestPreDispatchCheckpoint_IgnoresCollectionLockSiblingSidecar(t *testing.T)
 	assert.NotContains(t, paths, filepath.ToSlash(sidecarRel))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	assert.False(t, committed)
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
@@ -562,7 +562,7 @@ func TestPreDispatchCheckpoint_DoesNotEnumerateExecutionsDir(t *testing.T) {
 
 	// Production checkpoint path: only executions dirt → no-op success.
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	assert.False(t, committed,
 		"checkpoint must be a no-op when only .ddx/executions/ paths are dirty")
@@ -606,7 +606,7 @@ func TestPreDispatchCheckpoint_IgnoresConcurrentlyDeletedExecutionTempFile(t *te
 	}
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err, "concurrently-deleted execution temp must not fail the checkpoint")
 	require.True(t, committed, "legitimate beads dirt must still checkpoint")
 	assert.NotEqual(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
@@ -653,7 +653,7 @@ func TestPreDispatchCheckpoint_IgnoresCoordinationJournalWithoutGitignore(t *tes
 		"offline coordination journal must not appear in pre-dispatch checkpoint dirt")
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID, "")
 	require.NoError(t, err)
 	assert.False(t, committed,
 		"checkpoint must be a no-op when only coordination journal is dirty")

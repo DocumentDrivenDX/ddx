@@ -946,7 +946,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		// branch (FEAT-012 §22, US-126 AC#1). Use a temp-index commit-tree path
 		// here so parent checkout hooks and runtime artifacts cannot fail the
 		// dispatch before the isolated worker worktree exists.
-		if _, err := checkpointPreDispatchDirt(projectRoot, attemptID); err != nil {
+		if _, err := checkpointPreDispatchDirt(projectRoot, attemptID, beadID); err != nil {
 			// Residual concurrent pathspec races are soft-handled inside the
 			// checkpoint; if one still escapes, do not wrap it as a raw error
 			// that defaults to execution_failed (ddx-84efd50b).
