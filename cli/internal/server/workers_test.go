@@ -397,6 +397,10 @@ func setupBeadStore(t *testing.T, root string) {
 	t.Helper()
 	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
 	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
+	// Worker unit tests exercise spawn machinery; opt into management so the
+	// Phase 3 default-off gate does not fail StartExecuteLoop.
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(
+		"version: \"1.0\"\nserver:\n  manage_workers: true\n"), 0o644))
 	// Write empty but valid JSONL
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 }
@@ -433,6 +437,8 @@ func setupBeadStoreWithReadyBead(t *testing.T, root string) {
 	t.Helper()
 	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
 	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(
+		"version: \"1.0\"\nserver:\n  manage_workers: true\n"), 0o644))
 
 	store := bead.NewStore(ddxDir)
 	err := store.Create(context.Background(), &bead.Bead{

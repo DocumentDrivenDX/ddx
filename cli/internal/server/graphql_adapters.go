@@ -59,6 +59,11 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	if kind != "work" {
 		return nil, fmt.Errorf("unsupported worker kind %q", kind)
 	}
+	// Phase 3 WB-1: start mutations return typed management_disabled when
+	// server.manage_workers is off. stopWorker stays unrestricted.
+	if err := a.manager.RequireManageWorkers(); err != nil {
+		return nil, err
+	}
 
 	var spec executeloop.ExecuteLoopSpec
 	if rawArgs != nil && *rawArgs != "" {

@@ -40,7 +40,7 @@ func TestWorkerDispatchAdapterEnforcesMaxCount(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
 
-	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  max_count: 1\n"
+	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nserver:\n  manage_workers: true\nworkers:\n  max_count: 1\n"
 	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
 
-	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  max_count: 2\n  default_spec:\n    profile: cheap\n    effort: low\n"
+	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nserver:\n  manage_workers: true\nworkers:\n  max_count: 2\n  default_spec:\n    profile: cheap\n    effort: low\n"
 	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

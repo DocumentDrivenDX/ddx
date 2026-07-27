@@ -250,6 +250,11 @@ func (s *WorkerSupervisor) desiredStatePath() string {
 
 // SaveDesiredState normalizes, validates, and persists the desired worker
 // state. UpdatedAt is refreshed on every save.
+//
+// When server.manage_workers is disabled, writes that request a positive
+// desired_count (spawn intent) are rejected with ErrManagementDisabled.
+// Zeroing desired_count remains allowed so observer demotion can clear
+// forgotten spawn intent without re-enabling management.
 func (s *WorkerSupervisor) SaveDesiredState(state *WorkerDesiredState) error {
 	if s == nil || s.manager == nil {
 		return fmt.Errorf("worker supervisor is not configured")
@@ -262,6 +267,11 @@ func (s *WorkerSupervisor) SaveDesiredState(state *WorkerDesiredState) error {
 	state.UpdatedAt = time.Now().UTC()
 	if err := state.Validate(); err != nil {
 		return err
+	}
+	if state.DesiredCount > 0 {
+		if err := s.manager.RequireManageWorkers(); err != nil {
+			return err
+		}
 	}
 
 	if err := os.MkdirAll(s.manager.rootDir, 0o755); err != nil {
@@ -488,6 +498,12 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 	}
 
 	if len(active) < state.DesiredCount {
+		// Observer demotion (server.manage_workers=false): refuse scale-up /
+		// restart without erroring the whole reconcile tick so prune and
+		// scale-down keep running.
+		if err := s.manager.RequireManageWorkers(); err != nil {
+			return nil
+		}
 		blockedCount := s.resolveBlockedTerminals(state, now)
 		occupied := len(active) + blockedCount
 		if occupied < state.DesiredCount && s.canStartMore(state, now) {
@@ -496,6 +512,9 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 				spec := state.DefaultSpec
 				spec.ProjectRoot = projectRoot
 				if _, err := s.manager.StartExecuteLoop(spec); err != nil {
+					if errors.Is(err, ErrManagementDisabled) {
+						return nil
+					}
 					return err
 				}
 			}

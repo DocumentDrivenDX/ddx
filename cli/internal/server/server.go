@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -248,6 +249,11 @@ func New(addr, workingDir string) *Server {
 	})
 	s.supervisorRegistry = registry
 	s.supervisor = registry.getOrCreate(workingDir)
+
+	// Phase 3 WB-1: when server.manage_workers is off (default), zero every
+	// registered project's desired spawn intent so a stale desired_count>=1
+	// cannot respawn on later re-enable without an explicit rewrite.
+	s.applyManagementDisabledPolicy()
 
 	_ = state.save()
 
@@ -2790,6 +2796,10 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 
 	record, err := s.workers.StartExecuteLoop(workerSpec)
 	if err != nil {
+		if errors.Is(err, ErrManagementDisabled) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": ErrManagementDisabled.Error()})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

@@ -15,13 +15,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// writeWorkerManageWorkersConfig enables or disables server.manage_workers for
+// CLI worker command tests (production default is off).
+func writeWorkerManageWorkersConfig(t *testing.T, projectRoot string, enabled bool) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+	val := "false"
+	if enabled {
+		val = "true"
+	}
+	cfg := "version: \"1.0\"\nserver:\n  manage_workers: " + val + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(ddxroot.JoinProject(projectRoot), "config.yaml"), []byte(cfg), 0o644))
+}
+
 // TestWorkerCmd_SetPersistsDesiredState proves `ddx worker set` writes a
 // valid .ddx/workers/desired.json that the server-side supervisor can
 // load without further intervention. This closes the CLI → filesystem →
 // supervisor loop that Phase 1 of ddx-9d1af129 introduces.
 func TestWorkerCmd_SetPersistsDesiredState(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+	writeWorkerManageWorkersConfig(t, projectRoot, true)
 
 	f := &CommandFactory{WorkingDir: projectRoot}
 	cmd := f.newWorkerSetCommand()
@@ -64,7 +77,7 @@ func TestWorkerCmd_SetPersistsDesiredState(t *testing.T) {
 // promise that enabling supervision is a one-liner.
 func TestWorkerCmd_EnableIsShortcut(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+	writeWorkerManageWorkersConfig(t, projectRoot, true)
 
 	f := &CommandFactory{WorkingDir: projectRoot}
 	cmd := f.newWorkerEnableCommand()
@@ -79,6 +92,23 @@ func TestWorkerCmd_EnableIsShortcut(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, loaded.DesiredCount)
 	assert.True(t, loaded.Restart.Enabled)
+}
+
+// TestWorkerEnableRejectedWhenManagementDisabled proves the CLI enable path
+// returns the typed management_disabled result when server.manage_workers is off.
+func TestWorkerEnableRejectedWhenManagementDisabled(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkerManageWorkersConfig(t, projectRoot, false)
+
+	f := &CommandFactory{WorkingDir: projectRoot}
+	cmd := f.newWorkerEnableCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--project", projectRoot})
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorIs(t, err, server.ErrManagementDisabled)
+	assert.Equal(t, "management_disabled", err.Error())
 }
 
 // TestWorkerCmd_StatusReportsAbsent proves `ddx worker status` gracefully
@@ -149,7 +179,7 @@ func TestWorkerStatusJSONIncludesFDExhaustionForMissingDesiredWorker(t *testing.
 func seedMissingDesiredWorkerFDExhaustion(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+	writeWorkerManageWorkersConfig(t, projectRoot, true)
 
 	sup, err := workerNewSupervisor(projectRoot)
 	require.NoError(t, err)
