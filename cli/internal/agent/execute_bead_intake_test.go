@@ -854,6 +854,59 @@ func TestExecuteBeadWorkerStdout_ReadinessMalformedSchemaIsActionable(t *testing
 	}
 }
 
+// TestExecuteBeadWorkerStdout_ReadinessNestedFieldMalformedIsActionable proves
+// warn-only workers stay fail-open when a nested readiness field has the wrong
+// JSON kind, surface bead-scoped diagnosis text, and never print raw Go decoder
+// noise (ddx-442c48e3 / niflheim nested malformed incident).
+func TestExecuteBeadWorkerStdout_ReadinessNestedFieldMalformedIsActionable(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test","checkable_before_attempt":"yes"}]}`
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-readiness-nested-malformed",
+				ResultRev: "abc792",
+			}, nil
+		}),
+		Now: func() time.Time {
+			return time.Date(2026, 5, 9, 12, 34, 56, 789000000, time.UTC)
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var log bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &log,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+			require.NoError(t, err)
+			require.Equal(t, PreClaimIntakeError, got.Outcome)
+			return got, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	out := log.String()
+	assert.Contains(t, out, candidate.ID)
+	assert.Contains(t, out, "readiness_checks[0].checkable_before_attempt")
+	assert.Contains(t, out, "string")
+	assert.Contains(t, out, "(continuing)")
+	assert.NotContains(t, out, "cannot unmarshal")
+	assert.NotContains(t, out, "Go struct field")
+	// Fail-open: the bead still claims and the executor still runs.
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
+}
+
 func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {

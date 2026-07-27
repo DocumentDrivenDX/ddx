@@ -96,3 +96,86 @@ func TestReadinessChecksSchema(t *testing.T) {
 		require.Error(t, schema.Validate(v), "object verdicts must be rejected by readiness-checks.schema.json")
 	})
 }
+
+// TestReadinessChecksSchema_CheckableBeforeAttemptRemainsBoolean keeps
+// checkable_before_attempt boolean-only in the shared schema while proving the
+// robustness decoder diagnoses invalid strings instead of silently widening
+// canonical acceptance (ddx-442c48e3, cross-ref ddx-52d1c006).
+func TestReadinessChecksSchema_CheckableBeforeAttemptRemainsBoolean(t *testing.T) {
+	schema := compileReadinessChecksSchema(t)
+
+	buildPayload := func(checkableJSON string) string {
+		entry := `{"reason":"missing_verification","evidence":"AC lacks go test","verdict":"fail"`
+		if checkableJSON != "" {
+			entry += `,"checkable_before_attempt":` + checkableJSON
+		}
+		entry += `}`
+		return `{"classification":"needs_refine","rationale":"check","readiness_checks":[` + entry + `]}`
+	}
+
+	t.Run("boolean_true_validates_and_decodes", func(t *testing.T) {
+		payload := buildPayload(`true`)
+		var v any
+		require.NoError(t, json.Unmarshal([]byte(payload), &v))
+		require.NoError(t, schema.Validate(v))
+
+		var classified preClaimReadinessClassificationPromptResult
+		require.NoError(t, json.Unmarshal([]byte(payload), &classified))
+		require.Len(t, classified.ReadinessChecks.Checks, 1)
+		assert.True(t, classified.ReadinessChecks.Checks[0].CheckableBeforeAttempt)
+		assert.Empty(t, classified.ReadinessChecks.Malformed)
+	})
+
+	t.Run("boolean_false_validates_and_decodes", func(t *testing.T) {
+		payload := buildPayload(`false`)
+		var v any
+		require.NoError(t, json.Unmarshal([]byte(payload), &v))
+		require.NoError(t, schema.Validate(v))
+
+		var classified preClaimReadinessClassificationPromptResult
+		require.NoError(t, json.Unmarshal([]byte(payload), &classified))
+		require.Len(t, classified.ReadinessChecks.Checks, 1)
+		assert.False(t, classified.ReadinessChecks.Checks[0].CheckableBeforeAttempt)
+		assert.Empty(t, classified.ReadinessChecks.Malformed)
+	})
+
+	for _, tc := range []struct {
+		name          string
+		checkableJSON string
+		wantKind      string
+	}{
+		{name: "string_rejected", checkableJSON: `"yes"`, wantKind: "string"},
+		{name: "null_rejected", checkableJSON: `null`, wantKind: "null"},
+		{name: "object_rejected", checkableJSON: `{}`, wantKind: "object"},
+		{name: "array_rejected", checkableJSON: `[]`, wantKind: "array"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := buildPayload(tc.checkableJSON)
+
+			// Canonical shared schema does not accept non-boolean values.
+			var v any
+			require.NoError(t, json.Unmarshal([]byte(payload), &v))
+			require.Error(t, schema.Validate(v),
+				"checkable_before_attempt %s must not validate as canonical output", tc.wantKind)
+
+			// Robustness decoder must not silently widen: non-boolean values do
+			// not become accepted boolean truth, and strings become Malformed.
+			var classified preClaimReadinessClassificationPromptResult
+			require.NoError(t, json.Unmarshal([]byte(payload), &classified),
+				"decoder must preserve intake rather than aborting with a raw Go error")
+			require.Len(t, classified.ReadinessChecks.Checks, 1)
+			assert.False(t, classified.ReadinessChecks.Checks[0].CheckableBeforeAttempt,
+				"robustness path must not coerce %s into a true boolean", tc.wantKind)
+			if tc.wantKind == "null" {
+				// null maps to the zero value; schema rejection is the
+				// canonical-output gate, not a nested Malformed diagnostic.
+				assert.Empty(t, classified.ReadinessChecks.Malformed)
+				return
+			}
+			assert.Contains(t, classified.ReadinessChecks.Malformed, "readiness_checks[0].checkable_before_attempt")
+			assert.Contains(t, classified.ReadinessChecks.Malformed, tc.wantKind)
+			assert.NotContains(t, classified.ReadinessChecks.Malformed, "cannot unmarshal")
+			assert.NotContains(t, classified.ReadinessChecks.Malformed, "Go struct field")
+		})
+	}
+}
