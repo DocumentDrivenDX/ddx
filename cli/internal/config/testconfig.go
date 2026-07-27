@@ -23,6 +23,9 @@ type TestLoopConfigOpts struct {
 	// MaxDecompositionDepth, when non-zero, sets agent.triage.max_decomposition_depth
 	// in the resolved config. Zero uses the binary default (3).
 	MaxDecompositionDepth int
+	// MaxFamilyExpansion, when non-zero, sets agent.triage.max_family_expansion
+	// in the resolved config. Zero uses the conservative default (8).
+	MaxFamilyExpansion int
 }
 
 // NewTestConfigForLoop returns a *Config that, when Resolve()d with the
@@ -42,8 +45,14 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 	caps := opts.EvidenceCaps
 
 	agentCfg := &AgentConfig{}
-	if opts.MaxDecompositionDepth > 0 {
-		agentCfg.Triage = &TriageConfig{MaxDecompositionDepth: &opts.MaxDecompositionDepth}
+	if opts.MaxDecompositionDepth > 0 || opts.MaxFamilyExpansion > 0 {
+		agentCfg.Triage = &TriageConfig{}
+		if opts.MaxDecompositionDepth > 0 {
+			agentCfg.Triage.MaxDecompositionDepth = &opts.MaxDecompositionDepth
+		}
+		if opts.MaxFamilyExpansion > 0 {
+			agentCfg.Triage.MaxFamilyExpansion = &opts.MaxFamilyExpansion
+		}
 	}
 
 	return &Config{

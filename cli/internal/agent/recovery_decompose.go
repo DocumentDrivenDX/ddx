@@ -44,6 +44,13 @@ type decomposerEventBody struct {
 	SelectedModel     string   `json:"selected_model,omitempty"`
 	SelectedPower     int      `json:"selected_power,omitempty"`
 	FallbackReason    string   `json:"fallback_reason,omitempty"`
+	// Family telemetry: distinguishes landed progress from queue expansion.
+	FamilySize      int    `json:"family_size,omitempty"`
+	FamilyDepth     int    `json:"family_depth,omitempty"`
+	SplitReason     string `json:"split_reason,omitempty"`
+	RefusalReason   string `json:"refusal_reason,omitempty"`
+	FamilyBudget    int    `json:"family_budget,omitempty"`
+	DescendantCount int    `json:"descendant_count,omitempty"`
 }
 
 // NewPreClaimDecompositionHook dispatches an orchestrator splitter for beads
@@ -197,6 +204,29 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		}
 	}
 
+	// Family-wide expansion budget: refuse before creating any children when
+	// the proposed split would push the family past the resolved policy budget.
+	policy := rcfg.DecompositionPolicy()
+	stats := storeBeadFamilyStats(context.Background(), store, b)
+	if reason := familyExpansionRefusalReason(stats, len(children), policy); reason != "" {
+		body, _ := json.Marshal(decomposerEventBodyForResultWithTelemetry(nil, result, rcfg, "", decomposerEventTelemetry{
+			FamilySize:      stats.FamilySize,
+			FamilyDepth:     stats.FamilyDepth,
+			DescendantCount: stats.DescendantCount,
+			FamilyBudget:    policy.MaxFamilyExpansion,
+			RefusalReason:   reason,
+		}))
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "triage-decomposed",
+			Summary:   fmt.Sprintf("decomposition refused: %s", familyExpansionBudgetRefusal),
+			Body:      string(body),
+			Actor:     "ddx work",
+			Source:    "ddx work",
+			CreatedAt: time.Now().UTC(),
+		})
+		return DecomposeResult{Failed: true, Reason: familyExpansionBudgetRefusal, CostUSD: result.CostUSD}
+	}
+
 	childIDs := make([]string, 0, len(children))
 	for _, child := range children {
 		nb := &bead.Bead{
@@ -217,7 +247,14 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		b.Extra[bead.ExtraExecutionElig] = false
 	})
 
-	body, _ := json.Marshal(decomposerEventBodyForResult(childIDs, result, rcfg, ""))
+	afterStats := storeBeadFamilyStats(context.Background(), store, b)
+	body, _ := json.Marshal(decomposerEventBodyForResultWithTelemetry(childIDs, result, rcfg, "", decomposerEventTelemetry{
+		FamilySize:      afterStats.FamilySize,
+		FamilyDepth:     afterStats.FamilyDepth,
+		DescendantCount: afterStats.DescendantCount,
+		FamilyBudget:    policy.MaxFamilyExpansion,
+		SplitReason:     "post-ladder decomposer accepted split",
+	}))
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      "decompose-applied",
 		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
@@ -244,7 +281,25 @@ func decomposerRuntime(rcfg config.ResolvedConfig) AgentRunRuntime {
 }
 
 func appendPreClaimDecomposeEvent(store ExecuteBeadLoopStore, beadID string, result *Result, rcfg config.ResolvedConfig, fallbackReason string) {
-	body, _ := json.Marshal(decomposerEventBodyForResult(nil, result, rcfg, fallbackReason))
+	tele := decomposerEventTelemetry{}
+	if store != nil && strings.TrimSpace(beadID) != "" {
+		if b, err := store.Get(context.Background(), beadID); err == nil && b != nil {
+			stats := storeBeadFamilyStats(context.Background(), store, b)
+			policy := rcfg.DecompositionPolicy()
+			tele = decomposerEventTelemetry{
+				FamilySize:      stats.FamilySize,
+				FamilyDepth:     stats.FamilyDepth,
+				DescendantCount: stats.DescendantCount,
+				FamilyBudget:    policy.MaxFamilyExpansion,
+			}
+			if strings.TrimSpace(fallbackReason) != "" {
+				tele.RefusalReason = strings.TrimSpace(fallbackReason)
+			} else {
+				tele.SplitReason = "preclaim decomposition routed"
+			}
+		}
+	}
+	body, _ := json.Marshal(decomposerEventBodyForResultWithTelemetry(nil, result, rcfg, fallbackReason, tele))
 	summary := "preclaim decomposition routed"
 	if strings.TrimSpace(fallbackReason) != "" {
 		summary = "preclaim decomposition used deterministic fallback"
@@ -259,7 +314,23 @@ func appendPreClaimDecomposeEvent(store ExecuteBeadLoopStore, beadID string, res
 	})
 }
 
+// decomposerEventTelemetry optionally enriches a decomposer event with
+// family-size / refusal fields used by operators to distinguish expansion from
+// throughput.
+type decomposerEventTelemetry struct {
+	FamilySize      int
+	FamilyDepth     int
+	DescendantCount int
+	FamilyBudget    int
+	SplitReason     string
+	RefusalReason   string
+}
+
 func decomposerEventBodyForResult(childIDs []string, result *Result, rcfg config.ResolvedConfig, fallbackReason string) decomposerEventBody {
+	return decomposerEventBodyForResultWithTelemetry(childIDs, result, rcfg, fallbackReason, decomposerEventTelemetry{})
+}
+
+func decomposerEventBodyForResultWithTelemetry(childIDs []string, result *Result, rcfg config.ResolvedConfig, fallbackReason string, tele decomposerEventTelemetry) decomposerEventBody {
 	harness, harnessExplicit := rcfg.ExplicitHarness()
 	if !harnessExplicit {
 		harness = ""
@@ -272,6 +343,7 @@ func decomposerEventBodyForResult(childIDs []string, result *Result, rcfg config
 	if !modelExplicit {
 		model = ""
 	}
+	policy := rcfg.DecompositionPolicy()
 	body := decomposerEventBody{
 		ChildIDs:          append([]string(nil), childIDs...),
 		RequestedHarness:  harness,
@@ -281,6 +353,20 @@ func decomposerEventBodyForResult(childIDs []string, result *Result, rcfg config
 		RequestedMinPower: rcfg.MinPower(),
 		RequestedMaxPower: rcfg.MaxPower(),
 		FallbackReason:    strings.TrimSpace(fallbackReason),
+		FamilySize:        tele.FamilySize,
+		FamilyDepth:       tele.FamilyDepth,
+		DescendantCount:   tele.DescendantCount,
+		FamilyBudget:      tele.FamilyBudget,
+		SplitReason:       strings.TrimSpace(tele.SplitReason),
+		RefusalReason:     strings.TrimSpace(tele.RefusalReason),
+	}
+	if body.FamilyBudget == 0 {
+		body.FamilyBudget = policy.MaxFamilyExpansion
+	}
+	if body.RefusalReason == "" && strings.TrimSpace(fallbackReason) != "" {
+		// Fallback/routing refusals surface as refusal_reason for operator
+		// telemetry (in addition to the legacy fallback_reason field).
+		body.RefusalReason = strings.TrimSpace(fallbackReason)
 	}
 	if result != nil {
 		body.CostUSD = result.CostUSD

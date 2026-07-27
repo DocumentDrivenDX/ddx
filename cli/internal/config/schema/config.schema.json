@@ -413,6 +413,11 @@
               "type": "integer",
               "minimum": 1,
               "description": "Maximum recursive bead decomposition depth"
+            },
+            "max_family_expansion": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum descendants allowed under a bead family root (family-wide expansion budget; default 8)"
             }
           },
           "additionalProperties": false
