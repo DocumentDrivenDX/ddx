@@ -262,6 +262,9 @@ func mergeExecutionsConfig(projectCfg, globalCfg *Config) {
 	if projectCfg.Executions.ReusableWorkspace == nil {
 		projectCfg.Executions.ReusableWorkspace = globalCfg.Executions.ReusableWorkspace.Clone()
 	}
+	if projectCfg.Executions.BuildCache == nil {
+		projectCfg.Executions.BuildCache = globalCfg.Executions.BuildCache.Clone()
+	}
 	if projectCfg.Executions.Docker == nil {
 		projectCfg.Executions.Docker = globalCfg.Executions.Docker.Clone()
 		return

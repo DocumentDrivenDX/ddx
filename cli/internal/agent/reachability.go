@@ -95,6 +95,10 @@ func keepAgentSupportReachability() {
 	// production API ahead of backend Prepare/Cleanup wiring; keep keying,
 	// allocate, release, and eviction on the static graph.
 	keepAttemptWorkspaceSlotReachability(root)
+	// Per-slot Rust build-cache preservation (ddx-a18d2b61) is package-level
+	// production API ahead of scrub/orchestrator wiring; keep prepare,
+	// invalidate, allowlist, and env surfaces on the static graph.
+	keepAttemptBuildCacheReachability(root)
 }
 
 // keepAttemptWorkspaceSlotReachability exercises AttemptWorkspaceSlotKey and
@@ -147,4 +151,42 @@ func keepAttemptWorkspaceSlotReachability(root string) {
 		_ = disabledPool.Release(ephemeral)
 	}
 	_ = pool.Evict(key)
+}
+
+// keepAttemptBuildCacheReachability exercises the per-slot build-cache surface
+// so deadcode RTA sees prepare/invalidate/allowlist/env before scrub and
+// execute_bead integration land.
+func keepAttemptBuildCacheReachability(root string) {
+	slotPath := filepath.Join(root, "build-cache-slot")
+	if err := os.MkdirAll(slotPath, 0o755); err != nil {
+		return
+	}
+	enabled := true
+	preserve := true
+	policy := &config.BuildCacheConfig{
+		Enabled:       &enabled,
+		PreserveCargo: &preserve,
+	}
+	_ = policy.ResolveEnabled()
+	_ = policy.ResolvePreserveCargo()
+	_ = policy.Clone()
+
+	fp := BuildCacheFingerprint{
+		Toolchain: "reachability-toolchain",
+		LockHash:  HashCargoLock([]byte("reachability-lock")),
+	}
+	_ = fp.Encode()
+	_ = fp.Equal(fp)
+	_ = ResolveSlotBuildCache(slotPath)
+	prep, err := PrepareSlotBuildCache(slotPath, policy, fp)
+	if err == nil {
+		_ = BuildCacheEnvVars(prep.Cache, policy)
+	}
+	_ = BuildCacheAllowlistRelPaths(policy)
+	_ = IsBuildCacheAllowlisted(BuildCacheDirName, policy)
+	_ = ApplyReuseResetAllowlist(slotPath, policy)
+	_ = InvalidateSlotBuildCache(slotPath)
+
+	disabled := false
+	_, _ = PrepareSlotBuildCache(slotPath, &config.BuildCacheConfig{Enabled: &disabled}, fp)
 }

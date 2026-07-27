@@ -448,6 +448,74 @@ func (c *ReusableWorkspaceConfig) ResolveDiskHighWaterBytes() int64 {
 	return *c.DiskHighWaterBytes
 }
 
+// Build-cache defaults for per-slot language build-state preservation.
+const (
+	// DefaultBuildCacheEnabled is the default when BuildCacheConfig.Enabled is
+	// nil: allowlisted per-slot Cargo state may be preserved across sequential
+	// attempts when the workspace slot is reused.
+	DefaultBuildCacheEnabled = true
+	// DefaultBuildCachePreserveCargo is the default when PreserveCargo is nil
+	// and the master switch is on: preserve Cargo target + package caches.
+	DefaultBuildCachePreserveCargo = true
+)
+
+// BuildCacheConfig controls per-slot allowlisted language build-state
+// preservation (Cargo target directories and package/registry caches). It is
+// distinct from Docker's shared Go cache: paths are keyed per workspace slot
+// so concurrent workers never share a mutable target.
+//
+// Absent/nil means documented defaults apply; Enabled=false restores cold-build
+// behaviour (no preserved build directories, no CARGO_* env injection).
+type BuildCacheConfig struct {
+	// Enabled turns per-slot build-cache preservation on/off. Nil defaults to
+	// DefaultBuildCacheEnabled (true). Explicit false disables all language
+	// caches for sequential reuse.
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// PreserveCargo enables the Cargo target directory and CARGO_HOME package
+	// /registry caches under the per-slot allowlisted build-cache area. Nil
+	// defaults to DefaultBuildCachePreserveCargo when Enabled resolves true.
+	PreserveCargo *bool `yaml:"preserve_cargo,omitempty" json:"preserve_cargo,omitempty"`
+}
+
+// Clone returns a deep copy of c. Returns nil when c is nil.
+func (c *BuildCacheConfig) Clone() *BuildCacheConfig {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	if c.Enabled != nil {
+		v := *c.Enabled
+		cp.Enabled = &v
+	}
+	if c.PreserveCargo != nil {
+		v := *c.PreserveCargo
+		cp.PreserveCargo = &v
+	}
+	return &cp
+}
+
+// ResolveEnabled returns whether build-cache preservation is enabled.
+// Nil receiver or nil Enabled defaults to DefaultBuildCacheEnabled.
+func (c *BuildCacheConfig) ResolveEnabled() bool {
+	if c == nil || c.Enabled == nil {
+		return DefaultBuildCacheEnabled
+	}
+	return *c.Enabled
+}
+
+// ResolvePreserveCargo returns whether Cargo target/home caches are preserved.
+// False when the master switch is off; otherwise nil PreserveCargo defaults to
+// DefaultBuildCachePreserveCargo.
+func (c *BuildCacheConfig) ResolvePreserveCargo() bool {
+	if !c.ResolveEnabled() {
+		return false
+	}
+	if c == nil || c.PreserveCargo == nil {
+		return DefaultBuildCachePreserveCargo
+	}
+	return *c.PreserveCargo
+}
+
 // ExecutionsConfig configures the execute-bead bundle archive (mirror).
 type ExecutionsConfig struct {
 	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
@@ -469,6 +537,11 @@ type ExecutionsConfig struct {
 	// used for sequential reuse. Nil applies documented defaults; set
 	// enabled: false to disable reuse entirely.
 	ReusableWorkspace *ReusableWorkspaceConfig `yaml:"reusable_workspace,omitempty" json:"reusable_workspace,omitempty"`
+	// BuildCache configures per-slot allowlisted language build-state
+	// preservation (Cargo target + package caches) with toolchain/lock
+	// fingerprint invalidation. Nil applies documented defaults; set
+	// enabled: false for cold builds every attempt.
+	BuildCache *BuildCacheConfig `yaml:"build_cache,omitempty" json:"build_cache,omitempty"`
 }
 
 // Clone returns a deep copy of e. Returns nil when e is nil.
@@ -481,6 +554,7 @@ func (e *ExecutionsConfig) Clone() *ExecutionsConfig {
 	cp.RetainDays = clonePtrInt(e.RetainDays)
 	cp.Docker = e.Docker.Clone()
 	cp.ReusableWorkspace = e.ReusableWorkspace.Clone()
+	cp.BuildCache = e.BuildCache.Clone()
 	return &cp
 }
 
