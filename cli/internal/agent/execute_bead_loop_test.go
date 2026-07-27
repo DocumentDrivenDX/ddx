@@ -3396,6 +3396,47 @@ func TestWorkerFailurePathsReleaseClaimAtomically(t *testing.T) {
 	assert.Equal(t, b.ID, ready[0].ID)
 }
 
+// TestIntegrityPreserve_ReleasesClaimLease (ddx-b6ec32f7 AC4) proves the
+// post-attempt path used after FailureModeAttemptIntegrity preserve —
+// releaseWorkerClaim — clears owner, status, and claim-liveness so a
+// subsequent Claim succeeds without waiting for stale-lease TTL.
+func TestIntegrityPreserve_ReleasesClaimLease(t *testing.T) {
+	dir := t.TempDir()
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-integrity-release", Title: "integrity preserve release", Status: bead.StatusOpen}
+	require.NoError(t, store.Create(context.Background(), b))
+	require.NoError(t, store.Claim(b.ID, "worker-integrity"))
+
+	leasePath := claimHeartbeatPathForTest(store, b.ID)
+	if _, err := os.Stat(leasePath); err != nil {
+		// Claim may write the lease via heartbeat refresh; force one.
+		require.NoError(t, store.TouchClaimHeartbeat(b.ID))
+	}
+	_, err := os.Stat(leasePath)
+	require.NoError(t, err, "expected claim-liveness sidecar after claim/heartbeat")
+
+	// Simulate the integrity-preserve landing branch (execute_bead_loop.go):
+	// after preserved_needs_review with no Parking, releaseWorkerClaim runs.
+	require.NoError(t, releaseWorkerClaim(store, b.ID, "worker-integrity"))
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "integrity preserve must leave bead open")
+	assert.Empty(t, got.Owner, "integrity preserve must clear claim owner")
+
+	_, err = os.Stat(leasePath)
+	assert.True(t, os.IsNotExist(err), "claim-liveness sidecar must be removed on integrity preserve release")
+
+	// Immediate re-claim must succeed without waiting for stale-lease TTL.
+	require.NoError(t, store.Claim(b.ID, "worker-retry"))
+	reclaimed, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, reclaimed.Status)
+	assert.Equal(t, "worker-retry", reclaimed.Owner)
+}
+
 // TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable verifies that
 // when the pre-claim hook always fails (e.g. branch is persistently diverged),
 // the bead stays open and is available for a subsequent Run invocation once the

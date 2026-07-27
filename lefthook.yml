@@ -416,7 +416,9 @@ pre-commit:
     ddxroot-path-audit:
       name: "Guard hardcoded DDx state-root callsites"
       run: |
-        if rg -n 'filepath\.Join\([^)]*"\.ddx"|filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)|(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")' cli/ --type go | grep -Ev '(^cli/internal/ddxroot/)|(_test\.go$)'; then
+        # rg prints path:line:content — match _test.go: so fixtures are excluded
+        # (a bare _test.go$ never matches because the line continues past the path).
+        if rg -n 'filepath\.Join\([^)]*"\.ddx"|filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)|(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")' cli/ --type go | grep -Ev '(^cli/internal/ddxroot/)|(_test\.go:)'; then
           echo "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/ and approved test fixtures"
           exit 1
         fi
@@ -559,7 +561,9 @@ ci:
     ddxroot-path-audit-all:
       name: "Guard hardcoded DDx state-root callsites — full tree"
       run: |
-        if rg -n 'filepath\.Join\([^)]*"\.ddx"|filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)|(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")' cli/ --type go | grep -Ev '(^cli/internal/ddxroot/)|(_test\.go$)'; then
+        # rg prints path:line:content — match _test.go: so fixtures are excluded
+        # (a bare _test.go$ never matches because the line continues past the path).
+        if rg -n 'filepath\.Join\([^)]*"\.ddx"|filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)|(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")' cli/ --type go | grep -Ev '(^cli/internal/ddxroot/)|(_test\.go:)'; then
           echo "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/ and approved test fixtures"
           exit 1
         fi

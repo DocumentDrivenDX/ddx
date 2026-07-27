@@ -228,6 +228,91 @@ func TestValidateAttemptIntegrity_MeaningfulGateRunAccepted(t *testing.T) {
 	}
 }
 
+// TestValidateAttemptIntegrity_SuccessfulGitCommitCountsAsMeaningfulGate
+// (ddx-b6ec32f7) proves a pre-staging lefthook no-op plus a later successful
+// implementation git commit (exit 0, no --no-verify, no lefthook glyphs in
+// commit output) is accepted as required staged-gate evidence.
+func TestValidateAttemptIntegrity_SuccessfulGitCommitCountsAsMeaningfulGate(t *testing.T) {
+	noStagedOutput := strings.Join([]string{
+		"╭──────────────────────────────────────╮",
+		"│ 🥊 lefthook v1.7.0  hook: pre-commit  │",
+		"╰──────────────────────────────────────╯",
+		"summary: (skip) no files for inspection",
+	}, "\n")
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging:         true,
+		GateEvidenceRequired: true,
+		GateRuns: []PreCommitGateRun{
+			{Command: "lefthook run pre-commit", Output: noStagedOutput, ExitCode: 0},
+			{Command: "git add cli/internal/agent/foo.go", Output: "", ExitCode: 0},
+			// Glyph-less commit summary is the common harness capture shape.
+			{Command: "git commit -m fix: implement bead [ddx-test]", Output: "[detached HEAD bbb0000] fix: implement bead [ddx-test]\n 1 file changed, 10 insertions(+)", ExitCode: 0},
+		},
+	})
+	if !verdict.OK {
+		t.Fatalf("expected successful staged git commit to count as meaningful gate evidence, got reason=%q detail=%q", verdict.Reason, verdict.Detail)
+	}
+}
+
+// TestValidateAttemptIntegrity_NoVerifyCommitStillRejected is the explicit
+// ddx-b6ec32f7 regression alias: --no-verify must remain gate_bypass even when
+// other runs look green.
+func TestValidateAttemptIntegrity_NoVerifyCommitStillRejected(t *testing.T) {
+	TestValidateAttemptIntegrity_NoVerifyImplementationCommitRejected(t)
+}
+
+// TestValidateAttemptIntegrity_OnlyPreStagingLefthookStillRejected proves that
+// a lone pre-staging lefthook no-op without a successful commit is still
+// empty_gate_evidence (ddx-b6ec32f7 AC3).
+func TestValidateAttemptIntegrity_OnlyPreStagingLefthookStillRejected(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging:         true,
+		GateEvidenceRequired: true,
+		GateRuns: []PreCommitGateRun{
+			{Command: "lefthook run pre-commit", Output: "summary: (skip) no files for inspection", ExitCode: 0},
+		},
+	})
+	if verdict.OK {
+		t.Fatal("expected only pre-staging lefthook to be rejected, got OK")
+	}
+	if verdict.Reason != IntegrityReasonEmptyGateEvidence {
+		t.Errorf("expected reason %q, got %q", IntegrityReasonEmptyGateEvidence, verdict.Reason)
+	}
+}
+
+// TestValidateAttemptIntegrity_FailedGitCommitNotMeaningful proves a non-zero
+// exit on git commit does not count as staged-gate evidence.
+func TestValidateAttemptIntegrity_FailedGitCommitNotMeaningful(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging:         true,
+		GateEvidenceRequired: true,
+		GateRuns: []PreCommitGateRun{
+			{Command: "git commit -m fix: blocked by hook [ddx-test]", Output: "hook failed\n", ExitCode: 1},
+		},
+	})
+	if verdict.OK {
+		t.Fatal("expected failed git commit not to count as meaningful gate, got OK")
+	}
+	if verdict.Reason != IntegrityReasonEmptyGateEvidence {
+		t.Errorf("expected reason %q, got %q", IntegrityReasonEmptyGateEvidence, verdict.Reason)
+	}
+}
+
 // TestValidateAttemptIntegrity_CleanAttemptPasses (AC3) verifies that an
 // attempt which stages files, runs the staged gate meaningfully, creates
 // exactly one implementation commit, and leaves a clean worktree passes.

@@ -243,6 +243,15 @@ func classifyAttemptGateRun(run PreCommitGateRun) attemptGateRunClass {
 	if isNoVerifyCommitCommand(run.Command) {
 		return attemptGateRunImplementationNoVerifyCommit
 	}
+	// A successful implementation git commit exercises the repository
+	// pre-commit hook — the authoritative staged gate (execute-bead prompt
+	// contract). Harness tool output often captures only git's commit summary
+	// without lefthook glyphs; exit 0 without --no-verify is still meaningful
+	// staged-gate evidence (ddx-b6ec32f7). Pre-staging lefthook no-ops remain
+	// non-meaningful on their own.
+	if isSuccessfulHookBackedImplementationCommit(run) {
+		return attemptGateRunMeaningful
+	}
 	switch classifyLefthookOutput(run.Output) {
 	case "meaningful":
 		return attemptGateRunMeaningful
@@ -253,9 +262,61 @@ func classifyAttemptGateRun(run PreCommitGateRun) attemptGateRunClass {
 	}
 }
 
-func isNoVerifyCommitCommand(command string) bool {
+// isSuccessfulHookBackedImplementationCommit reports whether run is an
+// implementation-agent `git commit` that completed with exit 0 and did not
+// bypass hooks. Such a commit is the staged pre-commit gate itself.
+func isSuccessfulHookBackedImplementationCommit(run PreCommitGateRun) bool {
+	if run.ExitCode != 0 {
+		return false
+	}
+	if isNoVerifyCommitCommand(run.Command) {
+		return false
+	}
+	return isGitCommitCommand(run.Command)
+}
+
+// isGitCommitCommand reports whether command invokes `git commit` (with optional
+// -C/-c and other flags), without treating unrelated commands that merely
+// mention "commit" in a message or path.
+func isGitCommitCommand(command string) bool {
 	lower := strings.ToLower(strings.TrimSpace(command))
-	return lower != "" && strings.Contains(lower, "commit") && strings.Contains(lower, "--no-verify")
+	if lower == "" {
+		return false
+	}
+	fields := strings.Fields(firstShellCommandSegment(lower))
+	for i, field := range fields {
+		base := field
+		if idx := strings.LastIndex(field, "/"); idx >= 0 {
+			base = field[idx+1:]
+		}
+		if base != "git" {
+			continue
+		}
+		for j := i + 1; j < len(fields); j++ {
+			arg := fields[j]
+			switch arg {
+			case "commit":
+				return true
+			case "-C", "-c":
+				j++ // skip option argument
+				continue
+			}
+			if strings.HasPrefix(arg, "-") {
+				continue
+			}
+			// First non-option subcommand is not commit.
+			return false
+		}
+	}
+	return false
+}
+
+func isNoVerifyCommitCommand(command string) bool {
+	if !isGitCommitCommand(command) {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(command))
+	return strings.Contains(lower, "--no-verify")
 }
 
 func isDDXOwnedOutOfBandCommitCommand(command string) bool {
