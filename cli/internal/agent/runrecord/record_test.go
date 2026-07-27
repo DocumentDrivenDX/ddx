@@ -8,6 +8,128 @@ import (
 	"time"
 )
 
+// TestRunRecordCoreRoundTrip marshals a fully populated v1 core record
+// (schema version, run/bead/attempt IDs, lifecycle phase, timestamps, typed
+// outcome) and asserts equality of every core field after unmarshal. It also
+// asserts the serialized record encodes no concrete harness-routing policy
+// (no harness, model, or route-reason field).
+func TestRunRecordCoreRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	finished := time.Date(2026, 7, 27, 7, 48, 19, 0, time.UTC)
+	started := time.Date(2026, 7, 27, 7, 48, 0, 0, time.UTC)
+	updated := finished
+
+	in := Record{
+		Version:    SchemaVersion,
+		RunID:      "run_20260727T074800Z_core",
+		BeadID:     "ddx-f2cfe3d3",
+		AttemptID:  "20260727T074819-7485b068",
+		Phase:      PhaseTerminal,
+		CreatedAt:  started,
+		StartedAt:  started,
+		UpdatedAt:  updated,
+		FinishedAt: &finished,
+		Outcome: &Outcome{
+			Status:          "success",
+			Reason:          "core_fields_round_trip",
+			EvidenceVerdict: "gates_green",
+		},
+	}
+
+	raw, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	// Core surface must not encode concrete harness-routing policy.
+	var asMap map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &asMap); err != nil {
+		t.Fatalf("unmarshal map: %v", err)
+	}
+	for _, forbidden := range []string{"harness", "model", "route_reason", "route-reason"} {
+		if _, ok := asMap[forbidden]; ok {
+			t.Errorf("marshaled core record encodes routing policy field %q", forbidden)
+		}
+	}
+
+	var out Record
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if out.Version != SchemaVersion {
+		t.Errorf("version=%d, want %d (schema version)", out.Version, SchemaVersion)
+	}
+	if out.Version != in.Version {
+		t.Errorf("version round-trip: got %d want %d", out.Version, in.Version)
+	}
+	if out.RunID != in.RunID {
+		t.Errorf("run_id=%q, want %q", out.RunID, in.RunID)
+	}
+	if out.BeadID != in.BeadID {
+		t.Errorf("bead_id=%q, want %q", out.BeadID, in.BeadID)
+	}
+	if out.AttemptID != in.AttemptID {
+		t.Errorf("attempt_id=%q, want %q", out.AttemptID, in.AttemptID)
+	}
+	if out.Phase != in.Phase {
+		t.Errorf("phase=%q, want %q", out.Phase, in.Phase)
+	}
+	// Phase must be a LifecyclePhase constant, not an arbitrary free-form value.
+	if out.Phase != PhaseTerminal {
+		t.Errorf("phase constant: got %q want %q", out.Phase, PhaseTerminal)
+	}
+	if !out.CreatedAt.Equal(in.CreatedAt) {
+		t.Errorf("created_at=%v, want %v", out.CreatedAt, in.CreatedAt)
+	}
+	if !out.StartedAt.Equal(in.StartedAt) {
+		t.Errorf("started_at=%v, want %v", out.StartedAt, in.StartedAt)
+	}
+	if !out.UpdatedAt.Equal(in.UpdatedAt) {
+		t.Errorf("updated_at=%v, want %v", out.UpdatedAt, in.UpdatedAt)
+	}
+	if out.FinishedAt == nil || !out.FinishedAt.Equal(*in.FinishedAt) {
+		t.Errorf("finished_at=%v, want %v", out.FinishedAt, in.FinishedAt)
+	}
+	if out.Outcome == nil {
+		t.Fatal("outcome is nil after round-trip")
+	}
+	if out.Outcome.Status != in.Outcome.Status {
+		t.Errorf("outcome.status=%q, want %q", out.Outcome.Status, in.Outcome.Status)
+	}
+	if out.Outcome.Reason != in.Outcome.Reason {
+		t.Errorf("outcome.reason=%q, want %q", out.Outcome.Reason, in.Outcome.Reason)
+	}
+	if out.Outcome.EvidenceVerdict != in.Outcome.EvidenceVerdict {
+		t.Errorf("outcome.evidence_verdict=%q, want %q", out.Outcome.EvidenceVerdict, in.Outcome.EvidenceVerdict)
+	}
+
+	// Lifecycle phase is a named type with declared exported constants.
+	for _, phase := range []LifecyclePhase{PhaseDispatching, PhaseRunning, PhaseTerminal, PhaseInterrupted} {
+		rec := Record{
+			Version:   SchemaVersion,
+			RunID:     "run_phase_probe",
+			BeadID:    "ddx-f2cfe3d3",
+			AttemptID: "attempt-phase",
+			Phase:     phase,
+			StartedAt: started,
+			UpdatedAt: started,
+		}
+		b, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatalf("marshal phase %q: %v", phase, err)
+		}
+		var got Record
+		if err := json.Unmarshal(b, &got); err != nil {
+			t.Fatalf("unmarshal phase %q: %v", phase, err)
+		}
+		if got.Phase != phase {
+			t.Errorf("phase round-trip: got %q want %q", got.Phase, phase)
+		}
+	}
+}
+
 // TestRunRecordSchemaRoundTrip covers version, run ID, bead ID, attempt ID,
 // lifecycle phase, timestamps, typed outcome fields, optional public Fizeau
 // result fields, and evidence links without encoding concrete harness-routing
@@ -20,13 +142,13 @@ func TestRunRecordSchemaRoundTrip(t *testing.T) {
 	durationMS := int64(4200)
 
 	in := Record{
-		Version:   SchemaVersion,
-		RunID:     "run_20260725T120000Z_abc",
-		BeadID:    "ddx-5d431e3e",
-		AttemptID: "20260725T120249-ade5a024",
-		Phase:     PhaseTerminal,
-		StartedAt: time.Date(2026, 7, 25, 12, 2, 49, 0, time.UTC),
-		UpdatedAt: finished,
+		Version:    SchemaVersion,
+		RunID:      "run_20260725T120000Z_abc",
+		BeadID:     "ddx-5d431e3e",
+		AttemptID:  "20260725T120249-ade5a024",
+		Phase:      PhaseTerminal,
+		StartedAt:  time.Date(2026, 7, 25, 12, 2, 49, 0, time.UTC),
+		UpdatedAt:  finished,
 		FinishedAt: &finished,
 		Outcome: &Outcome{
 			Status:          "success",
