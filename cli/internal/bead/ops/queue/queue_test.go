@@ -275,3 +275,48 @@ func TestOpsQueue_Clear_RemovesOperatorOverride(t *testing.T) {
 		assert.False(t, stillHasRank, "Clear must remove queue-rank")
 	}
 }
+
+// TestOpsQueue_ClearRemovesLegacyAliasWithoutResurrection seeds an alias-only
+// ranked bead, clears it, and proves bead.QueueRank reports no rank and natural
+// bucket ordering is restored.
+func TestOpsQueue_ClearRemovesLegacyAliasWithoutResurrection(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// Earlier-created unranked bead; later-created alias-ranked bead would
+	// sort first via legacy queue_rank until cleared.
+	require.NoError(t, s.Create(context.Background(), &bead.Bead{
+		ID: "earlier", Title: "Earlier", Status: bead.StatusOpen, Priority: 1, IssueType: "task",
+		CreatedAt: now, UpdatedAt: now,
+	}))
+	require.NoError(t, s.Create(context.Background(), &bead.Bead{
+		ID: "alias-ranked", Title: "Alias ranked", Status: bead.StatusOpen, Priority: 1, IssueType: "task",
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute),
+		Extra: map[string]any{"queue_rank": 0},
+	}))
+
+	before, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, before, 2)
+	assert.Equal(t, "alias-ranked", before[0].ID, "legacy alias must be authoritative before clear")
+
+	require.NoError(t, beadqueue.Clear(context.Background(), s, "alias-ranked"))
+
+	cleared, err := s.Get(context.Background(), "alias-ranked")
+	require.NoError(t, err)
+	_, hasRank := bead.QueueRank(cleared.Extra)
+	assert.False(t, hasRank, "QueueRank must report no rank after clear of alias-only row")
+	if cleared.Extra != nil {
+		_, hasCanonical := cleared.Extra["queue-rank"]
+		_, hasAlias := cleared.Extra["queue_rank"]
+		assert.False(t, hasCanonical, "canonical queue-rank must be absent")
+		assert.False(t, hasAlias, "legacy queue_rank must not resurrect after clear")
+	}
+
+	after, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, after, 2)
+	assert.Equal(t, []string{"earlier", "alias-ranked"}, []string{after[0].ID, after[1].ID},
+		"natural created_at ordering must be restored after clear")
+}

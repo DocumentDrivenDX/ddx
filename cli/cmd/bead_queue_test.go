@@ -233,6 +233,46 @@ func TestBeadQueueClearRemovesQueueRank(t *testing.T) {
 	require.Equal(t, []string{"ddx-a", "ddx-b"}, ids)
 }
 
+// TestBeadQueueTopThenClearDoesNotRestoreLegacyRank drives the real queue top
+// and queue clear commands against a legacy row and proves the old rank cannot
+// reappear after the canonical override is cleared.
+func TestBeadQueueTopThenClearDoesNotRestoreLegacyRank(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// Legacy alias-only row that sorts first via queue_rank until top/clear
+	// canonicalize and then fully remove rank state.
+	seedQueueBeads(t, workingDir, []bead.Bead{
+		{ID: "ddx-unranked", Title: "Unranked", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+		{ID: "ddx-legacy", Title: "Legacy ranked", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute), Extra: map[string]any{"queue_rank": -5}},
+	})
+
+	// Sanity: legacy alias is authoritative before any queue mutation.
+	require.Equal(t, []string{"ddx-legacy", "ddx-unranked"}, readReadyIDs(t, factory))
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "queue", "top", "ddx-legacy")
+	require.NoError(t, err)
+
+	afterTop := readBeadJSON(t, factory, "ddx-legacy")
+	_, hasCanonical := afterTop["queue-rank"]
+	require.True(t, hasCanonical, "top must write canonical queue-rank")
+	_, hasAlias := afterTop["queue_rank"]
+	assert.False(t, hasAlias, "top must drop legacy queue_rank alias")
+
+	_, err = executeCommand(factory.NewRootCommand(), "bead", "queue", "clear", "ddx-legacy")
+	require.NoError(t, err)
+
+	afterClear := readBeadJSON(t, factory, "ddx-legacy")
+	_, hasCanonical = afterClear["queue-rank"]
+	_, hasAlias = afterClear["queue_rank"]
+	assert.False(t, hasCanonical, "clear must remove canonical queue-rank")
+	assert.False(t, hasAlias, "clear must not leave or restore legacy queue_rank")
+
+	// Natural created_at order: unranked first; legacy must not reappear at top.
+	assert.Equal(t, []string{"ddx-unranked", "ddx-legacy"}, readReadyIDs(t, factory))
+}
+
 func TestBeadQueueRenormalizesOnlyPriorityBucket(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)

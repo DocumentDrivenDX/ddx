@@ -41,6 +41,27 @@ func TestOperation_QueueSetPosition_RespectsBucket(t *testing.T) {
 	assert.Equal(t, 3, b.Priority, "QueueSetPosition must not change priority (respects bucket)")
 }
 
+// TestOperation_QueueSetPositionCanonicalizesLegacyAlias proves QueueSetPosition
+// replaces a legacy queue_rank with one numeric queue-rank and leaves no alias.
+func TestOperation_QueueSetPositionCanonicalizesLegacyAlias(t *testing.T) {
+	t.Parallel()
+
+	b := &Bead{
+		Title:    "legacy alias position",
+		Priority: 1,
+		Extra:    map[string]any{"queue_rank": 7, "other": "keep"},
+	}
+	require.NoError(t, QueueSetPosition{Position: 3}.Apply(b))
+
+	rank, ok := parseQueueRank(b.Extra[queueRankKey])
+	require.True(t, ok, "QueueSetPosition must write canonical queue-rank")
+	assert.Equal(t, 3, rank)
+	_, hasAlias := b.Extra[queueRankAliasKey]
+	assert.False(t, hasAlias, "legacy queue_rank alias must not survive QueueSetPosition")
+	assert.Equal(t, "keep", b.Extra["other"], "unrelated Extra keys must be preserved")
+	assert.Len(t, b.Extra, 2, "only queue-rank and unrelated keys should remain")
+}
+
 func TestOperation_QueueClearOp_RemovesRank(t *testing.T) {
 	t.Parallel()
 
