@@ -250,13 +250,17 @@ func (LocalCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWo
 	return transportCloneResult(ctx, ws, res, "source", "result")
 }
 
-func (LocalCloneAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) error {
+func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
 	}
 	if ws.KeepOnError {
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil)
 	return os.RemoveAll(ws.WorkDir)
 }
 
