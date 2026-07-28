@@ -41,6 +41,7 @@ func TestRecoverGitIndexLock_StaleByAge(t *testing.T) {
 	// test does not accidentally exercise the intentional fail-closed timeout.
 	gitlock.LsofTimeout = 2 * time.Second
 	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
+	installFakeLsof(t, "exit 1")
 
 	dir := initGitLockTestRepo(t)
 	lockPath := filepath.Join(dir, ".git", "index.lock")

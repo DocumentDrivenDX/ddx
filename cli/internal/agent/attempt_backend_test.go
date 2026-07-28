@@ -96,6 +96,84 @@ func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testi
 	runGitInteg(t, ws.WorkDir, "commit", "-m", "test: sandboxed default clone commit")
 }
 
+func TestReusableAttemptWorkspaceScrubsCrossBeadState(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ws, err := (LocalCloneAttemptBackend{}).Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-a",
+		AttemptID:   "20260728T000001-a",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws) })
+
+	// Bead A residue: a staged tracked change plus an unstaged tracked change.
+	seedPath := filepath.Join(ws.WorkDir, "seed.txt")
+	require.NoError(t, os.WriteFile(seedPath, []byte("bead-a staged line\n"), 0o644))
+	runGitInteg(t, ws.WorkDir, "add", "seed.txt")
+	require.NoError(t, os.WriteFile(seedPath, []byte("bead-a modified line\n"), 0o644))
+
+	// Bead A residue: untracked source, evidence, credential material, and
+	// cleanup metadata that must not survive into bead B's run.
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "bead-a-untracked.txt"), []byte("untracked\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".ddx", "executions", "bead-a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".ddx", "executions", "bead-a", "result.json"), []byte("{\"bead\":\"a\"}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".codex"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".claude"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".local", "state", "fizeau"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".codex", "auth.json"), []byte(`{"token":"a"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".codex", "config.toml"), []byte("model = 'a'\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".claude", ".credentials.json"), []byte(`{"credential":"a"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".claude", "settings.json"), []byte(`{"theme":"dark"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".claude.json"), []byte(`{"projects":{"a":true}}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".local", "state", "fizeau", "claude-quota.json"), []byte(`{"remaining":1}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".local", "state", "fizeau", "codex-quota.json"), []byte(`{"remaining":2}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".local", "state", "fizeau", "gemini-quota.json"), []byte(`{"remaining":3}`), 0o600))
+	require.NoError(t, WriteExecutionCleanupMetadata(ws.WorkDir, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-a",
+		AttemptID:    "20260728T000001-a",
+		WorktreePath: ws.WorkDir,
+		Registered:   true,
+	}))
+
+	preStatus, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
+	require.NoError(t, err)
+	require.NotEmpty(t, preStatus)
+	require.Contains(t, preStatus, "seed.txt")
+	require.Contains(t, preStatus, "bead-a-untracked.txt")
+
+	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev, nil))
+
+	headRev := runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD")
+	require.Equal(t, baseRev, headRev)
+
+	postStatus, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
+	require.NoError(t, err)
+	require.Empty(t, postStatus)
+
+	gotSeed, err := os.ReadFile(seedPath)
+	require.NoError(t, err)
+	require.Equal(t, "seed\n", string(gotSeed))
+
+	for _, path := range []string{
+		filepath.Join(ws.WorkDir, "bead-a-untracked.txt"),
+		filepath.Join(ws.WorkDir, ".ddx", "executions"),
+		filepath.Join(ws.WorkDir, ExecutionCleanupMetadataFileName),
+		filepath.Join(ws.WorkDir, ".codex", "auth.json"),
+		filepath.Join(ws.WorkDir, ".codex", "config.toml"),
+		filepath.Join(ws.WorkDir, ".claude", ".credentials.json"),
+		filepath.Join(ws.WorkDir, ".claude", "settings.json"),
+		filepath.Join(ws.WorkDir, ".claude.json"),
+		filepath.Join(ws.WorkDir, ".local", "state", "fizeau", "claude-quota.json"),
+		filepath.Join(ws.WorkDir, ".local", "state", "fizeau", "codex-quota.json"),
+		filepath.Join(ws.WorkDir, ".local", "state", "fizeau", "gemini-quota.json"),
+	} {
+		_, statErr := os.Stat(path)
+		require.True(t, os.IsNotExist(statErr), "expected %s to be removed", path)
+	}
+}
+
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
 		AttemptBackend: AttemptBackendDockerClone,

@@ -260,6 +260,61 @@ func (LocalCloneAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace)
 	return os.RemoveAll(ws.WorkDir)
 }
 
+// scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and
+// removes residue that must not survive across beads. The preserveRelPaths hook
+// lets a slot allocator keep an allowlisted subtree such as build cache while
+// still scrubbing all other residue.
+func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev string, preserveRelPaths []string) error {
+	if strings.TrimSpace(workspacePath) == "" {
+		return fmt.Errorf("scrubbing reusable attempt workspace: workspace path is empty")
+	}
+	if strings.TrimSpace(baseRev) == "" {
+		return fmt.Errorf("scrubbing reusable attempt workspace: base revision is empty")
+	}
+	resetOut, err := internalgit.Command(ctx, workspacePath, "reset", "--hard", baseRev).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("scrubbing reusable attempt workspace: git reset --hard %s: %s: %w", baseRev, strings.TrimSpace(string(resetOut)), err)
+	}
+
+	cleanArgs := []string{"clean", "-ffdx"}
+	excludePaths := append([]string{
+		filepath.ToSlash(slotLockFileName),
+		filepath.ToSlash(slotStampFileName),
+	}, preserveRelPaths...)
+	for _, rel := range excludePaths {
+		rel = strings.TrimSpace(rel)
+		if rel == "" {
+			continue
+		}
+		cleanArgs = append(cleanArgs, "-e", filepath.ToSlash(rel))
+	}
+	cleanArgs = append(cleanArgs, "--", ".")
+	cleanOut, err := internalgit.Command(ctx, workspacePath, cleanArgs...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("scrubbing reusable attempt workspace: git %s: %s: %w", strings.Join(cleanArgs, " "), strings.TrimSpace(string(cleanOut)), err)
+	}
+
+	for _, rel := range reusableAttemptCredentialRelPaths() {
+		_ = os.RemoveAll(filepath.Join(workspacePath, rel))
+	}
+	_ = os.RemoveAll(ddxroot.InTree(workspacePath, "executions"))
+	_ = os.Remove(filepath.Join(workspacePath, ExecutionCleanupMetadataFileName))
+	return nil
+}
+
+func reusableAttemptCredentialRelPaths() []string {
+	return []string{
+		filepath.Join(".codex", "auth.json"),
+		filepath.Join(".codex", "config.toml"),
+		filepath.Join(".claude", ".credentials.json"),
+		filepath.Join(".claude", "settings.json"),
+		".claude.json",
+		filepath.Join(".local", "state", "fizeau", "claude-quota.json"),
+		filepath.Join(".local", "state", "fizeau", "codex-quota.json"),
+		filepath.Join(".local", "state", "fizeau", "gemini-quota.json"),
+	}
+}
+
 type DockerCloneAttemptBackend struct {
 	Docker *config.ExecutionsDockerConfig
 }
