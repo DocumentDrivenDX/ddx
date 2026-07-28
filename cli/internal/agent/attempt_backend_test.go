@@ -174,6 +174,41 @@ func TestReusableAttemptWorkspaceScrubsCrossBeadState(t *testing.T) {
 	}
 }
 
+func TestReusableAttemptWorkspaceHardResetsToRequestedBaseRevision(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ws, err := (LocalCloneAttemptBackend{}).Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-a",
+		AttemptID:   "20260728T000002-a",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws) })
+
+	seedPath := filepath.Join(ws.WorkDir, "seed.txt")
+	require.NoError(t, os.WriteFile(seedPath, []byte("bead-a staged line\n"), 0o644))
+	runGitInteg(t, ws.WorkDir, "add", "seed.txt")
+	require.NoError(t, os.WriteFile(seedPath, []byte("bead-a modified line\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "bead-a-untracked.txt"), []byte("untracked\n"), 0o644))
+
+	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev, nil))
+
+	headRev := runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD")
+	require.Equal(t, baseRev, headRev)
+
+	cachedDiff, err := runGitIntegOutput(ws.WorkDir, "diff", "--cached", "--name-only")
+	require.NoError(t, err)
+	require.Empty(t, cachedDiff)
+
+	worktreeDiff, err := runGitIntegOutput(ws.WorkDir, "diff", "--name-only")
+	require.NoError(t, err)
+	require.Empty(t, worktreeDiff)
+
+	postStatus, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
+	require.NoError(t, err)
+	require.Empty(t, postStatus)
+}
+
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
 		AttemptBackend: AttemptBackendDockerClone,
