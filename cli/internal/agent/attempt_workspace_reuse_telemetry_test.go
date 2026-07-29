@@ -11,16 +11,16 @@ import (
 func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavings(t *testing.T) {
 	cases := []struct {
 		name string
-		in   combinedReusableWorkspaceTelemetry
+		body map[string]any
 		want map[string]any
 	}{
 		{
 			name: "reused_attempt",
-			in: combinedReusableWorkspaceTelemetry{
-				SlotHitCount:  1,
-				SlotMissCount: 0,
-				TimeSaved:     1500,
-				BytesSaved:    4096,
+			body: map[string]any{
+				"slot_hit_count":  1,
+				"slot_miss_count": 0,
+				"time_saved":      1500,
+				"bytes_saved":     4096,
 			},
 			want: map[string]any{
 				"slot_hit_count":  float64(1),
@@ -31,11 +31,11 @@ func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavings(t *testing.T)
 		},
 		{
 			name: "cold_start_attempt",
-			in: combinedReusableWorkspaceTelemetry{
-				SlotHitCount:  0,
-				SlotMissCount: 1,
-				TimeSaved:     0,
-				BytesSaved:    0,
+			body: map[string]any{
+				"slot_hit_count":  0,
+				"slot_miss_count": 1,
+				"time_saved":      0,
+				"bytes_saved":     0,
 			},
 			want: map[string]any{
 				"slot_hit_count":  float64(0),
@@ -50,7 +50,7 @@ func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavings(t *testing.T)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &stubBeadEventAppender{}
-			appendCombinedReusableWorkspaceTelemetryEvent(app, "ddx-reuse-telemetry", tc.in, "ddx", time.Unix(0, 0).UTC())
+			appendWorkEvent(app, "ddx-reuse-telemetry", "attempt-workspace-reuse-telemetry", "combined reusable workspace telemetry", tc.body, "ddx", time.Unix(0, 0).UTC())
 
 			require.Len(t, app.events, 1)
 			got := app.events[0]
