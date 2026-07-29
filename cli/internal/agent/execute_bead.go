@@ -675,16 +675,6 @@ type costEventBody struct {
 	ExitCode   int    `json:"exit_code"`
 }
 
-// reusableWorkspaceTelemetryBody deliberately keeps every counter field
-// present so reused and cold-start attempts emit the same JSON key set even
-// when the cold-start values are zero.
-type reusableWorkspaceTelemetryBody struct {
-	SlotHitCount  int   `json:"slot_hit_count"`
-	SlotMissCount int   `json:"slot_miss_count"`
-	TimeSavedMS   int   `json:"time_saved_ms"`
-	BytesSaved    int64 `json:"bytes_saved"`
-}
-
 // appendBeadCostEvidence records a kind:cost evidence entry on the bead with
 // per-attempt token and dollar usage. Best-effort: errors are discarded so a
 // store failure never aborts the main execute-bead flow. Emits nothing when
@@ -716,30 +706,6 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 	}
 	_ = appender.AppendEvent(beadID, bead.BeadEvent{
 		Kind:    "cost",
-		Summary: summary,
-		Body:    string(data),
-		Actor:   "ddx",
-		Source:  "legacy agent execute-bead",
-	})
-}
-
-// appendReusableWorkspaceTelemetry records reusable-workspace savings evidence
-// on the bead. The body shape is intentionally stable across reused and
-// cold-start attempts, so zero-valued cold-start counters stay visible.
-func appendReusableWorkspaceTelemetry(appender BeadEventAppender, beadID string, body reusableWorkspaceTelemetryBody) {
-	if appender == nil || beadID == "" {
-		return
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return
-	}
-	summary := fmt.Sprintf(
-		"slot_hit_count=%d slot_miss_count=%d time_saved_ms=%d bytes_saved=%d",
-		body.SlotHitCount, body.SlotMissCount, body.TimeSavedMS, body.BytesSaved,
-	)
-	_ = appender.AppendEvent(beadID, bead.BeadEvent{
-		Kind:    "reusable-workspace",
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
