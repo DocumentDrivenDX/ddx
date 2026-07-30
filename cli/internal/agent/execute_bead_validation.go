@@ -163,8 +163,9 @@ func classifyLefthookOutput(output string) string {
 //     (post-commit mutation), comparing the first commit event against the final
 //     implementation revision;
 //   - the caller marks the attempt as requiring staged gate evidence and every
-//     relevant observed run was failed, interrupted, background-only, or
-//     no-staged-files, so the gate never tested the committed change;
+//     relevant observed tool-stream run was failed, interrupted, background-only,
+//     or no-staged-files, AND there is no clean implementation commit that can
+//     stand as hook-backed gate evidence (the ordinary git pre-commit path);
 //   - an implementation-side `git commit --no-verify` appears in the evidence
 //     for a required gate-bearing attempt, even if some other gate run was
 //     meaningful;
@@ -175,6 +176,13 @@ func classifyLefthookOutput(output string) string {
 // outside implementation-agent evidence. Checks that lack evidence and do not
 // opt into the gate contract are skipped rather than failed, so the validator
 // never rejects an attempt it could not actually observe.
+//
+// Harness tool transcripts are incomplete on several routes (notably Codex
+// session capture). A clean ImplementationRev that advanced from BaseRev is
+// therefore accepted as staged-gate evidence when no --no-verify bypass was
+// observed: the repository pre-commit hook is the authoritative gate
+// (execute-bead prompt contract; ddx-b6ec32f7 follow-up after 2026-07-28
+// codex drain mass-reject).
 func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict {
 	if mutated, detail := detectPostCommitMutation(in.CommitEvents, in.ImplementationRev); mutated {
 		return AttemptIntegrityVerdict{
@@ -206,11 +214,18 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict 
 				sawRelevantGateRun = true
 			}
 		}
+		// Worktree commit evidence is the fallback when the harness tool stream
+		// omitted git commit / lefthook glyphs, or only captured a pre-staging
+		// lefthook no-op. A successful non-no-verify implementation commit is
+		// the staged gate itself.
+		if !sawMeaningful && hasHookBackedImplementationCommitEvidence(in) {
+			sawMeaningful = true
+		}
 		if !sawMeaningful {
 			if !sawAnyRun || sawRelevantGateRun {
 				return AttemptIntegrityVerdict{
 					Reason: IntegrityReasonEmptyGateEvidence,
-					Detail: "DDx validation: every relevant pre-commit gate run reported no staged files, failed, interrupted, or background-only output, so the required pre-commit gate never tested the committed change; this is not acceptance evidence. Detected by DDx, not an implementation failure.",
+					Detail: "DDx validation: every relevant pre-commit gate run reported no staged files, failed, interrupted, or background-only output, and no clean hook-backed implementation commit was observed, so the required pre-commit gate never tested the committed change; this is not acceptance evidence. Detected by DDx, not an implementation failure.",
 				}
 			}
 		}
@@ -273,6 +288,55 @@ func isSuccessfulHookBackedImplementationCommit(run PreCommitGateRun) bool {
 		return false
 	}
 	return isGitCommitCommand(run.Command)
+}
+
+// hasHookBackedImplementationCommitEvidence reports whether the worktree
+// produced a real implementation commit that can stand as staged-gate
+// evidence when the harness tool stream is empty or incomplete. Requires
+// ImplementationRev distinct from BaseRev and no observed --no-verify
+// bypass in GateRuns.
+func hasHookBackedImplementationCommitEvidence(in AttemptIntegrityInput) bool {
+	if strings.TrimSpace(in.ImplementationRev) == "" {
+		return false
+	}
+	if in.BaseRev != "" && shaEqual(in.ImplementationRev, in.BaseRev) {
+		return false
+	}
+	for _, run := range in.GateRuns {
+		if isNoVerifyCommitCommand(run.Command) && !isDDXOwnedOutOfBandCommitCommand(run.Command) {
+			return false
+		}
+	}
+	// Prefer an explicit commit event matching ImplementationRev.
+	for _, ev := range in.CommitEvents {
+		if !strings.HasPrefix(ev.Action, "commit") {
+			continue
+		}
+		if isDDXOwnedOutOfBandCommitSubject(ev.Subject) {
+			continue
+		}
+		if shaEqual(ev.SHA, in.ImplementationRev) {
+			return true
+		}
+	}
+	// CommitEvents can be empty when reflog capture fails; ImplementationRev
+	// still names the agent commit (execute_bead sets it from the worktree).
+	return len(in.CommitEvents) == 0
+}
+
+// isDDXOwnedOutOfBandCommitSubject mirrors isDDXOwnedOutOfBandCommitCommand for
+// reflog subjects (no "git commit -m" wrapper).
+func isDDXOwnedOutOfBandCommitSubject(subject string) bool {
+	lower := strings.ToLower(strings.TrimSpace(subject))
+	if lower == "" {
+		return false
+	}
+	return containsAny(lower,
+		"chore: update tracker (execute-bead ",
+		"chore: checkpoint local tree before land (",
+		"chore: checkpoint pre-execute-bead ",
+		"legacy: execution artifact [",
+	)
 }
 
 // isGitCommitCommand reports whether command invokes `git commit` (with optional

@@ -65,8 +65,9 @@ func TestValidateAttemptIntegrity_PostCommitMutationRejected(t *testing.T) {
 
 // TestValidateAttemptIntegrity_MissingRequiredGateEvidenceRejected proves
 // that a code-changing attempt subject to the staged-gate contract is rejected
-// when the observed gate evidence is empty, failed, interrupted, background-only,
-// or no-staged-files.
+// when observed tool-stream gate runs are empty/failed/no-staged AND there is
+// no clean implementation commit that can stand as hook-backed gate evidence
+// (ImplementationRev still at BaseRev).
 func TestValidateAttemptIntegrity_MissingRequiredGateEvidenceRejected(t *testing.T) {
 	noStagedOutput := strings.Join([]string{
 		"╭──────────────────────────────────────╮",
@@ -109,10 +110,11 @@ func TestValidateAttemptIntegrity_MissingRequiredGateEvidenceRejected(t *testing
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// ImplementationRev == BaseRev: no worktree commit to fall back on.
 			verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
 				BaseRev:              "aaa0000",
-				ImplementationRev:    "bbb0000",
-				CommitEvents:         []CommitEvent{{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"}},
+				ImplementationRev:    "aaa0000",
+				CommitEvents:         nil,
 				CodeChanging:         true,
 				GateEvidenceRequired: true,
 				GateRuns:             tc.runs,
@@ -125,6 +127,40 @@ func TestValidateAttemptIntegrity_MissingRequiredGateEvidenceRejected(t *testing
 			}
 			if !strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") {
 				t.Errorf("detail should mark the rejection as DDx validation, got %q", verdict.Detail)
+			}
+		})
+	}
+}
+
+// TestValidateAttemptIntegrity_ImplementationCommitFallsBackWhenToolStreamEmpty
+// proves the 2026-07-28 codex-drain failure class: incomplete harness tool
+// transcripts (empty GateRuns or only pre-staging no-ops) must not reject a
+// clean implementation commit that advanced from BaseRev.
+func TestValidateAttemptIntegrity_ImplementationCommitFallsBackWhenToolStreamEmpty(t *testing.T) {
+	noStagedOutput := "summary: (skip) no files for inspection"
+	cases := []struct {
+		name string
+		runs []PreCommitGateRun
+	}{
+		{name: "empty_tool_stream", runs: nil},
+		{name: "only_pre_staging_lefthook", runs: []PreCommitGateRun{
+			{Command: "lefthook run pre-commit", Output: noStagedOutput, ExitCode: 0},
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+				BaseRev:           "aaa0000",
+				ImplementationRev: "bbb0000",
+				CommitEvents: []CommitEvent{
+					{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+				},
+				CodeChanging:         true,
+				GateEvidenceRequired: true,
+				GateRuns:             tc.runs,
+			})
+			if !verdict.OK {
+				t.Fatalf("expected clean implementation commit to satisfy gate when tool stream is incomplete (%s), got reason=%q detail=%q", tc.name, verdict.Reason, verdict.Detail)
 			}
 		})
 	}
@@ -266,16 +302,14 @@ func TestValidateAttemptIntegrity_NoVerifyCommitStillRejected(t *testing.T) {
 	TestValidateAttemptIntegrity_NoVerifyImplementationCommitRejected(t)
 }
 
-// TestValidateAttemptIntegrity_OnlyPreStagingLefthookStillRejected proves that
-// a lone pre-staging lefthook no-op without a successful commit is still
-// empty_gate_evidence (ddx-b6ec32f7 AC3).
-func TestValidateAttemptIntegrity_OnlyPreStagingLefthookStillRejected(t *testing.T) {
+// TestValidateAttemptIntegrity_OnlyPreStagingLefthookWithoutCommitStillRejected
+// proves pre-staging lefthook alone is empty_gate when ImplementationRev did
+// not advance (no hook-backed commit to fall back on).
+func TestValidateAttemptIntegrity_OnlyPreStagingLefthookWithoutCommitStillRejected(t *testing.T) {
 	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
-		BaseRev:           "aaa0000",
-		ImplementationRev: "bbb0000",
-		CommitEvents: []CommitEvent{
-			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
-		},
+		BaseRev:              "aaa0000",
+		ImplementationRev:    "aaa0000",
+		CommitEvents:         nil,
 		CodeChanging:         true,
 		GateEvidenceRequired: true,
 		GateRuns: []PreCommitGateRun{
@@ -283,22 +317,21 @@ func TestValidateAttemptIntegrity_OnlyPreStagingLefthookStillRejected(t *testing
 		},
 	})
 	if verdict.OK {
-		t.Fatal("expected only pre-staging lefthook to be rejected, got OK")
+		t.Fatal("expected only pre-staging lefthook without commit to be rejected, got OK")
 	}
 	if verdict.Reason != IntegrityReasonEmptyGateEvidence {
 		t.Errorf("expected reason %q, got %q", IntegrityReasonEmptyGateEvidence, verdict.Reason)
 	}
 }
 
-// TestValidateAttemptIntegrity_FailedGitCommitNotMeaningful proves a non-zero
-// exit on git commit does not count as staged-gate evidence.
-func TestValidateAttemptIntegrity_FailedGitCommitNotMeaningful(t *testing.T) {
+// TestValidateAttemptIntegrity_FailedGitCommitWithoutWorktreeCommitRejected
+// proves a non-zero exit on git commit does not count as tool-stream gate
+// evidence when the worktree also has no advanced ImplementationRev.
+func TestValidateAttemptIntegrity_FailedGitCommitWithoutWorktreeCommitRejected(t *testing.T) {
 	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
-		BaseRev:           "aaa0000",
-		ImplementationRev: "bbb0000",
-		CommitEvents: []CommitEvent{
-			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
-		},
+		BaseRev:              "aaa0000",
+		ImplementationRev:    "aaa0000",
+		CommitEvents:         nil,
 		CodeChanging:         true,
 		GateEvidenceRequired: true,
 		GateRuns: []PreCommitGateRun{
@@ -306,7 +339,7 @@ func TestValidateAttemptIntegrity_FailedGitCommitNotMeaningful(t *testing.T) {
 		},
 	})
 	if verdict.OK {
-		t.Fatal("expected failed git commit not to count as meaningful gate, got OK")
+		t.Fatal("expected failed git commit without worktree commit to be rejected, got OK")
 	}
 	if verdict.Reason != IntegrityReasonEmptyGateEvidence {
 		t.Errorf("expected reason %q, got %q", IntegrityReasonEmptyGateEvidence, verdict.Reason)
