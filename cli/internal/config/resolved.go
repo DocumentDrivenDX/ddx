@@ -129,6 +129,9 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	} else if c != nil && c.Executions != nil {
 		r.attemptBackend = c.Executions.AttemptBackend
 	}
+	if c != nil && c.Executions != nil {
+		r.reusableWorkspace = c.Executions.ReusableWorkspace.Clone()
+	}
 	if c != nil && c.Executions != nil && c.Executions.Docker != nil {
 		r.executionsDocker = c.Executions.Docker.Clone()
 	}
@@ -202,6 +205,7 @@ type ResolvedConfig struct {
 	lifecycleEvidenceCaps              evidence.Caps
 	sessionLogDir                      string
 	mirrorConfig                       *ExecutionsMirrorConfig
+	reusableWorkspace                  *ReusableWorkspaceConfig
 	attemptBackend                     string
 	executionsDocker                   *ExecutionsDockerConfig
 	providerRequestTimeout             time.Duration
@@ -381,6 +385,13 @@ func (r ResolvedConfig) MirrorConfig() *ExecutionsMirrorConfig {
 func (r ResolvedConfig) AttemptBackend() string {
 	r.requireSealed()
 	return r.attemptBackend
+}
+
+// ReusableWorkspaceConfig returns the resolved reusable-workspace policy
+// snapshot, or nil when no policy was configured.
+func (r ResolvedConfig) ReusableWorkspaceConfig() *ReusableWorkspaceConfig {
+	r.requireSealed()
+	return r.reusableWorkspace.Clone()
 }
 
 func (r ResolvedConfig) ExecutionsDockerConfig() *ExecutionsDockerConfig {

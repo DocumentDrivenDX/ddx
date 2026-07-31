@@ -917,12 +917,22 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if runtime.WorkerID == "" {
 		runtime.WorkerID = os.Getenv("DDX_WORKER_ID")
 	}
+	var backendResolution *AttemptBackendResolution
 	attemptBackend := runtime.AttemptBackend
 	if attemptBackend == nil {
 		var backendErr error
-		attemptBackend, backendErr = ResolveAttemptBackend(rcfg)
+		backendResolution, backendErr = ResolveAttemptBackend(rcfg)
 		if backendErr != nil {
 			return nil, backendErr
+		}
+		attemptBackend = backendResolution.AttemptBackend
+	} else {
+		backendResolution = &AttemptBackendResolution{
+			AttemptBackend: attemptBackend,
+			ReusableWorkspace: ReusableWorkspaceResolution{
+				Backend: attemptBackend.Name(),
+				Policy:  rcfg.ReusableWorkspaceConfig(),
+			},
 		}
 	}
 
@@ -1055,13 +1065,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		return nil, err
 	}
 	baseRev = rev
-	ws, err := attemptBackend.Prepare(ctx, AttemptBackendPrepareRequest{
+	prepareRequest := AttemptBackendPrepareRequest{
 		ProjectRoot: projectRoot,
 		BeadID:      beadID,
 		AttemptID:   attemptID,
 		BaseRev:     baseRev,
 		GitOps:      gitOps,
-	})
+	}
+	if backendResolution != nil {
+		prepareRequest.ReusableWorkspace = backendResolution.ReusableWorkspace.WithContext(projectRoot, runtime.WorkerID, "default")
+	}
+	ws, err := attemptBackend.Prepare(ctx, prepareRequest)
 	if err != nil {
 		// A disk/resource-exhaustion failure during the pre-dispatch sequence
 		// (most commonly `git worktree add` running out of space while checking
