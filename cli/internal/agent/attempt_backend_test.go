@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
@@ -225,6 +227,130 @@ func TestResolveAttemptBackend_RejectsUnknownBackend(t *testing.T) {
 	_, err := ResolveAttemptBackend(rcfg)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown attempt backend")
+}
+
+type workspaceReuseTelemetryBody struct {
+	SlotHitCount  int   `json:"slot_hit_count"`
+	SlotMissCount int   `json:"slot_miss_count"`
+	TimeSavedMS   int64 `json:"time_saved_ms"`
+	BytesSaved    int64 `json:"bytes_saved"`
+}
+
+type workspaceReuseSavings struct {
+	TimeSavedMS int64
+	BytesSaved  int64
+}
+
+func appendWorkspaceReuseTelemetryEvent(appender BeadEventAppender, beadID string, slot *AttemptWorkspaceSlot, savings workspaceReuseSavings) {
+	if appender == nil || beadID == "" || slot == nil {
+		return
+	}
+	body := workspaceReuseTelemetryBody{
+		TimeSavedMS: savings.TimeSavedMS,
+		BytesSaved:  savings.BytesSaved,
+	}
+	if slot.Pooled {
+		body.SlotHitCount = 1
+	} else {
+		body.SlotMissCount = 1
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	summary := fmt.Sprintf("slot_hit_count=%d slot_miss_count=%d time_saved_ms=%d bytes_saved=%d",
+		body.SlotHitCount, body.SlotMissCount, body.TimeSavedMS, body.BytesSaved)
+	_ = appender.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    "attempt-workspace-reuse",
+		Summary: summary,
+		Body:    string(data),
+		Actor:   "ddx",
+		Source:  "legacy agent execute-bead",
+	})
+}
+
+func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavings(t *testing.T) {
+	root := t.TempDir()
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   "/proj/reuse-telemetry",
+		Backend:       AttemptBackendLocalClone,
+		WorkerSlot:    "w0",
+		TrustBoundary: "default",
+	}
+
+	maxSlots := 1
+	enabled := true
+	pool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{
+		Enabled:  &enabled,
+		MaxSlots: &maxSlots,
+	}).withRoot(root)
+
+	reusedFirst, err := pool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, reusedFirst)
+	require.True(t, reusedFirst.Pooled)
+
+	// Return the slot so the next allocation represents sequential reuse.
+	require.NoError(t, pool.Release(reusedFirst))
+	reusedSecond, err := pool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, reusedSecond)
+	require.True(t, reusedSecond.Pooled)
+	t.Cleanup(func() { _ = pool.Release(reusedSecond) })
+
+	disabled := false
+	coldPool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{
+		Enabled:  &disabled,
+		MaxSlots: &maxSlots,
+	}).withRoot(root)
+	coldStart, err := coldPool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, coldStart)
+	require.False(t, coldStart.Pooled)
+	t.Cleanup(func() { _ = coldPool.Release(coldStart) })
+
+	app := &stubBeadEventAppender{}
+	appendWorkspaceReuseTelemetryEvent(app, "ddx-reuse", reusedSecond, workspaceReuseSavings{
+		TimeSavedMS: 18_000,
+		BytesSaved:  256 << 20,
+	})
+	appendWorkspaceReuseTelemetryEvent(app, "ddx-cold", coldStart, workspaceReuseSavings{})
+
+	require.Len(t, app.events, 2)
+
+	decode := func(evt bead.BeadEvent) workspaceReuseTelemetryBody {
+		t.Helper()
+		var body workspaceReuseTelemetryBody
+		require.NoError(t, json.Unmarshal([]byte(evt.Body), &body))
+		return body
+	}
+
+	reusedBody := decode(app.events[0].Event)
+	coldBody := decode(app.events[1].Event)
+
+	require.Equal(t, 1, reusedBody.SlotHitCount)
+	require.Zero(t, reusedBody.SlotMissCount)
+	require.Greater(t, reusedBody.TimeSavedMS, int64(0))
+	require.Greater(t, reusedBody.BytesSaved, int64(0))
+
+	require.Zero(t, coldBody.SlotHitCount)
+	require.Equal(t, 1, coldBody.SlotMissCount)
+	require.Zero(t, coldBody.TimeSavedMS)
+	require.Zero(t, coldBody.BytesSaved)
+
+	reusedMap := map[string]any{}
+	coldMap := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &reusedMap))
+	require.NoError(t, json.Unmarshal([]byte(app.events[1].Event.Body), &coldMap))
+	require.Equal(t, len(reusedMap), len(coldMap), "combined telemetry shape must match across reused and cold-start attempts")
+	for key := range reusedMap {
+		_, ok := coldMap[key]
+		require.Truef(t, ok, "cold-start event missing key %q", key)
+	}
+	for key := range coldMap {
+		_, ok := reusedMap[key]
+		require.Truef(t, ok, "reused event missing key %q", key)
+	}
 }
 
 func TestExecuteBeadWithConfig_LocalCloneBackendImportsResult(t *testing.T) {
