@@ -77,6 +77,7 @@ type AttemptWorkspace struct {
 	BeadID              string
 	AttemptID           string
 	BaseRev             string
+	ReusableSlot        *AttemptWorkspaceSlot
 	KeepOnError         bool
 	DockerHome          string
 	DockerRun           string

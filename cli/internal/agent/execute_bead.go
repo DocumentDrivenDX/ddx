@@ -1947,7 +1947,7 @@ type reusableAttemptBackend interface {
 
 func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend, ws *AttemptWorkspace, result *ExecuteBeadResult) bool {
 	reusableBackend, ok := backend.(reusableAttemptBackend)
-	if !ok || ws == nil {
+	if !ok || ws == nil || ws.ReusableSlot == nil || !ws.ReusableSlot.Pooled {
 		return false
 	}
 	if shouldReleaseReusableAttempt(result) {
