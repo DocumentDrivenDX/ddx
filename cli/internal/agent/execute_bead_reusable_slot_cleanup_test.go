@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,6 +88,13 @@ func readQuarantineRecord(t *testing.T, ws *AttemptWorkspace) reusableAttemptWor
 
 func TestReusableAttemptWorkspaceQuarantinesDirtyOrLiveSlot(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	poolRoot := t.TempDir()
+	maxSlots := 1
+	enabled := true
+	pool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{
+		Enabled:  &enabled,
+		MaxSlots: &maxSlots,
+	}).withRoot(poolRoot)
 	cases := []struct {
 		name            string
 		backend         AttemptBackend
@@ -125,15 +133,27 @@ func TestReusableAttemptWorkspaceQuarantinesDirtyOrLiveSlot(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			backend := &recordingReusableSlotBackend{inner: tc.backend}
-			ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
-				ProjectRoot: projectRoot,
-				BeadID:      "ddx-reusable-slot-test",
-				AttemptID:   "20260731T000001-test",
-				BaseRev:     baseRev,
-			})
+			key := AttemptWorkspaceSlotKey{
+				ProjectRoot:   projectRoot,
+				Backend:       tc.backend.Name(),
+				WorkerSlot:    "w0",
+				TrustBoundary: "default",
+			}
+			slot, err := pool.Allocate(key)
 			require.NoError(t, err)
-			ws.ReusableSlot = true
-			t.Cleanup(func() { _ = backend.inner.Cleanup(context.Background(), ws) })
+			require.NotNil(t, slot)
+			require.True(t, slot.Pooled)
+			require.NotEmpty(t, slot.Path)
+
+			ws := &AttemptWorkspace{
+				Backend:      tc.backend.Name(),
+				ProjectRoot:  projectRoot,
+				WorkDir:      slot.Path,
+				BeadID:       "ddx-reusable-slot-test",
+				AttemptID:    "20260731T000001-test-" + tc.backend.Name(),
+				BaseRev:      baseRev,
+				ReusableSlot: true,
+			}
 
 			require.True(t, cleanupReusableAttemptWorkspace(context.Background(), backend, ws, tc.result, tc.cleanupSignal))
 			require.Equal(t, tc.wantRelease, backend.releaseCalls)
@@ -144,6 +164,15 @@ func TestReusableAttemptWorkspaceQuarantinesDirtyOrLiveSlot(t *testing.T) {
 			require.Equal(t, ws.Backend, record.Backend)
 			require.Equal(t, projectRoot, record.ProjectRoot)
 			require.Contains(t, record.Reason, tc.wantReasonMatch)
+
+			require.NoError(t, pool.Release(slot))
+			next, err := pool.Allocate(key)
+			require.NoError(t, err)
+			require.NotNil(t, next)
+			require.False(t, next.Pooled, "quarantined reusable slot must not be returned to the healthy pool")
+			require.NotEqual(t, slot.Path, next.Path)
+			require.Contains(t, filepath.Base(next.Path), ExecuteBeadEphemeralPrefix)
+			t.Cleanup(func() { _ = pool.Release(next) })
 		})
 	}
 }
@@ -175,17 +204,34 @@ func TestReusableAttemptWorkspaceDiagnosticsIncludeQuarantineReason(t *testing.T
 
 func TestReusableAttemptWorkspaceDoesNotRetainLiveProcessesBetweenBeads(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	poolRoot := t.TempDir()
+	maxSlots := 1
+	enabled := true
+	pool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{
+		Enabled:  &enabled,
+		MaxSlots: &maxSlots,
+	}).withRoot(poolRoot)
 	backend := &recordingReusableSlotBackend{inner: LocalCloneAttemptBackend{}}
-
-	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
-		ProjectRoot: projectRoot,
-		BeadID:      "ddx-reusable-slot-live",
-		AttemptID:   "20260731T000003-test",
-		BaseRev:     baseRev,
-	})
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   projectRoot,
+		Backend:       AttemptBackendLocalClone,
+		WorkerSlot:    "w0",
+		TrustBoundary: "default",
+	}
+	slot, err := pool.Allocate(key)
 	require.NoError(t, err)
-	ws.ReusableSlot = true
-	t.Cleanup(func() { _ = backend.inner.Cleanup(context.Background(), ws) })
+	require.NotNil(t, slot)
+	require.True(t, slot.Pooled)
+
+	ws := &AttemptWorkspace{
+		Backend:      AttemptBackendLocalClone,
+		ProjectRoot:  projectRoot,
+		WorkDir:      slot.Path,
+		BeadID:       "ddx-reusable-slot-live",
+		AttemptID:    "20260731T000003-test",
+		BaseRev:      baseRev,
+		ReusableSlot: true,
+	}
 
 	result := &ExecuteBeadResult{
 		Outcome: ExecuteBeadOutcomeTaskSucceeded,
@@ -201,4 +247,12 @@ func TestReusableAttemptWorkspaceDoesNotRetainLiveProcessesBetweenBeads(t *testi
 	require.Contains(t, record.Reason, "surviving descendant process")
 	require.Equal(t, ws.WorkDir, record.WorkDir)
 	require.Equal(t, ws.Backend, record.Backend)
+
+	require.NoError(t, pool.Release(slot))
+	next, err := pool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, next)
+	require.False(t, next.Pooled, "live descendants must quarantine the reusable slot")
+	require.NotEqual(t, slot.Path, next.Path)
+	t.Cleanup(func() { _ = pool.Release(next) })
 }

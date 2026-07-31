@@ -159,6 +159,42 @@ func TestAttemptWorkspaceSlotPoolRespectsMaxSlotBound(t *testing.T) {
 	_ = f.Close()
 }
 
+func TestAttemptWorkspaceSlotPoolSkipsQuarantinedSlots(t *testing.T) {
+	root := t.TempDir()
+	maxSlots := 1
+	policy := &config.ReusableWorkspaceConfig{MaxSlots: &maxSlots}
+	pool := NewAttemptWorkspaceSlotPool(policy).withRoot(root)
+
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   "/proj/quarantine",
+		Backend:       AttemptBackendLocalClone,
+		WorkerSlot:    "w0",
+		TrustBoundary: "default",
+	}
+
+	first, err := pool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.True(t, first.Pooled)
+	require.Equal(t, 0, first.Index)
+
+	require.NoError(t, quarantineReusableAttemptWorkspace(&AttemptWorkspace{
+		Backend:     AttemptBackendLocalClone,
+		ProjectRoot: key.ProjectRoot,
+		WorkDir:     first.Path,
+	}, "slot quarantined after cleanup failure"))
+	require.NoError(t, pool.Release(first))
+
+	second, err := pool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	require.False(t, second.Pooled, "quarantined pooled slots must not be returned to the healthy pool")
+	require.Equal(t, -1, second.Index)
+	require.NotEqual(t, first.Path, second.Path)
+	require.Contains(t, filepath.Base(second.Path), ExecuteBeadEphemeralPrefix)
+	t.Cleanup(func() { _ = pool.Release(second) })
+}
+
 func TestAttemptWorkspaceSlotPoolEvictsByAgeAndDiskHighWater(t *testing.T) {
 	root := t.TempDir()
 	maxSlots := 3

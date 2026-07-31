@@ -333,6 +333,17 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 		// Held by another allocator — try next slot.
 		return nil, nil
 	}
+	quarantined, err := reusableAttemptWorkspaceQuarantined(path)
+	if err != nil {
+		_ = releaseExclusiveLock(lockFile)
+		_ = lockFile.Close()
+		return nil, fmt.Errorf("checking slot quarantine marker %d: %w", index, err)
+	}
+	if quarantined {
+		_ = releaseExclusiveLock(lockFile)
+		_ = lockFile.Close()
+		return nil, nil
+	}
 	if err := touchSlotStamp(path, p.clock()); err != nil {
 		_ = releaseExclusiveLock(lockFile)
 		_ = lockFile.Close()
@@ -345,6 +356,17 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 		Pooled:   true,
 		lockFile: lockFile,
 	}, nil
+}
+
+func reusableAttemptWorkspaceQuarantined(workDir string) (bool, error) {
+	path := reusableAttemptWorkspaceQuarantineMarkerPath(workDir)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (p *AttemptWorkspaceSlotPool) allocateEphemeral(key AttemptWorkspaceSlotKey) (*AttemptWorkspaceSlot, error) {
