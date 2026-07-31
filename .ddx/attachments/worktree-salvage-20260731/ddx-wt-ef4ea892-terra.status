@@ -1,0 +1,5 @@
+ M cli/internal/agent/execute_bead.go
+M  cli/internal/agent/execute_bead_checkpoint_test.go
+ M cli/internal/agent/execute_bead_guardrails_test.go
+ M cli/internal/agent/execute_bead_validation.go
+M  cli/internal/agent/integration_helper_test.go

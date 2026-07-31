@@ -1,0 +1,3 @@
+083dc73221 test(agent): harden main-git lock protocol proof [ddx-1c8d9319]
+6fecda1d9f test(agent): prove main-git stale-lock handoff [ddx-1c8d9319]
+cb5f22a9a0 fix(agent): make stale main-git lock breaking single-winner [ddx-1c8d9319]

@@ -1,0 +1,363 @@
+diff --git a/cli/internal/agent/execute_bead.go b/cli/internal/agent/execute_bead.go
+index 05829c514c..ea506a6174 100644
+--- a/cli/internal/agent/execute_bead.go
++++ b/cli/internal/agent/execute_bead.go
+@@ -1624,19 +1624,21 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
+ 	// Structured post-agent integrity validation (ddx-725b65b4). A clean agent
+ 	// exit with a commit is not sufficient evidence of a contract-honoring
+ 	// attempt: reject attempts that rewrote the implementation commit after the
+-	// first commit, left required pre-commit gate evidence empty, or left tracked
+-	// files uncommitted. Such attempts are demoted to task_failed with a distinct
+-	// FailureMode so the orchestrator preserves them for review (rather than
+-	// merging) and an operator can tell the DDx validation rejection apart from
+-	// an implementation failure. Execution evidence stays outside Git, so the
+-	// reflog carries only candidate implementation commits.
++	// first commit, left required pre-commit gate evidence empty or stale, or
++	// left tracked files uncommitted. Such attempts are demoted to task_failed
++	// with a distinct FailureMode so the orchestrator preserves them for review
++	// (rather than merging) and an operator can tell the DDx validation
++	// rejection apart from an implementation failure. Execution evidence stays
++	// outside Git, so the reflog carries only candidate implementation commits.
+ 	if res.Outcome == ExecuteBeadOutcomeTaskSucceeded && res.ExitCode == 0 && res.ImplementationRev != "" {
++		gateFingerprint := preCommitGateFingerprint(wtPath, res.ImplementationRev)
+ 		verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+ 			BaseRev:           baseRev,
+ 			ImplementationRev: res.ImplementationRev,
+ 			CommitEvents:      readWorktreeCommitEvents(wtPath),
+ 			DirtyPaths:        integrityDirtyPaths(wtPath),
+ 			CodeChanging:      true,
++			GateFingerprint:   gateFingerprint,
+ 		})
+ 		if !verdict.OK {
+ 			res.Outcome = ExecuteBeadOutcomeTaskFailed
+@@ -2175,8 +2177,11 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
+ //  7. Never git add -A (worktree may have unrelated WIP)
+ //  8. Run git/index mutations sequentially; never parallelize git add/commit
+ //  9. Do not commit red code
+-// 10. Rerun lefthook run pre-commit after staging when hooks depend on staged files;
+-//     pre-staging no-staged-files runs do not count as acceptance evidence
++// 10. Treat git commit as the authoritative staged pre-commit gate: stage the
++//     exact commit set once, commit normally, and reuse an earlier
++//     lefthook run pre-commit only when a content/config fingerprint proves
++//     the staged tree and hook inputs are identical; no-staged-files runs
++//     still do not count as acceptance evidence
+ // 11. Do not modify files outside bead scope
+ // 12. Never run `ddx init`
+ // 13. Keep .ddx/executions/ intact, local, and untracked
+@@ -2295,7 +2300,8 @@ const executeBeadInstructionsText = `You are executing one bead in an isolated D
+ - Run the project's test and lint commands before committing. **Do not commit red code** — fix failures first.
+ - Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
+ - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + ` (the worktree may have unrelated WIP).
+-- If ` + "`lefthook run pre-commit`" + ` depends on staged files, rerun it after staging the exact commit set. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
++- Treat ` + "`git commit`" + ` as the single authoritative staged pre-commit gate: stage the exact commit set once, commit normally, and use the hook's output/exit status as the evidence for a ` + "`lefthook run pre-commit passes`" + ` AC.
++- If you explicitly ran ` + "`lefthook run pre-commit`" + ` before committing, reuse that success only when a content/config fingerprint proves the staged tree and hook inputs are identical; otherwise rerun it before the commit. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
+ - Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `. Stop after the commit.
+ - Do not modify files outside the bead's scope.
+ - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
+diff --git a/cli/internal/agent/execute_bead_checkpoint_test.go b/cli/internal/agent/execute_bead_checkpoint_test.go
+index ab47c75b23..e875d30d21 100644
+--- a/cli/internal/agent/execute_bead_checkpoint_test.go
++++ b/cli/internal/agent/execute_bead_checkpoint_test.go
+@@ -105,7 +105,13 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
+ 	projectRoot, _ := newScriptHarnessRepo(t, 1)
+ 	const beadID = "ddx-int-0001"
+ 
+-	// Confirm we start clean.
++	// Store.Init/Create leaves a collection-lock stale-break sidecar behind.
++	// The fixture must mirror the production .gitignore so that runtime
++	// coordination scratch does not make an otherwise clean parent look dirty.
++	sidecar := filepath.Join(projectRoot, ddxroot.DirName, "beads.lock.stale-break.lock")
++	require.FileExists(t, sidecar, "fixture must exercise the runtime lock sidecar")
++
++	// Confirm we start clean despite the documented ignored sidecar.
+ 	status := runGitInteg(t, projectRoot, "status", "--porcelain")
+ 	require.Empty(t, status, "test setup invariant: parent must be clean")
+ 
+@@ -135,6 +141,19 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
+ 	}
+ }
+ 
++func TestExecuteBead_CleanParentTree_StillRejectsUnignoredSourceDirt(t *testing.T) {
++	projectRoot, _ := newScriptHarnessRepo(t, 1)
++
++	// The same fixture contains the intentional ignored sidecar, but an
++	// ordinary source file must remain visible to the clean-parent assertion.
++	writeCheckpointTestFile(t, projectRoot, "real-source-change.go", "package changed\n")
++	status := runGitInteg(t, projectRoot, "status", "--porcelain")
++	assert.Contains(t, status, "?? real-source-change.go",
++		"an unignored source change must make the parent tree non-clean")
++	assert.NotContains(t, status, "beads.lock.stale-break.lock",
++		"only the documented runtime sidecar is ignored")
++}
++
+ func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
+ 	projectRoot, _ := newScriptHarnessRepo(t, 1)
+ 	const beadID = "ddx-int-0001"
+diff --git a/cli/internal/agent/execute_bead_guardrails_test.go b/cli/internal/agent/execute_bead_guardrails_test.go
+index c0474ca6ba..dfb790966f 100644
+--- a/cli/internal/agent/execute_bead_guardrails_test.go
++++ b/cli/internal/agent/execute_bead_guardrails_test.go
+@@ -247,8 +247,11 @@ func TestExecuteBeadInstructions_RequiresStagedPreCommitGate(t *testing.T) {
+ 		{"agent", "agent"},
+ 	}
+ 	required := []string{
++		"git commit",
++		"hook's output/exit status",
++		"content/config fingerprint",
+ 		"lefthook run pre-commit",
+-		"rerun it after staging the exact commit set",
++		"rerun that success only when",
+ 		"no-staged-files",
+ 		"not acceptance evidence",
+ 	}
+@@ -265,6 +268,32 @@ func TestExecuteBeadInstructions_RequiresStagedPreCommitGate(t *testing.T) {
+ 	}
+ }
+ 
++func TestExecuteBeadPrompt_UsesImplementationCommitAsSinglePreCommitGate(t *testing.T) {
++	cases := []struct{ variant, harness string }{
++		{"claude", "claude"},
++		{"agent", "agent"},
++	}
++	required := []string{
++		"Treat `git commit` as the single authoritative staged pre-commit gate",
++		"commit normally",
++		"hook's output/exit status",
++		"content/config fingerprint",
++		"reuse that success only when",
++		"no-staged-files",
++	}
++	for _, c := range cases {
++		c := c
++		t.Run(c.variant, func(t *testing.T) {
++			rendered := renderInstructionsForGuardrails(t, c.harness, "")
++			for _, sub := range required {
++				if !strings.Contains(rendered, sub) {
++					t.Errorf("rendered %s prompt missing authoritative-pre-commit substring %q", c.variant, sub)
++				}
++			}
++		})
++	}
++}
++
+ // TestExecuteBeadInstructionsRenderedInvariants is the AC4 substring-invariant
+ // test: rendered prompts MUST contain the named substrings in every (variant,
+ // non-minimal contextBudget) pair. These are the operational primitives the
+@@ -281,6 +310,8 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
+ 		"git add -A", // appears as part of "never `git add -A`"
+ 		"Run git/index mutations sequentially",
+ 		"lefthook run pre-commit",
++		"git commit",
++		"content/config fingerprint",
+ 		"no_changes_rationale.txt",
+ 		".ddx/executions/",
+ 		"ddx bead create",
+@@ -370,6 +401,8 @@ func TestPromptGuardrails_AllPresent(t *testing.T) {
+ 		{"sequential_git_operations", "Run git/index mutations sequentially"},
+ 		{"no_red_code", "Do not commit red code"},
+ 		{"rerun_staged_pre_commit_gate", "lefthook run pre-commit"},
++		{"rerun_staged_pre_commit_gate_commit", "git commit"},
++		{"rerun_staged_pre_commit_gate_fingerprint", "content/config fingerprint"},
+ 		{"no_modify_outside_scope", "outside the bead"},
+ 		{"never_ddx_init", "ddx init"},
+ 		{"executions_intact", ".ddx/executions/"},
+diff --git a/cli/internal/agent/execute_bead_validation.go b/cli/internal/agent/execute_bead_validation.go
+index a88d7d626d..9c69536677 100644
+--- a/cli/internal/agent/execute_bead_validation.go
++++ b/cli/internal/agent/execute_bead_validation.go
+@@ -3,6 +3,8 @@ package agent
+ import (
+ 	"context"
+ 	"fmt"
++	"os"
++	"path/filepath"
+ 	"regexp"
+ 	"strings"
+ 
+@@ -11,8 +13,8 @@ import (
+ 
+ // AttemptIntegrityPreserveReason is the canonical landing Reason written when
+ // DDx rejects an otherwise-clean attempt because it violated the execute-bead
+-// integrity contract (post-commit mutation, empty pre-commit gate evidence, or
+-// uncommitted changes after the implementation commit). ClassifyExecuteBeadStatus
++// integrity contract (post-commit mutation, empty or stale pre-commit gate
++// evidence, or uncommitted changes after the implementation commit). ClassifyExecuteBeadStatus
+ // and classifyLandingFailureMode match on this exact string to route the
+ // attempt to preserved_needs_review + FailureModeAttemptIntegrity rather than
+ // letting it land as success. The specific human explanation lives in the
+@@ -31,16 +33,22 @@ type CommitEvent struct {
+ 
+ // PreCommitGateRun captures one invocation of a pre-commit gate (e.g.
+ // `lefthook run pre-commit`) and the output it produced, so DDx can tell a
+-// meaningful staged-file gate from a no-op "no staged files" run.
++// meaningful staged-file gate from a no-op "no staged files" run. Fingerprint
++// captures the staged tree + hook-input fingerprint that produced the run when
++// the caller can supply it.
+ type PreCommitGateRun struct {
+-	Command string
+-	Output  string
++	Command     string
++	Output      string
++	Fingerprint string
+ }
+ 
+ // AttemptIntegrityInput is the structured snapshot the post-agent validation
+ // step compares before marking an attempt successful: the commit events the
+ // agent produced, the final implementation revision, the worktree dirty state,
+-// and the pre-commit gate evidence. See ValidateAttemptIntegrity.
++// and the pre-commit gate evidence. GateFingerprint is the staged tree + hook
++// inputs fingerprint for the final commit state, allowing explicit gate runs
++// to be reused only when they match the committed inputs exactly. See
++// ValidateAttemptIntegrity.
+ type AttemptIntegrityInput struct {
+ 	BaseRev           string
+ 	ImplementationRev string
+@@ -49,7 +57,8 @@ type AttemptIntegrityInput struct {
+ 	// CodeChanging is true when the attempt produced an implementation commit,
+ 	// i.e. the bead changed tracked files and the gate/dirty contracts apply.
+ 	CodeChanging bool
+-	GateRuns     []PreCommitGateRun
++	GateFingerprint string
++	GateRuns        []PreCommitGateRun
+ }
+ 
+ // AttemptIntegrityVerdict is the result of ValidateAttemptIntegrity. OK is true
+@@ -67,6 +76,7 @@ type AttemptIntegrityVerdict struct {
+ const (
+ 	IntegrityReasonPostCommitMutation = "post_commit_mutation"
+ 	IntegrityReasonEmptyGateEvidence  = "empty_gate_evidence"
++	IntegrityReasonStaleGateEvidence  = "stale_gate_evidence"
+ 	IntegrityReasonDirtyAfterCommit   = "dirty_after_commit"
+ )
+ 
+@@ -144,6 +154,81 @@ func classifyLefthookOutput(output string) string {
+ 	}
+ }
+ 
++// preCommitGateFingerprint returns a stable hash for the final staged tree and
++// hook inputs that back a pre-commit gate. It combines the commit tree SHA with
++// repo-local hook input files so stale explicit gate runs can be invalidated
++// when either the staged content or hook inputs change.
++func preCommitGateFingerprint(worktreePath, rev string) string {
++	worktreePath = strings.TrimSpace(worktreePath)
++	rev = strings.TrimSpace(rev)
++	if worktreePath == "" || rev == "" {
++		return ""
++	}
++
++	treeOut, err := internalgit.Command(context.Background(), worktreePath, "rev-parse", rev+"^{tree}").Output()
++	if err != nil {
++		return ""
++	}
++	parts := []string{strings.TrimSpace(string(treeOut))}
++	if hookInputs := preCommitHookInputsFingerprint(worktreePath); hookInputs != "" {
++		parts = append(parts, hookInputs)
++	}
++	return hashText(strings.Join(parts, "\x00"))
++}
++
++// preCommitHookInputsFingerprint hashes the repo-local inputs that shape the
++// staged pre-commit gate. The current contract only needs the repository's
++// Lefthook config and installed wrapper script.
++func preCommitHookInputsFingerprint(worktreePath string) string {
++	worktreePath = strings.TrimSpace(worktreePath)
++	if worktreePath == "" {
++		return ""
++	}
++
++	hookPath := ""
++	if out, err := internalgit.Command(context.Background(), worktreePath, "rev-parse", "--git-path", "hooks/pre-commit").Output(); err == nil {
++		hookPath = strings.TrimSpace(string(out))
++		if hookPath != "" && !filepath.IsAbs(hookPath) {
++			hookPath = filepath.Join(worktreePath, hookPath)
++		}
++	}
++
++	candidates := []struct {
++		label string
++		path  string
++	}{
++		{label: "lefthook.yml", path: filepath.Join(worktreePath, "lefthook.yml")},
++	}
++	if hookPath != "" {
++		candidates = append(candidates, struct {
++			label string
++			path  string
++		}{label: "git-hook-pre-commit", path: hookPath})
++	}
++
++	parts := make([]string, 0, len(candidates)*2)
++	for _, candidate := range candidates {
++		data, err := os.ReadFile(candidate.path)
++		if err != nil {
++			continue
++		}
++		parts = append(parts, candidate.label, hashText(string(data)))
++	}
++	if len(parts) == 0 {
++		return ""
++	}
++	return hashText(strings.Join(parts, "\x00"))
++}
++
++func gateFingerprintMatches(expected, actual string) bool {
++	expected = strings.TrimSpace(expected)
++	actual = strings.TrimSpace(actual)
++	if expected == "" {
++		return true
++	}
++	return actual != "" && actual == expected
++}
++
+ // ValidateAttemptIntegrity performs the structured post-agent integrity check.
+ // It is pure so it can be exercised directly by regression tests that simulate
+ // an execute-bead transcript. It rejects an attempt when:
+@@ -170,15 +255,29 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict
+ 	if in.CodeChanging && len(in.GateRuns) > 0 {
+ 		sawMeaningful := false
+ 		sawNoStaged := false
++		sawStaleMeaningful := false
+ 		for _, run := range in.GateRuns {
+ 			switch classifyLefthookOutput(run.Output) {
+ 			case "meaningful":
+-				sawMeaningful = true
++				if gateFingerprintMatches(in.GateFingerprint, run.Fingerprint) {
++					sawMeaningful = true
++				} else if strings.TrimSpace(in.GateFingerprint) != "" {
++					sawStaleMeaningful = true
++				}
+ 			case "no_staged_files":
+ 				sawNoStaged = true
+ 			}
+ 		}
+-		if !sawMeaningful && sawNoStaged {
++		if sawMeaningful {
++			return AttemptIntegrityVerdict{OK: true}
++		}
++		if sawStaleMeaningful {
++			return AttemptIntegrityVerdict{
++				Reason: IntegrityReasonStaleGateEvidence,
++				Detail: "DDx validation: a pre-commit gate run was recorded for a different staged-tree or hook-input fingerprint than the implementation commit, so the explicit hook run cannot be reused; rerun the gate on the final staged set. Detected by DDx, not an implementation failure.",
++			}
++		}
++		if sawNoStaged {
+ 			return AttemptIntegrityVerdict{
+ 				Reason: IntegrityReasonEmptyGateEvidence,
+ 				Detail: "DDx validation: every pre-commit gate run reported no staged files, so the required pre-commit gate never tested the committed change; this is not acceptance evidence. Detected by DDx, not an implementation failure.",
+diff --git a/cli/internal/agent/integration_helper_test.go b/cli/internal/agent/integration_helper_test.go
+index 3d08b442c0..f183a9e3e0 100644
+--- a/cli/internal/agent/integration_helper_test.go
++++ b/cli/internal/agent/integration_helper_test.go
+@@ -118,6 +118,12 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
+ 	// Create initial seed file and commit so the repo has a HEAD.
+ 	seedFile := filepath.Join(root, "seed.txt")
+ 	require.NoError(t, os.WriteFile(seedFile, []byte("seed\n"), 0644))
++	// Mirror the production ignore contract for DDx runtime advisory-lock
++	// sidecars. Store.Init/Create may leave .ddx/beads.lock.stale-break.lock
++	// behind; that is coordination scratch, not parent-worktree dirt. Keep the
++	// rule in the fixture's initial commit so normal status checks retain their
++	// production meaning while still exposing every unignored source change.
++	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".ddx/*.lock\n"), 0644))
+ 	runGitInteg(t, root, "add", ".")
+ 	runGitInteg(t, root, "commit", "-m", "chore: initial seed")
+ 

@@ -1,0 +1,113 @@
+diff --git a/cli/internal/agent/execute_bead_loop_disruption_test.go b/cli/internal/agent/execute_bead_loop_disruption_test.go
+index 3b8a59f546..1ba1c80689 100644
+--- a/cli/internal/agent/execute_bead_loop_disruption_test.go
++++ b/cli/internal/agent/execute_bead_loop_disruption_test.go
+@@ -3,6 +3,8 @@ package agent
+ import (
+ 	"context"
+ 	"errors"
++	"os"
++	"path/filepath"
+ 	"strings"
+ 	"sync/atomic"
+ 	"testing"
+@@ -10,6 +12,7 @@ import (
+ 
+ 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+ 	"github.com/DocumentDrivenDX/ddx/internal/config"
++	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ )
+@@ -202,10 +205,35 @@ func TestLoop_DisruptionEventEmitted(t *testing.T) {
+ 	assert.Equal(t, "transport_error", beadEv.Summary)
+ }
+ 
+-func runInterruptedWorkAttempt(t *testing.T) (*bead.Store, *bead.Bead, *ExecuteBeadLoopResult, error) {
++type interruptedWorkAttemptFixture struct {
++	projectRoot   string
++	executionRoot string
++	configHome    string
++}
++
++// runInterruptedWorkAttempt exercises the cancellation path with roots that
++// are private to the test. The worker startup path consults execution-root and
++// config discovery even though this test's executor is in-memory; leaving
++// those process-global values in place lets cleanup/config helpers inspect a
++// developer's shared DDx scratch tree.
++func runInterruptedWorkAttempt(t *testing.T) (*bead.Store, *bead.Bead, *ExecuteBeadLoopResult, interruptedWorkAttemptFixture, error) {
+ 	t.Helper()
+ 
+-	store, candidate, _ := newExecuteLoopTestStore(t)
++	fixtureRoot := t.TempDir()
++	fixture := interruptedWorkAttemptFixture{
++		projectRoot:   filepath.Join(fixtureRoot, "project"),
++		executionRoot: filepath.Join(fixtureRoot, "execution-worktrees"),
++		configHome:    filepath.Join(fixtureRoot, "home"),
++	}
++	require.NoError(t, os.MkdirAll(fixture.projectRoot, 0o755))
++	require.NoError(t, os.MkdirAll(fixture.configHome, 0o755))
++	t.Setenv(config.ExecutionWorktreeRootEnv, fixture.executionRoot)
++	t.Setenv("HOME", fixture.configHome)
++
++	store := bead.NewStore(ddxroot.JoinProject(fixture.projectRoot))
++	require.NoError(t, store.Init(context.Background()))
++	candidate := &bead.Bead{ID: "ddx-0001", Title: "First ready", Priority: 0}
++	require.NoError(t, store.Create(context.Background(), candidate))
+ 	cancelCtx, cancel := context.WithCancel(context.Background())
+ 	worker := &ExecuteBeadWorker{
+ 		Store: store,
+@@ -224,15 +252,32 @@ func runInterruptedWorkAttempt(t *testing.T) (*bead.Store, *bead.Bead, *ExecuteB
+ 
+ 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+ 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+-	result, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{Once: true})
+-	return store, candidate, result, err
++	result, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{
++		Once:        true,
++		ProjectRoot: fixture.projectRoot,
++	})
++	return store, candidate, result, fixture, err
++}
++
++func TestRunInterruptedWorkAttemptUsesPrivateRoots(t *testing.T) {
++	store, candidate, result, fixture, err := runInterruptedWorkAttempt(t)
++	if err != nil && !errors.Is(err, context.Canceled) {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	require.NotNil(t, store)
++	require.NotNil(t, candidate)
++	require.NotNil(t, result)
++	assert.Equal(t, ddxroot.JoinProject(fixture.projectRoot), store.Dir)
++	assert.Equal(t, fixture.executionRoot, config.ExecutionTempRoot(fixture.projectRoot))
++	assert.Equal(t, filepath.Dir(fixture.executionRoot), config.ExecutionScratchRoot(fixture.projectRoot))
++	assert.Equal(t, fixture.configHome, os.Getenv("HOME"))
+ }
+ 
+ // TestWorkInterrupt_InFlightAttemptUnclaimsBead verifies that an in-flight
+ // interrupted attempt releases the claim and returns the bead to open so it is
+ // re-claimable.
+ func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
+-	store, candidate, result, err := runInterruptedWorkAttempt(t)
++	store, candidate, result, _, err := runInterruptedWorkAttempt(t)
+ 	if err != nil && !errors.Is(err, context.Canceled) {
+ 		t.Fatalf("unexpected error: %v", err)
+ 	}
+@@ -250,7 +295,7 @@ func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
+ // work stays off the work retry cooldown and does not increment the
+ // no-progress suppression path.
+ func TestWorkInterrupt_DoesNotSetNoProgressCooldown(t *testing.T) {
+-	store, candidate, result, err := runInterruptedWorkAttempt(t)
++	store, candidate, result, _, err := runInterruptedWorkAttempt(t)
+ 	if err != nil && !errors.Is(err, context.Canceled) {
+ 		t.Fatalf("unexpected error: %v", err)
+ 	}
+@@ -317,7 +362,7 @@ func TestWorkInterrupt_NoChangesLikeCanceledAttemptDoesNotWriteTrackerNoise(t *t
+ // TestWorkInterrupt_RemovesClaimLiveness verifies that cleanup removes the
+ // external claim heartbeat so the bead can be reclaimed immediately.
+ func TestWorkInterrupt_RemovesClaimLiveness(t *testing.T) {
+-	store, candidate, _, err := runInterruptedWorkAttempt(t)
++	store, candidate, _, _, err := runInterruptedWorkAttempt(t)
+ 	if err != nil && !errors.Is(err, context.Canceled) {
+ 		t.Fatalf("unexpected error: %v", err)
+ 	}

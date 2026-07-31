@@ -1,0 +1,88 @@
+diff --git a/cli/internal/agent/execute_bead_loop_test.go b/cli/internal/agent/execute_bead_loop_test.go
+index 5f4074ad70..0ea51ac866 100644
+--- a/cli/internal/agent/execute_bead_loop_test.go
++++ b/cli/internal/agent/execute_bead_loop_test.go
+@@ -19,6 +19,7 @@ import (
+ 	"github.com/DocumentDrivenDX/ddx/internal/config"
+ 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+ 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
++	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ )
+@@ -3025,10 +3026,31 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
+ 	})
+ }
+ 
+-func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
++type executeLoopTestStoreFixture struct {
++	fixtureRoot   string
++	projectRoot   string
++	configRoot    string
++	executionRoot string
++	store         *bead.Store
++	first         *bead.Bead
++	second        *bead.Bead
++}
++
++// newExecuteLoopTestStoreFixture creates the store through a private, in-tree
++// DDx project.  bead.NewStore loads configuration for its working directory;
++// using a bare TempDir here would let that load inherit host-level execution
++// settings and could make resource-preflight cleanup enumerate shared roots.
++func newExecuteLoopTestStoreFixture(t *testing.T) *executeLoopTestStoreFixture {
+ 	t.Helper()
+ 
+-	store := bead.NewStore(t.TempDir())
++	fixtureRoot := t.TempDir()
++	projectRoot := filepath.Join(fixtureRoot, "project")
++	configRoot := testutils.MakeInitializedDDxRoot(t, projectRoot)
++	executionRoot := filepath.Join(fixtureRoot, "execution-worktrees")
++	require.NoError(t, os.MkdirAll(executionRoot, 0o755))
++	require.NoError(t, os.WriteFile(filepath.Join(configRoot, "config.yaml"), []byte(fmt.Sprintf("version: \"1.0\"\nexecutions:\n  temp_worktree_root: %q\n", executionRoot)), 0o644))
++
++	store := bead.NewStore(configRoot)
+ 	require.NoError(t, store.Init(context.Background()))
+ 
+ 	first := &bead.Bead{ID: "ddx-0001", Title: "First ready", Priority: 0}
+@@ -3036,7 +3058,40 @@ func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead)
+ 	require.NoError(t, store.Create(context.Background(), first))
+ 	require.NoError(t, store.Create(context.Background(), second))
+ 
+-	return store, first, second
++	return &executeLoopTestStoreFixture{
++		fixtureRoot:   fixtureRoot,
++		projectRoot:   projectRoot,
++		configRoot:    configRoot,
++		executionRoot: executionRoot,
++		store:         store,
++		first:         first,
++		second:        second,
++	}
++}
++
++func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
++	t.Helper()
++	fixture := newExecuteLoopTestStoreFixture(t)
++	return fixture.store, fixture.first, fixture.second
++}
++
++func TestNewExecuteLoopTestStoreUsesPrivateRoots(t *testing.T) {
++	fixture := newExecuteLoopTestStoreFixture(t)
++
++	assertPathUnder := func(path string) {
++		t.Helper()
++		rel, err := filepath.Rel(fixture.fixtureRoot, path)
++		require.NoError(t, err)
++		require.False(t, rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)),
++			"root %q escaped private fixture %q", path, fixture.fixtureRoot)
++	}
++
++	assert.Equal(t, fixture.configRoot, fixture.store.Dir)
++	assert.Equal(t, filepath.Join(fixture.configRoot, "beads.jsonl"), fixture.store.File)
++	assertPathUnder(fixture.store.Dir)
++	assertPathUnder(fixture.executionRoot)
++	assert.Equal(t, fixture.executionRoot, config.ExecutionTempRoot(fixture.projectRoot))
++	assert.FileExists(t, filepath.Join(fixture.configRoot, "config.yaml"))
+ }
+ 
+ type staleReadyStore struct {
