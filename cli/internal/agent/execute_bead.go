@@ -1121,6 +1121,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if preserveAttemptWorktree {
 			return
 		}
+		if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, result) {
+			return
+		}
 		if result != nil && attemptBackend.Name() == AttemptBackendWorktree {
 			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, result.Outcome, false) {
 				return
@@ -1934,6 +1937,37 @@ func cleanupAttemptWorktree(gitOps GitOps, workDir, wtPath, outcome string, pres
 	}
 	_ = gitOps.WorktreeRemove(workDir, wtPath)
 	return true
+}
+
+type reusableAttemptBackend interface {
+	AttemptBackend
+	Release(ctx context.Context, ws *AttemptWorkspace) error
+	Quarantine(ctx context.Context, ws *AttemptWorkspace) error
+}
+
+func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend, ws *AttemptWorkspace, result *ExecuteBeadResult) bool {
+	reusableBackend, ok := backend.(reusableAttemptBackend)
+	if !ok || ws == nil {
+		return false
+	}
+	if shouldReleaseReusableAttempt(result) {
+		_ = reusableBackend.Release(ctx, ws)
+		return true
+	}
+	_ = reusableBackend.Quarantine(ctx, ws)
+	return true
+}
+
+func shouldReleaseReusableAttempt(result *ExecuteBeadResult) bool {
+	if result == nil {
+		return false
+	}
+	switch result.Outcome {
+	case ExecuteBeadOutcomeTaskSucceeded, ExecuteBeadOutcomeTaskNoChanges:
+		return true
+	default:
+		return false
+	}
 }
 
 // preserveDirtyNoEvidenceAttempt stages all dirty files in the attempt
