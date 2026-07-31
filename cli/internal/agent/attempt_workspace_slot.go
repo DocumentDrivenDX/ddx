@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -459,7 +460,7 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 				observedIdentity,
 				mismatchReason,
 			)
-			_ = diag.String()
+			log.Printf("agent: %s", diag.String())
 			_ = releaseExclusiveLock(lockFile)
 			_ = lockFile.Close()
 			_ = os.RemoveAll(path)

@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -227,6 +229,51 @@ func TestReusableAttemptWorkspaceIdentityMismatchDiagnosticsIncludeSlotBackendAn
 	require.Contains(t, diag.String(), slot.Path)
 	require.Contains(t, diag.String(), AttemptBackendLocalClone)
 	require.Contains(t, diag.String(), key.ProjectRoot)
+}
+
+func TestReusableAttemptWorkspaceIdentityMismatchDiagnosticIsLogged(t *testing.T) {
+	var buf bytes.Buffer
+	prevOutput := log.Writer()
+	prevFlags := log.Flags()
+	prevPrefix := log.Prefix()
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	t.Cleanup(func() {
+		log.SetOutput(prevOutput)
+		log.SetFlags(prevFlags)
+		log.SetPrefix(prevPrefix)
+	})
+
+	root := t.TempDir()
+	maxSlots := 1
+	pool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{MaxSlots: &maxSlots}).withRoot(root)
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   filepath.Join(root, "requesting-project"),
+		Backend:       AttemptBackendWorktree,
+		WorkerSlot:    "w0",
+		TrustBoundary: "default",
+	}
+
+	slotPath := pool.slotPath(key, 0)
+	require.NoError(t, os.MkdirAll(slotPath, 0o755))
+	require.NoError(t, writeReusableAttemptWorkspaceIdentity(slotPath, reusableAttemptWorkspaceIdentity{
+		ProjectID: "proj-legacy",
+		Backend:   AttemptBackendLocalClone,
+	}))
+
+	slot, err := pool.Allocate(key)
+	require.NoError(t, err)
+	require.NotNil(t, slot)
+	t.Cleanup(func() { _ = pool.Release(slot) })
+
+	logged := buf.String()
+	require.Contains(t, logged, "refusing reusable attempt workspace")
+	require.Contains(t, logged, slotPath)
+	require.Contains(t, logged, AttemptBackendWorktree)
+	require.Contains(t, logged, key.ProjectRoot)
+	require.Contains(t, logged, ProjectIDForPath(key.ProjectRoot))
+	require.Contains(t, logged, "project identity mismatch")
 }
 
 func TestAttemptWorkspaceSlotPoolEvictsByAgeAndDiskHighWater(t *testing.T) {
