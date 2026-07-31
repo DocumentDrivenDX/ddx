@@ -97,6 +97,49 @@ func (r fixedExitCodeRunner) Run(opts RunArgs) (*Result, error) {
 	return &Result{ExitCode: r.exitCode}, nil
 }
 
+// recordingAttemptBackend wraps another backend and records cleanup calls.
+// Tests use it to prove that executor preservation branches do not fall
+// through to backend cleanup / workspace release.
+type recordingAttemptBackend struct {
+	inner        AttemptBackend
+	prepareHook  func(*AttemptWorkspace)
+	cleanupCalls int
+}
+
+func (b *recordingAttemptBackend) Name() string { return b.inner.Name() }
+
+func (b *recordingAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	ws, err := b.inner.Prepare(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if b.prepareHook != nil {
+		b.prepareHook(ws)
+	}
+	return ws, nil
+}
+
+func (b *recordingAttemptBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	return b.inner.Run(ctx, req)
+}
+
+func (b *recordingAttemptBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.ImportCandidate(ctx, ws, res)
+}
+
+func (b *recordingAttemptBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.ReleaseCandidateImport(ctx, ws)
+}
+
+func (b *recordingAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.PublishResult(ctx, ws, res)
+}
+
+func (b *recordingAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	b.cleanupCalls++
+	return b.inner.Cleanup(ctx, ws)
+}
+
 const (
 	isolatedWtBeadID  = "ddx-isolated-wt-test"
 	isolatedWtBaseRev = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -253,4 +296,107 @@ func TestIsolatedWorktree_PreserveAttemptWorktree(t *testing.T) {
 	if _, statErr := os.Stat(gitOps.addedPaths[0]); statErr != nil {
 		t.Fatalf("preserved worktree %s should remain on disk: %v", gitOps.addedPaths[0], statErr)
 	}
+}
+
+func TestExecuteBeadPreservationBranchesDoNotReleaseReusableSlot(t *testing.T) {
+	setExecutionWorktreeRootForTest(t)
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+
+	t.Run("preserve_attempt_worktree", func(t *testing.T) {
+		setExecutionWorktreeRootForTest(t)
+		gitOps := newIsolatedWorktreeGitOps()
+		backend := &recordingAttemptBackend{inner: WorktreeAttemptBackend{}}
+
+		rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{Harness: "test-harness"})
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, isolatedWtBeadID, rcfg, ExecuteBeadRuntime{
+			AgentRunner:             fixedExitCodeRunner{exitCode: 1},
+			PreserveAttemptWorktree: true,
+			AttemptBackend:          backend,
+		}, gitOps)
+		if err != nil {
+			t.Fatalf("unexpected error from preserved attempt: %v", err)
+		}
+		if res == nil {
+			t.Fatal("nil result from preserved attempt")
+		}
+		if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+			t.Fatalf("outcome = %q, want %q", res.Outcome, ExecuteBeadOutcomeTaskFailed)
+		}
+		if backend.cleanupCalls != 0 {
+			t.Fatalf("Cleanup calls = %d, want 0 for preserved worktree", backend.cleanupCalls)
+		}
+		if len(gitOps.removedPaths) != 0 {
+			t.Fatalf("WorktreeRemove calls = %v, want none for preserved worktree", gitOps.removedPaths)
+		}
+		if _, statErr := os.Stat(gitOps.addedPaths[0]); statErr != nil {
+			t.Fatalf("preserved worktree %s should remain on disk: %v", gitOps.addedPaths[0], statErr)
+		}
+	})
+
+	t.Run("keep_on_error", func(t *testing.T) {
+		backend := &recordingAttemptBackend{
+			inner: LocalCloneAttemptBackend{},
+			prepareHook: func(ws *AttemptWorkspace) {
+				ws.KeepOnError = true
+			},
+		}
+
+		rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{Harness: "test-harness"})
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
+			AgentRunner:    fixedExitCodeRunner{exitCode: 1},
+			AttemptBackend: backend,
+		}, &RealGitOps{})
+		if err != nil {
+			t.Fatalf("unexpected error from keep-on-error attempt: %v", err)
+		}
+		if res == nil {
+			t.Fatal("nil result from keep-on-error attempt")
+		}
+		if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+			t.Fatalf("outcome = %q, want %q", res.Outcome, ExecuteBeadOutcomeTaskFailed)
+		}
+		if backend.cleanupCalls != 1 {
+			t.Fatalf("Cleanup calls = %d, want 1 for keep-on-error", backend.cleanupCalls)
+		}
+		if _, statErr := os.Stat(res.WorktreePath); statErr != nil {
+			t.Fatalf("keep-on-error workspace %s should remain on disk: %v", res.WorktreePath, statErr)
+		}
+	})
+
+	t.Run("evidence_preservation", func(t *testing.T) {
+		backend := &recordingAttemptBackend{inner: LocalCloneAttemptBackend{}}
+
+		copyCalls := 0
+		injectedErr := os.ErrInvalid
+		directivePath := filepath.Join(t.TempDir(), "directive.txt")
+		writeDirectiveFile(t, directivePath, []string{"no-op"})
+		rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath}).Resolve(config.CLIOverrides{
+			Harness: "script",
+			Model:   directivePath,
+		})
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
+			AgentRunner: scriptHarnessAgentRunner{},
+			NoReview:    true,
+			EvidenceFileCopier: func(source, target string, mode os.FileMode) error {
+				copyCalls++
+				if copyCalls == 2 {
+					return injectedErr
+				}
+				return copyLocalExecutionEvidenceFile(source, target, mode)
+			},
+			AttemptBackend: backend,
+		}, &RealGitOps{})
+		if err == nil {
+			t.Fatal("expected evidence publication failure")
+		}
+		if res == nil {
+			t.Fatal("nil result from evidence-preservation attempt")
+		}
+		if backend.cleanupCalls != 0 {
+			t.Fatalf("Cleanup calls = %d, want 0 for evidence-preservation path", backend.cleanupCalls)
+		}
+		if !strings.Contains(res.Error, injectedErr.Error()) {
+			t.Fatalf("result error = %q, want injected evidence failure", res.Error)
+		}
+	})
 }
