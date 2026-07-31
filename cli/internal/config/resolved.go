@@ -132,6 +132,9 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	if c != nil && c.Executions != nil && c.Executions.Docker != nil {
 		r.executionsDocker = c.Executions.Docker.Clone()
 	}
+	if c != nil && c.Executions != nil && c.Executions.ReusableWorkspace != nil {
+		r.reusableWorkspace = c.Executions.ReusableWorkspace.Clone()
+	}
 
 	r.triagePolicy = c.ResolveTriagePolicy()
 	r.maxDecompositionDepth = c.ResolveMaxDecompositionDepth()
@@ -203,6 +206,7 @@ type ResolvedConfig struct {
 	sessionLogDir                      string
 	mirrorConfig                       *ExecutionsMirrorConfig
 	attemptBackend                     string
+	reusableWorkspace                  *ReusableWorkspaceConfig
 	executionsDocker                   *ExecutionsDockerConfig
 	providerRequestTimeout             time.Duration
 	beadQualityLintBlockThresholdScore int
@@ -381,6 +385,11 @@ func (r ResolvedConfig) MirrorConfig() *ExecutionsMirrorConfig {
 func (r ResolvedConfig) AttemptBackend() string {
 	r.requireSealed()
 	return r.attemptBackend
+}
+
+func (r ResolvedConfig) ReusableWorkspace() *ReusableWorkspaceConfig {
+	r.requireSealed()
+	return r.reusableWorkspace.Clone()
 }
 
 func (r ResolvedConfig) ExecutionsDockerConfig() *ExecutionsDockerConfig {

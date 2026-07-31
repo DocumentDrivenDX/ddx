@@ -925,6 +925,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			return nil, backendErr
 		}
 	}
+	reusableWorkspacePolicy := rcfg.ReusableWorkspace()
 
 	resourceChecker := runtime.ResourceChecker
 	if resourceChecker == nil {
@@ -1121,8 +1122,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if preserveAttemptWorktree {
 			return
 		}
-		if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, result) {
-			return
+		reusableWorkspaceEnabled := reusableWorkspacePolicy == nil || reusableWorkspacePolicy.ResolveEnabled()
+		if reusableWorkspaceEnabled {
+			if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, result) {
+				return
+			}
 		}
 		if result != nil && attemptBackend.Name() == AttemptBackendWorktree {
 			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, result.Outcome, false) {
