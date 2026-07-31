@@ -148,6 +148,112 @@ func TestBeadCommandsClaimFallsBackToCallerIdentity(t *testing.T) {
 	assert.Equal(t, "runtime-agent", bead["owner"])
 }
 
+func TestBeadCommandsRejectPreservedAppendsStructuredEvent(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Reject preserved result", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	resultRev := gitHead(t, env.Dir, "HEAD")
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--reject-preserved", resultRev)
+	require.NoError(t, err)
+
+	listOut, err := executeCommand(rootCmd, "bead", "evidence", "list", id, "--json")
+	require.NoError(t, err)
+
+	var events []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(listOut), &events))
+	require.Len(t, events, 1)
+	assert.Equal(t, "preserved-result-rejected", events[0]["kind"])
+	assert.Equal(t, "rejected preserved result rev "+resultRev, events[0]["summary"])
+	assert.Equal(t, "result_rev="+resultRev, events[0]["body"])
+	assert.NotEmpty(t, events[0]["actor"])
+	assert.Equal(t, "ddx bead update", events[0]["source"])
+}
+
+func TestBeadCommandsRejectPreservedRejectsEmptyRev(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Reject preserved result", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--reject-preserved", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty value")
+
+	listOut, err := executeCommand(rootCmd, "bead", "evidence", "list", id, "--json")
+	require.NoError(t, err)
+
+	var events []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(listOut), &events))
+	require.Empty(t, events)
+}
+
+func TestBeadCommandsRejectPreservedRejectsClaimCombination(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Reject preserved result", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	resultRev := gitHead(t, env.Dir, "HEAD")
+
+	t.Run("claim", func(t *testing.T) {
+		_, err := executeCommand(rootCmd, "bead", "update", id, "--reject-preserved", resultRev, "--claim")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--reject-preserved cannot be combined with --claim or --unclaim")
+	})
+
+	t.Run("unclaim", func(t *testing.T) {
+		_, err := executeCommand(rootCmd, "bead", "update", id, "--reject-preserved", resultRev, "--unclaim")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--reject-preserved cannot be combined with --claim or --unclaim")
+	})
+
+	listOut, err := executeCommand(rootCmd, "bead", "evidence", "list", id, "--json")
+	require.NoError(t, err)
+
+	var events []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(listOut), &events))
+	require.Empty(t, events)
+}
+
 func TestBeadCommandsUnsetCustomField(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)

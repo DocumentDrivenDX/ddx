@@ -246,6 +246,21 @@ func (f *CommandFactory) resolveClosingCommitSHA(commitSHA string) (string, erro
 	return normalizedCommitSHA, nil
 }
 
+func (f *CommandFactory) resolveRejectedPreservedRev(rev string) (string, error) {
+	trimmed := strings.TrimSpace(rev)
+	if trimmed == "" {
+		return "", fmt.Errorf("invalid --reject-preserved value: empty value")
+	}
+	normalizedRev, err := f.resolveCommitSHA(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("invalid --reject-preserved %q: %w", rev, err)
+	}
+	if normalizedRev == "" {
+		return "", fmt.Errorf("invalid --reject-preserved %q: empty value", rev)
+	}
+	return normalizedRev, nil
+}
+
 // commitIsMetadataOnlyTrackerBackfill reports whether the given commit changed
 // only bead tracker state. Closing provenance is suppressed only for pure
 // tracker backfills that touch .ddx/beads.jsonl and nothing else.
@@ -763,9 +778,16 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				return err
 			}
 			s := f.beadStoreConcrete()
+			claim, _ := cmd.Flags().GetBool("claim")
+			unclaim, _ := cmd.Flags().GetBool("unclaim")
+			rejectPreservedRaw, _ := cmd.Flags().GetString("reject-preserved")
+			rejectPreservedChanged := cmd.Flags().Changed("reject-preserved")
 
 			// --claim and --unclaim use dedicated store methods
-			if claim, _ := cmd.Flags().GetBool("claim"); claim {
+			if rejectPreservedChanged && (claim || unclaim) {
+				return fmt.Errorf("--reject-preserved cannot be combined with --claim or --unclaim")
+			}
+			if claim {
 				assignee, _ := cmd.Flags().GetString("assignee")
 				if assignee == "" {
 					assignee = resolveClaimAssignee()
@@ -783,7 +805,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				}
 				return nil
 			}
-			if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
+			if unclaim {
 				if err := f.withBeadTrackerWriteLock(func() error {
 					if err := s.Unclaim(args[0]); err != nil {
 						return err
@@ -798,7 +820,17 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				return nil
 			}
 
-			if unsetFlags, _ := cmd.Flags().GetStringArray("unset"); len(unsetFlags) > 0 {
+			var rejectPreservedRev string
+			if rejectPreservedChanged {
+				normalizedRev, err := f.resolveRejectedPreservedRev(rejectPreservedRaw)
+				if err != nil {
+					return err
+				}
+				rejectPreservedRev = normalizedRev
+			}
+
+			unsetFlags, _ := cmd.Flags().GetStringArray("unset")
+			if len(unsetFlags) > 0 {
 				for _, key := range unsetFlags {
 					if isProtectedBeadExtraKey(key) {
 						return fmt.Errorf("cannot unset protected bead field: %s", key)
@@ -841,6 +873,18 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 			externalBlockerReason, _ := cmd.Flags().GetString("external-blocker-reason")
 			blockedByRefRaw, _ := cmd.Flags().GetString("blocked-by-ref")
 			blockedByRefChanged := cmd.Flags().Changed("blocked-by-ref")
+			hasFieldMutation := cmd.Flags().Changed("title") ||
+				cmd.Flags().Changed("priority") ||
+				cmd.Flags().Changed("labels") ||
+				cmd.Flags().Changed("acceptance") ||
+				cmd.Flags().Changed("assignee") ||
+				cmd.Flags().Changed("parent") ||
+				cmd.Flags().Changed("description") ||
+				cmd.Flags().Changed("notes") ||
+				statusChanged ||
+				blockedByRefChanged ||
+				len(setFlags) > 0 ||
+				len(unsetFlags) > 0
 
 			var blockedByRef bead.CrossRepoBlockerRef
 			if blockedByRefChanged {
@@ -923,7 +967,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						}
 					}
 				}
-				if unsetFlags, _ := cmd.Flags().GetStringArray("unset"); len(unsetFlags) > 0 {
+				if len(unsetFlags) > 0 {
 					for _, key := range unsetFlags {
 						if b.Extra != nil {
 							bead.UnsetExtraKey(b.Extra, key)
@@ -940,16 +984,29 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 			}
 
 			if err := f.withBeadTrackerWriteLock(func() error {
-				var err error
-				if statusChanged {
-					err = s.UpdateWithLifecycleStatus(args[0], statusValue, statusOpts, applyUpdateFields)
-				} else {
-					err = s.Update(context.Background(), args[0], func(b *bead.Bead) {
-						_ = applyUpdateFields(b)
-					})
+				if rejectPreservedChanged {
+					if err := s.AppendEvent(args[0], bead.BeadEvent{
+						Kind:    "preserved-result-rejected",
+						Summary: fmt.Sprintf("rejected preserved result rev %s", rejectPreservedRev),
+						Body:    fmt.Sprintf("result_rev=%s", rejectPreservedRev),
+						Actor:   resolveClaimAssignee(),
+						Source:  "ddx bead update",
+					}); err != nil {
+						return err
+					}
 				}
-				if err != nil {
-					return err
+				if !rejectPreservedChanged || hasFieldMutation {
+					var err error
+					if statusChanged {
+						err = s.UpdateWithLifecycleStatus(args[0], statusValue, statusOpts, applyUpdateFields)
+					} else {
+						err = s.Update(context.Background(), args[0], func(b *bead.Bead) {
+							_ = applyUpdateFields(b)
+						})
+					}
+					if err != nil {
+						return err
+					}
 				}
 				if _, err := f.beadAutoCommit("update " + args[0]); err != nil {
 					return err
@@ -969,6 +1026,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	cmd.Flags().String("acceptance", "", "New acceptance criteria")
 	cmd.Flags().String("external-blocker-reason", "", "Reason required when status=blocked")
 	cmd.Flags().String("blocked-by-ref", "", "Structured blocked-by reference (<repo>#<bead-id>)")
+	cmd.Flags().String("reject-preserved", "", "Reject a preserved dangling-success result rev")
 	cmd.Flags().String("assignee", "", "New assignee or claim assignee fallback")
 	cmd.Flags().String("parent", "", "New parent bead ID")
 	cmd.Flags().String("description", "", "New description")
