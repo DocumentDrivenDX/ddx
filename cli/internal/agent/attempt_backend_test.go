@@ -109,15 +109,13 @@ func TestReusableAttemptWorkspacePreservesOnlyAllowlistedSlotState(t *testing.T)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws) })
 
-	allowedPath := filepath.Join(ws.WorkDir, "allocator-owned")
-	require.NoError(t, os.MkdirAll(allowedPath, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(allowedPath, "cache.bin"), []byte("allocator-owned\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, slotLockFileName), []byte(""), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, slotStampFileName), []byte("2020-01-01T00:00:00Z\n"), 0o600))
 
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "seed.txt"), []byte("bead-a staged line\n"), 0o644))
 	runGitInteg(t, ws.WorkDir, "add", "seed.txt")
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "seed.txt"), []byte("bead-a modified line\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "allocator-owned.txt"), []byte("allocator-owned\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "bead-a-untracked.txt"), []byte("untracked\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".ddx", "executions", "bead-a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".ddx", "executions", "bead-a", "result.json"), []byte("{\"bead\":\"a\"}\n"), 0o644))
@@ -125,16 +123,16 @@ func TestReusableAttemptWorkspacePreservesOnlyAllowlistedSlotState(t *testing.T)
 	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".codex"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".codex", "auth.json"), []byte(`{"token":"a"}`), 0o600))
 
-	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev, []string{"allocator-owned"}))
+	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev))
 
 	headRev := runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD")
 	require.Equal(t, baseRev, headRev)
 
 	require.FileExists(t, filepath.Join(ws.WorkDir, slotLockFileName))
 	require.FileExists(t, filepath.Join(ws.WorkDir, slotStampFileName))
-	require.FileExists(t, filepath.Join(allowedPath, "cache.bin"))
 
 	for _, path := range []string{
+		filepath.Join(ws.WorkDir, "allocator-owned.txt"),
 		filepath.Join(ws.WorkDir, "bead-a-untracked.txt"),
 		filepath.Join(ws.WorkDir, ".ddx", "executions"),
 		filepath.Join(ws.WorkDir, ExecutionCleanupMetadataFileName),
@@ -146,9 +144,9 @@ func TestReusableAttemptWorkspacePreservesOnlyAllowlistedSlotState(t *testing.T)
 
 	postStatus, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
 	require.NoError(t, err)
-	require.Contains(t, postStatus, "?? allocator-owned/cache.bin")
 	require.Contains(t, postStatus, "?? .slot.lock")
 	require.Contains(t, postStatus, "?? .slot.stamp")
+	require.NotContains(t, postStatus, "allocator-owned.txt")
 	require.NotContains(t, postStatus, "bead-a-untracked.txt")
 	require.NotContains(t, postStatus, ".ddx/executions")
 	require.NotContains(t, postStatus, ExecutionCleanupMetadataFileName)
@@ -185,7 +183,7 @@ esac
 `)
 	t.Setenv("PATH", fakeGitDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	err := scrubReusableAttemptWorkspace(context.Background(), workspace, "base-rev", nil)
+	err := scrubReusableAttemptWorkspace(context.Background(), workspace, "base-rev")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "disallowed residue remains after cleanup")
 	require.Contains(t, err.Error(), "leaked.txt")
@@ -239,7 +237,7 @@ func TestReusableAttemptWorkspaceScrubsCrossBeadState(t *testing.T) {
 	require.Contains(t, preStatus, "seed.txt")
 	require.Contains(t, preStatus, "bead-a-untracked.txt")
 
-	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev, nil))
+	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev))
 
 	headRev := runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD")
 	require.Equal(t, baseRev, headRev)
@@ -287,7 +285,7 @@ func TestReusableAttemptWorkspaceHardResetsToRequestedBaseRevision(t *testing.T)
 	require.NoError(t, os.WriteFile(seedPath, []byte("bead-a modified line\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "bead-a-untracked.txt"), []byte("untracked\n"), 0o644))
 
-	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev, nil))
+	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev))
 
 	headRev := runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD")
 	require.Equal(t, baseRev, headRev)
