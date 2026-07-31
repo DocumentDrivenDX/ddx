@@ -289,29 +289,30 @@ var RunStateRefreshInterval = 10 * time.Second
 //
 // See SD-024 / TD-024 §Runtime structs and §Stage 3.
 type ExecuteBeadRuntime struct {
-	FromRev                 string // base git revision (default: HEAD)
-	PromptFile              string // override prompt file (auto-generated if empty)
-	Output                  io.Writer
-	WorkerID                string // from DDX_WORKER_ID env or caller
-	BeadStoreRoot           string // canonical bead store for linked/external tracker roots
-	BeadEvents              BeadEventAppender
-	BeadCancel              BeadCancelStore // optional: enables operator-cancel mid-attempt poll
-	ResourceChecker         ExecutionResourceChecker
-	Service                 agentlib.FizeauService
-	AgentRunner             AgentRunner
-	Checks                  CandidateCheckRunner
-	Reviewer                CandidateReviewer
-	Repair                  RepairPass
-	RepairMaxCycles         int
-	CandidateRefStore       CandidateRefStore
-	NoReview                bool
-	AttemptBackend          AttemptBackend
-	candidateImport         func(candidate CandidateResult) error
-	candidateImportRelease  func(candidate CandidateResult) error
-	candidateOriginalTask   string
-	candidateDiff           func(candidate CandidateResult) (string, error)
-	candidateRepairCaps     evidence.Caps
-	candidateCapsConfigured bool
+	FromRev                    string // base git revision (default: HEAD)
+	PromptFile                 string // override prompt file (auto-generated if empty)
+	Output                     io.Writer
+	WorkerID                   string // from DDX_WORKER_ID env or caller
+	BeadStoreRoot              string // canonical bead store for linked/external tracker roots
+	BeadEvents                 BeadEventAppender
+	BeadCancel                 BeadCancelStore // optional: enables operator-cancel mid-attempt poll
+	ResourceChecker            ExecutionResourceChecker
+	Service                    agentlib.FizeauService
+	AgentRunner                AgentRunner
+	Checks                     CandidateCheckRunner
+	Reviewer                   CandidateReviewer
+	Repair                     RepairPass
+	RepairMaxCycles            int
+	CandidateRefStore          CandidateRefStore
+	NoReview                   bool
+	AttemptBackend             AttemptBackend
+	ReusableWorkspaceTelemetry *ReusableWorkspaceTelemetry
+	candidateImport            func(candidate CandidateResult) error
+	candidateImportRelease     func(candidate CandidateResult) error
+	candidateOriginalTask      string
+	candidateDiff              func(candidate CandidateResult) (string, error)
+	candidateRepairCaps        evidence.Caps
+	candidateCapsConfigured    bool
 	// EvidenceFileCopier is an internal test seam for controlled local-evidence
 	// publication. Production leaves it nil and uses the filesystem copier.
 	EvidenceFileCopier func(source, target string, mode os.FileMode) error
@@ -675,6 +676,17 @@ type costEventBody struct {
 	ExitCode   int    `json:"exit_code"`
 }
 
+// ReusableWorkspaceTelemetry captures the combined reusable-workspace
+// allocation outcome and savings estimate for one reused attempt.
+// TimeSavedMS is intentionally scalar so the emitted event stays compact.
+type ReusableWorkspaceTelemetry struct {
+	AttemptID     string `json:"attempt_id,omitempty"`
+	SlotHitCount  int    `json:"slot_hit_count"`
+	SlotMissCount int    `json:"slot_miss_count"`
+	TimeSavedMS   int64  `json:"time_saved"`
+	BytesSaved    int64  `json:"bytes_saved"`
+}
+
 // appendBeadCostEvidence records a kind:cost evidence entry on the bead with
 // per-attempt token and dollar usage. Best-effort: errors are discarded so a
 // store failure never aborts the main execute-bead flow. Emits nothing when
@@ -706,6 +718,33 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 	}
 	_ = appender.AppendEvent(beadID, bead.BeadEvent{
 		Kind:    "cost",
+		Summary: summary,
+		Body:    string(data),
+		Actor:   "ddx",
+		Source:  "legacy agent execute-bead",
+	})
+}
+
+// appendReusableWorkspaceTelemetry records one combined reusable-workspace
+// telemetry event. It is best-effort: empty or invalid payloads are ignored so
+// telemetry failures never abort attempt execution.
+func appendReusableWorkspaceTelemetry(appender BeadEventAppender, beadID string, body ReusableWorkspaceTelemetry) {
+	if appender == nil || beadID == "" {
+		return
+	}
+	if body.SlotHitCount == 0 && body.SlotMissCount == 0 && body.TimeSavedMS == 0 && body.BytesSaved == 0 {
+		return
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	summary := fmt.Sprintf(
+		"slot_hit_count=%d slot_miss_count=%d time_saved=%d bytes_saved=%d",
+		body.SlotHitCount, body.SlotMissCount, body.TimeSavedMS, body.BytesSaved,
+	)
+	_ = appender.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    "reusable-workspace",
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
@@ -1066,6 +1105,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}); err != nil {
 		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
+	}
+	if telemetry := runtime.ReusableWorkspaceTelemetry; telemetry != nil {
+		body := *telemetry
+		body.AttemptID = attemptID
+		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, body)
 	}
 	var res *ExecuteBeadResult
 	preserveEvidenceSource := false
