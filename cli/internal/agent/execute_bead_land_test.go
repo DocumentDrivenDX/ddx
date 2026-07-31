@@ -22,6 +22,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
+	"github.com/stretchr/testify/assert"
 )
 
 // ----------------------------------------------------------------------------
@@ -572,6 +573,60 @@ func TestLand_DirtyProjectRootDoesNotBlockSuccessfulLand(t *testing.T) {
 	if content, err := os.ReadFile(filepath.Join(r.dir, "operator-scratch.txt")); err != nil || string(content) != "scratch\n" {
 		t.Fatalf("operator untracked scratch was not preserved, content=%q err=%v", string(content), err)
 	}
+}
+
+func TestLandAdvancer_HardStopsOnForeignDirtyPaths(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	foreignPath := filepath.Join("cli", "internal", "agent", "dirty_impl.go")
+	r.writeFile(foreignPath, "package agent\n\nvar foreignDirty = true\n")
+	beforeTip := r.resolveRef("refs/heads/main")
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-foreign-dirty",
+		AttemptID:    "20260722T000000-foreign",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err == nil {
+		t.Fatal("expected Land to block foreign tracked dirt")
+	}
+	if land != nil {
+		t.Fatalf("expected nil land result on hard-stop, got %#v", land)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != beforeTip {
+		t.Fatalf("main tip advanced on hard-stop: before=%s after=%s", beforeTip, got)
+	}
+	if strings.Contains(r.runGit("log", "--all", "--format=%s", "--", foreignPath), "checkpoint local tree before land") {
+		t.Fatalf("foreign tracked file was checkpoint-committed despite hard-stop")
+	}
+	if !strings.Contains(err.Error(), filepath.ToSlash(foreignPath)) {
+		t.Fatalf("land error %q does not name the foreign tracked path", err)
+	}
+
+	res := &ExecuteBeadResult{
+		BeadID:    req.BeadID,
+		AttemptID: req.AttemptID,
+		BaseRev:   r.baseSHA,
+		ResultRev: workerSHA,
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		SessionID: "sess-foreign-dirty",
+	}
+	MarkResultLandError(r.dir, res, err)
+	report := ReportFromExecuteBeadResult(res, "standard")
+	assert.Equal(t, ExecuteBeadStatusLandOperatorAttention, res.Status)
+	assert.Equal(t, FailureModeLandOperatorAttention, res.FailureMode)
+	assert.Equal(t, ExecuteBeadStatusLandOperatorAttention, report.Status)
+	assert.Equal(t, FailureModeLandOperatorAttention, report.OutcomeReason)
+	assert.NotEmpty(t, res.PreserveRef, "hard-stop land error must preserve the worker result")
+	assert.Equal(t, res.PreserveRef, report.PreserveRef)
+	assert.Equal(t, workerSHA, r.resolveRef(res.PreserveRef))
 }
 
 func TestCheckpointLandingWorktreeLocalChanges_IgnoresLockMetrics(t *testing.T) {

@@ -541,29 +541,9 @@ func syncWorkTreeToHeadGuarded(gitOps LandingGitOps, dir, fromRev string, dirtyB
 // paths stay uncommitted: they are WithLock-owned live state with their own
 // commit machinery. Returns whether a checkpoint commit was created.
 func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
-	out, err := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--untracked-files=no").CombinedOutput()
+	paths, err := landingWorktreeLocalChangePaths(dir)
 	if err != nil {
-		return false, fmt.Errorf("checkpoint status: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	var paths []string
-	for _, line := range strings.Split(string(out), "\n") {
-		if len(line) < 4 {
-			continue
-		}
-		p := strings.TrimSpace(line[3:])
-		// Rename entries are "R  old -> new"; commit both sides.
-		if idx := strings.Index(p, " -> "); idx >= 0 {
-			for _, side := range []string{p[:idx], p[idx+4:]} {
-				if side = strings.TrimSpace(side); side != "" && !skipLandingCheckpointPath(side) {
-					paths = append(paths, side)
-				}
-			}
-			continue
-		}
-		if p == "" || skipLandingCheckpointPath(p) {
-			continue
-		}
-		paths = append(paths, p)
+		return false, err
 	}
 	if len(paths) == 0 {
 		return false, nil
@@ -630,6 +610,36 @@ func checkpointLandingWorktreeLocalChanges(dir, reason string) (bool, error) {
 		return false, fmt.Errorf("checkpoint commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return true, nil
+}
+
+// landingWorktreeLocalChangePaths returns the tracked paths in dir that are
+// outside the DDx-managed tracker/evidence/lock-metrics set.
+func landingWorktreeLocalChangePaths(dir string) ([]string, error) {
+	out, err := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--untracked-files=no").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("checkpoint status: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		p := strings.TrimSpace(line[3:])
+		// Rename entries are "R  old -> new"; report both sides.
+		if idx := strings.Index(p, " -> "); idx >= 0 {
+			for _, side := range []string{p[:idx], p[idx+4:]} {
+				if side = strings.TrimSpace(side); side != "" && !skipLandingCheckpointPath(side) {
+					paths = append(paths, filepath.ToSlash(side))
+				}
+			}
+			continue
+		}
+		if p == "" || skipLandingCheckpointPath(p) {
+			continue
+		}
+		paths = append(paths, filepath.ToSlash(p))
+	}
+	return appendUniqueStrings(nil, paths...), nil
 }
 
 func skipLandingCheckpointPath(path string) bool {
@@ -794,6 +804,43 @@ func recoverLandingIndexLocked(dir string, repairedCorruptIndex *bool) (landingI
 		return landingIndexRecovery{}, err
 	}
 	return landingIndexRecovery{progressed: committed}, nil
+}
+
+func hardStopLandPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	var blocked []string
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" {
+			continue
+		}
+		if strings.HasPrefix(path, "cli/internal/agent/") && strings.HasSuffix(path, ".go") {
+			blocked = append(blocked, path)
+		}
+	}
+	return appendUniqueStrings(nil, blocked...)
+}
+
+func landBoundaryForeignDirtyError(paths []string, timeout time.Duration) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(paths))
+	seen := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(filepath.ToSlash(path))
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		lines = append(lines, "M\t"+path)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return fmt.Errorf("landing worktree has staged changes after waiting %s:\n%s", timeout, strings.Join(lines, "\n"))
 }
 
 func isRecoverableLandingIndexCorruption(output string) bool {
@@ -1424,6 +1471,9 @@ func prepareLandTarget(projectRoot, wd string, req LandRequest, gitOps LandingGi
 	}
 	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
 		return nil, nil, err
+	}
+	if hardStop := hardStopLandPaths(dirtyWorktreePaths(wd)); len(hardStop) > 0 {
+		return nil, nil, landBoundaryForeignDirtyError(hardStop, 2*time.Second)
 	}
 	targetRef := "refs/heads/" + targetBranch
 
