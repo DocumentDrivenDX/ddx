@@ -59,7 +59,7 @@ func captureAttemptProcessBaseline(ctx context.Context, worktree string) attempt
 	return attemptProcessSnapshot{PIDs: pids}
 }
 
-func cleanupAttemptProcesses(ctx context.Context, projectRoot, beadID, attemptID, worktree string, baseline attemptProcessSnapshot, trigger string) *attemptProcessCleanupReport {
+func cleanupAttemptProcesses(ctx context.Context, projectRoot, beadID, attemptID, worktree string, baseline attemptProcessSnapshot, trigger string) *attemptProcessCleanupSignal {
 	started := time.Now().UTC()
 	report := &attemptProcessCleanupReport{
 		AttemptID:   attemptID,
@@ -74,7 +74,7 @@ func cleanupAttemptProcesses(ctx context.Context, projectRoot, beadID, attemptID
 		report.ScanErr = err.Error()
 		report.FinishedAt = time.Now().UTC()
 		writeAttemptProcessCleanupArtifact(projectRoot, attemptID, report)
-		return report
+		return nil
 	}
 	report.Scanned = len(processes)
 	candidates := attemptCleanupCandidates(processes, baseline.PIDs, worktree)
@@ -103,7 +103,10 @@ func cleanupAttemptProcesses(ctx context.Context, projectRoot, beadID, attemptID
 	}
 	report.FinishedAt = time.Now().UTC()
 	writeAttemptProcessCleanupArtifact(projectRoot, attemptID, report)
-	return report
+	if len(report.StillAlive) > 0 {
+		return &attemptProcessCleanupSignal{LiveDescendants: len(report.StillAlive)}
+	}
+	return nil
 }
 
 func writeAttemptProcessCleanupArtifact(projectRoot, attemptID string, report *attemptProcessCleanupReport) {

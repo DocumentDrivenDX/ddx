@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -77,6 +78,8 @@ type AttemptWorkspace struct {
 	BeadID              string
 	AttemptID           string
 	BaseRev             string
+	ReusableSlot        bool
+	QuarantineReason    string
 	KeepOnError         bool
 	DockerHome          string
 	DockerRun           string
@@ -165,6 +168,23 @@ func (WorktreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, 
 	return nil
 }
 
+func (WorktreeAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || ws.WorkDir == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+		return quarantineReusableAttemptWorkspace(ws, "release cleanup failed: "+err.Error())
+	}
+	return clearReusableAttemptWorkspaceQuarantineMarker(ws.WorkDir)
+}
+
+func (WorktreeAttemptBackend) Quarantine(_ context.Context, ws *AttemptWorkspace) error {
+	return quarantineReusableAttemptWorkspace(ws, ws.QuarantineReason)
+}
+
 // isStaleWorktreeRegistrationError reports whether err from `git worktree add`
 // indicates a leftover registration for the target path (e.g. a prior
 // attempt that died and was never cleaned up with `git worktree remove`)
@@ -250,6 +270,23 @@ func (LocalCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWo
 	return transportCloneResult(ctx, ws, res, "source", "result")
 }
 
+func (LocalCloneAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || ws.WorkDir == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+		return quarantineReusableAttemptWorkspace(ws, "release cleanup failed: "+err.Error())
+	}
+	return clearReusableAttemptWorkspaceQuarantineMarker(ws.WorkDir)
+}
+
+func (LocalCloneAttemptBackend) Quarantine(_ context.Context, ws *AttemptWorkspace) error {
+	return quarantineReusableAttemptWorkspace(ws, ws.QuarantineReason)
+}
+
 func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
@@ -317,6 +354,66 @@ func reusableAttemptCredentialRelPaths() []string {
 		filepath.Join(".local", "state", "fizeau", "codex-quota.json"),
 		filepath.Join(".local", "state", "fizeau", "gemini-quota.json"),
 	}
+}
+
+const reusableAttemptWorkspaceQuarantineFileName = "reusable-workspace-quarantine.json"
+
+type reusableAttemptWorkspaceQuarantineRecord struct {
+	Slot        string    `json:"slot"`
+	Backend     string    `json:"backend"`
+	ProjectRoot string    `json:"project_root"`
+	WorkDir     string    `json:"work_dir"`
+	BeadID      string    `json:"bead_id,omitempty"`
+	AttemptID   string    `json:"attempt_id,omitempty"`
+	BaseRev     string    `json:"base_rev,omitempty"`
+	Reason      string    `json:"reason"`
+	Quarantined time.Time `json:"quarantined_at"`
+}
+
+func quarantineReusableAttemptWorkspace(ws *AttemptWorkspace, reason string) error {
+	if ws == nil || ws.WorkDir == "" {
+		return nil
+	}
+	record := reusableAttemptWorkspaceQuarantineRecord{
+		Slot:        filepath.Base(filepath.Clean(ws.WorkDir)),
+		Backend:     ws.Backend,
+		ProjectRoot: ws.ProjectRoot,
+		WorkDir:     ws.WorkDir,
+		BeadID:      ws.BeadID,
+		AttemptID:   ws.AttemptID,
+		BaseRev:     ws.BaseRev,
+		Reason:      strings.TrimSpace(reason),
+		Quarantined: time.Now().UTC(),
+	}
+	if record.Reason == "" {
+		record.Reason = "reusable workspace quarantined"
+	}
+	if err := os.MkdirAll(filepath.Join(ws.WorkDir, ddxroot.DirName), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := reusableAttemptWorkspaceQuarantineMarkerPath(ws.WorkDir)
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "execute-bead: quarantined reusable workspace backend=%s slot=%s project=%s reason=%s\n",
+		record.Backend, record.Slot, record.ProjectRoot, record.Reason)
+	return nil
+}
+
+func clearReusableAttemptWorkspaceQuarantineMarker(workDir string) error {
+	path := reusableAttemptWorkspaceQuarantineMarkerPath(workDir)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func reusableAttemptWorkspaceQuarantineMarkerPath(workDir string) string {
+	return filepath.Join(workDir, ddxroot.DirName, reusableAttemptWorkspaceQuarantineFileName)
 }
 
 type DockerCloneAttemptBackend struct {

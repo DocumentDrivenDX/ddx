@@ -1112,6 +1112,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, body)
 	}
 	var res *ExecuteBeadResult
+	var processCleanupSignal *attemptProcessCleanupSignal
 	preserveEvidenceSource := false
 	defer func() {
 		if preserveEvidenceSource {
@@ -1121,11 +1122,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if preserveAttemptWorktree {
 			return
 		}
-		if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, result) {
+		if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, res, processCleanupSignal) {
 			return
 		}
-		if result != nil && attemptBackend.Name() == AttemptBackendWorktree {
-			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, result.Outcome, false) {
+		if res != nil && attemptBackend.Name() == AttemptBackendWorktree {
+			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, res.Outcome, false) {
 				return
 			}
 		}
@@ -1348,7 +1349,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	} else if agentErr != nil {
 		cleanupTrigger = agentErr.Error()
 	}
-	_ = cleanupAttemptProcesses(context.Background(), projectRoot, beadID, attemptID, wtPath, processBaseline, cleanupTrigger)
+	processCleanupSignal = cleanupAttemptProcesses(context.Background(), projectRoot, beadID, attemptID, wtPath, processBaseline, cleanupTrigger)
 	// Attempt-end backstop: reap every remaining provider child regardless of
 	// route, then fold the running-phase guard's evidence into the final
 	// provider-children.json so mid-attempt reaps survive in the audit trail.
@@ -1945,15 +1946,16 @@ type reusableAttemptBackend interface {
 	Quarantine(ctx context.Context, ws *AttemptWorkspace) error
 }
 
-func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend, ws *AttemptWorkspace, result *ExecuteBeadResult) bool {
+func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend, ws *AttemptWorkspace, result *ExecuteBeadResult, cleanupSignal *attemptProcessCleanupSignal) bool {
 	reusableBackend, ok := backend.(reusableAttemptBackend)
-	if !ok || ws == nil {
+	if !ok || ws == nil || !ws.ReusableSlot {
 		return false
 	}
-	if shouldReleaseReusableAttempt(result) {
+	if shouldReleaseReusableAttempt(result) && (cleanupSignal == nil || cleanupSignal.LiveDescendants == 0) {
 		_ = reusableBackend.Release(ctx, ws)
 		return true
 	}
+	ws.QuarantineReason = reusableAttemptWorkspaceQuarantineReason(result, cleanupSignal)
 	_ = reusableBackend.Quarantine(ctx, ws)
 	return true
 }
@@ -1968,6 +1970,23 @@ func shouldReleaseReusableAttempt(result *ExecuteBeadResult) bool {
 	default:
 		return false
 	}
+}
+
+func reusableAttemptWorkspaceQuarantineReason(result *ExecuteBeadResult, cleanupSignal *attemptProcessCleanupSignal) string {
+	if cleanupSignal != nil && cleanupSignal.LiveDescendants > 0 {
+		return fmt.Sprintf("surviving descendant process(es) after attempt cleanup: %d", cleanupSignal.LiveDescendants)
+	}
+	if result == nil {
+		return "reusable workspace quarantined"
+	}
+	reason := strings.TrimSpace(result.Reason)
+	if reason == "" {
+		reason = strings.TrimSpace(result.Error)
+	}
+	if reason == "" {
+		reason = result.Outcome
+	}
+	return fmt.Sprintf("attempt outcome %s: %s", result.Outcome, reason)
 }
 
 // preserveDirtyNoEvidenceAttempt stages all dirty files in the attempt

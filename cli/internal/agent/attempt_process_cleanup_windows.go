@@ -10,6 +10,6 @@ func captureAttemptProcessBaseline(context.Context, string) attemptProcessSnapsh
 	return attemptProcessSnapshot{}
 }
 
-func cleanupAttemptProcesses(context.Context, string, string, string, string, attemptProcessSnapshot, string) any {
+func cleanupAttemptProcesses(context.Context, string, string, string, string, attemptProcessSnapshot, string) *attemptProcessCleanupSignal {
 	return nil
 }
