@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -96,6 +97,110 @@ func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testi
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "sandboxed.txt"), []byte("ok\n"), 0o644))
 	runGitInteg(t, ws.WorkDir, "add", "sandboxed.txt")
 	runGitInteg(t, ws.WorkDir, "commit", "-m", "test: sandboxed default clone commit")
+}
+
+func TestAttemptBackendsScrubReusableWorkspaceBeforeHandoff(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+
+	var originalScrubber = reusableAttemptWorkspaceScrubber
+	t.Cleanup(func() { reusableAttemptWorkspaceScrubber = originalScrubber })
+
+	var calls []string
+	currentBackend := ""
+	reusableAttemptWorkspaceScrubber = func(ctx context.Context, workspacePath, scrubBaseRev string, preserveRelPaths []string) error {
+		calls = append(calls, currentBackend)
+		require.Equal(t, baseRev, scrubBaseRev)
+		require.Contains(t, preserveRelPaths, BuildCacheDirName)
+		headRev := runGitInteg(t, workspacePath, "rev-parse", "HEAD")
+		require.Equal(t, baseRev, headRev, "reused workspace must already be reset to the requested base revision")
+		return nil
+	}
+
+	handoff := &ReusableWorkspaceHandoff{AllowlistRelPaths: []string{BuildCacheDirName}}
+	localReq := AttemptBackendPrepareRequest{
+		ProjectRoot:              projectRoot,
+		BeadID:                   "ddx-reuse-local",
+		AttemptID:                "20260729T000001-local",
+		BaseRev:                  baseRev,
+		ReusableWorkspaceHandoff: handoff,
+	}
+
+	currentBackend = AttemptBackendLocalClone
+	localWS, err := (LocalCloneAttemptBackend{}).Prepare(context.Background(), localReq)
+	require.NoError(t, err)
+	require.NotNil(t, localWS)
+	t.Cleanup(func() { _ = (LocalCloneAttemptBackend{}).Cleanup(context.Background(), localWS) })
+
+	dockerReq := AttemptBackendPrepareRequest{
+		ProjectRoot:              projectRoot,
+		BeadID:                   "ddx-reuse-docker",
+		AttemptID:                "20260729T000001-docker",
+		BaseRev:                  baseRev,
+		ReusableWorkspaceHandoff: handoff,
+	}
+
+	currentBackend = AttemptBackendDockerClone
+	dockerWS, err := (DockerCloneAttemptBackend{Docker: &config.ExecutionsDockerConfig{KeepOnError: true}}).Prepare(context.Background(), dockerReq)
+	require.NoError(t, err)
+	require.NotNil(t, dockerWS)
+	t.Cleanup(func() {
+		_ = (DockerCloneAttemptBackend{Docker: &config.ExecutionsDockerConfig{KeepOnError: true}}).Cleanup(context.Background(), dockerWS)
+	})
+
+	require.Equal(t, []string{AttemptBackendLocalClone, AttemptBackendDockerClone}, calls)
+}
+
+func TestAttemptBackendsRefuseReuseWhenScrubIntegrityFails(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+
+	var originalScrubber = reusableAttemptWorkspaceScrubber
+	t.Cleanup(func() { reusableAttemptWorkspaceScrubber = originalScrubber })
+
+	scrubErr := errors.New("simulated scrub integrity failure")
+	reusableAttemptWorkspaceScrubber = func(context.Context, string, string, []string) error {
+		return scrubErr
+	}
+
+	handoff := &ReusableWorkspaceHandoff{AllowlistRelPaths: []string{}}
+
+	for _, tc := range []struct {
+		name      string
+		backend   AttemptBackend
+		beadID    string
+		attemptID string
+		workspace func() string
+	}{
+		{
+			name:      "local-clone",
+			backend:   LocalCloneAttemptBackend{},
+			beadID:    "ddx-reuse-local",
+			attemptID: "20260729T000002-local",
+			workspace: func() string { return executeBeadClonePath(projectRoot, "ddx-reuse-local", "20260729T000002-local") },
+		},
+		{
+			name:      "docker-clone",
+			backend:   DockerCloneAttemptBackend{Docker: &config.ExecutionsDockerConfig{}},
+			beadID:    "ddx-reuse-docker",
+			attemptID: "20260729T000002-docker",
+			workspace: func() string { return executeBeadClonePath(projectRoot, "ddx-reuse-docker", "20260729T000002-docker") },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, err := tc.backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+				ProjectRoot:              projectRoot,
+				BeadID:                   tc.beadID,
+				AttemptID:                tc.attemptID,
+				BaseRev:                  baseRev,
+				ReusableWorkspaceHandoff: handoff,
+			})
+			require.Error(t, err)
+			require.ErrorIs(t, err, scrubErr)
+			require.Nil(t, ws)
+
+			_, statErr := os.Stat(tc.workspace())
+			require.True(t, os.IsNotExist(statErr), "failing scrub must remove the abandoned reused workspace")
+		})
+	}
 }
 
 func TestReusableAttemptWorkspaceScrubsCrossBeadState(t *testing.T) {

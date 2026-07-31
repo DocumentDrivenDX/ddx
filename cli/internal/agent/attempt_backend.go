@@ -59,6 +59,16 @@ type AttemptBackendPrepareRequest struct {
 	AttemptID   string
 	BaseRev     string
 	GitOps      GitOps
+	// ReusableWorkspaceHandoff carries allocator-owned inputs for a pooled
+	// workspace that is being handed to a new bead. Nil means the backend is
+	// preparing a fresh workspace and must not scrub shared state.
+	ReusableWorkspaceHandoff *ReusableWorkspaceHandoff
+}
+
+// ReusableWorkspaceHandoff bundles the scrub inputs that the reusable-workspace
+// allocator owns for a pooled attempt workspace.
+type ReusableWorkspaceHandoff struct {
+	AllowlistRelPaths []string
 }
 
 type AttemptBackendRunRequest struct {
@@ -221,6 +231,10 @@ checkout:
 		_ = os.RemoveAll(clonePath)
 		return nil, fmt.Errorf("checking out isolated clone base: %s: %w", strings.TrimSpace(string(out)), err)
 	}
+	if err := scrubReusableAttemptWorkspaceForPrepare(ctx, clonePath, req); err != nil {
+		_ = os.RemoveAll(clonePath)
+		return nil, err
+	}
 	seedAttemptCloneUserConfig(ctx, req.ProjectRoot, clonePath)
 	configureAttemptCloneTransientExcludes(clonePath)
 
@@ -262,6 +276,16 @@ func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspac
 	}
 	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil)
 	return os.RemoveAll(ws.WorkDir)
+}
+
+var reusableAttemptWorkspaceScrubber = scrubReusableAttemptWorkspace
+
+func scrubReusableAttemptWorkspaceForPrepare(ctx context.Context, workspacePath string, req AttemptBackendPrepareRequest) error {
+	handoff := req.ReusableWorkspaceHandoff
+	if handoff == nil {
+		return nil
+	}
+	return reusableAttemptWorkspaceScrubber(ctx, workspacePath, req.BaseRev, handoff.AllowlistRelPaths)
 }
 
 // scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and
