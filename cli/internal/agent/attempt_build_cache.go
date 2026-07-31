@@ -209,8 +209,9 @@ func IsBuildCacheAllowlisted(relPath string, policy *config.BuildCacheConfig) bo
 // reservedSlotMetaNames are per-slot bookkeeping files that are not build
 // state and must not be deleted by a build-cache-aware reuse reset.
 var reservedSlotMetaNames = map[string]struct{}{
-	slotLockFileName:  {},
-	slotStampFileName: {},
+	slotLockFileName:     {},
+	slotStampFileName:    {},
+	slotIdentityFileName: {},
 }
 
 // ApplyReuseResetAllowlist removes non-allowlisted content from workspacePath

@@ -3,6 +3,7 @@ package agent
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -27,6 +28,8 @@ const (
 	slotLockFileName = ".slot.lock"
 	// slotStampFileName records last-use timestamp for age-based eviction.
 	slotStampFileName = ".slot.stamp"
+	// slotIdentityFileName records which project/backend owns the slot.
+	slotIdentityFileName = ".slot.identity.json"
 )
 
 // AttemptWorkspaceSlotKey identifies a reusable workspace slot pool.
@@ -89,6 +92,104 @@ type AttemptWorkspaceSlot struct {
 	ConservativeTimeSavedMS int64 `json:"conservative_time_saved_ms,omitempty"`
 	ConservativeBytesSaved  int64 `json:"conservative_bytes_saved,omitempty"`
 	lockFile                *os.File
+}
+
+type reusableAttemptWorkspaceIdentity struct {
+	ProjectID string `json:"project_id"`
+	Backend   string `json:"backend"`
+}
+
+type reusableAttemptWorkspaceIdentityMismatchDiagnostic struct {
+	SlotPath          string `json:"slot_path"`
+	SlotIndex         int    `json:"slot_index,omitempty"`
+	Backend           string `json:"backend"`
+	ProjectRoot       string `json:"project_root"`
+	ProjectID         string `json:"project_id"`
+	ObservedProjectID string `json:"observed_project_id,omitempty"`
+	ObservedBackend   string `json:"observed_backend,omitempty"`
+	Reason            string `json:"reason"`
+}
+
+func (d reusableAttemptWorkspaceIdentityMismatchDiagnostic) String() string {
+	return fmt.Sprintf("refusing reusable attempt workspace slot=%s backend=%s project_root=%s project_id=%s observed_project_id=%s observed_backend=%s reason=%s",
+		d.SlotPath, d.Backend, d.ProjectRoot, d.ProjectID, d.ObservedProjectID, d.ObservedBackend, d.Reason)
+}
+
+func reusableAttemptWorkspaceIdentityForKey(key AttemptWorkspaceSlotKey) reusableAttemptWorkspaceIdentity {
+	return reusableAttemptWorkspaceIdentity{
+		ProjectID: ProjectIDForPath(key.ProjectRoot),
+		Backend:   strings.ToLower(strings.TrimSpace(key.Backend)),
+	}
+}
+
+func reusableAttemptWorkspaceIdentityMismatchDiagnosticForSlot(slot *AttemptWorkspaceSlot, requested reusableAttemptWorkspaceIdentity, observed reusableAttemptWorkspaceIdentity, reason string) reusableAttemptWorkspaceIdentityMismatchDiagnostic {
+	diag := reusableAttemptWorkspaceIdentityMismatchDiagnostic{
+		Backend:           requested.Backend,
+		ProjectRoot:       "",
+		ProjectID:         requested.ProjectID,
+		ObservedProjectID: observed.ProjectID,
+		ObservedBackend:   observed.Backend,
+		Reason:            strings.TrimSpace(reason),
+	}
+	if slot != nil {
+		diag.SlotPath = slot.Path
+		diag.SlotIndex = slot.Index
+		diag.Backend = slot.Key.Backend
+		diag.ProjectRoot = slot.Key.ProjectRoot
+	}
+	if strings.TrimSpace(diag.Backend) == "" {
+		diag.Backend = requested.Backend
+	}
+	return diag
+}
+
+func (requested reusableAttemptWorkspaceIdentity) normalized() reusableAttemptWorkspaceIdentity {
+	requested.ProjectID = strings.TrimSpace(requested.ProjectID)
+	requested.Backend = strings.ToLower(strings.TrimSpace(requested.Backend))
+	return requested
+}
+
+func (requested reusableAttemptWorkspaceIdentity) mismatchReason(observed reusableAttemptWorkspaceIdentity) string {
+	requested = requested.normalized()
+	observed = observed.normalized()
+	if strings.TrimSpace(observed.ProjectID) == "" && strings.TrimSpace(observed.Backend) == "" {
+		return "missing repository identity metadata"
+	}
+	if requested.ProjectID != observed.ProjectID {
+		return "project identity mismatch"
+	}
+	if requested.Backend != observed.Backend {
+		return "backend mismatch"
+	}
+	return ""
+}
+
+func readReusableAttemptWorkspaceIdentity(slotPath string) (reusableAttemptWorkspaceIdentity, bool, error) {
+	path := filepath.Join(slotPath, slotIdentityFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return reusableAttemptWorkspaceIdentity{}, false, nil
+		}
+		return reusableAttemptWorkspaceIdentity{}, false, fmt.Errorf("reading slot identity metadata: %w", err)
+	}
+	var identity reusableAttemptWorkspaceIdentity
+	if err := json.Unmarshal(data, &identity); err != nil {
+		return reusableAttemptWorkspaceIdentity{}, false, fmt.Errorf("parsing slot identity metadata: %w", err)
+	}
+	return identity, true, nil
+}
+
+func writeReusableAttemptWorkspaceIdentity(slotPath string, identity reusableAttemptWorkspaceIdentity) error {
+	data, err := json.MarshalIndent(identity.normalized(), "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal slot identity metadata: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(slotPath, slotIdentityFileName), data, 0o600); err != nil {
+		return fmt.Errorf("write slot identity metadata: %w", err)
+	}
+	return nil
 }
 
 // AttemptWorkspaceSlotPool hands out bounded, exclusively locked reusable
@@ -320,6 +421,12 @@ func (p *AttemptWorkspaceSlotPool) Evict(key AttemptWorkspaceSlotKey) error {
 
 func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, index int) (*AttemptWorkspaceSlot, error) {
 	path := p.slotPath(key, index)
+	preexisting := false
+	if info, err := os.Stat(path); err == nil {
+		preexisting = info.IsDir()
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("stating workspace slot %d: %w", index, err)
+	}
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return nil, fmt.Errorf("creating workspace slot %d: %w", index, err)
 	}
@@ -332,6 +439,39 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 		_ = lockFile.Close()
 		// Held by another allocator — try next slot.
 		return nil, nil
+	}
+	requestedIdentity := reusableAttemptWorkspaceIdentityForKey(key)
+	if preexisting {
+		observedIdentity, hasIdentity, err := readReusableAttemptWorkspaceIdentity(path)
+		mismatchReason := ""
+		if err != nil {
+			mismatchReason = err.Error()
+		} else {
+			mismatchReason = requestedIdentity.mismatchReason(observedIdentity)
+			if !hasIdentity {
+				mismatchReason = "missing repository identity metadata"
+			}
+		}
+		if mismatchReason != "" {
+			diag := reusableAttemptWorkspaceIdentityMismatchDiagnosticForSlot(
+				&AttemptWorkspaceSlot{Key: key, Index: index, Path: path},
+				requestedIdentity,
+				observedIdentity,
+				mismatchReason,
+			)
+			_ = diag.String()
+			_ = releaseExclusiveLock(lockFile)
+			_ = lockFile.Close()
+			_ = os.RemoveAll(path)
+			return nil, nil
+		}
+	} else {
+		if err := writeReusableAttemptWorkspaceIdentity(path, requestedIdentity); err != nil {
+			_ = releaseExclusiveLock(lockFile)
+			_ = lockFile.Close()
+			_ = os.RemoveAll(path)
+			return nil, fmt.Errorf("writing workspace slot %d identity: %w", index, err)
+		}
 	}
 	if err := touchSlotStamp(path, p.clock()); err != nil {
 		_ = releaseExclusiveLock(lockFile)

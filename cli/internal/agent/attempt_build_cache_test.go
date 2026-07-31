@@ -282,6 +282,7 @@ func TestReusableAttemptWorkspaceInvalidatesOnToolchainOrLockChange(t *testing.T
 		}
 		require.FileExists(t, filepath.Join(slot.Path, "src-marker"))
 		require.FileExists(t, filepath.Join(slot.Path, slotLockFileName))
+		require.FileExists(t, filepath.Join(slot.Path, slotIdentityFileName))
 	})
 }
 
@@ -308,6 +309,7 @@ func TestReusableBuildCacheAllowlistExcludesNonBuildState(t *testing.T) {
 	// Slot metadata must survive.
 	require.NoError(t, os.WriteFile(filepath.Join(ws, slotLockFileName), []byte(""), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(ws, slotStampFileName), []byte("2020-01-01T00:00:00Z\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, slotIdentityFileName), []byte("{\"project_id\":\"proj-1\",\"backend\":\"local-clone\"}\n"), 0o600))
 
 	// Allowlist only covers the build-cache root.
 	require.True(t, IsBuildCacheAllowlisted(BuildCacheDirName, policy))
@@ -324,6 +326,7 @@ func TestReusableBuildCacheAllowlistExcludesNonBuildState(t *testing.T) {
 	require.FileExists(t, filepath.Join(prep.Cache.CargoHome, "registry"))
 	require.FileExists(t, filepath.Join(ws, slotLockFileName))
 	require.FileExists(t, filepath.Join(ws, slotStampFileName))
+	require.FileExists(t, filepath.Join(ws, slotIdentityFileName))
 
 	// Source, evidence, credentials gone — not retained via build-cache path.
 	_, err = os.Stat(filepath.Join(ws, "src"))

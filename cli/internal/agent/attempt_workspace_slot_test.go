@@ -159,6 +159,76 @@ func TestAttemptWorkspaceSlotPoolRespectsMaxSlotBound(t *testing.T) {
 	_ = f.Close()
 }
 
+func TestReusableAttemptWorkspaceRejectsRepositoryIdentityMismatch(t *testing.T) {
+	for _, backend := range []string{AttemptBackendWorktree, AttemptBackendLocalClone} {
+		t.Run(backend, func(t *testing.T) {
+			root := t.TempDir()
+			maxSlots := 1
+			pool := NewAttemptWorkspaceSlotPool(&config.ReusableWorkspaceConfig{MaxSlots: &maxSlots}).withRoot(root)
+			key := AttemptWorkspaceSlotKey{
+				ProjectRoot:   filepath.Join(root, "requesting-project"),
+				Backend:       backend,
+				WorkerSlot:    "w0",
+				TrustBoundary: "default",
+			}
+
+			slotPath := pool.slotPath(key, 0)
+			require.NoError(t, os.MkdirAll(slotPath, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(slotPath, "stale.txt"), []byte("cross-project residue\n"), 0o644))
+			require.NoError(t, writeReusableAttemptWorkspaceIdentity(slotPath, reusableAttemptWorkspaceIdentity{
+				ProjectID: "proj-legacy",
+				Backend:   backend,
+			}))
+
+			slot, err := pool.Allocate(key)
+			require.NoError(t, err)
+			require.NotNil(t, slot)
+			require.False(t, slot.Pooled, "identity-mismatched slot must not be reused")
+			require.NotEqual(t, slotPath, slot.Path, "allocator must create a fresh workspace")
+			require.Contains(t, filepath.Base(slot.Path), ExecuteBeadEphemeralPrefix)
+			t.Cleanup(func() { _ = pool.Release(slot) })
+
+			_, statErr := os.Stat(slotPath)
+			require.True(t, os.IsNotExist(statErr), "mismatched slot should be quarantined")
+		})
+	}
+}
+
+func TestReusableAttemptWorkspaceIdentityMismatchDiagnosticsIncludeSlotBackendAndProject(t *testing.T) {
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   "/proj/diagnostic",
+		Backend:       AttemptBackendLocalClone,
+		WorkerSlot:    "w0",
+		TrustBoundary: "default",
+	}
+	slot := &AttemptWorkspaceSlot{
+		Key:   key,
+		Index: 0,
+		Path:  filepath.Join(t.TempDir(), "slot-0"),
+	}
+	diag := reusableAttemptWorkspaceIdentityMismatchDiagnosticForSlot(
+		slot,
+		reusableAttemptWorkspaceIdentityForKey(key),
+		reusableAttemptWorkspaceIdentity{
+			ProjectID: "proj-legacy",
+			Backend:   AttemptBackendWorktree,
+		},
+		"project identity mismatch",
+	)
+
+	require.Equal(t, slot.Path, diag.SlotPath)
+	require.Equal(t, 0, diag.SlotIndex)
+	require.Equal(t, AttemptBackendLocalClone, diag.Backend)
+	require.Equal(t, key.ProjectRoot, diag.ProjectRoot)
+	require.Equal(t, ProjectIDForPath(key.ProjectRoot), diag.ProjectID)
+	require.Equal(t, "proj-legacy", diag.ObservedProjectID)
+	require.Equal(t, AttemptBackendWorktree, diag.ObservedBackend)
+	require.Contains(t, diag.Reason, "mismatch")
+	require.Contains(t, diag.String(), slot.Path)
+	require.Contains(t, diag.String(), AttemptBackendLocalClone)
+	require.Contains(t, diag.String(), key.ProjectRoot)
+}
+
 func TestAttemptWorkspaceSlotPoolEvictsByAgeAndDiskHighWater(t *testing.T) {
 	root := t.TempDir()
 	maxSlots := 3

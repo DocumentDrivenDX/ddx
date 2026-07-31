@@ -284,6 +284,7 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 	excludePaths := append([]string{
 		filepath.ToSlash(slotLockFileName),
 		filepath.ToSlash(slotStampFileName),
+		filepath.ToSlash(slotIdentityFileName),
 	}, preserveRelPaths...)
 	for _, rel := range excludePaths {
 		rel = strings.TrimSpace(rel)
