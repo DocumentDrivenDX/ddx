@@ -248,6 +248,23 @@ func appendDanglingSuccessEvent(store ExecuteBeadLoopStore, beadID string, event
 	_ = store.AppendEvent(beadID, event)
 }
 
+func rejectedPreservedResultRev(events []bead.BeadEvent, resultRev string) bool {
+	if resultRev == "" {
+		return false
+	}
+	needle := "result_rev=" + resultRev
+	for i := len(events) - 1; i >= 0; i-- {
+		ev := events[i]
+		if ev.Kind != "preserved-result-rejected" {
+			continue
+		}
+		if strings.Contains(ev.Body, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func parkDanglingSuccessForOperator(store ExecuteBeadLoopStore, beadID, reason, suggestedAction, summary string, at time.Time) error {
 	return store.ParkToProposed(beadID, bead.ParkAutoRecoveryFailed, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
@@ -276,6 +293,10 @@ func recoverDanglingSuccess(
 
 	prior := latestTaskSucceededResult(projectRoot, beadID)
 	if prior == nil {
+		return nil, nil
+	}
+
+	if events, err := store.Events(beadID); err == nil && rejectedPreservedResultRev(events, prior.ResultRev) {
 		return nil, nil
 	}
 

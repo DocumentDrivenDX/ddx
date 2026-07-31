@@ -67,6 +67,20 @@ func gitDetachedBranchCommit(t *testing.T, dir, branch, filename, content, messa
 	return baseSHA, resultSHA
 }
 
+func appendBeadEvent(t *testing.T, store *bead.Store, beadID string, event bead.BeadEvent) {
+	t.Helper()
+	require.NoError(t, store.AppendEvent(beadID, event))
+}
+
+func beadEventByKind(events []bead.BeadEvent, kind string) *bead.BeadEvent {
+	for i := range events {
+		if events[i].Kind == kind {
+			return &events[i]
+		}
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests for latestTaskSucceededResult
 // ---------------------------------------------------------------------------
@@ -218,6 +232,226 @@ func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T)
 	meta := bead.GetNeedsHumanMeta(*b)
 	assert.Equal(t, "successful result commit could not be recovered automatically", meta.Reason)
 	assert.Contains(t, meta.SuggestedAction, "recover or reconstruct result_rev")
+}
+
+// TestRecoverDanglingSuccess_SkipsRejectedPreservedResultForFreshAttempt proves
+// that a matching preserved-result-rejected event bypasses preservation and
+// lets the normal executor path run.
+func TestRecoverDanglingSuccess_SkipsRejectedPreservedResultForFreshAttempt(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	baseSHA, resultSHA := gitDetachedBranchCommit(
+		t,
+		projectRoot,
+		"worker-result-rejected",
+		"worker-output.txt",
+		"detached result for rejected preserve\n",
+		"chore: detached worker result for "+beadID,
+	)
+
+	const attemptID = "20260727T120000-rejected"
+	writeResultJSON(t, projectRoot, attemptID, ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		SessionID: "sess-rejected",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: resultSHA,
+		BaseRev:   baseSHA,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Claim(beadID, "worker"))
+	require.NoError(t, store.RemoveClaimHeartbeat(beadID))
+	require.NoError(t, store.Update(context.Background(), beadID, func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["work-heartbeat-at"] = time.Now().Add(-2 * bead.HeartbeatTTL).Format(time.RFC3339Nano)
+	}))
+	appendBeadEvent(t, store, beadID, bead.BeadEvent{
+		Kind:      "preserved-result-rejected",
+		Summary:   "operator rejected preserved result",
+		Body:      "result_rev=" + resultSHA,
+		Actor:     "operator",
+		Source:    "ddx work",
+		CreatedAt: time.Now().UTC(),
+	})
+
+	freshResultSHA := gitCommitFile(t, projectRoot, "fresh-output.txt", "fresh executor result\n", "chore: fresh executor result for "+beadID)
+	var execCalled atomic.Int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, id string) (ExecuteBeadReport, error) {
+			execCalled.Add(1)
+			return ExecuteBeadReport{
+				BeadID:    id,
+				SessionID: "fresh-session",
+				BaseRev:   baseSHA,
+				ResultRev: freshResultSHA,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "fresh executor path ran",
+			}, nil
+		}),
+	}
+
+	opts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:        true,
+		ProjectRoot: projectRoot,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), execCalled.Load(), "matching rejection must bypass dangling-success preservation and execute fresh work")
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.NotEqual(t, bead.StatusProposed, got.Status, "fresh execution path must not park the bead to proposed")
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	assert.Nil(t, beadEventByKind(events, "dangling-success-preserved"), "matching rejection must suppress dangling-success-preserved")
+}
+
+// TestRecoverDanglingSuccess_NonRejectedPreservedResultStillParks proves the
+// current preserve-and-park behavior still runs when no matching rejection
+// event exists.
+func TestRecoverDanglingSuccess_NonRejectedPreservedResultStillParks(t *testing.T) {
+	workDir, originDir, _ := setupBareOrigin(t)
+	const beadID = "ddx-preserve-no-reject"
+
+	ddxDir := testutils.MakeInitializedDDxRoot(t, workDir)
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "preserve without rejection",
+		IssueType: "task",
+	}))
+	require.NoError(t, store.Claim(beadID, "worker"))
+
+	baseSHA, resultSHA := gitDetachedBranchCommit(
+		t,
+		workDir,
+		"worker-result-preserve",
+		"worker-output.txt",
+		"detached result for preserve without rejection\n",
+		"chore: detached worker result for "+beadID,
+	)
+
+	const attemptID = "20260727T120100-preserve"
+	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		SessionID: "sess-preserve",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: resultSHA,
+		BaseRev:   baseSHA,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+
+	frozen := time.Date(2026, 7, 27, 12, 10, 0, 0, time.UTC)
+	prevNow := NowFunc
+	NowFunc = func() time.Time { return frozen }
+	t.Cleanup(func() { NowFunc = prevNow })
+
+	recovery, err := recoverDanglingSuccess(store, workDir, beadID, "worker", nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, recovery)
+	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome)
+
+	preserveRef := PreserveRef(beadID, baseSHA)
+	assert.Equal(t, resultSHA, mustGitRevParse(t, workDir, preserveRef))
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "non-rejected preserved result must still park to proposed")
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	preservedEvent := beadEventByKind(events, "dangling-success-preserved")
+	require.NotNil(t, preservedEvent)
+	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
+	assert.Contains(t, preservedEvent.Body, "pushed=true")
+
+	_ = originDir
+}
+
+// TestPreservedResultRejectedEventMatchesOnlySameResultRev proves that a
+// rejection event for a different result_rev does not suppress preservation.
+func TestPreservedResultRejectedEventMatchesOnlySameResultRev(t *testing.T) {
+	workDir, originDir, _ := setupBareOrigin(t)
+	const beadID = "ddx-preserve-other-reject"
+
+	ddxDir := testutils.MakeInitializedDDxRoot(t, workDir)
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "preserve with other rejection",
+		IssueType: "task",
+	}))
+	require.NoError(t, store.Claim(beadID, "worker"))
+
+	baseSHA, resultSHA := gitDetachedBranchCommit(
+		t,
+		workDir,
+		"worker-result-other-reject",
+		"worker-output.txt",
+		"detached result for preserve with other rejection\n",
+		"chore: detached worker result for "+beadID,
+	)
+
+	const attemptID = "20260727T120200-otherreject"
+	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		SessionID: "sess-other-reject",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: resultSHA,
+		BaseRev:   baseSHA,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+	appendBeadEvent(t, store, beadID, bead.BeadEvent{
+		Kind:      "preserved-result-rejected",
+		Summary:   "operator rejected a different preserved result",
+		Body:      "result_rev=ffffffffffffffffffffffffffffffffffffffff",
+		Actor:     "operator",
+		Source:    "ddx work",
+		CreatedAt: time.Now().UTC(),
+	})
+
+	frozen := time.Date(2026, 7, 27, 12, 20, 0, 0, time.UTC)
+	prevNow := NowFunc
+	NowFunc = func() time.Time { return frozen }
+	t.Cleanup(func() { NowFunc = prevNow })
+
+	recovery, err := recoverDanglingSuccess(store, workDir, beadID, "worker", nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, recovery)
+	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome)
+
+	preserveRef := PreserveRef(beadID, baseSHA)
+	assert.Equal(t, resultSHA, mustGitRevParse(t, workDir, preserveRef))
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "different rejection result_rev must not suppress preservation")
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	preservedEvent := beadEventByKind(events, "dangling-success-preserved")
+	require.NotNil(t, preservedEvent)
+	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
+	assert.Contains(t, preservedEvent.Body, "pushed=true")
+
+	_ = originDir
 }
 
 // ---------------------------------------------------------------------------
