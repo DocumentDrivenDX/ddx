@@ -704,6 +704,106 @@ func TestResourceExhaustedWorktreeCreationReleasesClaim(t *testing.T) {
 	require.Contains(t, res.Error, "No space left on device")
 }
 
+type prepareFailureResourceExhaustedBackend struct {
+	prepareErr   error
+	prepareCalls int
+	runCalls     int
+	cleanupCalls int
+}
+
+func (b *prepareFailureResourceExhaustedBackend) Name() string {
+	return "prepare-failure-resource-exhausted"
+}
+
+func (b *prepareFailureResourceExhaustedBackend) Prepare(context.Context, AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	b.prepareCalls++
+	return nil, b.prepareErr
+}
+
+func (b *prepareFailureResourceExhaustedBackend) Run(context.Context, AttemptBackendRunRequest) (*Result, error) {
+	b.runCalls++
+	return nil, fmt.Errorf("Run must not be called after Prepare fails")
+}
+
+func (b *prepareFailureResourceExhaustedBackend) ImportCandidate(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (b *prepareFailureResourceExhaustedBackend) ReleaseCandidateImport(context.Context, *AttemptWorkspace) error {
+	return nil
+}
+
+func (b *prepareFailureResourceExhaustedBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (b *prepareFailureResourceExhaustedBackend) Cleanup(context.Context, *AttemptWorkspace) error {
+	b.cleanupCalls++
+	return nil
+}
+
+// TestExecuteBeadPrepareFailureStillReportsResourceExhausted verifies that a
+// slot-backed prepare failure still reports resource_exhausted, the loop
+// releases the claim, and the backend never tries to clean up an unprepared
+// workspace.
+func TestExecuteBeadPrepareFailureStillReportsResourceExhausted(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	store, first, _ := newExecuteLoopTestStore(t)
+	claimStore := &claimCountingStore{Store: store}
+
+	backend := &prepareFailureResourceExhaustedBackend{
+		prepareErr: &ResourceExhaustedError{Detail: "slot pool exhausted"},
+	}
+
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	worker := &ExecuteBeadWorker{
+		Store: claimStore,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			res, err := ExecuteBeadWithConfig(ctx, projectRoot, beadID, cfg, ExecuteBeadRuntime{
+				AttemptBackend: backend,
+				AgentRunner:    scriptHarnessAgentRunner{},
+			}, &RealGitOps{})
+			if err != nil {
+				return ExecuteBeadReport{}, err
+			}
+			return ExecuteBeadReport{
+				BeadID:      res.BeadID,
+				AttemptID:   res.AttemptID,
+				WorkerID:    res.WorkerID,
+				Status:      res.Status,
+				Detail:      res.Reason,
+				Error:       res.Error,
+				SessionID:   res.SessionID,
+				BaseRev:     res.BaseRev,
+				ResultRev:   res.ResultRev,
+				ProjectRoot: res.ProjectRoot,
+			}, nil
+		}),
+	}
+
+	result, err := worker.Run(context.Background(), cfg, ExecuteBeadLoopRuntime{
+		Once:        true,
+		ProjectRoot: projectRoot,
+		SessionID:   "sess-prepare-resource",
+		WorkerID:    "worker-prepare-resource",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.Equal(t, 1, backend.prepareCalls)
+	require.Equal(t, 0, backend.runCalls)
+	require.Equal(t, 0, backend.cleanupCalls)
+
+	require.Equal(t, ExecuteBeadStatusResourceExhausted, result.LastFailureStatus)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, ExecuteBeadStatusResourceExhausted, result.Results[0].Status)
+
+	got, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	require.Equal(t, "open", got.Status)
+	require.Empty(t, got.Owner)
+}
+
 func TestResolveAttemptBackend_InTreeFromOverride(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
 		AttemptBackend: AttemptBackendInTree,
