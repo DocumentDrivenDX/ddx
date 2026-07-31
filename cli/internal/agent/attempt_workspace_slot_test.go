@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -300,4 +302,45 @@ executions:
 			require.NoError(t, pool.Release(slot))
 		}
 	})
+}
+
+func TestAttemptWorkspaceReuseTelemetryContractCarriesSavingsFields(t *testing.T) {
+	typ := reflect.TypeOf(AttemptWorkspaceSlot{})
+
+	timeField, ok := typ.FieldByName("ConservativeTimeSavedMS")
+	require.True(t, ok, "missing conservative time-saved field")
+	require.Equal(t, reflect.TypeOf(int64(0)), timeField.Type)
+	require.Equal(t, "conservative_time_saved_ms,omitempty", timeField.Tag.Get("json"))
+
+	bytesField, ok := typ.FieldByName("ConservativeBytesSaved")
+	require.True(t, ok, "missing conservative bytes-saved field")
+	require.Equal(t, reflect.TypeOf(int64(0)), bytesField.Type)
+	require.Equal(t, "conservative_bytes_saved,omitempty", bytesField.Tag.Get("json"))
+}
+
+func TestAttemptWorkspaceReuseTelemetryPayloadPreservesHitMissFields(t *testing.T) {
+	typ := reflect.TypeOf(AttemptWorkspaceSlot{})
+
+	hitField, ok := typ.FieldByName("SlotHitCount")
+	require.True(t, ok, "missing slot hit count field")
+	require.Equal(t, reflect.TypeOf(int(0)), hitField.Type)
+	require.Equal(t, "slot_hit_count,omitempty", hitField.Tag.Get("json"))
+
+	missField, ok := typ.FieldByName("SlotMissCount")
+	require.True(t, ok, "missing slot miss count field")
+	require.Equal(t, reflect.TypeOf(int(0)), missField.Type)
+	require.Equal(t, "slot_miss_count,omitempty", missField.Tag.Get("json"))
+
+	payload := AttemptWorkspaceSlot{
+		SlotHitCount:            3,
+		SlotMissCount:           1,
+		ConservativeTimeSavedMS: 2500,
+		ConservativeBytesSaved:  4096,
+	}
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"slot_hit_count":3`)
+	require.Contains(t, string(data), `"slot_miss_count":1`)
+	require.Contains(t, string(data), `"conservative_time_saved_ms":2500`)
+	require.Contains(t, string(data), `"conservative_bytes_saved":4096`)
 }

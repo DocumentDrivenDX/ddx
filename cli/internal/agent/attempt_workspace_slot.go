@@ -78,11 +78,17 @@ func (k AttemptWorkspaceSlotKey) SlotPath(index int) string {
 // When Pooled is false the Path is a fresh non-pooled directory that the
 // caller should treat as single-use (pool bound exceeded or reuse disabled).
 type AttemptWorkspaceSlot struct {
-	Key      AttemptWorkspaceSlotKey
-	Index    int
-	Path     string
-	Pooled   bool
-	lockFile *os.File
+	Key    AttemptWorkspaceSlotKey
+	Index  int
+	Path   string
+	Pooled bool
+	// Reusable-workspace telemetry contract. These fields are additive and
+	// default to zero until later execution telemetry populates them.
+	SlotHitCount            int   `json:"slot_hit_count,omitempty"`
+	SlotMissCount           int   `json:"slot_miss_count,omitempty"`
+	ConservativeTimeSavedMS int64 `json:"conservative_time_saved_ms,omitempty"`
+	ConservativeBytesSaved  int64 `json:"conservative_bytes_saved,omitempty"`
+	lockFile                *os.File
 }
 
 // AttemptWorkspaceSlotPool hands out bounded, exclusively locked reusable
