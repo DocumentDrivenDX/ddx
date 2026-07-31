@@ -303,6 +303,86 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 	}
 	_ = os.RemoveAll(ddxroot.InTree(workspacePath, "executions"))
 	_ = os.Remove(filepath.Join(workspacePath, ExecutionCleanupMetadataFileName))
+
+	if err := verifyReusableAttemptWorkspaceIntegrity(ctx, workspacePath, preserveRelPaths); err != nil {
+		return err
+	}
+	return nil
+}
+
+func reusableAttemptWorkspaceAllowlistRelPaths(preserveRelPaths []string) []string {
+	allowed := make([]string, 0, 2+len(preserveRelPaths))
+	seen := map[string]struct{}{}
+	add := func(rel string) {
+		rel = normalizeReusableAttemptWorkspaceRelPath(rel)
+		if rel == "" {
+			return
+		}
+		if _, ok := seen[rel]; ok {
+			return
+		}
+		seen[rel] = struct{}{}
+		allowed = append(allowed, rel)
+	}
+
+	add(slotLockFileName)
+	add(slotStampFileName)
+	for _, rel := range preserveRelPaths {
+		add(rel)
+	}
+	return allowed
+}
+
+func normalizeReusableAttemptWorkspaceRelPath(rel string) string {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return ""
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." || rel == "/" || strings.HasPrefix(rel, "../") {
+		return ""
+	}
+	return strings.TrimPrefix(rel, "./")
+}
+
+func reusableAttemptWorkspacePathAllowed(relPath string, allowedPrefixes []string) bool {
+	rel := normalizeReusableAttemptWorkspaceRelPath(relPath)
+	if rel == "" {
+		return false
+	}
+	for _, prefix := range allowedPrefixes {
+		if rel == prefix || strings.HasPrefix(rel, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func verifyReusableAttemptWorkspaceIntegrity(ctx context.Context, workspacePath string, preserveRelPaths []string) error {
+	out, err := internalgit.Command(ctx, workspacePath, "status", "--porcelain", "--untracked-files=all").Output()
+	if err != nil {
+		return fmt.Errorf("verifying reusable attempt workspace integrity: git status --porcelain --untracked-files=all: %w", err)
+	}
+
+	allowedPrefixes := reusableAttemptWorkspaceAllowlistRelPaths(preserveRelPaths)
+	var disallowed []string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" || len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+		}
+		if reusableAttemptWorkspacePathAllowed(path, allowedPrefixes) {
+			continue
+		}
+		disallowed = append(disallowed, normalizeReusableAttemptWorkspaceRelPath(path))
+	}
+	if len(disallowed) > 0 {
+		return fmt.Errorf("scrubbing reusable attempt workspace: disallowed residue remains after cleanup: %s", strings.Join(disallowed, ", "))
+	}
 	return nil
 }
 

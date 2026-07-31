@@ -98,6 +98,100 @@ func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testi
 	runGitInteg(t, ws.WorkDir, "commit", "-m", "test: sandboxed default clone commit")
 }
 
+func TestReusableAttemptWorkspacePreservesOnlyAllowlistedSlotState(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ws, err := (LocalCloneAttemptBackend{}).Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-a",
+		AttemptID:   "20260731T000001-a",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws) })
+
+	allowedPath := filepath.Join(ws.WorkDir, "allocator-owned")
+	require.NoError(t, os.MkdirAll(allowedPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(allowedPath, "cache.bin"), []byte("allocator-owned\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, slotLockFileName), []byte(""), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, slotStampFileName), []byte("2020-01-01T00:00:00Z\n"), 0o600))
+
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "seed.txt"), []byte("bead-a staged line\n"), 0o644))
+	runGitInteg(t, ws.WorkDir, "add", "seed.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "seed.txt"), []byte("bead-a modified line\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "bead-a-untracked.txt"), []byte("untracked\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".ddx", "executions", "bead-a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".ddx", "executions", "bead-a", "result.json"), []byte("{\"bead\":\"a\"}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ExecutionCleanupMetadataFileName), []byte("{}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".codex"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, ".codex", "auth.json"), []byte(`{"token":"a"}`), 0o600))
+
+	require.NoError(t, scrubReusableAttemptWorkspace(context.Background(), ws.WorkDir, baseRev, []string{"allocator-owned"}))
+
+	headRev := runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD")
+	require.Equal(t, baseRev, headRev)
+
+	require.FileExists(t, filepath.Join(ws.WorkDir, slotLockFileName))
+	require.FileExists(t, filepath.Join(ws.WorkDir, slotStampFileName))
+	require.FileExists(t, filepath.Join(allowedPath, "cache.bin"))
+
+	for _, path := range []string{
+		filepath.Join(ws.WorkDir, "bead-a-untracked.txt"),
+		filepath.Join(ws.WorkDir, ".ddx", "executions"),
+		filepath.Join(ws.WorkDir, ExecutionCleanupMetadataFileName),
+		filepath.Join(ws.WorkDir, ".codex", "auth.json"),
+	} {
+		_, statErr := os.Stat(path)
+		require.True(t, os.IsNotExist(statErr), "expected %s to be removed", path)
+	}
+
+	postStatus, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
+	require.NoError(t, err)
+	require.Contains(t, postStatus, "?? allocator-owned/cache.bin")
+	require.Contains(t, postStatus, "?? .slot.lock")
+	require.Contains(t, postStatus, "?? .slot.stamp")
+	require.NotContains(t, postStatus, "bead-a-untracked.txt")
+	require.NotContains(t, postStatus, ".ddx/executions")
+	require.NotContains(t, postStatus, ExecutionCleanupMetadataFileName)
+}
+
+func TestReusableAttemptWorkspaceFailsIntegrityCheckWhenScrubIncomplete(t *testing.T) {
+	projectRoot := t.TempDir()
+	workspace := filepath.Join(projectRoot, "workspace")
+	require.NoError(t, os.MkdirAll(workspace, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "leaked.txt"), []byte("leak\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, slotLockFileName), []byte(""), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, slotStampFileName), []byte("2020-01-01T00:00:00Z\n"), 0o600))
+
+	fakeGitDir := t.TempDir()
+	writeExecutable(t, filepath.Join(fakeGitDir, "git"), `#!/bin/sh
+set -eu
+case "$1" in
+  reset)
+    exit 0
+    ;;
+  clean)
+    exit 0
+    ;;
+  status)
+    printf '?? .slot.lock\n'
+    printf '?? .slot.stamp\n'
+    printf '?? leaked.txt\n'
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`)
+	t.Setenv("PATH", fakeGitDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	err := scrubReusableAttemptWorkspace(context.Background(), workspace, "base-rev", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "disallowed residue remains after cleanup")
+	require.Contains(t, err.Error(), "leaked.txt")
+	require.FileExists(t, filepath.Join(workspace, "leaked.txt"))
+}
+
 func TestReusableAttemptWorkspaceScrubsCrossBeadState(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 	ws, err := (LocalCloneAttemptBackend{}).Prepare(context.Background(), AttemptBackendPrepareRequest{
