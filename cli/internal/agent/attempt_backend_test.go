@@ -211,6 +211,117 @@ func TestReusableAttemptWorkspaceHardResetsToRequestedBaseRevision(t *testing.T)
 	require.Empty(t, postStatus)
 }
 
+func TestLocalCloneAttemptBackendReusesWorkerSlotAcrossSequentialAttempts(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ctx := context.Background()
+	backend := LocalCloneAttemptBackend{}
+
+	ws1, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-slot-a",
+		AttemptID:   "20260731T000001-a",
+		BaseRev:     baseRev,
+		WorkerSlot:  "worker-0",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws1)
+
+	absRoot, err := filepath.Abs(projectRoot)
+	require.NoError(t, err)
+	stampedRoot, err := runGitIntegOutput(ws1.WorkDir, "config", "--local", "--get", lockmetrics.SharedMainGitLockRootConfigKey)
+	require.NoError(t, err)
+	require.Equal(t, absRoot, strings.TrimSpace(stampedRoot))
+
+	require.NoError(t, backend.Cleanup(ctx, ws1))
+	require.Equal(t, baseRev, runGitInteg(t, ws1.WorkDir, "rev-parse", "HEAD"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "second-base.txt"), []byte("second base\n"), 0o644))
+	runGitInteg(t, projectRoot, "add", "second-base.txt")
+	runGitInteg(t, projectRoot, "commit", "-m", "test: second reusable base")
+	secondBaseRev := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	ws2, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-slot-b",
+		AttemptID:   "20260731T000001-b",
+		BaseRev:     secondBaseRev,
+		WorkerSlot:  "worker-0",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws2)
+	require.Equal(t, ws1.WorkDir, ws2.WorkDir)
+	require.Equal(t, secondBaseRev, runGitInteg(t, ws2.WorkDir, "rev-parse", "HEAD"))
+	require.NoError(t, backend.Cleanup(ctx, ws2))
+}
+
+func TestLocalCloneAttemptBackendCleanupReturnsHealthySlot(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ctx := context.Background()
+	backend := LocalCloneAttemptBackend{}
+
+	ws, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-slot-cleanup",
+		AttemptID:   "20260731T000002-a",
+		BaseRev:     baseRev,
+		WorkerSlot:  "worker-1",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+
+	sentinel := filepath.Join(ws.WorkDir, "dirty.txt")
+	require.NoError(t, os.WriteFile(sentinel, []byte("dirty\n"), 0o644))
+	require.NoError(t, backend.Cleanup(ctx, ws))
+
+	require.Equal(t, baseRev, runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD"))
+	status, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
+	require.NoError(t, err)
+	require.NotContains(t, status, "dirty.txt")
+	require.Contains(t, status, ".slot.stamp")
+	_, statErr := os.Stat(sentinel)
+	require.True(t, os.IsNotExist(statErr), "cleanup should scrub dirty residue before returning the slot")
+
+	ws2, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-slot-cleanup-b",
+		AttemptID:   "20260731T000002-b",
+		BaseRev:     baseRev,
+		WorkerSlot:  "worker-1",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws2)
+	require.Equal(t, ws.WorkDir, ws2.WorkDir)
+	require.NoError(t, backend.Cleanup(ctx, ws2))
+}
+
+func TestLocalCloneAttemptBackendKeepOnErrorPreservesExistingBehavior(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ctx := context.Background()
+	backend := LocalCloneAttemptBackend{}
+
+	ws, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-slot-keep",
+		AttemptID:   "20260731T000003-a",
+		BaseRev:     baseRev,
+		WorkerSlot:  "worker-2",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+
+	sentinel := filepath.Join(ws.WorkDir, "failed-attempt.txt")
+	require.NoError(t, os.WriteFile(sentinel, []byte("keep me\n"), 0o644))
+	ws.KeepOnError = true
+
+	require.NoError(t, backend.Quarantine(ctx, ws))
+	_, statErr := os.Stat(sentinel)
+	require.NoError(t, statErr, "KeepOnError must preserve the failed workspace")
+	require.Equal(t, baseRev, runGitInteg(t, ws.WorkDir, "rev-parse", "HEAD"))
+	status, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
+	require.NoError(t, err)
+	require.Contains(t, status, "failed-attempt.txt")
+}
+
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
 		AttemptBackend: AttemptBackendDockerClone,
@@ -927,25 +1038,6 @@ func TestInTreeAttemptBackendExclusiveLock(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, ws2)
 	require.Contains(t, err.Error(), "already running")
-}
-
-// TestAttemptBackend_LocalCloneCleanupUnchanged verifies that local-clone and
-// worktree backend cleanup remains routed through the existing non-docker path
-// (os.RemoveAll for local-clone, gitOps.WorktreeRemove for worktree). The
-// docker-clone Cleanup additions must not alter these paths.
-func TestAttemptBackend_LocalCloneCleanupUnchanged(t *testing.T) {
-	workDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "sentinel.txt"), []byte("test"), 0o644))
-
-	ws := &AttemptWorkspace{
-		Backend:   AttemptBackendLocalClone,
-		WorkDir:   workDir,
-		BeadID:    "ddx-test",
-		AttemptID: "test-attempt",
-	}
-	err := (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws)
-	require.NoError(t, err)
-	require.NoDirExists(t, workDir, "local-clone Cleanup must remove the work dir via os.RemoveAll")
 }
 
 func TestInTreeAttemptBackendReleasesLockOnCleanup(t *testing.T) {

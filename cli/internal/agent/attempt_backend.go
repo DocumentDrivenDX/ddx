@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -54,11 +55,13 @@ type AttemptBackend interface {
 }
 
 type AttemptBackendPrepareRequest struct {
-	ProjectRoot string
-	BeadID      string
-	AttemptID   string
-	BaseRev     string
-	GitOps      GitOps
+	ProjectRoot   string
+	BeadID        string
+	AttemptID     string
+	BaseRev       string
+	WorkerSlot    string
+	TrustBoundary string
+	GitOps        GitOps
 }
 
 type AttemptBackendRunRequest struct {
@@ -81,6 +84,8 @@ type AttemptWorkspace struct {
 	DockerHome          string
 	DockerRun           string
 	DockerSharedGoCache string
+	slot                *AttemptWorkspaceSlot
+	slotPool            *AttemptWorkspaceSlotPool
 	gitOps              GitOps
 	inTreeLockFile      *os.File
 }
@@ -99,7 +104,10 @@ func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
 	case AttemptBackendWorktree, "linked-worktree":
 		return WorktreeAttemptBackend{}, nil
 	case AttemptBackendLocalClone, "clone":
-		return LocalCloneAttemptBackend{CloneMode: dockerCloneMode(rcfg.ExecutionsDockerConfig())}, nil
+		return LocalCloneAttemptBackend{
+			CloneMode:         dockerCloneMode(rcfg.ExecutionsDockerConfig()),
+			ReusableWorkspace: rcfg.ReusableWorkspaceConfig(),
+		}, nil
 	case AttemptBackendDockerClone, "docker":
 		return DockerCloneAttemptBackend{Docker: rcfg.ExecutionsDockerConfig()}, nil
 	case AttemptBackendInTree:
@@ -192,45 +200,31 @@ func (WorktreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) e
 }
 
 type LocalCloneAttemptBackend struct {
-	CloneMode string
+	CloneMode         string
+	ReusableWorkspace *config.ReusableWorkspaceConfig
+	slotPool          *AttemptWorkspaceSlotPool
 }
 
 func (LocalCloneAttemptBackend) Name() string { return AttemptBackendLocalClone }
 
 func (b LocalCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
-	clonePath := executeBeadClonePath(req.ProjectRoot, req.BeadID, req.AttemptID)
-	if err := os.MkdirAll(filepath.Dir(clonePath), 0o755); err != nil {
-		return nil, fmt.Errorf("creating execute-bead clone parent dir: %w", err)
+	slot, pool, err := b.allocateReusableSlot(req)
+	if err != nil {
+		return nil, err
 	}
-
-	cloneArgs := localCloneArgs(b.CloneMode, req.ProjectRoot, clonePath)
-	if out, err := internalgit.Command(ctx, req.ProjectRoot, cloneArgs...).CombinedOutput(); err != nil {
-		if shouldRetryCloneWithoutHardlinks(b.CloneMode, out) {
-			_ = os.RemoveAll(clonePath)
-			cloneArgs = localCloneArgs("no-hardlinks", req.ProjectRoot, clonePath)
-			out, err = internalgit.Command(ctx, req.ProjectRoot, cloneArgs...).CombinedOutput()
-		}
-		if err == nil {
-			goto checkout
-		}
-		_ = os.RemoveAll(clonePath)
-		return nil, fmt.Errorf("creating isolated clone: %s: %w", strings.TrimSpace(string(out)), err)
+	if err := b.prepareReusableSlotWorkspace(ctx, req, slot); err != nil {
+		_ = discardAttemptWorkspaceSlot(slot)
+		return nil, err
 	}
-checkout:
-	if out, err := internalgit.Command(ctx, clonePath, "checkout", "--detach", req.BaseRev).CombinedOutput(); err != nil {
-		_ = os.RemoveAll(clonePath)
-		return nil, fmt.Errorf("checking out isolated clone base: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	seedAttemptCloneUserConfig(ctx, req.ProjectRoot, clonePath)
-	configureAttemptCloneTransientExcludes(clonePath)
-
 	return &AttemptWorkspace{
 		Backend:     AttemptBackendLocalClone,
 		ProjectRoot: req.ProjectRoot,
-		WorkDir:     clonePath,
+		WorkDir:     slot.Path,
 		BeadID:      req.BeadID,
 		AttemptID:   req.AttemptID,
 		BaseRev:     req.BaseRev,
+		slot:        slot,
+		slotPool:    pool,
 	}, nil
 }
 
@@ -251,7 +245,130 @@ func (LocalCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWo
 }
 
 func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
-	if ws == nil || ws.WorkDir == "" {
+	if ws == nil || ws.WorkDir == "" || ws.KeepOnError {
+		return nil
+	}
+	return (LocalCloneAttemptBackend{}).Release(ctx, ws)
+}
+
+func (LocalCloneAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	return cleanupReusableLocalCloneWorkspace(ctx, ws, true)
+}
+
+func (LocalCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	return cleanupReusableLocalCloneWorkspace(ctx, ws, false)
+}
+
+func (b LocalCloneAttemptBackend) allocateReusableSlot(req AttemptBackendPrepareRequest) (*AttemptWorkspaceSlot, *AttemptWorkspaceSlotPool, error) {
+	pool := b.slotAllocator()
+	key := AttemptWorkspaceSlotKey{
+		ProjectRoot:   req.ProjectRoot,
+		Backend:       AttemptBackendLocalClone,
+		WorkerSlot:    req.WorkerSlot,
+		TrustBoundary: req.TrustBoundary,
+	}
+	slot, err := pool.Allocate(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	return slot, pool, nil
+}
+
+func (b LocalCloneAttemptBackend) slotAllocator() *AttemptWorkspaceSlotPool {
+	if b.slotPool != nil {
+		return b.slotPool
+	}
+	return NewAttemptWorkspaceSlotPool(b.ReusableWorkspace)
+}
+
+func (b LocalCloneAttemptBackend) prepareReusableSlotWorkspace(ctx context.Context, req AttemptBackendPrepareRequest, slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return fmt.Errorf("allocating reusable attempt workspace: slot is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := os.MkdirAll(filepath.Dir(slot.Path), 0o755); err != nil {
+		return fmt.Errorf("creating reusable attempt workspace parent: %w", err)
+	}
+
+	cloneMode := b.CloneMode
+	if cloneMode == "" {
+		cloneMode = dockerCloneMode(nil)
+	}
+	healthy, err := reusableLocalCloneWorkspaceHealthy(ctx, slot.Path, req.ProjectRoot)
+	if err != nil {
+		return err
+	}
+	if !healthy {
+		if err := os.RemoveAll(slot.Path); err != nil {
+			return fmt.Errorf("resetting reusable attempt workspace: %w", err)
+		}
+		if err := b.cloneReusableSlot(ctx, req.ProjectRoot, slot.Path, cloneMode); err != nil {
+			return err
+		}
+	}
+	if err := scrubReusableAttemptWorkspace(ctx, slot.Path, req.BaseRev, nil); err != nil {
+		_ = os.RemoveAll(slot.Path)
+		if err := b.cloneReusableSlot(ctx, req.ProjectRoot, slot.Path, cloneMode); err != nil {
+			return err
+		}
+		if err := scrubReusableAttemptWorkspace(ctx, slot.Path, req.BaseRev, nil); err != nil {
+			_ = os.RemoveAll(slot.Path)
+			return err
+		}
+	}
+	seedAttemptCloneUserConfig(ctx, req.ProjectRoot, slot.Path)
+	configureAttemptCloneTransientExcludes(slot.Path)
+	return nil
+}
+
+func (b LocalCloneAttemptBackend) cloneReusableSlot(ctx context.Context, projectRoot, clonePath, cloneMode string) error {
+	if err := os.MkdirAll(filepath.Dir(clonePath), 0o755); err != nil {
+		return fmt.Errorf("creating execute-bead clone parent dir: %w", err)
+	}
+	cloneArgs := localCloneArgs(cloneMode, projectRoot, clonePath)
+	if out, err := internalgit.Command(ctx, projectRoot, cloneArgs...).CombinedOutput(); err != nil {
+		if shouldRetryCloneWithoutHardlinks(cloneMode, out) {
+			_ = os.RemoveAll(clonePath)
+			cloneArgs = localCloneArgs("no-hardlinks", projectRoot, clonePath)
+			out, err = internalgit.Command(ctx, projectRoot, cloneArgs...).CombinedOutput()
+		}
+		if err != nil {
+			_ = os.RemoveAll(clonePath)
+			return fmt.Errorf("creating isolated clone: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+	}
+	return nil
+}
+
+func reusableLocalCloneWorkspaceHealthy(ctx context.Context, clonePath, projectRoot string) (bool, error) {
+	if strings.TrimSpace(clonePath) == "" {
+		return false, nil
+	}
+	if info, err := os.Stat(filepath.Join(clonePath, ".git")); err != nil || !info.IsDir() {
+		return false, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	out, err := internalgit.Command(ctx, clonePath, "config", "--local", "--get", lockmetrics.SharedMainGitLockRootConfigKey).Output()
+	if err != nil {
+		return false, nil
+	}
+	stamped := strings.TrimSpace(string(out))
+	if stamped == "" {
+		return false, nil
+	}
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return false, nil
+	}
+	return sameFilesystemPath(stamped, absRoot), nil
+}
+
+func cleanupReusableLocalCloneWorkspace(ctx context.Context, ws *AttemptWorkspace, release bool) error {
+	if ws == nil || ws.WorkDir == "" || ws.slot == nil {
 		return nil
 	}
 	if ws.KeepOnError {
@@ -260,8 +377,70 @@ func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspac
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil)
-	return os.RemoveAll(ws.WorkDir)
+	if release {
+		if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+			if ws.slotPool != nil {
+				_ = ws.slotPool.Discard(ws.slot)
+			} else {
+				_ = discardAttemptWorkspaceSlot(ws.slot)
+			}
+			return err
+		}
+		if ws.slotPool != nil {
+			return ws.slotPool.Release(ws.slot)
+		}
+		return releaseAttemptWorkspaceSlot(ws.slot)
+	}
+	if ws.slotPool != nil {
+		return ws.slotPool.Discard(ws.slot)
+	}
+	return discardAttemptWorkspaceSlot(ws.slot)
+}
+
+func releaseAttemptWorkspaceSlot(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	var firstErr error
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := slot.lockFile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		slot.lockFile = nil
+	}
+	if slot.Pooled && slot.Path != "" {
+		_ = touchSlotStamp(slot.Path, time.Now())
+	} else if slot.Path != "" {
+		if err := os.RemoveAll(slot.Path); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func discardAttemptWorkspaceSlot(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	var firstErr error
+	if slot.Path != "" {
+		if err := os.RemoveAll(slot.Path); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := slot.lockFile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		slot.lockFile = nil
+	}
+	return firstErr
 }
 
 // scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and

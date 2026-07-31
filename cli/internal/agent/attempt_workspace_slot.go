@@ -202,6 +202,31 @@ func (p *AttemptWorkspaceSlotPool) Release(slot *AttemptWorkspaceSlot) error {
 	return firstErr
 }
 
+// Discard removes a slot directory without returning it to the pool. The
+// exclusive lock is held until the directory has been removed so a new
+// allocator cannot race in and reuse the same path mid-quarantine.
+func (p *AttemptWorkspaceSlotPool) Discard(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	var firstErr error
+	if slot.Path != "" {
+		if err := os.RemoveAll(slot.Path); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := slot.lockFile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		slot.lockFile = nil
+	}
+	return firstErr
+}
+
 // Evict removes pooled slots for key that exceed the configured max age or
 // that must be reclaimed to bring total disk usage under the high-water mark.
 // Held (locked) slots are skipped so concurrent holders are not disrupted.

@@ -62,6 +62,11 @@ func (b *recordingReusableSlotBackend) Release(ctx context.Context, ws *AttemptW
 
 func (b *recordingReusableSlotBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
 	b.quarantineCalls++
+	if backend, ok := b.inner.(interface {
+		Quarantine(context.Context, *AttemptWorkspace) error
+	}); ok {
+		return backend.Quarantine(ctx, ws)
+	}
 	return b.inner.Cleanup(ctx, ws)
 }
 

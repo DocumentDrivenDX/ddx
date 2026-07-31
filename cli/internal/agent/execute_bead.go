@@ -1056,11 +1056,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 	baseRev = rev
 	ws, err := attemptBackend.Prepare(ctx, AttemptBackendPrepareRequest{
-		ProjectRoot: projectRoot,
-		BeadID:      beadID,
-		AttemptID:   attemptID,
-		BaseRev:     baseRev,
-		GitOps:      gitOps,
+		ProjectRoot:   projectRoot,
+		BeadID:        beadID,
+		AttemptID:     attemptID,
+		BaseRev:       baseRev,
+		WorkerSlot:    runtime.WorkerID,
+		TrustBoundary: "default",
+		GitOps:        gitOps,
 	})
 	if err != nil {
 		// A disk/resource-exhaustion failure during the pre-dispatch sequence

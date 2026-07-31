@@ -259,7 +259,11 @@ func looksLikeExecuteBeadClonePath(p string) bool {
 	if p == "" {
 		return false
 	}
-	return strings.Contains(filepath.ToSlash(p), executeBeadClonePathSegment)
+	slash := filepath.ToSlash(p)
+	if strings.Contains(slash, executeBeadClonePathSegment) {
+		return true
+	}
+	return strings.Contains(slash, "/slot-")
 }
 
 // sharedMainGitLockRootFromConfig reads ddx.sharedMainGitLockRoot from the
