@@ -43,9 +43,11 @@ var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-conflict-recover-",
 	"ddx-home-",
 	"ddx-fixture-bin-",
+	"ddx-fizeau-testseam-bin-",
 }
 
 const executionCleanupUnownedScratchObservationClass = "preserved_unowned_scratch_dir"
+const executionCleanupUncertainScratchObservationClass = "preserved_uncertain_scratch_dir"
 
 // ExecutionCleanupLiveness records the refreshable liveness signal attached to
 // a temp execution directory.
@@ -668,21 +670,26 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 
 			meta, metaErr := ReadExecutionCleanupMetadata(path)
 			if metaErr != nil {
+				if trustReason := m.trustedScratchRootReason(root); trustReason != "" {
+					class := executionCleanupUnownedScratchObservationClass
+					message := fmt.Sprintf("missing cleanup metadata under %s; preserving", trustReason)
+					if !errors.Is(metaErr, os.ErrNotExist) {
+						class = executionCleanupUncertainScratchObservationClass
+						message = fmt.Sprintf("unreadable cleanup metadata under %s; preserving", trustReason)
+					}
+					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+						Path:    path,
+						Class:   class,
+						Message: message,
+					})
+					continue
+				}
 				if !errors.Is(metaErr, os.ErrNotExist) {
 					summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 						Path:    path,
 						Class:   "scratch_metadata_read",
 						Message: metaErr.Error(),
 					})
-					continue
-				}
-				if trustReason := m.trustedScratchRootReason(root); trustReason != "" {
-					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
-						Path:    path,
-						Class:   executionCleanupUnownedScratchObservationClass,
-						Message: fmt.Sprintf("missing cleanup metadata under %s; preserving", trustReason),
-					})
-					continue
 				}
 				meta = ExecutionCleanupMetadata{
 					ProjectRoot:  m.ProjectRoot,

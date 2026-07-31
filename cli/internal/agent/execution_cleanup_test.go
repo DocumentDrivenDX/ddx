@@ -863,6 +863,7 @@ func TestExecutionCleanup_DefaultScratchRootsIncludeConfiguredParentAndLegacyTem
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	configuredParent := t.TempDir()
 	tempRoot := filepath.Join(configuredParent, "ddx-exec-wt")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
 
 	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
 	mgr.TempRoot = tempRoot
@@ -923,6 +924,182 @@ func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {
 	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
 	assert.Equal(t, int64(2), summary.PreservedActiveScratchDirs)
 	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_scratch_dir"))
+}
+
+func TestExecutionCleanup_PreservesLiveFixtureBinaryScratch(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	livePID := os.Getpid()
+	fixtureBin := filepath.Join(scratchRoot, "ddx-fixture-bin-live")
+	fizeauBin := filepath.Join(scratchRoot, "ddx-fizeau-testseam-bin-live")
+
+	writeExecutionCleanupCandidate(t, fixtureBin, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: fixtureBin,
+		Liveness: &ExecutionCleanupLiveness{
+			PID:         livePID,
+			RefreshedAt: now.Add(-2 * time.Hour),
+			ExpiresAt:   now.Add(-time.Hour),
+		},
+	}, map[string]string{"payload.txt": "fixture live\n"})
+	writeExecutionCleanupCandidate(t, fizeauBin, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: fizeauBin,
+		Liveness: &ExecutionCleanupLiveness{
+			PID:         livePID,
+			RefreshedAt: now.Add(-2 * time.Hour),
+			ExpiresAt:   now.Add(-time.Hour),
+		},
+	}, map[string]string{"payload.txt": "fizeau live\n"})
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(fixtureBin, old, old))
+	require.NoError(t, os.Chtimes(fizeauBin, old, old))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, fixtureBin)
+	assert.DirExists(t, fizeauBin)
+	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(2), summary.PreservedActiveScratchDirs)
+	assert.Equal(t, 2, countObservationClass(summary.Observations, "preserved_active_scratch_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_scratch_dir"))
+}
+
+func TestExecutionCleanup_ReclaimsDeadFixtureBinaryScratch(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 30, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	fixtureBin := filepath.Join(scratchRoot, "ddx-fixture-bin-dead")
+	fizeauBin := filepath.Join(scratchRoot, "ddx-fizeau-testseam-bin-dead")
+
+	writeExecutionCleanupCandidate(t, fixtureBin, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: fixtureBin,
+		Liveness: &ExecutionCleanupLiveness{
+			PID:         0,
+			RefreshedAt: now.Add(-48 * time.Hour),
+			ExpiresAt:   now.Add(-24 * time.Hour),
+		},
+	}, map[string]string{"payload.txt": strings.Repeat("x", 32)})
+	writeExecutionCleanupCandidate(t, fizeauBin, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: fizeauBin,
+		Liveness: &ExecutionCleanupLiveness{
+			PID:         0,
+			RefreshedAt: now.Add(-48 * time.Hour),
+			ExpiresAt:   now.Add(-24 * time.Hour),
+		},
+	}, map[string]string{"payload.txt": strings.Repeat("y", 32)})
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(fixtureBin, old, old))
+	require.NoError(t, os.Chtimes(fizeauBin, old, old))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, fixtureBin)
+	assert.NoDirExists(t, fizeauBin)
+	assert.Equal(t, int64(2), summary.RemovedScratchDirs)
+	assert.Greater(t, summary.ScratchBytesReclaimed, int64(0))
+	assert.Greater(t, summary.ScratchInodesReclaimed, int64(0))
+	assert.Equal(t, 2, countObservationClass(summary.Observations, "removed_scratch_dir"))
+}
+
+func TestExecutionCleanup_PreservesUnownedFixtureBinaryScratch(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := filepath.Join(fixtureRoot, "execution-temp")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	missingMeta := filepath.Join(os.TempDir(), "ddx-fixture-bin-missing")
+	malformedMeta := filepath.Join(os.TempDir(), "ddx-fizeau-testseam-bin-malformed")
+
+	writeExecutionCleanupCandidateWithoutMetadata(t, missingMeta, map[string]string{"payload.txt": "missing\n"})
+	require.NoError(t, os.MkdirAll(malformedMeta, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(malformedMeta, ExecutionCleanupMetadataFileName), []byte("{not-json"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(malformedMeta, "payload.txt"), []byte("malformed\n"), 0o644))
+
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(missingMeta, old, old))
+	require.NoError(t, os.Chtimes(malformedMeta, old, old))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.ScratchRoots = []string{os.TempDir()}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, missingMeta)
+	assert.DirExists(t, malformedMeta)
+	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(0), summary.ScratchBytesReclaimed)
+	assert.Equal(t, int64(0), summary.ScratchInodesReclaimed)
+	assert.Equal(t, 1, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.Equal(t, 1, countObservationClass(summary.Observations, executionCleanupUncertainScratchObservationClass))
+	assert.True(t, hasObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.True(t, hasObservationClass(summary.Observations, executionCleanupUncertainScratchObservationClass))
+}
+
+func TestExecutionCleanup_DefaultPrefixesRequireFixtureOwnerMarker(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")
+	require.NoError(t, os.MkdirAll(hostTempRoot, 0o755))
+	t.Setenv("TMPDIR", hostTempRoot)
+
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	configuredParent := t.TempDir()
+	tempRoot := filepath.Join(configuredParent, "ddx-exec-wt")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+
+	prefixes := mgr.scratchPrefixes()
+	assert.Contains(t, prefixes, "ddx-fixture-bin-")
+	assert.Contains(t, prefixes, "ddx-fizeau-testseam-bin-")
+
+	fixtureBin := filepath.Join(os.TempDir(), "ddx-fixture-bin-owner-marker")
+	fizeauBin := filepath.Join(os.TempDir(), "ddx-fizeau-testseam-bin-owner-marker")
+	writeExecutionCleanupCandidateWithoutMetadata(t, fixtureBin, map[string]string{"payload.txt": "fixture\n"})
+	writeExecutionCleanupCandidateWithoutMetadata(t, fizeauBin, map[string]string{"payload.txt": "fizeau\n"})
+	old := time.Date(2026, 7, 24, 13, 30, 0, 0, time.UTC).Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(fixtureBin, old, old))
+	require.NoError(t, os.Chtimes(fizeauBin, old, old))
+
+	mgr.ScratchRoots = []string{os.TempDir()}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return old.Add(48 * time.Hour) }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, fixtureBin)
+	assert.DirExists(t, fizeauBin)
+	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
+	assert.Equal(t, 2, countObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
+	assert.True(t, hasObservationClass(summary.Observations, executionCleanupUnownedScratchObservationClass))
 }
 
 func TestExecutionCleanup_PreservesMetadataLessHostGlobalScratch(t *testing.T) {
