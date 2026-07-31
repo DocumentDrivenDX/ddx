@@ -69,6 +69,10 @@ type AttemptBackendPrepareRequest struct {
 // allocator owns for a pooled attempt workspace.
 type ReusableWorkspaceHandoff struct {
 	AllowlistRelPaths []string
+	// WorkspacePath is the allocator-owned existing slot that is being handed
+	// to a new bead. When empty, the backend falls back to creating a fresh
+	// attempt-ID clone path.
+	WorkspacePath string
 }
 
 type AttemptBackendRunRequest struct {
@@ -208,40 +212,51 @@ type LocalCloneAttemptBackend struct {
 func (LocalCloneAttemptBackend) Name() string { return AttemptBackendLocalClone }
 
 func (b LocalCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
-	clonePath := executeBeadClonePath(req.ProjectRoot, req.BeadID, req.AttemptID)
-	if err := os.MkdirAll(filepath.Dir(clonePath), 0o755); err != nil {
-		return nil, fmt.Errorf("creating execute-bead clone parent dir: %w", err)
+	var handoff *ReusableWorkspaceHandoff
+	if req.ReusableWorkspaceHandoff != nil {
+		handoff = req.ReusableWorkspaceHandoff
 	}
+	workspacePath := ""
+	if handoff != nil {
+		workspacePath = strings.TrimSpace(handoff.WorkspacePath)
+	}
+	reusedWorkspace := workspacePath != ""
+	if !reusedWorkspace {
+		workspacePath = executeBeadClonePath(req.ProjectRoot, req.BeadID, req.AttemptID)
+		if err := os.MkdirAll(filepath.Dir(workspacePath), 0o755); err != nil {
+			return nil, fmt.Errorf("creating execute-bead clone parent dir: %w", err)
+		}
 
-	cloneArgs := localCloneArgs(b.CloneMode, req.ProjectRoot, clonePath)
-	if out, err := internalgit.Command(ctx, req.ProjectRoot, cloneArgs...).CombinedOutput(); err != nil {
-		if shouldRetryCloneWithoutHardlinks(b.CloneMode, out) {
-			_ = os.RemoveAll(clonePath)
-			cloneArgs = localCloneArgs("no-hardlinks", req.ProjectRoot, clonePath)
-			out, err = internalgit.Command(ctx, req.ProjectRoot, cloneArgs...).CombinedOutput()
+		cloneArgs := localCloneArgs(b.CloneMode, req.ProjectRoot, workspacePath)
+		if out, err := internalgit.Command(ctx, req.ProjectRoot, cloneArgs...).CombinedOutput(); err != nil {
+			if shouldRetryCloneWithoutHardlinks(b.CloneMode, out) {
+				_ = os.RemoveAll(workspacePath)
+				cloneArgs = localCloneArgs("no-hardlinks", req.ProjectRoot, workspacePath)
+				out, err = internalgit.Command(ctx, req.ProjectRoot, cloneArgs...).CombinedOutput()
+			}
+			if err == nil {
+				goto checkout
+			}
+			_ = os.RemoveAll(workspacePath)
+			return nil, fmt.Errorf("creating isolated clone: %s: %w", strings.TrimSpace(string(out)), err)
 		}
-		if err == nil {
-			goto checkout
+	checkout:
+		if out, err := internalgit.Command(ctx, workspacePath, "checkout", "--detach", req.BaseRev).CombinedOutput(); err != nil {
+			_ = os.RemoveAll(workspacePath)
+			return nil, fmt.Errorf("checking out isolated clone base: %s: %w", strings.TrimSpace(string(out)), err)
 		}
-		_ = os.RemoveAll(clonePath)
-		return nil, fmt.Errorf("creating isolated clone: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-checkout:
-	if out, err := internalgit.Command(ctx, clonePath, "checkout", "--detach", req.BaseRev).CombinedOutput(); err != nil {
-		_ = os.RemoveAll(clonePath)
-		return nil, fmt.Errorf("checking out isolated clone base: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	if err := scrubReusableAttemptWorkspaceForPrepare(ctx, clonePath, req); err != nil {
-		_ = os.RemoveAll(clonePath)
+	if err := scrubReusableAttemptWorkspaceForPrepare(ctx, workspacePath, req); err != nil {
+		_ = os.RemoveAll(workspacePath)
 		return nil, err
 	}
-	seedAttemptCloneUserConfig(ctx, req.ProjectRoot, clonePath)
-	configureAttemptCloneTransientExcludes(clonePath)
+	seedAttemptCloneUserConfig(ctx, req.ProjectRoot, workspacePath)
+	configureAttemptCloneTransientExcludes(workspacePath)
 
 	return &AttemptWorkspace{
 		Backend:     AttemptBackendLocalClone,
 		ProjectRoot: req.ProjectRoot,
-		WorkDir:     clonePath,
+		WorkDir:     workspacePath,
 		BeadID:      req.BeadID,
 		AttemptID:   req.AttemptID,
 		BaseRev:     req.BaseRev,
@@ -284,6 +299,10 @@ func scrubReusableAttemptWorkspaceForPrepare(ctx context.Context, workspacePath 
 	handoff := req.ReusableWorkspaceHandoff
 	if handoff == nil {
 		return nil
+	}
+	reusePath := strings.TrimSpace(handoff.WorkspacePath)
+	if reusePath != "" {
+		workspacePath = reusePath
 	}
 	return reusableAttemptWorkspaceScrubber(ctx, workspacePath, req.BaseRev, handoff.AllowlistRelPaths)
 }
