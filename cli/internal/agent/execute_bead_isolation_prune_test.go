@@ -36,6 +36,10 @@ func (g *staleWorktreeRegistrationGitOps) WorktreePrune(dir string) error {
 	return nil
 }
 
+func (g *staleWorktreeRegistrationGitOps) WorktreeList(dir string) ([]string, error) {
+	return nil, nil
+}
+
 // TestExecuteBeadIsolation_PrunesStaleWorktreeAndRetries proves that a stale
 // worktree registration for the target path does not fail isolation setup:
 // WorktreeAttemptBackend.Prepare prunes the registration and retries the add
@@ -79,6 +83,10 @@ func (g *alwaysFailingWorktreeAddGitOps) WorktreeAdd(dir, wtPath, rev string) er
 func (g *alwaysFailingWorktreeAddGitOps) WorktreePrune(dir string) error {
 	g.prunedDirs = append(g.prunedDirs, dir)
 	return nil
+}
+
+func (g *alwaysFailingWorktreeAddGitOps) WorktreeList(dir string) ([]string, error) {
+	return nil, nil
 }
 
 func TestExecuteBeadIsolation_NonRegistrationWorktreeFailureIsNotRetried(t *testing.T) {

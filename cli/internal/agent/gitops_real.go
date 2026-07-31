@@ -27,7 +27,7 @@ func (r *RealGitOps) ResolveRev(dir, rev string) (string, error) {
 }
 
 func (r *RealGitOps) WorktreeAdd(dir, wtPath, rev string) error {
-	out, err := internalgit.Command(context.Background(), dir, "worktree", "add", "--detach", wtPath, rev).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "worktree", "add", "--force", "--detach", wtPath, rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add: %s: %w", strings.TrimSpace(string(out)), err)
 	}

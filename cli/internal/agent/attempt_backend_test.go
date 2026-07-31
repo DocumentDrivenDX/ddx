@@ -211,6 +211,151 @@ func TestReusableAttemptWorkspaceHardResetsToRequestedBaseRevision(t *testing.T)
 	require.Empty(t, postStatus)
 }
 
+func TestWorktreeAttemptBackendReusesWorkerSlotAcrossSequentialAttempts(t *testing.T) {
+	projectRoot, baseRev1 := newScriptHarnessRepo(t, 1)
+	ctx := context.Background()
+	backend := WorktreeAttemptBackend{}
+
+	ws1, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-reuse-a",
+		AttemptID:     "20260731T010101-a",
+		BaseRev:       baseRev1,
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        &RealGitOps{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws1)
+	t.Cleanup(func() { _ = discardAttemptWorkspaceSlot(ws1.workspaceSlot) })
+
+	require.Equal(t, baseRev1, runGitInteg(t, ws1.WorkDir, "rev-parse", "HEAD"))
+	require.NoError(t, os.WriteFile(filepath.Join(ws1.WorkDir, "slot-residue.txt"), []byte("first attempt\n"), 0o644))
+
+	require.NoError(t, backend.Release(ctx, ws1))
+	require.DirExists(t, ws1.WorkDir)
+	require.Equal(t, baseRev1, runGitInteg(t, ws1.WorkDir, "rev-parse", "HEAD"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "second-base.txt"), []byte("second base\n"), 0o644))
+	runGitInteg(t, projectRoot, "add", "second-base.txt")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: second base revision for worktree reuse")
+	baseRev2 := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	require.NotEqual(t, baseRev1, baseRev2)
+
+	ws2, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-reuse-b",
+		AttemptID:     "20260731T010102-b",
+		BaseRev:       baseRev2,
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        &RealGitOps{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws2)
+	require.Equal(t, ws1.WorkDir, ws2.WorkDir)
+	require.Equal(t, baseRev2, runGitInteg(t, ws2.WorkDir, "rev-parse", "HEAD"))
+	require.NoError(t, backend.Release(ctx, ws2))
+}
+
+func TestWorktreeAttemptBackendCleanupReturnsHealthySlot(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ctx := context.Background()
+	backend := WorktreeAttemptBackend{}
+
+	ws1, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-cleanup-a",
+		AttemptID:     "20260731T020201-a",
+		BaseRev:       baseRev,
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        &RealGitOps{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws1)
+	t.Cleanup(func() { _ = discardAttemptWorkspaceSlot(ws1.workspaceSlot) })
+
+	require.NoError(t, backend.Cleanup(ctx, ws1))
+	require.DirExists(t, ws1.WorkDir)
+	require.Equal(t, baseRev, runGitInteg(t, ws1.WorkDir, "rev-parse", "HEAD"))
+
+	ws2, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-cleanup-b",
+		AttemptID:     "20260731T020202-b",
+		BaseRev:       baseRev,
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        &RealGitOps{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws2)
+	require.Equal(t, ws1.WorkDir, ws2.WorkDir)
+	require.NoError(t, backend.Release(ctx, ws2))
+}
+
+func TestWorktreeAttemptBackendPreservesStaleRegistrationRecovery(t *testing.T) {
+	projectRoot := t.TempDir()
+	gitOps := &staleWorktreeRegistrationGitOps{}
+	backend := WorktreeAttemptBackend{}
+
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-stale-wt",
+		AttemptID:     "20260731T030301-a",
+		BaseRev:       "deadbeef",
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        gitOps,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+	require.Equal(t, 2, gitOps.addCalls, "expected one retry after pruning the stale registration")
+	require.Len(t, gitOps.prunedDirs, 1)
+	require.Equal(t, projectRoot, gitOps.prunedDirs[0])
+}
+
+func TestWorktreeAttemptBackendKeepOnErrorPreservesExistingBehavior(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ctx := context.Background()
+	backend := WorktreeAttemptBackend{}
+
+	ws1, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-keep-a",
+		AttemptID:     "20260731T040401-a",
+		BaseRev:       baseRev,
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        &RealGitOps{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws1)
+	ws1.KeepOnError = true
+	t.Cleanup(func() { _ = discardAttemptWorkspaceSlot(ws1.workspaceSlot) })
+
+	require.NoError(t, backend.Cleanup(ctx, ws1))
+	require.DirExists(t, ws1.WorkDir)
+	markerPath := filepath.Join(ws1.WorkDir, "keep-on-error-marker.txt")
+	require.NoError(t, os.WriteFile(markerPath, []byte("preserve\n"), 0o644))
+
+	ws2, err := backend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot:   projectRoot,
+		BeadID:        "ddx-keep-b",
+		AttemptID:     "20260731T040402-b",
+		BaseRev:       baseRev,
+		WorkerSlot:    "worker-0",
+		TrustBoundary: "default",
+		GitOps:        &RealGitOps{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws2)
+	_, statErr := os.Stat(markerPath)
+	require.NoError(t, statErr, "keep-on-error workspace residue must survive the next allocation")
+	require.NoError(t, backend.Release(ctx, ws2))
+}
+
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
 		AttemptBackend: AttemptBackendDockerClone,

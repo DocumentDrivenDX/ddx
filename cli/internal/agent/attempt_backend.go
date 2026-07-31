@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -54,11 +55,13 @@ type AttemptBackend interface {
 }
 
 type AttemptBackendPrepareRequest struct {
-	ProjectRoot string
-	BeadID      string
-	AttemptID   string
-	BaseRev     string
-	GitOps      GitOps
+	ProjectRoot   string
+	BeadID        string
+	AttemptID     string
+	BaseRev       string
+	WorkerSlot    string
+	TrustBoundary string
+	GitOps        GitOps
 }
 
 type AttemptBackendRunRequest struct {
@@ -81,6 +84,7 @@ type AttemptWorkspace struct {
 	DockerHome          string
 	DockerRun           string
 	DockerSharedGoCache string
+	workspaceSlot       *AttemptWorkspaceSlot
 	gitOps              GitOps
 	inTreeLockFile      *os.File
 }
@@ -119,24 +123,73 @@ func (WorktreeAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPre
 	if gitOps == nil {
 		gitOps = &RealGitOps{}
 	}
+	if strings.TrimSpace(req.WorkerSlot) == "" && strings.TrimSpace(req.TrustBoundary) == "" {
+		return prepareLegacyWorktreeAttemptWorkspace(ctx, req, gitOps)
+	}
+	pool := NewAttemptWorkspaceSlotPool(nil)
+	slot, err := pool.Allocate(AttemptWorkspaceSlotKey{
+		ProjectRoot:   req.ProjectRoot,
+		Backend:       AttemptBackendWorktree,
+		WorkerSlot:    resolveAttemptWorkspaceWorkerSlot(req.WorkerSlot),
+		TrustBoundary: resolveAttemptWorkspaceTrustBoundary(req.TrustBoundary),
+	})
+	if err != nil {
+		return nil, err
+	}
+	cleanupOnError := true
+	defer func() {
+		if !cleanupOnError || slot == nil {
+			return
+		}
+		_ = discardAttemptWorkspaceSlot(slot)
+	}()
+
+	if err := os.MkdirAll(filepath.Dir(slot.Path), 0o755); err != nil {
+		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", err)
+	}
+
+	registered, err := worktreePathRegistered(gitOps, req.ProjectRoot, slot.Path)
+	if err != nil {
+		return nil, fmt.Errorf("checking reusable worktree slot health: %w", err)
+	}
+
+	if registered {
+		if _, err := os.Stat(slot.Path); err != nil {
+			_ = gitOps.WorktreePrune(req.ProjectRoot)
+			_ = os.RemoveAll(slot.Path)
+			if err := addWorktreeAtPath(gitOps, req.ProjectRoot, slot.Path, req.BaseRev); err != nil {
+				return nil, err
+			}
+		} else if err := scrubReusableAttemptWorkspace(ctx, slot.Path, req.BaseRev, nil); err != nil {
+			return nil, err
+		}
+	} else {
+		_ = os.RemoveAll(slot.Path)
+		if err := addWorktreeAtPath(gitOps, req.ProjectRoot, slot.Path, req.BaseRev); err != nil {
+			return nil, err
+		}
+	}
+
+	cleanupOnError = false
+	return &AttemptWorkspace{
+		Backend:       AttemptBackendWorktree,
+		ProjectRoot:   req.ProjectRoot,
+		WorkDir:       slot.Path,
+		BeadID:        req.BeadID,
+		AttemptID:     req.AttemptID,
+		BaseRev:       req.BaseRev,
+		workspaceSlot: slot,
+		gitOps:        gitOps,
+	}, nil
+}
+
+func prepareLegacyWorktreeAttemptWorkspace(ctx context.Context, req AttemptBackendPrepareRequest, gitOps GitOps) (*AttemptWorkspace, error) {
 	wtPath := executeBeadWorktreePath(req.ProjectRoot, req.BeadID, req.AttemptID)
 	if err := os.MkdirAll(filepath.Dir(wtPath), 0o755); err != nil {
 		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", err)
 	}
-	if err := gitOps.WorktreeAdd(req.ProjectRoot, wtPath, req.BaseRev); err != nil {
-		if !isStaleWorktreeRegistrationError(err) {
-			_ = os.RemoveAll(wtPath)
-			return nil, fmt.Errorf("creating isolated worktree: %w", err)
-		}
-		// A prior attempt died without a clean `git worktree remove`, leaving a
-		// registration whose gitdir no longer resolves. Prune it and retry once
-		// before giving up (ddx-2e9679ba).
-		_ = gitOps.WorktreePrune(req.ProjectRoot)
-		_ = os.RemoveAll(wtPath)
-		if err := gitOps.WorktreeAdd(req.ProjectRoot, wtPath, req.BaseRev); err != nil {
-			_ = os.RemoveAll(wtPath)
-			return nil, fmt.Errorf("creating isolated worktree: %w", err)
-		}
+	if err := addWorktreeAtPath(gitOps, req.ProjectRoot, wtPath, req.BaseRev); err != nil {
+		return nil, err
 	}
 	return &AttemptWorkspace{
 		Backend:     AttemptBackendWorktree,
@@ -165,6 +218,52 @@ func (WorktreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, 
 	return nil
 }
 
+func (WorktreeAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || ws.WorkDir == "" || ws.workspaceSlot == nil {
+		if ws == nil || ws.WorkDir == "" {
+			return nil
+		}
+		if ws.KeepOnError {
+			return nil
+		}
+		gitOps := ws.gitOps
+		if gitOps == nil {
+			gitOps = &RealGitOps{}
+		}
+		return gitOps.WorktreeRemove(ws.ProjectRoot, ws.WorkDir)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ws.KeepOnError {
+		return nil
+	}
+	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+		return err
+	}
+	return releaseAttemptWorkspaceSlot(ws.workspaceSlot)
+}
+
+func (WorktreeAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || ws.WorkDir == "" || ws.workspaceSlot == nil {
+		if ws == nil || ws.WorkDir == "" {
+			return nil
+		}
+		gitOps := ws.gitOps
+		if gitOps == nil {
+			gitOps = &RealGitOps{}
+		}
+		return gitOps.WorktreeRemove(ws.ProjectRoot, ws.WorkDir)
+	}
+	if ws.KeepOnError {
+		return nil
+	}
+	if err := discardAttemptWorkspaceSlot(ws.workspaceSlot); err != nil {
+		return err
+	}
+	return nil
+}
+
 // isStaleWorktreeRegistrationError reports whether err from `git worktree add`
 // indicates a leftover registration for the target path (e.g. a prior
 // attempt that died and was never cleaned up with `git worktree remove`)
@@ -180,15 +279,135 @@ func isStaleWorktreeRegistrationError(err error) bool {
 		strings.Contains(msg, "gitdir file points to non-existent location")
 }
 
-func (WorktreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) error {
+func (WorktreeAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
+	}
+	if ws.KeepOnError {
+		if ws.workspaceSlot == nil {
+			return nil
+		}
+		return preserveAttemptWorkspaceSlot(ws.workspaceSlot)
 	}
 	gitOps := ws.gitOps
 	if gitOps == nil {
 		gitOps = &RealGitOps{}
 	}
+	if ws.workspaceSlot != nil {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+			_ = discardAttemptWorkspaceSlot(ws.workspaceSlot)
+			return err
+		}
+		return releaseAttemptWorkspaceSlot(ws.workspaceSlot)
+	}
 	return gitOps.WorktreeRemove(ws.ProjectRoot, ws.WorkDir)
+}
+
+func releaseAttemptWorkspaceSlot(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	_ = os.Remove(filepath.Join(slot.Path, slotKeepOnErrorFileName))
+	pool := NewAttemptWorkspaceSlotPool(nil)
+	return pool.Release(slot)
+}
+
+func preserveAttemptWorkspaceSlot(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	if slot.Path != "" {
+		if err := os.WriteFile(filepath.Join(slot.Path, slotKeepOnErrorFileName), []byte(time.Now().UTC().Format(time.RFC3339Nano)+"\n"), 0o600); err != nil {
+			return err
+		}
+	}
+	if err := touchSlotStamp(slot.Path, time.Now().UTC()); err != nil {
+		return err
+	}
+	var firstErr error
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := slot.lockFile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		slot.lockFile = nil
+	}
+	return firstErr
+}
+
+func discardAttemptWorkspaceSlot(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	var firstErr error
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := slot.lockFile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		slot.lockFile = nil
+	}
+	if slot.Path != "" {
+		if err := os.RemoveAll(slot.Path); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func worktreePathRegistered(gitOps GitOps, projectRoot, wtPath string) (bool, error) {
+	paths, err := gitOps.WorktreeList(projectRoot)
+	if err != nil {
+		return false, err
+	}
+	for _, path := range paths {
+		if sameFilesystemPath(path, wtPath) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func addWorktreeAtPath(gitOps GitOps, projectRoot, wtPath, baseRev string) error {
+	if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
+		if !isStaleWorktreeRegistrationError(err) {
+			return fmt.Errorf("creating isolated worktree: %w", err)
+		}
+		// A prior attempt died without a clean `git worktree remove`, leaving a
+		// registration whose gitdir no longer resolves. Prune it and retry once
+		// before giving up (ddx-2e9679ba).
+		_ = gitOps.WorktreePrune(projectRoot)
+		_ = os.RemoveAll(wtPath)
+		if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
+			_ = os.RemoveAll(wtPath)
+			return fmt.Errorf("creating isolated worktree: %w", err)
+		}
+	}
+	return nil
+}
+
+func resolveAttemptWorkspaceWorkerSlot(workerSlot string) string {
+	if workerSlot = strings.TrimSpace(workerSlot); workerSlot != "" {
+		return workerSlot
+	}
+	if workerSlot = strings.TrimSpace(os.Getenv("DDX_WORKER_ID")); workerSlot != "" {
+		return workerSlot
+	}
+	return "default"
+}
+
+func resolveAttemptWorkspaceTrustBoundary(trustBoundary string) string {
+	if trustBoundary = strings.TrimSpace(trustBoundary); trustBoundary != "" {
+		return trustBoundary
+	}
+	return "default"
 }
 
 type LocalCloneAttemptBackend struct {

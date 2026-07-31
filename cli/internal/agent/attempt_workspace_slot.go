@@ -27,6 +27,9 @@ const (
 	slotLockFileName = ".slot.lock"
 	// slotStampFileName records last-use timestamp for age-based eviction.
 	slotStampFileName = ".slot.stamp"
+	// slotKeepOnErrorFileName marks a preserved failed workspace so the pool
+	// never hands it out again until an operator cleans it up manually.
+	slotKeepOnErrorFileName = ".slot.keep-on-error"
 )
 
 // AttemptWorkspaceSlotKey identifies a reusable workspace slot pool.
@@ -322,6 +325,9 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 	path := p.slotPath(key, index)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return nil, fmt.Errorf("creating workspace slot %d: %w", index, err)
+	}
+	if _, err := os.Stat(filepath.Join(path, slotKeepOnErrorFileName)); err == nil {
+		return nil, nil
 	}
 	lockPath := filepath.Join(path, slotLockFileName)
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)

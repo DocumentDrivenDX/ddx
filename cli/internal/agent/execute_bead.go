@@ -1950,6 +1950,9 @@ func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend
 	if !ok || ws == nil {
 		return false
 	}
+	if ws.KeepOnError {
+		return false
+	}
 	if shouldReleaseReusableAttempt(result) {
 		_ = reusableBackend.Release(ctx, ws)
 		return true
