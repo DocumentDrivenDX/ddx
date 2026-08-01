@@ -246,6 +246,160 @@ func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
 	require.Zero(t, parsed.BytesSaved)
 }
 
+func TestAttemptWorkspaceReuseTelemetryRecordsHitsMisses(t *testing.T) {
+	const beadID = "ddx-int-0001"
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+
+	testCases := []struct {
+		name      string
+		slot      *AttemptWorkspaceSlot
+		telemetry *AttemptWorkspaceReuseTelemetryInput
+		want      string
+	}{
+		{
+			name: "hit",
+			slot: &AttemptWorkspaceSlot{
+				Pooled:        true,
+				SlotHitCount:  1,
+				SlotMissCount: 0,
+			},
+			telemetry: &AttemptWorkspaceReuseTelemetryInput{
+				SlotHitCount:  1,
+				SlotMissCount: 0,
+			},
+			want: AttemptWorkspaceReuseOutcomeHit,
+		},
+		{
+			name: "miss",
+			slot: &AttemptWorkspaceSlot{
+				Pooled:        true,
+				SlotHitCount:  0,
+				SlotMissCount: 1,
+			},
+			telemetry: &AttemptWorkspaceReuseTelemetryInput{
+				SlotHitCount:  0,
+				SlotMissCount: 1,
+			},
+			want: AttemptWorkspaceReuseOutcomeMiss,
+		},
+		{
+			name: "cold_start",
+			telemetry: &AttemptWorkspaceReuseTelemetryInput{
+				SlotHitCount:  0,
+				SlotMissCount: 1,
+			},
+			want: AttemptWorkspaceReuseOutcomeColdStart,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+			app := &stubBeadEventAppender{}
+			backend := &reusableWorkspaceTelemetryPrepBackend{
+				slot:      tc.slot,
+				telemetry: tc.telemetry,
+			}
+
+			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+				WorkerID:       "worker-slot-a",
+				BeadEvents:     app,
+				AgentRunner:    scriptHarnessAgentRunner{},
+				FromRev:        baseRev,
+				AttemptBackend: backend,
+			}, &RealGitOps{})
+			require.NoError(t, err)
+			require.NotNil(t, res)
+
+			var reuseEvents []bead.BeadEvent
+			for _, recorded := range app.events {
+				if recorded.Event.Kind == "reusable-workspace" {
+					reuseEvents = append(reuseEvents, recorded.Event)
+				}
+			}
+			require.Len(t, reuseEvents, 1, "expected exactly one reusable-workspace record for %s", tc.name)
+
+			evt := reuseEvents[0]
+			require.Contains(t, evt.Summary, "outcome="+tc.want)
+			require.Contains(t, evt.Summary, "slot_hit_count=")
+			require.Contains(t, evt.Summary, "slot_miss_count=")
+			require.Contains(t, evt.Summary, "time_saved_ms=")
+			require.Contains(t, evt.Summary, "bytes_saved=")
+
+			var parsed AttemptWorkspaceReuseTelemetryEventContract
+			require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+			require.Equal(t, tc.want, parsed.Outcome)
+			require.Equal(t, projectRoot, parsed.ProjectRoot)
+			require.Equal(t, "worker-slot-a", parsed.WorkerSlot)
+			require.Equal(t, AttemptBackendLocalClone, parsed.ResolvedBackendPolicy)
+			require.Equal(t, res.AttemptID, parsed.AttemptID)
+			require.Equal(t, tc.telemetry.SlotHitCount, parsed.SlotHitCount)
+			require.Equal(t, tc.telemetry.SlotMissCount, parsed.SlotMissCount)
+			require.Equal(t, tc.telemetry.TimeSavedMS, parsed.TimeSavedMS)
+			require.Equal(t, tc.telemetry.BytesSaved, parsed.BytesSaved)
+		})
+	}
+}
+
+type reusableWorkspaceTelemetryPrepBackend struct {
+	inner     AttemptBackend
+	slot      *AttemptWorkspaceSlot
+	telemetry *AttemptWorkspaceReuseTelemetryInput
+}
+
+func (b *reusableWorkspaceTelemetryPrepBackend) Name() string { return AttemptBackendLocalClone }
+
+func (b *reusableWorkspaceTelemetryPrepBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	inner := b.inner
+	if inner == nil {
+		inner = LocalCloneAttemptBackend{}
+	}
+	ws, err := inner.Prepare(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if b.slot != nil {
+		slot := *b.slot
+		if slot.Path == "" {
+			slot.Path = ws.WorkDir
+		}
+		ws.ReusableSlot = &slot
+	}
+	if b.telemetry != nil {
+		ws.ReusableTelemetry = b.telemetry
+	}
+	return ws, nil
+}
+
+func (b *reusableWorkspaceTelemetryPrepBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	inner := b.inner
+	if inner == nil {
+		inner = LocalCloneAttemptBackend{}
+	}
+	return inner.Run(ctx, req)
+}
+
+func (b *reusableWorkspaceTelemetryPrepBackend) ImportCandidate(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (b *reusableWorkspaceTelemetryPrepBackend) ReleaseCandidateImport(context.Context, *AttemptWorkspace) error {
+	return nil
+}
+
+func (b *reusableWorkspaceTelemetryPrepBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (b *reusableWorkspaceTelemetryPrepBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	inner := b.inner
+	if inner == nil {
+		inner = LocalCloneAttemptBackend{}
+	}
+	return inner.Cleanup(ctx, ws)
+}
+
 // TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings proves a
 // reused-attempt combined telemetry event carries hit allocation counts and
 // non-zero savings when the savings estimate provides proven preserved state.
