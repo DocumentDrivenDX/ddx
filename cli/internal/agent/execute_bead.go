@@ -752,6 +752,21 @@ func appendReusableWorkspaceTelemetry(appender BeadEventAppender, beadID string,
 	})
 }
 
+// reusableWorkspaceTelemetryForSlot returns the zero-savings fallback telemetry
+// for a non-pooled attempt workspace allocation.
+//
+// Reused pooled allocations keep their savings contract from the dedicated
+// savings calculator child; this fallback only makes cold starts and reuse
+// misses explicit so they are not silently omitted.
+func reusableWorkspaceTelemetryForSlot(slot *AttemptWorkspaceSlot) *ReusableWorkspaceTelemetry {
+	if slot == nil || slot.Pooled {
+		return nil
+	}
+	return &ReusableWorkspaceTelemetry{
+		SlotMissCount: 1,
+	}
+}
+
 func startRunStateRefresh(ctx context.Context, projectRoot string, state RunState) func() {
 	interval := RunStateRefreshInterval
 	if interval <= 0 {
@@ -1089,6 +1104,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	workspace = ws
 	if workspace == nil || strings.TrimSpace(workspace.WorkDir) == "" {
 		return nil, fmt.Errorf("attempt backend %s did not return a workspace", attemptBackend.Name())
+	}
+	if runtime.ReusableWorkspaceTelemetry == nil {
+		runtime.ReusableWorkspaceTelemetry = reusableWorkspaceTelemetryForSlot(workspace.ReusableSlot)
 	}
 	wtPath := workspace.WorkDir
 	if err := excludeCleanupMetadataFromWorktreeGit(wtPath); err != nil {
