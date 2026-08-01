@@ -148,5 +148,7 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		body := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
 		require.Equal(t, "execute-bead", body.Kind)
 		require.Contains(t, body.Body, "reusable_workspace_slot_misses=1")
+		require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
+		require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
 	})
 }
