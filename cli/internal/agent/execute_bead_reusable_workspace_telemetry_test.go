@@ -246,6 +246,84 @@ func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
 	require.Zero(t, parsed.BytesSaved)
 }
 
+func TestAttemptWorkspaceReuseTelemetryRecordsHitsMisses(t *testing.T) {
+	TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavingsPayload(t)
+}
+
+func TestAttemptWorkspaceReuseTelemetryRecordsFreshWorkspaceFallback(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+		AttemptWorkspaceReuseAllocationOutcome{
+			SlotMissCount: 1,
+		},
+	)
+	backend := &reusableWorkspaceSavingsEstimateBackend{
+		telemetry: &telemetry,
+	}
+
+	app := &stubBeadEventAppender{}
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, executeBeadReusableWorkspaceSavingsEstimateTestConfig(t), ExecuteBeadRuntime{
+		BeadEvents:     app,
+		AttemptBackend: backend,
+		AgentRunner:    scriptHarnessAgentRunner{},
+		WorkerID:       "worker-slot-a",
+		FromRev:        baseRev,
+	}, &RealGitOps{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var evt bead.BeadEvent
+	var beadEventID string
+	found := false
+	for _, recorded := range app.events {
+		if recorded.Event.Kind != "reusable-workspace" {
+			continue
+		}
+		evt = recorded.Event
+		beadEventID = recorded.BeadID
+		found = true
+		break
+	}
+	require.True(t, found, "expected a reusable-workspace event for the fresh-workspace fallback")
+	require.Equal(t, beadID, beadEventID)
+	require.Contains(t, evt.Summary, "outcome=cold_start")
+	require.Contains(t, evt.Summary, "slot_hit_count=0")
+	require.Contains(t, evt.Summary, "slot_miss_count=1")
+	require.Contains(t, evt.Summary, "time_saved_ms=0")
+	require.Contains(t, evt.Summary, "bytes_saved=0")
+
+	var parsed AttemptWorkspaceReuseTelemetryEventContract
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, AttemptWorkspaceReuseOutcomeColdStart, parsed.Outcome)
+	require.Equal(t, projectRoot, parsed.ProjectRoot)
+	require.Equal(t, "worker-slot-a", parsed.WorkerSlot)
+	require.Equal(t, AttemptBackendLocalClone, parsed.ResolvedBackendPolicy)
+	require.Equal(t, res.AttemptID, parsed.AttemptID)
+	require.Zero(t, parsed.SlotHitCount)
+	require.Equal(t, 1, parsed.SlotMissCount)
+	require.Zero(t, parsed.TimeSavedMS)
+	require.Zero(t, parsed.BytesSaved)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &raw))
+	require.Len(t, raw, 9)
+	for _, key := range []string{
+		"attempt_id",
+		"bytes_saved",
+		"outcome",
+		"project_root",
+		"resolved_backend_policy",
+		"slot_hit_count",
+		"slot_miss_count",
+		"time_saved_ms",
+		"worker_slot",
+	} {
+		require.Contains(t, raw, key)
+	}
+}
+
 // TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings proves a
 // reused-attempt combined telemetry event carries hit allocation counts and
 // non-zero savings when the savings estimate provides proven preserved state.
