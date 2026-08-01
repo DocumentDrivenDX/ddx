@@ -88,7 +88,13 @@ type AttemptWorkspace struct {
 	inTreeLockFile      *os.File
 }
 
-func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
+func ResolveAttemptBackend(rcfg config.ResolvedConfig, workerSlot ...string) (AttemptBackend, error) {
+	slotID := ""
+	if len(workerSlot) > 0 {
+		slotID = strings.TrimSpace(workerSlot[0])
+	}
+	policy := rcfg.ReusableWorkspaceConfig()
+	pool := NewAttemptWorkspaceSlotPool(policy)
 	name := strings.ToLower(strings.TrimSpace(rcfg.AttemptBackend()))
 	if name == "" {
 		// A linked worktree stores its gitdir under the primary repository's
@@ -100,9 +106,18 @@ func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
 	}
 	switch name {
 	case AttemptBackendWorktree, "linked-worktree":
-		return WorktreeAttemptBackend{}, nil
+		return WorktreeAttemptBackend{
+			ReusableWorkspacePolicy: policy,
+			ReusableWorkspacePool:   pool,
+			WorkerSlot:              slotID,
+		}, nil
 	case AttemptBackendLocalClone, "clone":
-		return LocalCloneAttemptBackend{CloneMode: dockerCloneMode(rcfg.ExecutionsDockerConfig())}, nil
+		return LocalCloneAttemptBackend{
+			CloneMode:               dockerCloneMode(rcfg.ExecutionsDockerConfig()),
+			ReusableWorkspacePolicy: policy,
+			ReusableWorkspacePool:   pool,
+			WorkerSlot:              slotID,
+		}, nil
 	case AttemptBackendDockerClone, "docker":
 		return DockerCloneAttemptBackend{Docker: rcfg.ExecutionsDockerConfig()}, nil
 	case AttemptBackendInTree:
@@ -113,9 +128,22 @@ func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
 	}
 }
 
-type WorktreeAttemptBackend struct{}
+type WorktreeAttemptBackend struct {
+	ReusableWorkspacePolicy *config.ReusableWorkspaceConfig
+	ReusableWorkspacePool   *AttemptWorkspaceSlotPool
+	WorkerSlot              string
+}
 
 func (WorktreeAttemptBackend) Name() string { return AttemptBackendWorktree }
+
+func (b WorktreeAttemptBackend) reusableWorkspaceKey(projectRoot string) AttemptWorkspaceSlotKey {
+	return AttemptWorkspaceSlotKey{
+		ProjectRoot:   projectRoot,
+		Backend:       b.Name(),
+		WorkerSlot:    b.WorkerSlot,
+		TrustBoundary: "default",
+	}
+}
 
 func (WorktreeAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
 	gitOps := req.GitOps
@@ -203,10 +231,22 @@ func (WorktreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) e
 }
 
 type LocalCloneAttemptBackend struct {
-	CloneMode string
+	CloneMode               string
+	ReusableWorkspacePolicy *config.ReusableWorkspaceConfig
+	ReusableWorkspacePool   *AttemptWorkspaceSlotPool
+	WorkerSlot              string
 }
 
 func (LocalCloneAttemptBackend) Name() string { return AttemptBackendLocalClone }
+
+func (b LocalCloneAttemptBackend) reusableWorkspaceKey(projectRoot string) AttemptWorkspaceSlotKey {
+	return AttemptWorkspaceSlotKey{
+		ProjectRoot:   projectRoot,
+		Backend:       b.Name(),
+		WorkerSlot:    b.WorkerSlot,
+		TrustBoundary: "default",
+	}
+}
 
 func (b LocalCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
 	clonePath := executeBeadClonePath(req.ProjectRoot, req.BeadID, req.AttemptID)
@@ -291,6 +331,14 @@ func (b DockerCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWo
 	return finalizeReusableAttemptWorkspace(ctx, AttemptBackendDockerClone, ws, false)
 }
 
+type reusableAttemptWorkspaceIntegrityError struct {
+	reason string
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	return e.reason
+}
+
 // scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and
 // removes residue that must not survive across beads. The preserveRelPaths hook
 // lets a slot allocator keep an allowlisted subtree such as build cache while
@@ -301,6 +349,9 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 	}
 	if strings.TrimSpace(baseRev) == "" {
 		return fmt.Errorf("scrubbing reusable attempt workspace: base revision is empty")
+	}
+	if _, err := os.Stat(filepath.Join(workspacePath, ".git")); err != nil {
+		return fmt.Errorf("scrubbing reusable attempt workspace: git metadata missing: %w", err)
 	}
 	resetOut, err := internalgit.Command(ctx, workspacePath, "reset", "--hard", baseRev).CombinedOutput()
 	if err != nil {
@@ -408,7 +459,9 @@ func validateReusableAttemptWorkspaceIntegrity(ctx context.Context, ws *AttemptW
 	if len(dirty) == 0 {
 		return nil
 	}
-	return fmt.Errorf("reusable workspace still dirty after reset: %s", strings.Join(dirty, ", "))
+	return &reusableAttemptWorkspaceIntegrityError{
+		reason: fmt.Sprintf("reusable workspace still dirty after reset: %s", strings.Join(dirty, ", ")),
+	}
 }
 
 func reusableAttemptWorkspaceDirtyPaths(status string) []string {
@@ -443,6 +496,10 @@ func reusableAttemptWorkspaceDirtyPaths(status string) []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+func reusableAttemptWorkspaceResiduePaths(status string) []string {
+	return reusableAttemptWorkspaceDirtyPaths(status)
 }
 
 func reusableAttemptCredentialRelPaths() []string {

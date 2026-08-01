@@ -698,6 +698,8 @@ type ReusableWorkspaceTelemetry struct {
 	BytesSaved    int64  `json:"bytes_saved"`
 }
 
+type reusableWorkspaceTelemetryBody = ReusableWorkspaceTelemetry
+
 // reusableWorkspaceTelemetryForWorkspace prefers the allocation metadata on
 // the prepared workspace slot and threads in an injected savings contract
 // when the slot does not already carry savings values. The execute path must
@@ -974,7 +976,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	attemptBackend := runtime.AttemptBackend
 	if attemptBackend == nil {
 		var backendErr error
-		attemptBackend, backendErr = ResolveAttemptBackend(rcfg)
+		attemptBackend, backendErr = ResolveAttemptBackend(rcfg, runtime.WorkerID)
 		if backendErr != nil {
 			return nil, backendErr
 		}

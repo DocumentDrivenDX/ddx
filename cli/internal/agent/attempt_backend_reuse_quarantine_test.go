@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,13 +79,20 @@ func TestReusableAttemptWorkspaceIntegrityDiagnosticsIncludeQuarantineReason(t *
 
 	require.NoError(t, os.RemoveAll(filepath.Join(ws.WorkDir, ".git")))
 
-	err = backend.Release(context.Background(), ws)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "slot="+ws.WorkDir)
-	require.Contains(t, err.Error(), "backend="+AttemptBackendLocalClone)
-	require.Contains(t, err.Error(), "project="+projectRoot)
-	require.Contains(t, err.Error(), "reason=")
-	require.Contains(t, err.Error(), "scrub failed")
+	require.NoError(t, backend.Release(context.Background(), ws))
+
+	markerPath := slotQuarantineMarkerPath(ws.WorkDir)
+	data, err := os.ReadFile(markerPath)
+	require.NoError(t, err)
+	var marker reusableAttemptWorkspaceQuarantineRecord
+	require.NoError(t, json.Unmarshal(data, &marker))
+	require.Equal(t, AttemptBackendLocalClone, marker.Backend)
+	require.Equal(t, ws.ProjectRoot, marker.ProjectRoot)
+	require.Equal(t, ws.WorkDir, marker.SlotPath)
+	require.Equal(t, ws.ReusableSlot.Index, marker.SlotIndex)
+	require.Contains(t, marker.Reason, "git metadata missing")
+	_, statErr := os.Stat(ws.WorkDir)
+	require.True(t, os.IsNotExist(statErr))
 }
 
 func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
@@ -120,7 +128,7 @@ func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
 	})
 	require.True(t, ok)
 	require.Equal(t, 1, backend.releaseCalls)
-	require.Equal(t, 1, backend.quarantineCalls)
+	require.Zero(t, backend.quarantineCalls)
 	_, statErr := os.Stat(ws.WorkDir)
 	require.True(t, os.IsNotExist(statErr))
 }

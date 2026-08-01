@@ -36,6 +36,7 @@ func sealedFixture() ResolvedConfig {
 		evidenceCaps:                 evidence.DefaultCaps(),
 		sessionLogDir:                "/tmp/sessions",
 		mirrorConfig:                 &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
+		reusableWorkspace:            &ReusableWorkspaceConfig{Enabled: func() *bool { v := true; return &v }(), MaxSlots: func() *int { v := 3; return &v }()},
 		beadQualityMode:              BeadQualityModeBlock,
 	}
 }
@@ -89,6 +90,7 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"EvidenceCapsForRole":                func(r ResolvedConfig) { _ = r.EvidenceCapsForRole(EvidenceRoleReviewer) },
 		"SessionLogDir":                      func(r ResolvedConfig) { _ = r.SessionLogDir() },
 		"MirrorConfig":                       func(r ResolvedConfig) { _ = r.MirrorConfig() },
+		"ReusableWorkspaceConfig":            func(r ResolvedConfig) { _ = r.ReusableWorkspaceConfig() },
 		"BeadQualityLintBlockThresholdScore": func(r ResolvedConfig) { _ = r.BeadQualityLintBlockThresholdScore() },
 		"BeadQualityMode":                    func(r ResolvedConfig) { _ = r.BeadQualityMode() },
 	}
@@ -285,6 +287,16 @@ func TestResolvedConfigMirrorConfigAccessor(t *testing.T) {
 	}
 }
 
+func TestResolvedConfigReusableWorkspaceConfigAccessor(t *testing.T) {
+	got := sealedFixture().ReusableWorkspaceConfig()
+	if got == nil || !got.ResolveEnabled() || got.ResolveMaxSlots() != 3 {
+		t.Fatalf("ReusableWorkspaceConfig = %+v", got)
+	}
+	if (ResolvedConfig{sealed: true}).ReusableWorkspaceConfig() != nil {
+		t.Fatalf("zero-after-seal ReusableWorkspaceConfig should be nil")
+	}
+}
+
 func TestResolveNilCfg(t *testing.T) {
 	timeout := 9 * time.Second
 	overrides := CLIOverrides{
@@ -341,6 +353,8 @@ func TestResolveAgentWallClockFromProjectConfig(t *testing.T) {
 
 func TestResolveDeepCopy(t *testing.T) {
 	mirrorAsync := true
+	reusableEnabled := true
+	reusableSlots := 2
 	cfg := &NewConfig{
 		Agent: &AgentConfig{
 			Routing: &RoutingConfig{},
@@ -352,6 +366,10 @@ func TestResolveDeepCopy(t *testing.T) {
 				Include: []string{"prompt.md"},
 				Async:   &mirrorAsync,
 			},
+			ReusableWorkspace: &ReusableWorkspaceConfig{
+				Enabled:  &reusableEnabled,
+				MaxSlots: &reusableSlots,
+			},
 		},
 	}
 
@@ -359,9 +377,14 @@ func TestResolveDeepCopy(t *testing.T) {
 
 	// Mutating the source after Resolve must not leak into resolved view.
 	cfg.Executions.Mirror.Kind = "SOURCE-MUTATED"
+	*cfg.Executions.ReusableWorkspace.Enabled = false
+	*cfg.Executions.ReusableWorkspace.MaxSlots = 99
 
 	if rcfg.MirrorConfig().Kind != "fs" {
 		t.Fatalf("post-source-mutation mirror kind = %q", rcfg.MirrorConfig().Kind)
+	}
+	if got := rcfg.ReusableWorkspaceConfig(); got == nil || !got.ResolveEnabled() || got.ResolveMaxSlots() != 2 {
+		t.Fatalf("post-source-mutation reusable workspace = %+v", got)
 	}
 }
 
