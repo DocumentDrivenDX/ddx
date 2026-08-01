@@ -698,6 +698,23 @@ type ReusableWorkspaceTelemetry struct {
 	BytesSaved    int64  `json:"bytes_saved"`
 }
 
+// reusableWorkspaceTelemetryForWorkspace prefers the allocation metadata on
+// the prepared workspace slot and only falls back to an injected telemetry
+// override when no slot is available. The execute path must not recompute
+// savings; it only threads through the contract already attached to the slot.
+func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *ReusableWorkspaceTelemetry) *ReusableWorkspaceTelemetry {
+	if ws != nil && ws.ReusableSlot != nil {
+		slot := ws.ReusableSlot
+		return &ReusableWorkspaceTelemetry{
+			SlotHitCount:  slot.SlotHitCount,
+			SlotMissCount: slot.SlotMissCount,
+			TimeSavedMS:   slot.ConservativeTimeSavedMS,
+			BytesSaved:    slot.ConservativeBytesSaved,
+		}
+	}
+	return fallback
+}
+
 // appendBeadCostEvidence records a kind:cost evidence entry on the bead with
 // per-attempt token and dollar usage. Best-effort: errors are discarded so a
 // store failure never aborts the main execute-bead flow. Emits nothing when
@@ -1117,7 +1134,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
 	}
-	if telemetry := runtime.ReusableWorkspaceTelemetry; telemetry != nil {
+	if telemetry := reusableWorkspaceTelemetryForWorkspace(workspace, runtime.ReusableWorkspaceTelemetry); telemetry != nil {
 		body := *telemetry
 		body.AttemptID = attemptID
 		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, body)
