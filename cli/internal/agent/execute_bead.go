@@ -130,10 +130,17 @@ type ExecuteBeadResult struct {
 	// CostSource is Fizeau public cost provenance for CostUSD ("reported",
 	// "configured", or "unknown"). Distinguishes genuine free calls from
 	// discarded source-less cost. See Result.CostSource.
-	CostSource  string `json:"cost_source,omitempty"`
-	ExitCode    int    `json:"exit_code"`
-	Error       string `json:"error,omitempty"`
-	ProjectRoot string `json:"project_root,omitempty"`
+	CostSource string `json:"cost_source,omitempty"`
+	// Reusable workspace telemetry stays on the same final execute-bead event
+	// as the rest of the attempt summary so callers do not need a separate
+	// savings-only stream.
+	ReusableWorkspaceSlotHits    int    `json:"reusable_workspace_slot_hits,omitempty"`
+	ReusableWorkspaceSlotMisses  int    `json:"reusable_workspace_slot_misses,omitempty"`
+	ReusableWorkspaceTimeSavedMS int64  `json:"reusable_workspace_time_saved_ms,omitempty"`
+	ReusableWorkspaceBytesSaved  int64  `json:"reusable_workspace_bytes_saved,omitempty"`
+	ExitCode                     int    `json:"exit_code"`
+	Error                        string `json:"error,omitempty"`
+	ProjectRoot                  string `json:"project_root,omitempty"`
 
 	// FailureMode classifies why an execution did not land cleanly. Empty
 	// when the bead was merged (task_succeeded landing outcome). Populated
@@ -482,6 +489,10 @@ func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadRepor
 	if report.CostSource != "" {
 		res.CostSource = report.CostSource
 	}
+	res.ReusableWorkspaceSlotHits = report.ReusableWorkspaceSlotHits
+	res.ReusableWorkspaceSlotMisses = report.ReusableWorkspaceSlotMisses
+	res.ReusableWorkspaceTimeSavedMS = report.ReusableWorkspaceTimeSavedMS
+	res.ReusableWorkspaceBytesSaved = report.ReusableWorkspaceBytesSaved
 	res.DurationMS = int(report.DurationMS)
 }
 

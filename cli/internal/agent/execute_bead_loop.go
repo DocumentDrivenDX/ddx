@@ -836,6 +836,12 @@ type ExecuteBeadReport struct {
 	// "configured", or "unknown"). Zero CostUSD with unknown provenance is not
 	// authoritative billing evidence.
 	CostSource string `json:"cost_source,omitempty"`
+	// Reusable workspace telemetry stays attached to the same final attempt
+	// event so allocation counts and savings analysis remain coupled.
+	ReusableWorkspaceSlotHits    int   `json:"reusable_workspace_slot_hits,omitempty"`
+	ReusableWorkspaceSlotMisses  int   `json:"reusable_workspace_slot_misses,omitempty"`
+	ReusableWorkspaceTimeSavedMS int64 `json:"reusable_workspace_time_saved_ms,omitempty"`
+	ReusableWorkspaceBytesSaved  int64 `json:"reusable_workspace_bytes_saved,omitempty"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	// Profile routing telemetry. Populated when work uses a profile
@@ -5984,6 +5990,15 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		parts = append(parts, cost)
 	} else if report.PredictedCostSource != "" {
 		parts = append(parts, fmt.Sprintf("predicted_cost_source=%s", report.PredictedCostSource))
+	}
+	if report.ReusableWorkspaceSlotHits > 0 || report.ReusableWorkspaceSlotMisses > 0 ||
+		report.ReusableWorkspaceTimeSavedMS > 0 || report.ReusableWorkspaceBytesSaved > 0 {
+		parts = append(parts,
+			fmt.Sprintf("reusable_workspace_slot_hits=%d", report.ReusableWorkspaceSlotHits),
+			fmt.Sprintf("reusable_workspace_slot_misses=%d", report.ReusableWorkspaceSlotMisses),
+			fmt.Sprintf("reusable_workspace_time_saved_ms=%d", report.ReusableWorkspaceTimeSavedMS),
+			fmt.Sprintf("reusable_workspace_bytes_saved=%d", report.ReusableWorkspaceBytesSaved),
+		)
 	}
 
 	return bead.BeadEvent{

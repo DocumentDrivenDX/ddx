@@ -77,6 +77,60 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
+func TestAttemptWorkspaceReuseTelemetryDoesNotEmitSplitReuseSavingsEvents(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:                       beadID,
+				Status:                       ExecuteBeadStatusNoChanges,
+				Detail:                       "no changes required",
+				SessionID:                    "sess-reuse",
+				BaseRev:                      "deadbeef",
+				ResultRev:                    "deadbeef",
+				NoChangesRationale:           "verification_command: true",
+				ReusableWorkspaceSlotHits:    3,
+				ReusableWorkspaceSlotMisses:  1,
+				ReusableWorkspaceTimeSavedMS: 4200,
+				ReusableWorkspaceBytesSaved:  8192,
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+
+	var combined *bead.BeadEvent
+	for i := range events {
+		ev := &events[i]
+		body := ev.Body
+		hasReuseField := strings.Contains(body, "reusable_workspace_slot_hits=") ||
+			strings.Contains(body, "reusable_workspace_slot_misses=") ||
+			strings.Contains(body, "reusable_workspace_time_saved_ms=") ||
+			strings.Contains(body, "reusable_workspace_bytes_saved=")
+		if !hasReuseField {
+			continue
+		}
+		require.Equal(t, "execute-bead", ev.Kind, "reuse telemetry must stay on the combined execute-bead event")
+		require.Nil(t, combined, "reuse telemetry must not be split across multiple events")
+		combined = ev
+	}
+
+	require.NotNil(t, combined, "execute-bead event must carry reusable workspace telemetry")
+	assert.Contains(t, combined.Body, "reusable_workspace_slot_hits=3")
+	assert.Contains(t, combined.Body, "reusable_workspace_slot_misses=1")
+	assert.Contains(t, combined.Body, "reusable_workspace_time_saved_ms=4200")
+	assert.Contains(t, combined.Body, "reusable_workspace_bytes_saved=8192")
+}
+
 func TestExecutionTrace_BeadResultEventRetainsCompatibleFields(t *testing.T) {
 	report := ExecuteBeadReport{
 		BeadID:    "ddx-trace",
