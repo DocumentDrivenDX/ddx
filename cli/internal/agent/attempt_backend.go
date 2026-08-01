@@ -191,9 +191,12 @@ func isStaleWorktreeRegistrationError(err error) bool {
 		strings.Contains(msg, "gitdir file points to non-existent location")
 }
 
-func (WorktreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) error {
+func (b WorktreeAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
+	}
+	if ws.ReusableSlot != nil && ws.ReusableSlot.Pooled {
+		return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, true)
 	}
 	gitOps := ws.gitOps
 	if gitOps == nil {
@@ -269,9 +272,12 @@ func (b LocalCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWor
 	return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, false)
 }
 
-func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+func (b LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
+	}
+	if ws.ReusableSlot != nil && ws.ReusableSlot.Pooled {
+		return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, true)
 	}
 	if ws.KeepOnError {
 		return nil
@@ -335,6 +341,58 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 
 var reusableAttemptWorkspaceIntegrityCheck = validateReusableAttemptWorkspaceIntegrity
 
+type reusableAttemptWorkspaceIntegrityError struct {
+	Backend     string
+	ProjectRoot string
+	SlotPath    string
+	Reason      string
+	Err         error
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	if e == nil {
+		return ""
+	}
+	parts := []string{
+		"quarantining reusable workspace",
+		"slot=" + e.SlotPath,
+		"backend=" + e.Backend,
+		"project=" + e.ProjectRoot,
+		"reason=" + e.Reason,
+	}
+	if e.Err != nil {
+		parts = append(parts, "error="+e.Err.Error())
+	}
+	return strings.Join(parts, " ")
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func newReusableAttemptWorkspaceIntegrityError(ws *AttemptWorkspace, backendName, reason string, err error) error {
+	if strings.TrimSpace(reason) == "" && err != nil {
+		reason = err.Error()
+	}
+	out := &reusableAttemptWorkspaceIntegrityError{
+		Backend: backendName,
+		Reason:  strings.TrimSpace(reason),
+		Err:     err,
+	}
+	if ws != nil {
+		out.ProjectRoot = ws.ProjectRoot
+		if ws.ReusableSlot != nil {
+			out.SlotPath = ws.ReusableSlot.Path
+		} else {
+			out.SlotPath = ws.WorkDir
+		}
+	}
+	return out
+}
+
 func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, ws *AttemptWorkspace, release bool) error {
 	if ws == nil || ws.ReusableSlot == nil || !ws.ReusableSlot.Pooled {
 		return nil
@@ -343,10 +401,18 @@ func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, w
 		ctx = context.Background()
 	}
 	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		reason := fmt.Sprintf("scrub failed: %v", err)
+		if qErr := quarantineReusableAttemptWorkspaceSlot(ws, backendName, reason); qErr != nil {
+			return newReusableAttemptWorkspaceIntegrityError(ws, backendName, reason, qErr)
+		}
+		return newReusableAttemptWorkspaceIntegrityError(ws, backendName, reason, err)
 	}
 	if err := reusableAttemptWorkspaceIntegrityCheck(ctx, ws); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		reason := err.Error()
+		if qErr := quarantineReusableAttemptWorkspaceSlot(ws, backendName, reason); qErr != nil {
+			return newReusableAttemptWorkspaceIntegrityError(ws, backendName, reason, qErr)
+		}
+		return newReusableAttemptWorkspaceIntegrityError(ws, backendName, reason, err)
 	}
 	if !release {
 		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine")

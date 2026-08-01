@@ -87,7 +87,7 @@ func TestReusableAttemptWorkspaceIntegrityDiagnosticsIncludeQuarantineReason(t *
 	require.Contains(t, err.Error(), "scrub failed")
 }
 
-func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
+func TestReusableAttemptWorkspaceReleaseQuarantinesFailedIntegrityCheck(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 
 	backend := &delegatingReusableSlotBackend{
@@ -120,12 +120,12 @@ func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
 	})
 	require.True(t, ok)
 	require.Equal(t, 1, backend.releaseCalls)
-	require.Equal(t, 1, backend.quarantineCalls)
+	require.Zero(t, backend.quarantineCalls, "release already quarantines integrity failures")
 	_, statErr := os.Stat(ws.WorkDir)
 	require.True(t, os.IsNotExist(statErr))
 }
 
-func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
+func TestReusableAttemptWorkspaceReleaseReturnsOnlyHealthySlotsToPool(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 
 	backend := &delegatingReusableSlotBackend{
@@ -163,6 +163,6 @@ func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
 
 	status, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
 	require.NoError(t, err)
-	require.Empty(t, reusableAttemptWorkspaceResiduePaths(strings.TrimSpace(status)))
+	require.Empty(t, reusableAttemptWorkspaceDirtyPaths(strings.TrimSpace(status)))
 	require.FileExists(t, filepath.Join(ws.WorkDir, slotStampFileName))
 }
