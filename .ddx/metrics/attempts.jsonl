@@ -5625,3 +5625,4 @@
 {"schema_version":1,"attempt_id":"20260729T005911-9eed8745","bead_id":"ddx-0a1b99dd","session_id":"eb-d7a63c21","ts_end":"2026-08-01T07:33:58Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260729T013351-1a9e7d89","bead_id":"ddx-c223fbee","session_id":"eb-6152d9a6","ts_end":"2026-08-01T07:34:52Z","outcome":"success","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260801T065550-a8f6cfe9","bead_id":"ddx-2bd4099a","session_id":"eb-592e13f1","ts_start":"2026-08-01T07:08:36Z","ts_end":"2026-08-01T07:49:02Z","model":"gpt-5.4-mini","harness":"codex","outcome":"repair-cycle-exhausted","exit_code":0,"duration_ms":2425808,"review_verdict":"BLOCK"}
+{"schema_version":1,"attempt_id":"20260801T065550-a8f6cfe9","bead_id":"ddx-2bd4099a","session_id":"eb-592e13f1","ts_end":"2026-08-01T08:13:54Z","outcome":"success","exit_code":0,"duration_ms":0}
