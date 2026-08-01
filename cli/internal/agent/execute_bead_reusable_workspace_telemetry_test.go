@@ -246,6 +246,71 @@ func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
 	require.Zero(t, parsed.BytesSaved)
 }
 
+// TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings proves a
+// reused-attempt combined telemetry event carries hit allocation counts and
+// non-zero savings when the savings estimate provides proven preserved state.
+func TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings(t *testing.T) {
+	const beadID = "ddx-int-0001"
+
+	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+		AttemptWorkspaceReuseAllocationOutcome{
+			SlotHitCount:                     1,
+			ConservativeTimeSavedMS:          8400,
+			ConservativeBytesSaved:           512 << 20,
+			ProvenPreservedProjectLocalState: true,
+		},
+	)
+	require.Equal(t, 1, telemetry.SlotHitCount)
+	require.Zero(t, telemetry.SlotMissCount)
+	require.Equal(t, int64(8400), telemetry.TimeSavedMS)
+	require.Equal(t, int64(512<<20), telemetry.BytesSaved)
+
+	app := &stubBeadEventAppender{}
+	contract := reusableWorkspaceTelemetryEventContract(
+		&AttemptWorkspace{
+			ReusableSlot: &AttemptWorkspaceSlot{
+				Pooled:                  true,
+				SlotHitCount:            telemetry.SlotHitCount,
+				SlotMissCount:           telemetry.SlotMissCount,
+				ConservativeTimeSavedMS: telemetry.TimeSavedMS,
+				ConservativeBytesSaved:  telemetry.BytesSaved,
+			},
+		},
+		&ReusableWorkspaceTelemetry{
+			SlotHitCount:  telemetry.SlotHitCount,
+			SlotMissCount: telemetry.SlotMissCount,
+			TimeSavedMS:   telemetry.TimeSavedMS,
+			BytesSaved:    telemetry.BytesSaved,
+		},
+		"/tmp/project-root",
+		"worker-slot-a",
+		AttemptBackendLocalClone,
+		"20260801T010203-reuse",
+	)
+	appendAttemptWorkspaceReuseTelemetry(app, beadID, contract)
+
+	require.Len(t, app.events, 1)
+	evt := app.events[0].Event
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "outcome=hit")
+	require.Contains(t, evt.Summary, "slot_hit_count=1")
+	require.Contains(t, evt.Summary, "slot_miss_count=0")
+	require.Contains(t, evt.Summary, "time_saved_ms=8400")
+	require.Contains(t, evt.Summary, "bytes_saved=536870912")
+
+	var parsed AttemptWorkspaceReuseTelemetryEventContract
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, AttemptWorkspaceReuseOutcomeHit, parsed.Outcome)
+	require.Equal(t, "/tmp/project-root", parsed.ProjectRoot)
+	require.Equal(t, "worker-slot-a", parsed.WorkerSlot)
+	require.Equal(t, AttemptBackendLocalClone, parsed.ResolvedBackendPolicy)
+	require.Equal(t, "20260801T010203-reuse", parsed.AttemptID)
+	require.Equal(t, 1, parsed.SlotHitCount)
+	require.Zero(t, parsed.SlotMissCount)
+	require.Equal(t, int64(8400), parsed.TimeSavedMS)
+	require.Equal(t, int64(512<<20), parsed.BytesSaved)
+}
+
 func TestAttemptWorkspaceReuseCombinedTelemetryColdStartValues(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	body := reusableWorkspaceTelemetryForWorkspace(
