@@ -400,6 +400,16 @@ func (b *reusableWorkspaceTelemetryPrepBackend) Cleanup(ctx context.Context, ws 
 	return inner.Cleanup(ctx, ws)
 }
 
+type reusableWorkspaceTelemetryCleanupCountingBackend struct {
+	reusableWorkspaceTelemetryPrepBackend
+	cleanupCalls int
+}
+
+func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	b.cleanupCalls++
+	return b.reusableWorkspaceTelemetryPrepBackend.Cleanup(ctx, ws)
+}
+
 // TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings proves a
 // reused-attempt combined telemetry event carries hit allocation counts and
 // non-zero savings when the savings estimate provides proven preserved state.
@@ -560,6 +570,59 @@ func TestAttemptWorkspaceReuseCombinedTelemetryReusedValues(t *testing.T) {
 	require.Zero(t, parsed.SlotMissCount)
 	require.Equal(t, int64(8400), parsed.TimeSavedMS)
 	require.Equal(t, int64(512<<20), parsed.BytesSaved)
+}
+
+func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
+	const beadID = "ddx-int-0001"
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendLocalClone,
+	})
+
+	app := &stubBeadEventAppender{}
+	backend := &reusableWorkspaceTelemetryCleanupCountingBackend{
+		reusableWorkspaceTelemetryPrepBackend: reusableWorkspaceTelemetryPrepBackend{
+			slot: &AttemptWorkspaceSlot{
+				Pooled:        true,
+				SlotHitCount:  1,
+				SlotMissCount: 0,
+			},
+			telemetry: &AttemptWorkspaceReuseTelemetryInput{
+				SlotHitCount:  1,
+				SlotMissCount: 0,
+			},
+		},
+	}
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		WorkerID:       "worker-slot-a",
+		BeadEvents:     app,
+		AgentRunner:    scriptHarnessAgentRunner{},
+		FromRev:        baseRev,
+		AttemptBackend: backend,
+	}, &RealGitOps{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, 1, backend.cleanupCalls)
+
+	var reuseEvents []bead.BeadEvent
+	for _, recorded := range app.events {
+		if recorded.Event.Kind == "reusable-workspace" {
+			reuseEvents = append(reuseEvents, recorded.Event)
+		}
+	}
+	require.Len(t, reuseEvents, 1, "cleanup should not append a second reusable-workspace event")
+
+	evt := reuseEvents[0]
+	require.Contains(t, evt.Summary, "outcome=hit")
+	require.Contains(t, evt.Summary, "slot_hit_count=1")
+	require.Contains(t, evt.Summary, "slot_miss_count=0")
+
+	var parsed AttemptWorkspaceReuseTelemetryEventContract
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, AttemptWorkspaceReuseOutcomeHit, parsed.Outcome)
+	require.Equal(t, 1, parsed.SlotHitCount)
+	require.Zero(t, parsed.SlotMissCount)
 }
 
 func TestAttemptWorkspaceReuseTelemetryUsesSamePayloadShapeForReuseAndColdStart(t *testing.T) {
