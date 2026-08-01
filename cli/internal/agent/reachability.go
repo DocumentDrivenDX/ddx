@@ -157,7 +157,6 @@ func keepAttemptWorkspaceSlotReachability(root string) {
 	// the static graph.
 	_ = AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
 		AttemptWorkspaceReuseAllocationOutcome{SlotMissCount: 1},
-		AttemptWorkspaceReuseSavings{},
 	)
 }
 

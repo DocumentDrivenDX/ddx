@@ -3,17 +3,13 @@ package agent
 // AttemptWorkspaceReuseAllocationOutcome captures the slot-pool outcome that
 // feeds reusable-workspace telemetry. Hit and miss counts stay explicit so the
 // combined payload can represent both reused attempts and cold starts with the
-// same JSON shape.
+// same JSON shape. Conservative savings estimates travel on the same contract
+// so callers do not need a parallel structure to preserve them.
 type AttemptWorkspaceReuseAllocationOutcome struct {
-	SlotHitCount  int
-	SlotMissCount int
-}
-
-// AttemptWorkspaceReuseSavings carries the savings contract consumed by the
-// reusable-workspace telemetry path.
-type AttemptWorkspaceReuseSavings struct {
-	TimeSavedMS int64
-	BytesSaved  int64
+	SlotHitCount            int
+	SlotMissCount           int
+	ConservativeTimeSavedMS int64
+	ConservativeBytesSaved  int64
 }
 
 // AttemptWorkspaceReuseTelemetryInput is the combined reusable-workspace
@@ -28,17 +24,16 @@ type AttemptWorkspaceReuseTelemetryInput struct {
 }
 
 // AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome converts the
-// allocation outcome plus savings contract into the combined telemetry input.
-// Callers provide the observed hit/miss counts and the savings estimate; cold
-// starts should pass zero savings and an expected miss count.
+// allocation outcome into the combined telemetry input. The function is a pure
+// projection: it preserves the counts and conservative savings estimates
+// already attached to the outcome and does not recompute them.
 func AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
 	outcome AttemptWorkspaceReuseAllocationOutcome,
-	savings AttemptWorkspaceReuseSavings,
 ) AttemptWorkspaceReuseTelemetryInput {
 	return AttemptWorkspaceReuseTelemetryInput{
 		SlotHitCount:  outcome.SlotHitCount,
 		SlotMissCount: outcome.SlotMissCount,
-		TimeSavedMS:   savings.TimeSavedMS,
-		BytesSaved:    savings.BytesSaved,
+		TimeSavedMS:   outcome.ConservativeTimeSavedMS,
+		BytesSaved:    outcome.ConservativeBytesSaved,
 	}
 }
