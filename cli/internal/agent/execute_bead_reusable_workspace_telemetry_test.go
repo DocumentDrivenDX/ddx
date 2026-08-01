@@ -11,45 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type coldStartReusableWorkspaceBackend struct {
-	inner AttemptBackend
-}
-
-func (b coldStartReusableWorkspaceBackend) Name() string { return b.inner.Name() }
-
-func (b coldStartReusableWorkspaceBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
-	ws, err := b.inner.Prepare(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	ws.ReusableSlot = &AttemptWorkspaceSlot{
-		Pooled:        false,
-		Path:          ws.WorkDir,
-		SlotMissCount: 1,
-	}
-	return ws, nil
-}
-
-func (b coldStartReusableWorkspaceBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
-	return b.inner.Run(ctx, req)
-}
-
-func (b coldStartReusableWorkspaceBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
-	return b.inner.ImportCandidate(ctx, ws, res)
-}
-
-func (b coldStartReusableWorkspaceBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
-	return b.inner.ReleaseCandidateImport(ctx, ws)
-}
-
-func (b coldStartReusableWorkspaceBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
-	return b.inner.PublishResult(ctx, ws, res)
-}
-
-func (b coldStartReusableWorkspaceBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
-	return b.inner.Cleanup(ctx, ws)
-}
-
 func TestAttemptWorkspaceReuseTelemetryPayloadCarriesSavingsFields(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	body := reusableWorkspaceTelemetryForWorkspace(
@@ -212,7 +173,10 @@ func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testi
 				Error:    "simulated cold-start attempt",
 			},
 		},
-		AttemptBackend: coldStartReusableWorkspaceBackend{inner: WorktreeAttemptBackend{}},
+		ReusableWorkspaceTelemetry: &ReusableWorkspaceTelemetry{
+			SlotMissCount: 1,
+		},
+		AttemptBackend: WorktreeAttemptBackend{},
 	}, &artifactTestGitOps{
 		projectRoot: projectRoot,
 		baseRev:     baseRev,
