@@ -724,20 +724,6 @@ func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *Reus
 			TimeSavedMS:   slot.ConservativeTimeSavedMS,
 			BytesSaved:    slot.ConservativeBytesSaved,
 		}
-		if ws.ReusableTelemetry != nil {
-			if telemetry.SlotHitCount == 0 {
-				telemetry.SlotHitCount = ws.ReusableTelemetry.SlotHitCount
-			}
-			if telemetry.SlotMissCount == 0 {
-				telemetry.SlotMissCount = ws.ReusableTelemetry.SlotMissCount
-			}
-			if telemetry.TimeSavedMS == 0 {
-				telemetry.TimeSavedMS = ws.ReusableTelemetry.TimeSavedMS
-			}
-			if telemetry.BytesSaved == 0 {
-				telemetry.BytesSaved = ws.ReusableTelemetry.BytesSaved
-			}
-		}
 		if telemetry.SlotHitCount == 0 && telemetry.SlotMissCount == 0 {
 			if slot.Pooled {
 				telemetry.SlotHitCount = 1
@@ -745,18 +731,34 @@ func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *Reus
 				telemetry.SlotMissCount = 1
 			}
 		}
-		if fallback != nil {
-			if telemetry.SlotHitCount == 0 {
-				telemetry.SlotHitCount = fallback.SlotHitCount
+		if slot.Pooled {
+			if ws.ReusableTelemetry != nil {
+				if telemetry.SlotHitCount == 0 {
+					telemetry.SlotHitCount = ws.ReusableTelemetry.SlotHitCount
+				}
+				if telemetry.SlotMissCount == 0 {
+					telemetry.SlotMissCount = ws.ReusableTelemetry.SlotMissCount
+				}
+				if telemetry.TimeSavedMS == 0 {
+					telemetry.TimeSavedMS = ws.ReusableTelemetry.TimeSavedMS
+				}
+				if telemetry.BytesSaved == 0 {
+					telemetry.BytesSaved = ws.ReusableTelemetry.BytesSaved
+				}
 			}
-			if telemetry.SlotMissCount == 0 {
-				telemetry.SlotMissCount = fallback.SlotMissCount
-			}
-			if telemetry.TimeSavedMS == 0 {
-				telemetry.TimeSavedMS = fallback.TimeSavedMS
-			}
-			if telemetry.BytesSaved == 0 {
-				telemetry.BytesSaved = fallback.BytesSaved
+			if fallback != nil {
+				if telemetry.SlotHitCount == 0 {
+					telemetry.SlotHitCount = fallback.SlotHitCount
+				}
+				if telemetry.SlotMissCount == 0 {
+					telemetry.SlotMissCount = fallback.SlotMissCount
+				}
+				if telemetry.TimeSavedMS == 0 {
+					telemetry.TimeSavedMS = fallback.TimeSavedMS
+				}
+				if telemetry.BytesSaved == 0 {
+					telemetry.BytesSaved = fallback.BytesSaved
+				}
 			}
 		}
 		return telemetry
