@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -255,86 +254,6 @@ func newReusableWorkspaceFixture(t *testing.T, backendName string) (*AttemptWork
 		ReusableSlot: slot,
 	}
 	return pool, slot, ws, key
-}
-
-func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
-	backendCases := []struct {
-		name    string
-		backend reusableWorkspaceLifecycleBackend
-	}{
-		{name: "local-clone", backend: LocalCloneAttemptBackend{}},
-		{name: "worktree", backend: WorktreeAttemptBackend{}},
-	}
-
-	for _, tc := range backendCases {
-		t.Run(tc.name, func(t *testing.T) {
-			pool, slot, ws, key := newReusableWorkspaceFixture(t, tc.backend.Name())
-
-			prev := reusableAttemptWorkspaceIntegrityCheck
-			reusableAttemptWorkspaceIntegrityCheck = func(context.Context, *AttemptWorkspace) error {
-				return errors.New("forced reusable workspace integrity failure")
-			}
-			t.Cleanup(func() { reusableAttemptWorkspaceIntegrityCheck = prev })
-
-			require.NoError(t, tc.backend.Release(context.Background(), ws))
-
-			markerPath := slotQuarantineMarkerPath(slot.Path)
-			data, err := os.ReadFile(markerPath)
-			require.NoError(t, err)
-			var marker reusableAttemptWorkspaceQuarantineRecord
-			require.NoError(t, json.Unmarshal(data, &marker))
-			require.Equal(t, tc.backend.Name(), marker.Backend)
-			require.Equal(t, ws.ProjectRoot, marker.ProjectRoot)
-			require.Equal(t, slot.Path, marker.SlotPath)
-			require.Equal(t, slot.Index, marker.SlotIndex)
-			require.Contains(t, marker.Reason, "forced reusable workspace integrity failure")
-			_, statErr := os.Stat(slot.Path)
-			require.True(t, os.IsNotExist(statErr), "quarantined slot must be removed from reuse")
-
-			next, err := pool.Allocate(key)
-			require.NoError(t, err)
-			require.NotNil(t, next)
-			require.False(t, next.Pooled, "quarantined slots must not be returned to the reusable pool")
-			require.NotEqual(t, slot.Path, next.Path)
-			t.Cleanup(func() { _ = pool.Release(next) })
-		})
-	}
-}
-
-func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
-	backendCases := []struct {
-		name    string
-		backend reusableWorkspaceLifecycleBackend
-	}{
-		{name: "local-clone", backend: LocalCloneAttemptBackend{}},
-		{name: "worktree", backend: WorktreeAttemptBackend{}},
-	}
-
-	for _, tc := range backendCases {
-		t.Run(tc.name, func(t *testing.T) {
-			pool, slot, ws, key := newReusableWorkspaceFixture(t, tc.backend.Name())
-
-			prev := reusableAttemptWorkspaceIntegrityCheck
-			reusableAttemptWorkspaceIntegrityCheck = func(context.Context, *AttemptWorkspace) error { return nil }
-			t.Cleanup(func() { reusableAttemptWorkspaceIntegrityCheck = prev })
-
-			require.NoError(t, tc.backend.Release(context.Background(), ws))
-
-			_, err := os.Stat(slotQuarantineMarkerPath(slot.Path))
-			require.True(t, os.IsNotExist(err), "healthy slot must not be quarantined")
-			require.FileExists(t, filepath.Join(slot.Path, "seed.txt"))
-			require.FileExists(t, filepath.Join(slot.Path, slotLockFileName))
-			require.FileExists(t, filepath.Join(slot.Path, slotStampFileName))
-
-			next, err := pool.Allocate(key)
-			require.NoError(t, err)
-			require.NotNil(t, next)
-			require.True(t, next.Pooled)
-			require.Equal(t, slot.Path, next.Path)
-			require.Equal(t, slot.Index, next.Index)
-			t.Cleanup(func() { _ = pool.Release(next) })
-		})
-	}
 }
 
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {

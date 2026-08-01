@@ -5991,17 +5991,14 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	} else if report.PredictedCostSource != "" {
 		parts = append(parts, fmt.Sprintf("predicted_cost_source=%s", report.PredictedCostSource))
 	}
-	if report.ReusableWorkspaceSlotHits > 0 || report.ReusableWorkspaceSlotMisses > 0 ||
-		report.ReusableWorkspaceTimeSavedMS > 0 || report.ReusableWorkspaceBytesSaved > 0 {
-		parts = append(parts,
-			fmt.Sprintf("reusable_workspace_slot_hits=%d", report.ReusableWorkspaceSlotHits),
-			fmt.Sprintf("reusable_workspace_slot_misses=%d", report.ReusableWorkspaceSlotMisses),
-		)
-		parts = append(parts,
-			fmt.Sprintf("reusable_workspace_time_saved_ms=%d", report.ReusableWorkspaceTimeSavedMS),
-			fmt.Sprintf("reusable_workspace_bytes_saved=%d", report.ReusableWorkspaceBytesSaved),
-		)
-	}
+	// Keep the reusable-workspace schema stable across reused and cold-start
+	// attempts by always emitting the same quartet of fields.
+	parts = append(parts,
+		fmt.Sprintf("reusable_workspace_slot_hits=%d", report.ReusableWorkspaceSlotHits),
+		fmt.Sprintf("reusable_workspace_slot_misses=%d", report.ReusableWorkspaceSlotMisses),
+		fmt.Sprintf("reusable_workspace_time_saved_ms=%d", report.ReusableWorkspaceTimeSavedMS),
+		fmt.Sprintf("reusable_workspace_bytes_saved=%d", report.ReusableWorkspaceBytesSaved),
+	)
 
 	return bead.BeadEvent{
 		Kind:      "execute-bead",

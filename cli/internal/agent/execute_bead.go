@@ -2009,10 +2009,7 @@ func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend
 	}
 	if shouldReleaseReusableAttempt(result) {
 		if err := reusableBackend.Release(ctx, ws); err != nil {
-			var integrityErr *reusableAttemptWorkspaceIntegrityError
-			if errors.As(err, &integrityErr) {
-				_ = reusableBackend.Quarantine(ctx, ws)
-			}
+			_ = reusableBackend.Quarantine(ctx, ws)
 		}
 		return true
 	}

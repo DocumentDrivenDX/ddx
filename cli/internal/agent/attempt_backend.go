@@ -343,10 +343,22 @@ func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, w
 		ctx = context.Background()
 	}
 	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		if !release {
+			return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		}
+		return fmt.Errorf(
+			"reusable workspace scrub failed: slot=%s backend=%s project=%s reason=scrub failed: %v",
+			ws.WorkDir,
+			backendName,
+			ws.ProjectRoot,
+			err,
+		)
 	}
 	if err := reusableAttemptWorkspaceIntegrityCheck(ctx, ws); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		if !release {
+			return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		}
+		return err
 	}
 	if !release {
 		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine")
@@ -408,7 +420,43 @@ func validateReusableAttemptWorkspaceIntegrity(ctx context.Context, ws *AttemptW
 	if len(dirty) == 0 {
 		return nil
 	}
-	return fmt.Errorf("reusable workspace still dirty after reset: %s", strings.Join(dirty, ", "))
+	return &reusableAttemptWorkspaceIntegrityError{
+		SlotPath:    ws.WorkDir,
+		Backend:     ws.Backend,
+		ProjectRoot: ws.ProjectRoot,
+		DirtyPaths:  append([]string(nil), dirty...),
+	}
+}
+
+type reusableAttemptWorkspaceIntegrityError struct {
+	SlotPath    string
+	Backend     string
+	ProjectRoot string
+	DirtyPaths  []string
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	if e == nil {
+		return "reusable workspace integrity check failed"
+	}
+	parts := []string{"reusable workspace still dirty after reset"}
+	if e.SlotPath != "" {
+		parts = append(parts, "slot="+e.SlotPath)
+	}
+	if e.Backend != "" {
+		parts = append(parts, "backend="+e.Backend)
+	}
+	if e.ProjectRoot != "" {
+		parts = append(parts, "project="+e.ProjectRoot)
+	}
+	if len(e.DirtyPaths) > 0 {
+		parts = append(parts, "dirty="+strings.Join(e.DirtyPaths, ","))
+	}
+	return strings.Join(parts, " ")
+}
+
+func reusableAttemptWorkspaceResiduePaths(status string) []string {
+	return reusableAttemptWorkspaceDirtyPaths(status)
 }
 
 func reusableAttemptWorkspaceDirtyPaths(status string) []string {

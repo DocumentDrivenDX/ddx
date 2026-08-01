@@ -2,6 +2,8 @@ package agent
 
 import (
 	"encoding/json"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -148,4 +150,55 @@ func TestAttemptWorkspaceReuseTelemetryColdStartRecordsSlotMiss(t *testing.T) {
 	require.Equal(t, 1, parsed.SlotMissCount)
 	require.Zero(t, parsed.TimeSavedMS)
 	require.Zero(t, parsed.BytesSaved)
+}
+
+func TestAttemptWorkspaceReuseCombinedTelemetryPayloadSchemaIsStable(t *testing.T) {
+	reused := executeBeadLoopEvent(ExecuteBeadReport{
+		BeadID:                       "ddx-reuse",
+		Status:                       ExecuteBeadStatusNoChanges,
+		ReusableWorkspaceSlotHits:    1,
+		ReusableWorkspaceSlotMisses:  0,
+		ReusableWorkspaceTimeSavedMS: 1834,
+		ReusableWorkspaceBytesSaved:  987654321,
+	}, "worker", time.Unix(0, 0).UTC())
+
+	coldStart := executeBeadLoopEvent(ExecuteBeadReport{
+		BeadID:                       "ddx-cold",
+		Status:                       ExecuteBeadStatusNoChanges,
+		ReusableWorkspaceSlotHits:    0,
+		ReusableWorkspaceSlotMisses:  1,
+		ReusableWorkspaceTimeSavedMS: 0,
+		ReusableWorkspaceBytesSaved:  0,
+	}, "worker", time.Unix(0, 0).UTC())
+
+	require.Equal(t, "execute-bead", reused.Kind)
+	require.Equal(t, "execute-bead", coldStart.Kind)
+
+	reusedKeys := executeBeadTelemetryFieldNames(reused.Body)
+	coldStartKeys := executeBeadTelemetryFieldNames(coldStart.Body)
+	require.ElementsMatch(t, reusedKeys, coldStartKeys)
+	require.Equal(t, []string{
+		"decision_audit",
+		"reusable_workspace_bytes_saved",
+		"reusable_workspace_slot_hits",
+		"reusable_workspace_slot_misses",
+		"reusable_workspace_time_saved_ms",
+	}, reusedKeys)
+}
+
+func executeBeadTelemetryFieldNames(body string) []string {
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+	keys := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		key, _, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
