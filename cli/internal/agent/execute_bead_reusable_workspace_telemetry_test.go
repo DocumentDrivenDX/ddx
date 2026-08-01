@@ -69,3 +69,41 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotRecomputeReuseSavings(t *testing.T
 	require.Equal(t, int64(1234), got.TimeSavedMS)
 	require.Equal(t, int64(5678), got.BytesSaved)
 }
+
+func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testing.T) {
+	body := reusableWorkspaceTelemetryForWorkspace(
+		&AttemptWorkspace{
+			ReusableSlot: &AttemptWorkspaceSlot{
+				Pooled: false,
+			},
+		},
+		nil,
+	)
+
+	require.NotNil(t, body)
+	require.Equal(t, 0, body.SlotHitCount)
+	require.Equal(t, 1, body.SlotMissCount)
+	require.Zero(t, body.TimeSavedMS)
+	require.Zero(t, body.BytesSaved)
+
+	body.AttemptID = "20260801T010203-cold"
+	app := &stubBeadEventAppender{}
+	appendReusableWorkspaceTelemetry(app, "ddx-int-0001", *body)
+
+	require.Len(t, app.events, 1)
+	got := app.events[0]
+	require.Equal(t, "ddx-int-0001", got.BeadID)
+	require.Equal(t, "reusable-workspace", got.Event.Kind)
+	require.Contains(t, got.Event.Summary, "slot_hit_count=0")
+	require.Contains(t, got.Event.Summary, "slot_miss_count=1")
+	require.Contains(t, got.Event.Summary, "time_saved_ms=0")
+	require.Contains(t, got.Event.Summary, "bytes_saved=0")
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(got.Event.Body), &parsed))
+	require.Equal(t, "20260801T010203-cold", parsed.AttemptID)
+	require.Equal(t, 0, parsed.SlotHitCount)
+	require.Equal(t, 1, parsed.SlotMissCount)
+	require.Zero(t, parsed.TimeSavedMS)
+	require.Zero(t, parsed.BytesSaved)
+}

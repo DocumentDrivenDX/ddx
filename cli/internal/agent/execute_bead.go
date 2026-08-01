@@ -705,9 +705,18 @@ type ReusableWorkspaceTelemetry struct {
 func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *ReusableWorkspaceTelemetry) *ReusableWorkspaceTelemetry {
 	if ws != nil && ws.ReusableSlot != nil {
 		slot := ws.ReusableSlot
+		hitCount := slot.SlotHitCount
+		missCount := slot.SlotMissCount
+		if hitCount == 0 && missCount == 0 {
+			if slot.Pooled {
+				hitCount = 1
+			} else {
+				missCount = 1
+			}
+		}
 		return &ReusableWorkspaceTelemetry{
-			SlotHitCount:  slot.SlotHitCount,
-			SlotMissCount: slot.SlotMissCount,
+			SlotHitCount:  hitCount,
+			SlotMissCount: missCount,
 			TimeSavedMS:   slot.ConservativeTimeSavedMS,
 			BytesSaved:    slot.ConservativeBytesSaved,
 		}
