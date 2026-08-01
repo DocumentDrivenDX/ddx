@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -166,6 +168,14 @@ func (WorktreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, 
 	return nil
 }
 
+func (b WorktreeAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, true)
+}
+
+func (b WorktreeAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, false)
+}
+
 // isStaleWorktreeRegistrationError reports whether err from `git worktree add`
 // indicates a leftover registration for the target path (e.g. a prior
 // attempt that died and was never cleaned up with `git worktree remove`)
@@ -251,6 +261,14 @@ func (LocalCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWo
 	return transportCloneResult(ctx, ws, res, "source", "result")
 }
 
+func (b LocalCloneAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, true)
+}
+
+func (b LocalCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	return finalizeReusableAttemptWorkspace(ctx, b.Name(), ws, false)
+}
+
 func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
@@ -263,6 +281,14 @@ func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspac
 	}
 	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil)
 	return os.RemoveAll(ws.WorkDir)
+}
+
+func (b DockerCloneAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	return finalizeReusableAttemptWorkspace(ctx, AttemptBackendDockerClone, ws, true)
+}
+
+func (b DockerCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	return finalizeReusableAttemptWorkspace(ctx, AttemptBackendDockerClone, ws, false)
 }
 
 // scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and
@@ -305,6 +331,118 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 	_ = os.RemoveAll(ddxroot.InTree(workspacePath, "executions"))
 	_ = os.Remove(filepath.Join(workspacePath, ExecutionCleanupMetadataFileName))
 	return nil
+}
+
+var reusableAttemptWorkspaceIntegrityCheck = validateReusableAttemptWorkspaceIntegrity
+
+func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, ws *AttemptWorkspace, release bool) error {
+	if ws == nil || ws.ReusableSlot == nil || !ws.ReusableSlot.Pooled {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+	}
+	if err := reusableAttemptWorkspaceIntegrityCheck(ctx, ws); err != nil {
+		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+	}
+	if !release {
+		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine")
+	}
+	return releaseReusableAttemptWorkspaceSlot(ws)
+}
+
+func releaseReusableAttemptWorkspaceSlot(ws *AttemptWorkspace) error {
+	if ws == nil || ws.ReusableSlot == nil {
+		return nil
+	}
+	slot := ws.ReusableSlot
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil {
+			_ = slot.lockFile.Close()
+			slot.lockFile = nil
+			return fmt.Errorf("releasing reusable workspace lock: %w", err)
+		}
+		if err := slot.lockFile.Close(); err != nil {
+			slot.lockFile = nil
+			return fmt.Errorf("closing reusable workspace lock: %w", err)
+		}
+		slot.lockFile = nil
+	}
+	if slot.Pooled && slot.Path != "" {
+		_ = touchSlotStamp(slot.Path, time.Now().UTC())
+	}
+	return nil
+}
+
+func quarantineReusableAttemptWorkspaceSlot(ws *AttemptWorkspace, backendName, reason string) error {
+	if ws == nil || ws.ReusableSlot == nil {
+		return nil
+	}
+	slot := ws.ReusableSlot
+	if err := writeSlotQuarantineMarker(slot, backendName, ws.ProjectRoot, reason); err != nil {
+		return err
+	}
+	if slot.lockFile != nil {
+		_ = releaseExclusiveLock(slot.lockFile)
+		_ = slot.lockFile.Close()
+		slot.lockFile = nil
+	}
+	if slot.Path != "" {
+		_ = os.RemoveAll(slot.Path)
+	}
+	return nil
+}
+
+func validateReusableAttemptWorkspaceIntegrity(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || strings.TrimSpace(ws.WorkDir) == "" {
+		return nil
+	}
+	out, err := internalgit.Command(ctx, ws.WorkDir, "status", "--porcelain", "--untracked-files=all").Output()
+	if err != nil {
+		return fmt.Errorf("checking reusable workspace integrity: %w", err)
+	}
+	dirty := reusableAttemptWorkspaceDirtyPaths(string(out))
+	if len(dirty) == 0 {
+		return nil
+	}
+	return fmt.Errorf("reusable workspace still dirty after reset: %s", strings.Join(dirty, ", "))
+}
+
+func reusableAttemptWorkspaceDirtyPaths(status string) []string {
+	if strings.TrimSpace(status) == "" {
+		return nil
+	}
+	var paths []string
+	seen := map[string]struct{}{}
+	for _, line := range strings.Split(status, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+		}
+		if path == "" {
+			continue
+		}
+		if _, reserved := reservedSlotMetaNames[filepath.Base(path)]; reserved {
+			continue
+		}
+		if strings.HasPrefix(path, ".ddx/") || path == ".ddx" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 func reusableAttemptCredentialRelPaths() []string {
