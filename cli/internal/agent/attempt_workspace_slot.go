@@ -339,11 +339,12 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 		return nil, fmt.Errorf("stamping slot %d: %w", index, err)
 	}
 	return &AttemptWorkspaceSlot{
-		Key:      key,
-		Index:    index,
-		Path:     path,
-		Pooled:   true,
-		lockFile: lockFile,
+		Key:          key,
+		Index:        index,
+		Path:         path,
+		Pooled:       true,
+		SlotHitCount: 1,
+		lockFile:     lockFile,
 	}, nil
 }
 
@@ -364,10 +365,11 @@ func (p *AttemptWorkspaceSlotPool) allocateEphemeral(key AttemptWorkspaceSlotKey
 		return nil, fmt.Errorf("creating ephemeral workspace: %w", err)
 	}
 	return &AttemptWorkspaceSlot{
-		Key:    key,
-		Index:  -1,
-		Path:   path,
-		Pooled: false,
+		Key:           key,
+		Index:         -1,
+		Path:          path,
+		Pooled:        false,
+		SlotMissCount: 1,
 	}, nil
 }
 
