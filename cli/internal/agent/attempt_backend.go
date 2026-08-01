@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -166,6 +167,14 @@ func (WorktreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, 
 	return nil
 }
 
+func (WorktreeAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	return releaseReusableAttemptWorkspace(ctx, ws, AttemptBackendWorktree)
+}
+
+func (WorktreeAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	return quarantineReusableAttemptWorkspace(ctx, ws, AttemptBackendWorktree)
+}
+
 // isStaleWorktreeRegistrationError reports whether err from `git worktree add`
 // indicates a leftover registration for the target path (e.g. a prior
 // attempt that died and was never cleaned up with `git worktree remove`)
@@ -251,6 +260,14 @@ func (LocalCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptWo
 	return transportCloneResult(ctx, ws, res, "source", "result")
 }
 
+func (LocalCloneAttemptBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	return releaseReusableAttemptWorkspace(ctx, ws, AttemptBackendLocalClone)
+}
+
+func (LocalCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	return quarantineReusableAttemptWorkspace(ctx, ws, AttemptBackendLocalClone)
+}
+
 func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
 	if ws == nil || ws.WorkDir == "" {
 		return nil
@@ -263,6 +280,127 @@ func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspac
 	}
 	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil)
 	return os.RemoveAll(ws.WorkDir)
+}
+
+type reusableAttemptWorkspaceIntegrityError struct {
+	SlotPath    string
+	Backend     string
+	ProjectRoot string
+	Reason      string
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	return fmt.Sprintf("reusable workspace integrity quarantine: slot=%s backend=%s project=%s reason=%s",
+		strings.TrimSpace(e.SlotPath), strings.TrimSpace(e.Backend), strings.TrimSpace(e.ProjectRoot), strings.TrimSpace(e.Reason))
+}
+
+func releaseReusableAttemptWorkspace(ctx context.Context, ws *AttemptWorkspace, backend string) error {
+	if ws == nil || strings.TrimSpace(ws.WorkDir) == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+		return reportReusableAttemptWorkspaceIntegrityError(ws, backend, fmt.Sprintf("scrub failed: %v", err))
+	}
+	if err := validateReusableAttemptWorkspaceIntegrity(ctx, ws); err != nil {
+		return reportReusableAttemptWorkspaceIntegrityError(ws, backend, err.Error())
+	}
+	if err := releaseReusableAttemptWorkspaceSlot(ws.ReusableSlot); err != nil {
+		return reportReusableAttemptWorkspaceIntegrityError(ws, backend, fmt.Sprintf("slot release failed: %v", err))
+	}
+	return nil
+}
+
+func quarantineReusableAttemptWorkspace(ctx context.Context, ws *AttemptWorkspace, backend string) error {
+	if ws == nil || strings.TrimSpace(ws.WorkDir) == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_ = releaseReusableAttemptWorkspaceSlot(ws.ReusableSlot)
+	if ws.Backend == AttemptBackendWorktree || backend == AttemptBackendWorktree {
+		gitOps := ws.gitOps
+		if gitOps == nil {
+			gitOps = &RealGitOps{}
+		}
+		return gitOps.WorktreeRemove(ws.ProjectRoot, ws.WorkDir)
+	}
+	return os.RemoveAll(ws.WorkDir)
+}
+
+func releaseReusableAttemptWorkspaceSlot(slot *AttemptWorkspaceSlot) error {
+	if slot == nil {
+		return nil
+	}
+	var firstErr error
+	if slot.lockFile != nil {
+		if err := releaseExclusiveLock(slot.lockFile); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := slot.lockFile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		slot.lockFile = nil
+	}
+	if slot.Pooled && slot.Path != "" {
+		if err := touchSlotStamp(slot.Path, time.Now().UTC()); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func validateReusableAttemptWorkspaceIntegrity(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws == nil || strings.TrimSpace(ws.WorkDir) == "" {
+		return nil
+	}
+	out, err := internalgit.Command(ctx, ws.WorkDir, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git status --porcelain --untracked-files=all: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	residue := reusableAttemptWorkspaceResiduePaths(string(out))
+	if len(residue) == 0 {
+		return nil
+	}
+	return fmt.Errorf("residual workspace state: %s", strings.Join(residue, ", "))
+}
+
+func reusableAttemptWorkspaceResiduePaths(statusOut string) []string {
+	var residue []string
+	for _, line := range strings.Split(strings.TrimSpace(statusOut), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		path := line
+		if len(path) > 3 {
+			path = strings.TrimSpace(path[3:])
+		}
+		if path == "" || path == slotLockFileName || path == slotStampFileName {
+			continue
+		}
+		residue = append(residue, path)
+	}
+	return residue
+}
+
+func reportReusableAttemptWorkspaceIntegrityError(ws *AttemptWorkspace, backend, reason string) error {
+	diag := &reusableAttemptWorkspaceIntegrityError{
+		Backend: backend,
+		Reason:  reason,
+	}
+	if ws != nil {
+		diag.SlotPath = ws.WorkDir
+		diag.ProjectRoot = ws.ProjectRoot
+		if ws.ReusableSlot != nil && ws.ReusableSlot.Path != "" {
+			diag.SlotPath = ws.ReusableSlot.Path
+		}
+	}
+	_, _ = fmt.Fprintln(os.Stderr, diag.Error())
+	return diag
 }
 
 // scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and
