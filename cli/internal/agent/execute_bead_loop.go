@@ -5996,9 +5996,13 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		parts = append(parts,
 			fmt.Sprintf("reusable_workspace_slot_hits=%d", report.ReusableWorkspaceSlotHits),
 			fmt.Sprintf("reusable_workspace_slot_misses=%d", report.ReusableWorkspaceSlotMisses),
-			fmt.Sprintf("reusable_workspace_time_saved_ms=%d", report.ReusableWorkspaceTimeSavedMS),
-			fmt.Sprintf("reusable_workspace_bytes_saved=%d", report.ReusableWorkspaceBytesSaved),
 		)
+		if report.ReusableWorkspaceTimeSavedMS > 0 {
+			parts = append(parts, fmt.Sprintf("reusable_workspace_time_saved_ms=%d", report.ReusableWorkspaceTimeSavedMS))
+		}
+		if report.ReusableWorkspaceBytesSaved > 0 {
+			parts = append(parts, fmt.Sprintf("reusable_workspace_bytes_saved=%d", report.ReusableWorkspaceBytesSaved))
+		}
 	}
 
 	return bead.BeadEvent{
