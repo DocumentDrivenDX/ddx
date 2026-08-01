@@ -694,7 +694,7 @@ type ReusableWorkspaceTelemetry struct {
 	AttemptID     string `json:"attempt_id,omitempty"`
 	SlotHitCount  int    `json:"slot_hit_count"`
 	SlotMissCount int    `json:"slot_miss_count"`
-	TimeSavedMS   int64  `json:"time_saved"`
+	TimeSavedMS   int64  `json:"time_saved_ms"`
 	BytesSaved    int64  `json:"bytes_saved"`
 }
 
@@ -768,7 +768,7 @@ func appendReusableWorkspaceTelemetry(appender BeadEventAppender, beadID string,
 		return
 	}
 	summary := fmt.Sprintf(
-		"slot_hit_count=%d slot_miss_count=%d time_saved=%d bytes_saved=%d",
+		"slot_hit_count=%d slot_miss_count=%d time_saved_ms=%d bytes_saved=%d",
 		body.SlotHitCount, body.SlotMissCount, body.TimeSavedMS, body.BytesSaved,
 	)
 	_ = appender.AppendEvent(beadID, bead.BeadEvent{
