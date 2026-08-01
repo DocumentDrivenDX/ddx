@@ -12,9 +12,10 @@ package agent
 //   A. result_rev IS reachable from HEAD (merge succeeded, close didn't).
 //      Recovery: call CloseWithEvidence directly; no re-execution needed.
 //   B. result_rev is NOT reachable from HEAD (crash during Land / dangling
-//      commit). Recovery: preserve the successful commit under
-//      refs/ddx/iterations/... when the object still exists locally, or park
-//      the bead for operator attention when DDx cannot recover the commit.
+//      commit, or empty-gate false-reject that still left a good commit).
+//      Recovery: try Land() first so clean results close without operator
+//      hand-landing; only preserve under refs/ddx/iterations/... when land
+//      fails or the object is missing.
 
 import (
 	"context"
@@ -345,6 +346,53 @@ func recoverDanglingSuccess(
 	}
 
 	if isCommitObjectPresent(projectRoot, prior.ResultRev) {
+		// Prefer automatic land of the successful result over parking for
+		// operator hand-merge. Empty-gate / crash-after-success left many
+		// green commits stranded; Land() preserves the worker commit parent
+		// (merge-over-rebase) and only preserves on conflict.
+		landRes, landErr := Land(projectRoot, LandRequest{
+			WorktreeDir: projectRoot,
+			BaseRev:     prior.BaseRev,
+			ResultRev:   prior.ResultRev,
+			BeadID:      beadID,
+			AttemptID:   prior.AttemptID,
+		}, RealLandingGitOps{})
+		if landErr == nil && landRes != nil && landRes.Status == "landed" {
+			closeRev := landRes.NewTip
+			if closeRev == "" {
+				closeRev = prior.ResultRev
+			}
+			payload["action"] = "auto_land_and_close"
+			payload["landed_tip"] = closeRev
+			if emit != nil {
+				emit("bead.dangling_success_recovery", payload)
+			}
+			appendDanglingSuccessEvent(store, beadID, bead.BeadEvent{
+				Kind:      "dangling-success-recovery",
+				Summary:   "recovered dangling success: landed result_rev and closed bead",
+				Body:      fmt.Sprintf("attempt_id=%s\nresult_rev=%s\nlanded_tip=%s\naction=auto_land_and_close", prior.AttemptID, prior.ResultRev, closeRev),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: t,
+			})
+			if cerr := store.CloseWithEvidence(beadID, prior.SessionID, closeRev); cerr != nil {
+				return nil, fmt.Errorf("dangling-success recovery: CloseWithEvidence after land(%s): %w", beadID, cerr)
+			}
+			return &DanglingSuccessRecovery{
+				Outcome:   danglingSuccessOutcomeClosed,
+				AttemptID: prior.AttemptID,
+				BaseRev:   prior.BaseRev,
+				ResultRev: prior.ResultRev,
+				SessionID: prior.SessionID,
+			}, nil
+		}
+		if landRes != nil && landRes.Status == "preserved" {
+			payload["land_status"] = "preserved"
+			payload["land_reason"] = landRes.Reason
+		} else if landErr != nil {
+			payload["land_error"] = landErr.Error()
+		}
+
 		ref := PreserveRef(beadID, prior.BaseRev)
 		if err := (&RealGitOps{}).UpdateRef(projectRoot, ref, prior.ResultRev); err == nil {
 			payload["preserve_ref"] = ref

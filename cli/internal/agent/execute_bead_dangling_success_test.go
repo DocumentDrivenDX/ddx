@@ -67,6 +67,15 @@ func gitDetachedBranchCommit(t *testing.T, dir, branch, filename, content, messa
 	return baseSHA, resultSHA
 }
 
+// forceDanglingSuccessLandConflict advances main on the same path the detached
+// worker edited so Land() cannot fast-forward or clean-merge. Used by tests
+// that assert the preserve-and-park fallback after auto-land fails.
+func forceDanglingSuccessLandConflict(t *testing.T, dir, filename string) {
+	t.Helper()
+	_ = gitCommitFile(t, dir, filename, "main-side conflict content for land fallback\n",
+		"chore: advance main to force land conflict")
+}
+
 func appendBeadEvent(t *testing.T, store *bead.Store, beadID string, event bead.BeadEvent) {
 	t.Helper()
 	require.NoError(t, store.AppendEvent(beadID, event))
@@ -342,6 +351,7 @@ func TestRecoverDanglingSuccess_NonRejectedPreservedResultStillParks(t *testing.
 		"detached result for preserve without rejection\n",
 		"chore: detached worker result for "+beadID,
 	)
+	forceDanglingSuccessLandConflict(t, workDir, "worker-output.txt")
 
 	const attemptID = "20260727T120100-preserve"
 	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
@@ -406,6 +416,7 @@ func TestPreservedResultRejectedEventMatchesOnlySameResultRev(t *testing.T) {
 		"detached result for preserve with other rejection\n",
 		"chore: detached worker result for "+beadID,
 	)
+	forceDanglingSuccessLandConflict(t, workDir, "worker-output.txt")
 
 	const attemptID = "20260727T120200-otherreject"
 	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
@@ -547,6 +558,9 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 }
 
 func TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry(t *testing.T) {
+	// Unmerged task_succeeded results must be reconciled without re-running the
+	// agent. When Land() can advance the target, recovery auto-lands and closes
+	// (factory reliability: do not park operator for mergeable green work).
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
@@ -601,34 +615,30 @@ func TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry(t *testing.T)
 	require.NotNil(t, result)
 	assert.Equal(t, int32(0), execCalled.Load(), "prior successful result must be reconciled before any retry")
 	assert.Equal(t, 1, result.Attempts)
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, result.LastFailureStatus)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
 
 	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status)
+	assert.Equal(t, bead.StatusClosed, got.Status, "mergeable dangling success must auto-land and close")
 
-	preserveRef := PreserveRef(beadID, baseSHA)
-	assert.Equal(t, resultSHA, mustGitRevParse(t, projectRoot, preserveRef))
-
-	meta := bead.GetNeedsHumanMeta(*got)
-	assert.Equal(t, "successful result commit was preserved for manual landing", meta.Reason)
-	assert.Contains(t, meta.SuggestedAction, preserveRef)
+	// Target tip should include the worker result (ff or merge).
+	head := mustGitRevParse(t, projectRoot, "HEAD")
+	assert.True(t, isRevReachableFromHead(projectRoot, resultSHA) || head == resultSHA,
+		"result_rev must be reachable after auto-land (head=%s result=%s)", head, resultSHA)
 
 	events, err := store.Events(beadID)
 	require.NoError(t, err)
-	var preservedEvent *bead.BeadEvent
+	var recoveryEvent *bead.BeadEvent
 	for i := range events {
-		if events[i].Kind == "dangling-success-preserved" {
-			preservedEvent = &events[i]
+		if events[i].Kind == "dangling-success-recovery" {
+			recoveryEvent = &events[i]
 			break
 		}
 	}
-	require.NotNil(t, preservedEvent, "preserved dangling success event must be recorded")
-	assert.Contains(t, preservedEvent.Body, "attempt_id="+attemptID)
-	assert.Contains(t, preservedEvent.Body, "result_rev="+resultSHA)
-	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
+	require.NotNil(t, recoveryEvent, "auto-land recovery event must be recorded")
+	assert.Contains(t, recoveryEvent.Body, "action=auto_land_and_close")
+	assert.Contains(t, recoveryEvent.Body, "result_rev="+resultSHA)
 }
 
 // TestRecoverDanglingSuccess_PushesPreserveRefToOrigin proves that a preserved
@@ -656,6 +666,7 @@ func TestRecoverDanglingSuccess_PushesPreserveRefToOrigin(t *testing.T) {
 		"detached result for push\n",
 		"chore: detached worker result for "+beadID,
 	)
+	forceDanglingSuccessLandConflict(t, workDir, "worker-output.txt")
 
 	const attemptID = "20260727T120000-pushok"
 	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
@@ -732,6 +743,7 @@ func TestRecoverDanglingSuccess_PushFailureStillPreservesLocally(t *testing.T) {
 		"detached result for push fail\n",
 		"chore: detached worker result for "+beadID,
 	)
+	forceDanglingSuccessLandConflict(t, projectRoot, "worker-output.txt")
 
 	const attemptID = "20260727T120000-pushfail"
 	writeResultJSON(t, projectRoot, attemptID, ExecuteBeadResult{
