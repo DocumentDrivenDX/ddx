@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -176,4 +179,63 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
 		require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
 	})
+}
+
+func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testing.T) {
+	projectRoot := setupArtifactTestProjectRoot(t)
+	const beadID = "ddx-int-0001"
+	baseRev := "bbbb000000000001"
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendLocalClone,
+	})
+
+	app := &stubBeadEventAppender{}
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		BeadEvents: app,
+		AgentRunner: &artifactTestAgentRunner{
+			result: &Result{
+				ExitCode: 1,
+				Error:    "simulated cold-start attempt",
+			},
+		},
+		ReusableWorkspaceTelemetry: &ReusableWorkspaceTelemetry{
+			SlotMissCount: 1,
+		},
+		AttemptBackend: WorktreeAttemptBackend{},
+	}, &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     baseRev,
+		resultRev:   baseRev,
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	var evt bead.BeadEvent
+	var beadEventID string
+	found := false
+	for _, recorded := range app.events {
+		if recorded.Event.Kind != "reusable-workspace" {
+			continue
+		}
+		evt = recorded.Event
+		beadEventID = recorded.BeadID
+		found = true
+		break
+	}
+	require.True(t, found, "expected a reusable-workspace event in the execute-bead telemetry stream")
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "slot_hit_count=0")
+	require.Contains(t, evt.Summary, "slot_miss_count=1")
+	require.Contains(t, evt.Summary, "time_saved_ms=0")
+	require.Contains(t, evt.Summary, "bytes_saved=0")
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, beadID, beadEventID)
+	require.Zero(t, parsed.SlotHitCount)
+	require.Equal(t, 1, parsed.SlotMissCount)
+	require.Zero(t, parsed.TimeSavedMS)
+	require.Zero(t, parsed.BytesSaved)
 }
