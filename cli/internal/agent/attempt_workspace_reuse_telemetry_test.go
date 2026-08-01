@@ -74,6 +74,24 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotCountColdSavingsAsReuseWin(t *test
 	require.Equal(t, 0, got.SlotHitCount)
 	require.Equal(t, 1, got.SlotMissCount)
 
+	evt := AttemptWorkspaceReuseTelemetryEvent(AttemptWorkspaceReuseTelemetryPayload{
+		SlotHitCount:  int64(got.SlotHitCount),
+		SlotMissCount: int64(got.SlotMissCount),
+		ReuseWin:      got.ReuseWin,
+		AttemptWorkspaceReuseSavingsContract: AttemptWorkspaceReuseSavingsContract{
+			TimeSavedMS: got.TimeSavedMS,
+			BytesSaved:  got.BytesSaved,
+		},
+	})
+	require.Equal(t, "attempt-workspace-reuse", evt.Kind)
+	require.Contains(t, evt.Summary, "reuse_win=false")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &body))
+	require.Equal(t, false, body["reuse_win"])
+	require.Equal(t, float64(0), body["time_saved_ms"])
+	require.Equal(t, float64(0), body["bytes_saved"])
+
 	raw, err := json.Marshal(got)
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"reuse_win":false`)
