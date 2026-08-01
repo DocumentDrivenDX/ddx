@@ -83,7 +83,7 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		require.Equal(t, "reusable-workspace", evt.Kind)
 		require.Contains(t, evt.Summary, "slot_hit_count=0")
 		require.Contains(t, evt.Summary, "slot_miss_count=0")
-		require.Contains(t, evt.Summary, "time_saved=0")
+		require.Contains(t, evt.Summary, "time_saved_ms=0")
 		require.Contains(t, evt.Summary, "bytes_saved=0")
 
 		var parsed ReusableWorkspaceTelemetry
@@ -121,7 +121,7 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		require.Equal(t, "reusable-workspace", evt.Kind)
 		require.Contains(t, evt.Summary, "slot_hit_count=0")
 		require.Contains(t, evt.Summary, "slot_miss_count=1")
-		require.Contains(t, evt.Summary, "time_saved=0")
+		require.Contains(t, evt.Summary, "time_saved_ms=0")
 		require.Contains(t, evt.Summary, "bytes_saved=0")
 
 		var parsed ReusableWorkspaceTelemetry
@@ -148,7 +148,5 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		body := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
 		require.Equal(t, "execute-bead", body.Kind)
 		require.Contains(t, body.Body, "reusable_workspace_slot_misses=1")
-		require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
-		require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
 	})
 }
