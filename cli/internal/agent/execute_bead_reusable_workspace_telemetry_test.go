@@ -1,12 +1,54 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/require"
 )
+
+type coldStartReusableWorkspaceBackend struct {
+	inner AttemptBackend
+}
+
+func (b coldStartReusableWorkspaceBackend) Name() string { return b.inner.Name() }
+
+func (b coldStartReusableWorkspaceBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	ws, err := b.inner.Prepare(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	ws.ReusableSlot = &AttemptWorkspaceSlot{
+		Pooled:        false,
+		Path:          ws.WorkDir,
+		SlotMissCount: 1,
+	}
+	return ws, nil
+}
+
+func (b coldStartReusableWorkspaceBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	return b.inner.Run(ctx, req)
+}
+
+func (b coldStartReusableWorkspaceBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.ImportCandidate(ctx, ws, res)
+}
+
+func (b coldStartReusableWorkspaceBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.ReleaseCandidateImport(ctx, ws)
+}
+
+func (b coldStartReusableWorkspaceBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.PublishResult(ctx, ws, res)
+}
+
+func (b coldStartReusableWorkspaceBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.Cleanup(ctx, ws)
+}
 
 func TestAttemptWorkspaceReuseTelemetryPayloadCarriesSavingsFields(t *testing.T) {
 	app := &stubBeadEventAppender{}
@@ -151,4 +193,60 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
 		require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
 	})
+}
+
+func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testing.T) {
+	projectRoot := setupArtifactTestProjectRoot(t)
+	const beadID = "ddx-int-0001"
+	baseRev := "bbbb000000000001"
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendLocalClone,
+	})
+
+	app := &stubBeadEventAppender{}
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		BeadEvents: app,
+		AgentRunner: &artifactTestAgentRunner{
+			result: &Result{
+				ExitCode: 1,
+				Error:    "simulated cold-start attempt",
+			},
+		},
+		AttemptBackend: coldStartReusableWorkspaceBackend{inner: WorktreeAttemptBackend{}},
+	}, &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     baseRev,
+		resultRev:   baseRev,
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	var evt bead.BeadEvent
+	var beadEventID string
+	found := false
+	for _, recorded := range app.events {
+		if recorded.Event.Kind != "reusable-workspace" {
+			continue
+		}
+		evt = recorded.Event
+		beadEventID = recorded.BeadID
+		found = true
+		break
+	}
+	require.True(t, found, "expected a reusable-workspace event in the execute-bead telemetry stream")
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "slot_hit_count=0")
+	require.Contains(t, evt.Summary, "slot_miss_count=1")
+	require.Contains(t, evt.Summary, "time_saved_ms=0")
+	require.Contains(t, evt.Summary, "bytes_saved=0")
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, beadID, beadEventID)
+	require.Zero(t, parsed.SlotHitCount)
+	require.Equal(t, 1, parsed.SlotMissCount)
+	require.Zero(t, parsed.TimeSavedMS)
+	require.Zero(t, parsed.BytesSaved)
 }
