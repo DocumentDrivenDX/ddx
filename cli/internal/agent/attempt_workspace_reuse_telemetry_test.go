@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,7 @@ func TestAttemptWorkspaceReuseTelemetryInputCarriesReusedAllocationSavings(t *te
 }
 
 func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *testing.T) {
-	got := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+	allocationOutcome := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
 		AttemptWorkspaceReuseAllocationOutcome{
 			SlotHitCount:  1,
 			SlotMissCount: 0,
@@ -44,10 +45,41 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 		},
 	)
 
+	got := reusableWorkspaceTelemetryForWorkspace(
+		&AttemptWorkspace{
+			ReusableSlot: &AttemptWorkspaceSlot{
+				SlotHitCount:            1,
+				SlotMissCount:           0,
+				ConservativeTimeSavedMS: 0,
+				ConservativeBytesSaved:  0,
+			},
+		},
+		&ReusableWorkspaceTelemetry{
+			TimeSavedMS: allocationOutcome.TimeSavedMS,
+			BytesSaved:  allocationOutcome.BytesSaved,
+		},
+	)
+
+	require.NotNil(t, got)
 	require.Equal(t, 1, got.SlotHitCount)
 	require.Equal(t, 0, got.SlotMissCount)
 	require.Equal(t, int64(1834), got.TimeSavedMS)
 	require.Equal(t, int64(987654321), got.BytesSaved)
+
+	res := &ExecuteBeadResult{
+		BeadID:    "ddx-int-0001",
+		Status:    ExecuteBeadStatusNoChanges,
+		BaseRev:   "base-rev",
+		ResultRev: "result-rev",
+	}
+	applyReusableWorkspaceTelemetry(res, got)
+	report := ReportFromExecuteBeadResult(res, "")
+	event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
+	require.Equal(t, "execute-bead", event.Kind)
+	require.Contains(t, event.Body, "reusable_workspace_slot_hits=1")
+	require.Contains(t, event.Body, "reusable_workspace_slot_misses=0")
+	require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=1834")
+	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=987654321")
 
 	raw, err := json.Marshal(got)
 	require.NoError(t, err)
