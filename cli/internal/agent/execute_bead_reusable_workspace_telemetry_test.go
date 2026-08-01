@@ -238,3 +238,61 @@ func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testi
 	require.Zero(t, parsed.TimeSavedMS)
 	require.Zero(t, parsed.BytesSaved)
 }
+
+func TestAttemptWorkspaceReuseCombinedTelemetryIncludesCountsAndSavingsFields(t *testing.T) {
+	projectRoot := setupArtifactTestProjectRoot(t)
+	const beadID = "ddx-int-reused"
+	baseRev := "bbbb000000000002"
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendLocalClone,
+	})
+
+	app := &stubBeadEventAppender{}
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		BeadEvents: app,
+		AgentRunner: &artifactTestAgentRunner{
+			result: &Result{
+				ExitCode: 0,
+			},
+		},
+		ReusableWorkspaceTelemetry: &ReusableWorkspaceTelemetry{
+			SlotHitCount:  1,
+			SlotMissCount: 0,
+			TimeSavedMS:   8400,
+			BytesSaved:    512 << 20,
+		},
+		AttemptBackend: WorktreeAttemptBackend{},
+	}, &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     baseRev,
+		resultRev:   baseRev,
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var reusableEvents []bead.BeadEvent
+	for _, recorded := range app.events {
+		if recorded.Event.Kind == "reusable-workspace" {
+			reusableEvents = append(reusableEvents, recorded.Event)
+		}
+	}
+	require.Len(t, reusableEvents, 1, "reused attempts must emit one combined reusable-workspace event")
+
+	evt := reusableEvents[0]
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "slot_hit_count=1")
+	require.Contains(t, evt.Summary, "slot_miss_count=0")
+	require.Contains(t, evt.Summary, "time_saved_ms=8400")
+	require.Contains(t, evt.Summary, "bytes_saved=536870912")
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.NotEmpty(t, parsed.AttemptID)
+	require.Equal(t, 1, parsed.SlotHitCount)
+	require.Zero(t, parsed.SlotMissCount)
+	require.Equal(t, int64(8400), parsed.TimeSavedMS)
+	require.Equal(t, int64(512<<20), parsed.BytesSaved)
+}
