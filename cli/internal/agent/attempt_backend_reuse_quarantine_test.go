@@ -87,7 +87,7 @@ func TestReusableAttemptWorkspaceIntegrityDiagnosticsIncludeQuarantineReason(t *
 	require.Contains(t, err.Error(), "scrub failed")
 }
 
-func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
+func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck_ReuseSlotLifecycle(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 
 	backend := &delegatingReusableSlotBackend{
@@ -125,7 +125,7 @@ func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
 	require.True(t, os.IsNotExist(statErr))
 }
 
-func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
+func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool_ReuseSlotLifecycle(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 
 	backend := &delegatingReusableSlotBackend{
@@ -165,4 +165,31 @@ func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, reusableAttemptWorkspaceResiduePaths(strings.TrimSpace(status)))
 	require.FileExists(t, filepath.Join(ws.WorkDir, slotStampFileName))
+}
+
+func reusableAttemptWorkspaceResiduePaths(status string) []string {
+	if strings.TrimSpace(status) == "" {
+		return nil
+	}
+	var paths []string
+	for _, line := range strings.Split(status, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if len(line) >= 3 {
+			line = strings.TrimSpace(line[3:])
+		}
+		if tab := strings.IndexByte(line, '\t'); tab >= 0 {
+			line = line[tab+1:]
+		}
+		switch filepath.Base(line) {
+		case slotLockFileName, slotStampFileName:
+			continue
+		}
+		if line != "" {
+			paths = append(paths, filepath.ToSlash(line))
+		}
+	}
+	return paths
 }

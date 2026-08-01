@@ -343,10 +343,18 @@ func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, w
 		ctx = context.Background()
 	}
 	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		_ = quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		return &reusableAttemptWorkspaceIntegrityError{err: fmt.Errorf(
+			"slot=%s backend=%s project=%s reason=%s",
+			ws.WorkDir, backendName, ws.ProjectRoot, fmt.Sprintf("scrub failed: %v", err),
+		)}
 	}
 	if err := reusableAttemptWorkspaceIntegrityCheck(ctx, ws); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		_ = quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		return &reusableAttemptWorkspaceIntegrityError{err: fmt.Errorf(
+			"slot=%s backend=%s project=%s reason=%s",
+			ws.WorkDir, backendName, ws.ProjectRoot, err.Error(),
+		)}
 	}
 	if !release {
 		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine")

@@ -691,11 +691,14 @@ type costEventBody struct {
 // allocation outcome and savings estimate for one reused attempt.
 // TimeSavedMS is intentionally scalar so the emitted event stays compact.
 type ReusableWorkspaceTelemetry struct {
-	AttemptID     string `json:"attempt_id,omitempty"`
-	SlotHitCount  int    `json:"slot_hit_count"`
-	SlotMissCount int    `json:"slot_miss_count"`
-	TimeSavedMS   int64  `json:"time_saved_ms"`
-	BytesSaved    int64  `json:"bytes_saved"`
+	ProjectRoot           string `json:"project_root"`
+	WorkerSlot            string `json:"worker_slot"`
+	ResolvedBackendPolicy string `json:"resolved_backend_policy"`
+	AttemptID             string `json:"attempt_id"`
+	SlotHitCount          int    `json:"slot_hit_count"`
+	SlotMissCount         int    `json:"slot_miss_count"`
+	TimeSavedMS           int64  `json:"time_saved_ms"`
+	BytesSaved            int64  `json:"bytes_saved"`
 }
 
 // reusableWorkspaceTelemetryForWorkspace prefers the allocation metadata on
@@ -716,12 +719,28 @@ func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *Reus
 			}
 		}
 		telemetry := &ReusableWorkspaceTelemetry{
-			SlotHitCount:  hitCount,
-			SlotMissCount: missCount,
-			TimeSavedMS:   slot.ConservativeTimeSavedMS,
-			BytesSaved:    slot.ConservativeBytesSaved,
+			ProjectRoot:           slot.Key.ProjectRoot,
+			WorkerSlot:            slot.Key.WorkerSlot,
+			ResolvedBackendPolicy: slot.Key.Backend,
+			AttemptID:             ws.AttemptID,
+			SlotHitCount:          hitCount,
+			SlotMissCount:         missCount,
+			TimeSavedMS:           slot.ConservativeTimeSavedMS,
+			BytesSaved:            slot.ConservativeBytesSaved,
 		}
 		if fallback != nil {
+			if telemetry.ProjectRoot == "" {
+				telemetry.ProjectRoot = fallback.ProjectRoot
+			}
+			if telemetry.WorkerSlot == "" {
+				telemetry.WorkerSlot = fallback.WorkerSlot
+			}
+			if telemetry.ResolvedBackendPolicy == "" {
+				telemetry.ResolvedBackendPolicy = fallback.ResolvedBackendPolicy
+			}
+			if telemetry.AttemptID == "" {
+				telemetry.AttemptID = fallback.AttemptID
+			}
 			if telemetry.TimeSavedMS == 0 {
 				telemetry.TimeSavedMS = fallback.TimeSavedMS
 			}
@@ -794,7 +813,8 @@ func appendReusableWorkspaceTelemetry(appender BeadEventAppender, beadID string,
 		return
 	}
 	summary := fmt.Sprintf(
-		"slot_hit_count=%d slot_miss_count=%d time_saved_ms=%d bytes_saved=%d",
+		"project_root=%s worker_slot=%s resolved_backend_policy=%s attempt_id=%s slot_hit_count=%d slot_miss_count=%d time_saved_ms=%d bytes_saved=%d",
+		body.ProjectRoot, body.WorkerSlot, body.ResolvedBackendPolicy, body.AttemptID,
 		body.SlotHitCount, body.SlotMissCount, body.TimeSavedMS, body.BytesSaved,
 	)
 	_ = appender.AppendEvent(beadID, bead.BeadEvent{
@@ -1164,6 +1184,14 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if reusableTelemetry != nil {
 		body := *reusableTelemetry
 		body.AttemptID = attemptID
+		body.ProjectRoot = projectRoot
+		if workspace != nil && workspace.ReusableSlot != nil {
+			body.WorkerSlot = workspace.ReusableSlot.Key.WorkerSlot
+			body.ResolvedBackendPolicy = workspace.ReusableSlot.Key.Backend
+		} else {
+			body.WorkerSlot = runtime.WorkerID
+			body.ResolvedBackendPolicy = rcfg.AttemptBackend()
+		}
 		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, body)
 	}
 	var res *ExecuteBeadResult
@@ -2000,6 +2028,26 @@ type reusableAttemptBackend interface {
 	AttemptBackend
 	Release(ctx context.Context, ws *AttemptWorkspace) error
 	Quarantine(ctx context.Context, ws *AttemptWorkspace) error
+}
+
+// reusableAttemptWorkspaceIntegrityError marks a reusable-slot release error
+// that should quarantine the slot rather than returning it to the pool.
+type reusableAttemptWorkspaceIntegrityError struct {
+	err error
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	if e == nil || e.err == nil {
+		return "reusable workspace integrity error"
+	}
+	return e.err.Error()
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
 }
 
 func cleanupReusableAttemptWorkspace(ctx context.Context, backend AttemptBackend, ws *AttemptWorkspace, result *ExecuteBeadResult) bool {

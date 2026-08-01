@@ -20,6 +20,8 @@ type reusableWorkspaceTelemetryBodyLegacy struct {
 	BytesSaved    int64 `json:"bytes_saved"`
 }
 
+type reusableWorkspaceTelemetryBody = reusableWorkspaceTelemetryBodyLegacy
+
 func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavingsPayload(t *testing.T) {
 	app := &stubBeadEventAppender{}
 

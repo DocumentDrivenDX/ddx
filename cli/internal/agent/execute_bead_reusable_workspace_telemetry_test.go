@@ -45,6 +45,96 @@ func TestAttemptWorkspaceReuseTelemetryPayloadCarriesSavingsFields(t *testing.T)
 	require.Equal(t, 0, parsed.SlotMissCount)
 }
 
+func TestAttemptWorkspaceReuseTelemetryScopesByProjectAndWorkerSlot(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	body := reusableWorkspaceTelemetryForWorkspace(
+		&AttemptWorkspace{
+			ProjectRoot: "/repo/project-a",
+			AttemptID:   "20260801T010203-reuse",
+			ReusableSlot: &AttemptWorkspaceSlot{
+				Key: AttemptWorkspaceSlotKey{
+					ProjectRoot: "/repo/project-a",
+					Backend:     AttemptBackendLocalClone,
+					WorkerSlot:  "worker-a",
+				},
+				Pooled:                  true,
+				SlotHitCount:            1,
+				SlotMissCount:           0,
+				ConservativeTimeSavedMS: 8400,
+				ConservativeBytesSaved:  512 << 20,
+			},
+		},
+		nil,
+	)
+
+	require.NotNil(t, body)
+	appendReusableWorkspaceTelemetry(app, "ddx-int-0001", *body)
+
+	require.Len(t, app.events, 1)
+	evt := app.events[0].Event
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "project_root=/repo/project-a")
+	require.Contains(t, evt.Summary, "worker_slot=worker-a")
+	require.Contains(t, evt.Summary, "resolved_backend_policy=local-clone")
+	require.Contains(t, evt.Summary, "attempt_id=20260801T010203-reuse")
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, "/repo/project-a", parsed.ProjectRoot)
+	require.Equal(t, "worker-a", parsed.WorkerSlot)
+	require.Equal(t, AttemptBackendLocalClone, parsed.ResolvedBackendPolicy)
+	require.Equal(t, "20260801T010203-reuse", parsed.AttemptID)
+	require.Equal(t, 1, parsed.SlotHitCount)
+	require.Equal(t, 0, parsed.SlotMissCount)
+	require.Equal(t, int64(8400), parsed.TimeSavedMS)
+	require.Equal(t, int64(512<<20), parsed.BytesSaved)
+}
+
+func TestAttemptWorkspaceReuseTelemetryScopesColdStarts(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	body := reusableWorkspaceTelemetryForWorkspace(
+		&AttemptWorkspace{
+			ProjectRoot: "/repo/project-b",
+			AttemptID:   "20260801T010204-cold",
+			ReusableSlot: &AttemptWorkspaceSlot{
+				Key: AttemptWorkspaceSlotKey{
+					ProjectRoot: "/repo/project-b",
+					Backend:     AttemptBackendLocalClone,
+					WorkerSlot:  "worker-b",
+				},
+				Pooled:        false,
+				SlotHitCount:  0,
+				SlotMissCount: 1,
+			},
+		},
+		nil,
+	)
+
+	require.NotNil(t, body)
+	appendReusableWorkspaceTelemetry(app, "ddx-int-0002", *body)
+
+	require.Len(t, app.events, 1)
+	evt := app.events[0].Event
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "project_root=/repo/project-b")
+	require.Contains(t, evt.Summary, "worker_slot=worker-b")
+	require.Contains(t, evt.Summary, "resolved_backend_policy=local-clone")
+	require.Contains(t, evt.Summary, "attempt_id=20260801T010204-cold")
+	require.Contains(t, evt.Summary, "slot_hit_count=0")
+	require.Contains(t, evt.Summary, "slot_miss_count=1")
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, "/repo/project-b", parsed.ProjectRoot)
+	require.Equal(t, "worker-b", parsed.WorkerSlot)
+	require.Equal(t, AttemptBackendLocalClone, parsed.ResolvedBackendPolicy)
+	require.Equal(t, "20260801T010204-cold", parsed.AttemptID)
+	require.Equal(t, 0, parsed.SlotHitCount)
+	require.Equal(t, 1, parsed.SlotMissCount)
+	require.Zero(t, parsed.TimeSavedMS)
+	require.Zero(t, parsed.BytesSaved)
+}
+
 func TestAttemptWorkspaceReuseTelemetryDoesNotRecomputeReuseSavings(t *testing.T) {
 	got := reusableWorkspaceTelemetryForWorkspace(
 		&AttemptWorkspace{

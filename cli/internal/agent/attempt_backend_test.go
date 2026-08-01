@@ -276,7 +276,9 @@ func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
 			}
 			t.Cleanup(func() { reusableAttemptWorkspaceIntegrityCheck = prev })
 
-			require.NoError(t, tc.backend.Release(context.Background(), ws))
+			err := tc.backend.Release(context.Background(), ws)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "forced reusable workspace integrity failure")
 
 			markerPath := slotQuarantineMarkerPath(slot.Path)
 			data, err := os.ReadFile(markerPath)
