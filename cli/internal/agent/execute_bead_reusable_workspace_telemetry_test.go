@@ -128,7 +128,6 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 			AttemptWorkspaceReuseAllocationOutcome{
 				SlotMissCount: 1,
 			},
-			AttemptWorkspaceReuseSavings{},
 		)
 		require.Zero(t, telemetry.SlotHitCount)
 		require.Equal(t, 1, telemetry.SlotMissCount)

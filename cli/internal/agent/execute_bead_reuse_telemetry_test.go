@@ -13,7 +13,7 @@ import (
 // reusableWorkspaceTelemetryBody deliberately keeps every counter field
 // present so reused and cold-start attempts emit the same JSON key set even
 // when the cold-start values are zero.
-type reusableWorkspaceTelemetryBodyLegacy struct {
+type reusableWorkspaceTelemetryBody struct {
 	SlotHitCount  int   `json:"slot_hit_count"`
 	SlotMissCount int   `json:"slot_miss_count"`
 	TimeSavedMS   int   `json:"time_saved_ms"`

@@ -8,63 +8,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAttemptWorkspaceReuseTelemetryInputCarriesReusedAllocationSavings(t *testing.T) {
-	got := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
-		AttemptWorkspaceReuseAllocationOutcome{
-			SlotHitCount:  1,
-			SlotMissCount: 0,
-		},
-		AttemptWorkspaceReuseSavings{
-			TimeSavedMS: 1834,
-			BytesSaved:  987654321,
-		},
-	)
+func TestAttemptWorkspaceReuseSavingsEstimateContractPreservesExplicitValues(t *testing.T) {
+	outcome := AttemptWorkspaceReuseAllocationOutcome{
+		SlotHitCount:            1,
+		SlotMissCount:           0,
+		ConservativeTimeSavedMS: 1834,
+		ConservativeBytesSaved:  987654321,
+	}
+	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(outcome)
 
-	require.Equal(t, 1, got.SlotHitCount)
-	require.Equal(t, 0, got.SlotMissCount)
-	require.Equal(t, int64(1834), got.TimeSavedMS)
-	require.Equal(t, int64(987654321), got.BytesSaved)
+	require.Equal(t, 1, telemetry.SlotHitCount)
+	require.Equal(t, 0, telemetry.SlotMissCount)
+	require.Equal(t, int64(1834), telemetry.TimeSavedMS)
+	require.Equal(t, int64(987654321), telemetry.BytesSaved)
 
-	raw, err := json.Marshal(got)
+	raw, err := json.Marshal(telemetry)
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"slot_hit_count":1`)
 	require.Contains(t, string(raw), `"slot_miss_count":0`)
 	require.Contains(t, string(raw), `"time_saved_ms":1834`)
 	require.Contains(t, string(raw), `"bytes_saved":987654321`)
-}
 
-func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *testing.T) {
-	allocationOutcome := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
-		AttemptWorkspaceReuseAllocationOutcome{
-			SlotHitCount:  1,
-			SlotMissCount: 0,
-		},
-		AttemptWorkspaceReuseSavings{
-			TimeSavedMS: 1834,
-			BytesSaved:  987654321,
-		},
-	)
-
-	got := reusableWorkspaceTelemetryForWorkspace(
+	combined := reusableWorkspaceTelemetryForWorkspace(
 		&AttemptWorkspace{
 			ReusableSlot: &AttemptWorkspaceSlot{
 				SlotHitCount:            1,
 				SlotMissCount:           0,
-				ConservativeTimeSavedMS: 0,
-				ConservativeBytesSaved:  0,
+				ConservativeTimeSavedMS: telemetry.TimeSavedMS,
+				ConservativeBytesSaved:  telemetry.BytesSaved,
 			},
 		},
 		&ReusableWorkspaceTelemetry{
-			TimeSavedMS: allocationOutcome.TimeSavedMS,
-			BytesSaved:  allocationOutcome.BytesSaved,
+			TimeSavedMS: telemetry.TimeSavedMS,
+			BytesSaved:  telemetry.BytesSaved,
 		},
 	)
 
-	require.NotNil(t, got)
-	require.Equal(t, 1, got.SlotHitCount)
-	require.Equal(t, 0, got.SlotMissCount)
-	require.Equal(t, int64(1834), got.TimeSavedMS)
-	require.Equal(t, int64(987654321), got.BytesSaved)
+	require.NotNil(t, combined)
+	require.Equal(t, 1, combined.SlotHitCount)
+	require.Equal(t, 0, combined.SlotMissCount)
+	require.Equal(t, int64(1834), combined.TimeSavedMS)
+	require.Equal(t, int64(987654321), combined.BytesSaved)
 
 	res := &ExecuteBeadResult{
 		BeadID:    "ddx-int-0001",
@@ -72,7 +56,7 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 		BaseRev:   "base-rev",
 		ResultRev: "result-rev",
 	}
-	applyReusableWorkspaceTelemetry(res, got)
+	applyReusableWorkspaceTelemetry(res, combined)
 	report := ReportFromExecuteBeadResult(res, "")
 	event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
 	require.Equal(t, "execute-bead", event.Kind)
@@ -81,7 +65,7 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 	require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=1834")
 	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=987654321")
 
-	raw, err := json.Marshal(got)
+	raw, err = json.Marshal(combined)
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"slot_hit_count":1`)
 	require.Contains(t, string(raw), `"slot_miss_count":0`)
@@ -89,14 +73,13 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 	require.Contains(t, string(raw), `"bytes_saved":987654321`)
 }
 
-func TestAttemptWorkspaceReuseTelemetryInputPreservesColdStartZeroSavings(t *testing.T) {
-	got := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
-		AttemptWorkspaceReuseAllocationOutcome{
-			SlotHitCount:  0,
-			SlotMissCount: 1,
-		},
-		AttemptWorkspaceReuseSavings{},
-	)
+func TestAttemptWorkspaceReuseSavingsEstimateZeroForMissOutcome(t *testing.T) {
+	coldStart := AttemptWorkspaceReuseAllocationOutcome{
+		SlotMissCount: 1,
+	}
+	require.Zero(t, coldStart.ConservativeTimeSavedMS)
+	require.Zero(t, coldStart.ConservativeBytesSaved)
+	got := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(coldStart)
 
 	require.Equal(t, 0, got.SlotHitCount)
 	require.Equal(t, 1, got.SlotMissCount)
@@ -109,15 +92,8 @@ func TestAttemptWorkspaceReuseTelemetryInputPreservesColdStartZeroSavings(t *tes
 	require.Contains(t, string(raw), `"slot_miss_count":1`)
 	require.Contains(t, string(raw), `"time_saved_ms":0`)
 	require.Contains(t, string(raw), `"bytes_saved":0`)
-}
 
-func TestAttemptWorkspaceReuseTelemetryColdStartRecordsSlotMiss(t *testing.T) {
-	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
-		AttemptWorkspaceReuseAllocationOutcome{
-			SlotMissCount: 1,
-		},
-		AttemptWorkspaceReuseSavings{},
-	)
+	telemetry := got
 
 	require.Zero(t, telemetry.SlotHitCount)
 	require.Equal(t, 1, telemetry.SlotMissCount)
