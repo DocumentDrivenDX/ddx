@@ -77,6 +77,46 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
+func TestAttemptWorkspaceReuseTelemetryRecordsSavings(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:                       "ddx-reuse-hit",
+		Status:                       ExecuteBeadStatusNoChanges,
+		BaseRev:                      "base-rev",
+		ResultRev:                    "result-rev",
+		ReusableWorkspaceSlotHits:    1,
+		ReusableWorkspaceSlotMisses:  0,
+		ReusableWorkspaceTimeSavedMS: 8400,
+		ReusableWorkspaceBytesSaved:  512 << 20,
+	}
+
+	event := executeBeadLoopEvent(report, "worker", time.Now().UTC())
+	require.Equal(t, "execute-bead", event.Kind)
+	require.Equal(t, ExecuteBeadStatusNoChanges, event.Summary)
+	require.Contains(t, event.Body, "reusable_workspace_slot_hits=1")
+	require.Contains(t, event.Body, "reusable_workspace_slot_misses=0")
+	require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=8400")
+	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=536870912")
+}
+
+func TestAttemptWorkspaceReuseTelemetryOmitsSavingsForReuseMiss(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:                      "ddx-reuse-miss",
+		Status:                      ExecuteBeadStatusNoChanges,
+		BaseRev:                     "base-rev",
+		ResultRev:                   "result-rev",
+		ReusableWorkspaceSlotHits:   0,
+		ReusableWorkspaceSlotMisses: 1,
+	}
+
+	event := executeBeadLoopEvent(report, "worker", time.Now().UTC())
+	require.Equal(t, "execute-bead", event.Kind)
+	require.Equal(t, ExecuteBeadStatusNoChanges, event.Summary)
+	require.Contains(t, event.Body, "reusable_workspace_slot_hits=0")
+	require.Contains(t, event.Body, "reusable_workspace_slot_misses=1")
+	require.NotContains(t, event.Body, "reusable_workspace_time_saved_ms=")
+	require.NotContains(t, event.Body, "reusable_workspace_bytes_saved=")
+}
+
 func TestAttemptWorkspaceReuseTelemetryDoesNotEmitSplitReuseSavingsEvents(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 

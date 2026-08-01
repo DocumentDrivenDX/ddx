@@ -715,6 +715,16 @@ func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *Reus
 	return fallback
 }
 
+func applyReusableWorkspaceTelemetry(res *ExecuteBeadResult, telemetry *ReusableWorkspaceTelemetry) {
+	if res == nil || telemetry == nil {
+		return
+	}
+	res.ReusableWorkspaceSlotHits = telemetry.SlotHitCount
+	res.ReusableWorkspaceSlotMisses = telemetry.SlotMissCount
+	res.ReusableWorkspaceTimeSavedMS = telemetry.TimeSavedMS
+	res.ReusableWorkspaceBytesSaved = telemetry.BytesSaved
+}
+
 // appendBeadCostEvidence records a kind:cost evidence entry on the bead with
 // per-attempt token and dollar usage. Best-effort: errors are discarded so a
 // store failure never aborts the main execute-bead flow. Emits nothing when
@@ -1134,8 +1144,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
 	}
-	if telemetry := reusableWorkspaceTelemetryForWorkspace(workspace, runtime.ReusableWorkspaceTelemetry); telemetry != nil {
-		body := *telemetry
+	reusableTelemetry := reusableWorkspaceTelemetryForWorkspace(workspace, runtime.ReusableWorkspaceTelemetry)
+	if reusableTelemetry != nil {
+		body := *reusableTelemetry
 		body.AttemptID = attemptID
 		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, body)
 	}
@@ -1593,6 +1604,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				FinishedAt:                  finishedAt,
 				Outcome:                     prelimOutcome,
 			}
+			applyReusableWorkspaceTelemetry(prelimRes, reusableTelemetry)
 			populateWorkerStatus(prelimRes)
 			_ = writeArtifactJSON(artifacts.ResultAbs, prelimRes)
 
@@ -1643,6 +1655,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		StartedAt:                   startedAt,
 		FinishedAt:                  finishedAt,
 	}
+	applyReusableWorkspaceTelemetry(res, reusableTelemetry)
 	if resultRev != baseRev {
 		res.ImplementationRev = resultRev
 	}
