@@ -7,16 +7,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAttemptWorkspaceReuseTelemetryRecordsReuseSavingsFromAllocationOutcome(t *testing.T) {
+func TestAttemptWorkspaceReuseTelemetryPayloadCarriesSavingsFields(t *testing.T) {
 	app := &stubBeadEventAppender{}
-	body := ReusableWorkspaceTelemetry{
-		AttemptID:     "20260801T010203-reuse",
-		SlotHitCount:  1,
-		SlotMissCount: 0,
-		TimeSavedMS:   8400,
-		BytesSaved:    512 << 20,
-	}
-	appendReusableWorkspaceTelemetry(app, "ddx-int-0001", body)
+	body := reusableWorkspaceTelemetryForWorkspace(
+		&AttemptWorkspace{
+			ReusableSlot: &AttemptWorkspaceSlot{
+				SlotHitCount:            1,
+				SlotMissCount:           0,
+				ConservativeTimeSavedMS: 8400,
+				ConservativeBytesSaved:  512 << 20,
+			},
+		},
+		nil,
+	)
+	require.NotNil(t, body)
+	body.AttemptID = "20260801T010203-reuse"
+	appendReusableWorkspaceTelemetry(app, "ddx-int-0001", *body)
 
 	require.Len(t, app.events, 1)
 	got := app.events[0]
@@ -26,7 +32,7 @@ func TestAttemptWorkspaceReuseTelemetryRecordsReuseSavingsFromAllocationOutcome(
 	require.Equal(t, "legacy agent execute-bead", got.Event.Source)
 	require.Contains(t, got.Event.Summary, "slot_hit_count=1")
 	require.Contains(t, got.Event.Summary, "slot_miss_count=0")
-	require.Contains(t, got.Event.Summary, "time_saved=8400")
+	require.Contains(t, got.Event.Summary, "time_saved_ms=8400")
 	require.Contains(t, got.Event.Summary, "bytes_saved=536870912")
 
 	var parsed ReusableWorkspaceTelemetry
