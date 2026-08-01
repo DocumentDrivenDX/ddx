@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -171,6 +170,6 @@ func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
 
 	status, err := runGitIntegOutput(ws.WorkDir, "status", "--porcelain", "--untracked-files=all")
 	require.NoError(t, err)
-	require.Empty(t, reusableAttemptWorkspaceResiduePaths(strings.TrimSpace(status)))
+	require.Empty(t, reusableAttemptWorkspaceDirtyPaths(status))
 	require.FileExists(t, filepath.Join(ws.WorkDir, slotStampFileName))
 }

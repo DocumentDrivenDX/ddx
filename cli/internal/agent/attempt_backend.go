@@ -136,15 +136,6 @@ type WorktreeAttemptBackend struct {
 
 func (WorktreeAttemptBackend) Name() string { return AttemptBackendWorktree }
 
-func (b WorktreeAttemptBackend) reusableWorkspaceKey(projectRoot string) AttemptWorkspaceSlotKey {
-	return AttemptWorkspaceSlotKey{
-		ProjectRoot:   projectRoot,
-		Backend:       b.Name(),
-		WorkerSlot:    b.WorkerSlot,
-		TrustBoundary: "default",
-	}
-}
-
 func (WorktreeAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
 	gitOps := req.GitOps
 	if gitOps == nil {
@@ -238,15 +229,6 @@ type LocalCloneAttemptBackend struct {
 }
 
 func (LocalCloneAttemptBackend) Name() string { return AttemptBackendLocalClone }
-
-func (b LocalCloneAttemptBackend) reusableWorkspaceKey(projectRoot string) AttemptWorkspaceSlotKey {
-	return AttemptWorkspaceSlotKey{
-		ProjectRoot:   projectRoot,
-		Backend:       b.Name(),
-		WorkerSlot:    b.WorkerSlot,
-		TrustBoundary: "default",
-	}
-}
 
 func (b LocalCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
 	clonePath := executeBeadClonePath(req.ProjectRoot, req.BeadID, req.AttemptID)
@@ -496,10 +478,6 @@ func reusableAttemptWorkspaceDirtyPaths(status string) []string {
 	}
 	sort.Strings(paths)
 	return paths
-}
-
-func reusableAttemptWorkspaceResiduePaths(status string) []string {
-	return reusableAttemptWorkspaceDirtyPaths(status)
 }
 
 func reusableAttemptCredentialRelPaths() []string {

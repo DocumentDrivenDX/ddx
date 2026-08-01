@@ -115,12 +115,6 @@ func TestResolveAttemptBackendThreadsReusableWorkspacePolicyAndWorkerSlot(t *tes
 				require.True(t, got.ReusableWorkspacePolicy.ResolveEnabled())
 				require.Equal(t, 2, got.ReusableWorkspacePolicy.ResolveMaxSlots())
 				require.Equal(t, "worker-slot-7", got.WorkerSlot)
-				require.Equal(t, AttemptWorkspaceSlotKey{
-					ProjectRoot:   "/tmp/project",
-					Backend:       AttemptBackendWorktree,
-					WorkerSlot:    "worker-slot-7",
-					TrustBoundary: "default",
-				}, got.reusableWorkspaceKey("/tmp/project"))
 			case LocalCloneAttemptBackend:
 				require.Equal(t, tc.wantBackend, got.Name())
 				require.NotNil(t, got.ReusableWorkspacePolicy)
@@ -128,12 +122,6 @@ func TestResolveAttemptBackendThreadsReusableWorkspacePolicyAndWorkerSlot(t *tes
 				require.True(t, got.ReusableWorkspacePolicy.ResolveEnabled())
 				require.Equal(t, 2, got.ReusableWorkspacePolicy.ResolveMaxSlots())
 				require.Equal(t, "worker-slot-7", got.WorkerSlot)
-				require.Equal(t, AttemptWorkspaceSlotKey{
-					ProjectRoot:   "/tmp/project",
-					Backend:       AttemptBackendLocalClone,
-					WorkerSlot:    "worker-slot-7",
-					TrustBoundary: "default",
-				}, got.reusableWorkspaceKey("/tmp/project"))
 			default:
 				t.Fatalf("unexpected backend type %T", backend)
 			}
