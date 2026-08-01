@@ -3,6 +3,7 @@ package agent
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -27,6 +28,9 @@ const (
 	slotLockFileName = ".slot.lock"
 	// slotStampFileName records last-use timestamp for age-based eviction.
 	slotStampFileName = ".slot.stamp"
+	// slotQuarantineSuffix marks quarantined slots so future allocations skip
+	// them instead of reusing an unhealthy workspace.
+	slotQuarantineSuffix = ".quarantine.json"
 )
 
 // AttemptWorkspaceSlotKey identifies a reusable workspace slot pool.
@@ -320,8 +324,15 @@ func (p *AttemptWorkspaceSlotPool) Evict(key AttemptWorkspaceSlotKey) error {
 
 func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, index int) (*AttemptWorkspaceSlot, error) {
 	path := p.slotPath(key, index)
+	if slotIsQuarantined(path) {
+		return nil, nil
+	}
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return nil, fmt.Errorf("creating workspace slot %d: %w", index, err)
+	}
+	if slotIsQuarantined(path) {
+		_ = os.RemoveAll(path)
+		return nil, nil
 	}
 	lockPath := filepath.Join(path, slotLockFileName)
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
@@ -346,6 +357,58 @@ func (p *AttemptWorkspaceSlotPool) tryAcquireSlot(key AttemptWorkspaceSlotKey, i
 		SlotHitCount: 1,
 		lockFile:     lockFile,
 	}, nil
+}
+
+func slotQuarantineMarkerPath(slotPath string) string {
+	if strings.TrimSpace(slotPath) == "" {
+		return ""
+	}
+	return slotPath + slotQuarantineSuffix
+}
+
+func slotIsQuarantined(slotPath string) bool {
+	marker := slotQuarantineMarkerPath(slotPath)
+	if marker == "" {
+		return false
+	}
+	_, err := os.Stat(marker)
+	return err == nil
+}
+
+type reusableAttemptWorkspaceQuarantineRecord struct {
+	Backend       string    `json:"backend"`
+	ProjectRoot   string    `json:"project_root"`
+	SlotPath      string    `json:"slot_path"`
+	SlotIndex     int       `json:"slot_index"`
+	Reason        string    `json:"reason"`
+	QuarantinedAt time.Time `json:"quarantined_at"`
+}
+
+func writeSlotQuarantineMarker(slot *AttemptWorkspaceSlot, backendName, projectRoot, reason string) error {
+	if slot == nil || strings.TrimSpace(slot.Path) == "" {
+		return nil
+	}
+	marker := slotQuarantineMarkerPath(slot.Path)
+	if marker == "" {
+		return nil
+	}
+	record := reusableAttemptWorkspaceQuarantineRecord{
+		Backend:       backendName,
+		ProjectRoot:   projectRoot,
+		SlotPath:      slot.Path,
+		SlotIndex:     slot.Index,
+		Reason:        strings.TrimSpace(reason),
+		QuarantinedAt: time.Now().UTC(),
+	}
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding slot quarantine marker: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(marker, data, 0o600); err != nil {
+		return fmt.Errorf("writing slot quarantine marker: %w", err)
+	}
+	return nil
 }
 
 func (p *AttemptWorkspaceSlotPool) allocateEphemeral(key AttemptWorkspaceSlotKey) (*AttemptWorkspaceSlot, error) {
