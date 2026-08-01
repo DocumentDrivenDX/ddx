@@ -443,7 +443,7 @@ func validateReusableAttemptWorkspaceIntegrity(ctx context.Context, ws *AttemptW
 	if err != nil {
 		return fmt.Errorf("checking reusable workspace integrity: %w", err)
 	}
-	dirty := reusableAttemptWorkspaceDirtyPaths(string(out))
+	dirty := reusableAttemptWorkspaceResiduePaths(string(out))
 	if len(dirty) == 0 {
 		return nil
 	}
