@@ -84,6 +84,8 @@ func assertColdStartCombinedReusableWorkspaceTelemetry(t *testing.T, beadID stri
 
 	event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
 	require.Equal(t, "execute-bead", event.Kind)
+	require.Equal(t, "worker", event.Actor)
+	require.Equal(t, "ddx work", event.Source)
 	require.Contains(t, event.Body, "reusable_workspace_slot_hits=0")
 	require.Contains(t, event.Body, "reusable_workspace_slot_misses=1")
 	require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=0")
