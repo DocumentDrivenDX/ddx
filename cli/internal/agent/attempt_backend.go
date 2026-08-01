@@ -391,10 +391,6 @@ func quarantineReusableAttemptWorkspaceIntegrityFailure(ws *AttemptWorkspace, ba
 	return integrityErr
 }
 
-func reusableAttemptWorkspaceResiduePaths(status string) []string {
-	return reusableAttemptWorkspaceDirtyPaths(status)
-}
-
 func releaseReusableAttemptWorkspaceSlot(ws *AttemptWorkspace) error {
 	if ws == nil || ws.ReusableSlot == nil {
 		return nil
