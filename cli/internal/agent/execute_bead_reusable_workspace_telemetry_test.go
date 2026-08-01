@@ -66,43 +66,83 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotRecomputeReuseSavings(t *testing.T
 }
 
 func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *testing.T) {
-	app := &stubBeadEventAppender{}
-	appendReusableWorkspaceTelemetry(app, "ddx-int-0001", ReusableWorkspaceTelemetry{
-		AttemptID: "20260801T010203-cold",
+	t.Run("cold_start_payload_emits_explicit_zero_savings", func(t *testing.T) {
+		app := &stubBeadEventAppender{}
+		appendReusableWorkspaceTelemetry(app, "ddx-int-0001", ReusableWorkspaceTelemetry{
+			AttemptID: "20260801T010203-cold",
+		})
+
+		require.Len(t, app.events, 1)
+		evt := app.events[0].Event
+		require.Equal(t, "reusable-workspace", evt.Kind)
+		require.Contains(t, evt.Summary, "slot_hit_count=0")
+		require.Contains(t, evt.Summary, "slot_miss_count=0")
+		require.Contains(t, evt.Summary, "time_saved=0")
+		require.Contains(t, evt.Summary, "bytes_saved=0")
+
+		var parsed ReusableWorkspaceTelemetry
+		require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+		require.Equal(t, "20260801T010203-cold", parsed.AttemptID)
+		require.Zero(t, parsed.SlotHitCount)
+		require.Zero(t, parsed.SlotMissCount)
+		require.Zero(t, parsed.TimeSavedMS)
+		require.Zero(t, parsed.BytesSaved)
 	})
 
-	require.Len(t, app.events, 1)
-	evt := app.events[0].Event
-	require.Equal(t, "reusable-workspace", evt.Kind)
-	require.Contains(t, evt.Summary, "slot_hit_count=0")
-	require.Contains(t, evt.Summary, "slot_miss_count=0")
-	require.Contains(t, evt.Summary, "time_saved=0")
-	require.Contains(t, evt.Summary, "bytes_saved=0")
+	t.Run("no_reuse_allocation_outcome_keeps_miss_counter_and_zero_savings", func(t *testing.T) {
+		telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+			AttemptWorkspaceReuseAllocationOutcome{
+				SlotMissCount: 1,
+			},
+			AttemptWorkspaceReuseSavings{},
+		)
+		require.Zero(t, telemetry.SlotHitCount)
+		require.Equal(t, 1, telemetry.SlotMissCount)
+		require.Zero(t, telemetry.TimeSavedMS)
+		require.Zero(t, telemetry.BytesSaved)
 
-	var parsed ReusableWorkspaceTelemetry
-	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
-	require.Equal(t, "20260801T010203-cold", parsed.AttemptID)
-	require.Zero(t, parsed.SlotHitCount)
-	require.Zero(t, parsed.SlotMissCount)
-	require.Zero(t, parsed.TimeSavedMS)
-	require.Zero(t, parsed.BytesSaved)
+		app := &stubBeadEventAppender{}
+		appendReusableWorkspaceTelemetry(app, "ddx-int-0001", ReusableWorkspaceTelemetry{
+			AttemptID:     "20260801T010203-miss",
+			SlotHitCount:  telemetry.SlotHitCount,
+			SlotMissCount: telemetry.SlotMissCount,
+			TimeSavedMS:   telemetry.TimeSavedMS,
+			BytesSaved:    telemetry.BytesSaved,
+		})
 
-	report := ExecuteBeadReport{
-		BeadID:                       "ddx-int-0001",
-		Status:                       ExecuteBeadStatusNoChanges,
-		ReusableWorkspaceSlotMisses:  1,
-		ReusableWorkspaceTimeSavedMS: 0,
-		ReusableWorkspaceBytesSaved:  0,
-	}
-	reportJSON, err := json.Marshal(report)
-	require.NoError(t, err)
-	require.Contains(t, string(reportJSON), `"reusable_workspace_slot_misses":1`)
-	require.Contains(t, string(reportJSON), `"reusable_workspace_time_saved_ms":0`)
-	require.Contains(t, string(reportJSON), `"reusable_workspace_bytes_saved":0`)
+		require.Len(t, app.events, 1)
+		evt := app.events[0].Event
+		require.Equal(t, "reusable-workspace", evt.Kind)
+		require.Contains(t, evt.Summary, "slot_hit_count=0")
+		require.Contains(t, evt.Summary, "slot_miss_count=1")
+		require.Contains(t, evt.Summary, "time_saved=0")
+		require.Contains(t, evt.Summary, "bytes_saved=0")
 
-	body := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
-	require.Equal(t, "execute-bead", body.Kind)
-	require.Contains(t, body.Body, "reusable_workspace_slot_misses=1")
-	require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
-	require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
+		var parsed ReusableWorkspaceTelemetry
+		require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+		require.Equal(t, "20260801T010203-miss", parsed.AttemptID)
+		require.Zero(t, parsed.SlotHitCount)
+		require.Equal(t, 1, parsed.SlotMissCount)
+		require.Zero(t, parsed.TimeSavedMS)
+		require.Zero(t, parsed.BytesSaved)
+
+		report := ExecuteBeadReport{
+			BeadID:                       "ddx-int-0001",
+			Status:                       ExecuteBeadStatusNoChanges,
+			ReusableWorkspaceSlotMisses:  telemetry.SlotMissCount,
+			ReusableWorkspaceTimeSavedMS: telemetry.TimeSavedMS,
+			ReusableWorkspaceBytesSaved:  telemetry.BytesSaved,
+		}
+		reportJSON, err := json.Marshal(report)
+		require.NoError(t, err)
+		require.Contains(t, string(reportJSON), `"reusable_workspace_slot_misses":1`)
+		require.Contains(t, string(reportJSON), `"reusable_workspace_time_saved_ms":0`)
+		require.Contains(t, string(reportJSON), `"reusable_workspace_bytes_saved":0`)
+
+		body := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
+		require.Equal(t, "execute-bead", body.Kind)
+		require.Contains(t, body.Body, "reusable_workspace_slot_misses=1")
+		require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
+		require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
+	})
 }
