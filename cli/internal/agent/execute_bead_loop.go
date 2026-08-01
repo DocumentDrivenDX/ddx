@@ -838,10 +838,10 @@ type ExecuteBeadReport struct {
 	CostSource string `json:"cost_source,omitempty"`
 	// Reusable workspace telemetry stays attached to the same final attempt
 	// event so allocation counts and savings analysis remain coupled.
-	ReusableWorkspaceSlotHits    int   `json:"reusable_workspace_slot_hits,omitempty"`
-	ReusableWorkspaceSlotMisses  int   `json:"reusable_workspace_slot_misses,omitempty"`
-	ReusableWorkspaceTimeSavedMS int64 `json:"reusable_workspace_time_saved_ms,omitempty"`
-	ReusableWorkspaceBytesSaved  int64 `json:"reusable_workspace_bytes_saved,omitempty"`
+	ReusableWorkspaceSlotHits    int   `json:"reusable_workspace_slot_hits"`
+	ReusableWorkspaceSlotMisses  int   `json:"reusable_workspace_slot_misses"`
+	ReusableWorkspaceTimeSavedMS int64 `json:"reusable_workspace_time_saved_ms"`
+	ReusableWorkspaceBytesSaved  int64 `json:"reusable_workspace_bytes_saved"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	// Profile routing telemetry. Populated when work uses a profile

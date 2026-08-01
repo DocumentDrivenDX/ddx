@@ -134,10 +134,10 @@ type ExecuteBeadResult struct {
 	// Reusable workspace telemetry stays on the same final execute-bead event
 	// as the rest of the attempt summary so callers do not need a separate
 	// savings-only stream.
-	ReusableWorkspaceSlotHits    int    `json:"reusable_workspace_slot_hits,omitempty"`
-	ReusableWorkspaceSlotMisses  int    `json:"reusable_workspace_slot_misses,omitempty"`
-	ReusableWorkspaceTimeSavedMS int64  `json:"reusable_workspace_time_saved_ms,omitempty"`
-	ReusableWorkspaceBytesSaved  int64  `json:"reusable_workspace_bytes_saved,omitempty"`
+	ReusableWorkspaceSlotHits    int    `json:"reusable_workspace_slot_hits"`
+	ReusableWorkspaceSlotMisses  int    `json:"reusable_workspace_slot_misses"`
+	ReusableWorkspaceTimeSavedMS int64  `json:"reusable_workspace_time_saved_ms"`
+	ReusableWorkspaceBytesSaved  int64  `json:"reusable_workspace_bytes_saved"`
 	ExitCode                     int    `json:"exit_code"`
 	Error                        string `json:"error,omitempty"`
 	ProjectRoot                  string `json:"project_root,omitempty"`
@@ -758,9 +758,6 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 // telemetry failures never abort attempt execution.
 func appendReusableWorkspaceTelemetry(appender BeadEventAppender, beadID string, body ReusableWorkspaceTelemetry) {
 	if appender == nil || beadID == "" {
-		return
-	}
-	if body.SlotHitCount == 0 && body.SlotMissCount == 0 && body.TimeSavedMS == 0 && body.BytesSaved == 0 {
 		return
 	}
 	data, err := json.Marshal(body)
