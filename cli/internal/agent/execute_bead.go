@@ -716,27 +716,42 @@ func reusableWorkspaceTelemetryFromInput(input *AttemptWorkspaceReuseTelemetryIn
 // not recompute savings; it only merges the contracts already attached to the
 // slot or provided by allocation/execution outcome handling.
 func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *ReusableWorkspaceTelemetry) *ReusableWorkspaceTelemetry {
-	if ws != nil && ws.ReusableTelemetry != nil {
-		return reusableWorkspaceTelemetryFromInput(ws.ReusableTelemetry)
-	}
 	if ws != nil && ws.ReusableSlot != nil {
 		slot := ws.ReusableSlot
-		hitCount := slot.SlotHitCount
-		missCount := slot.SlotMissCount
-		if hitCount == 0 && missCount == 0 {
-			if slot.Pooled {
-				hitCount = 1
-			} else {
-				missCount = 1
-			}
-		}
 		telemetry := &ReusableWorkspaceTelemetry{
-			SlotHitCount:  hitCount,
-			SlotMissCount: missCount,
+			SlotHitCount:  slot.SlotHitCount,
+			SlotMissCount: slot.SlotMissCount,
 			TimeSavedMS:   slot.ConservativeTimeSavedMS,
 			BytesSaved:    slot.ConservativeBytesSaved,
 		}
+		if ws.ReusableTelemetry != nil {
+			if telemetry.SlotHitCount == 0 {
+				telemetry.SlotHitCount = ws.ReusableTelemetry.SlotHitCount
+			}
+			if telemetry.SlotMissCount == 0 {
+				telemetry.SlotMissCount = ws.ReusableTelemetry.SlotMissCount
+			}
+			if telemetry.TimeSavedMS == 0 {
+				telemetry.TimeSavedMS = ws.ReusableTelemetry.TimeSavedMS
+			}
+			if telemetry.BytesSaved == 0 {
+				telemetry.BytesSaved = ws.ReusableTelemetry.BytesSaved
+			}
+		}
+		if telemetry.SlotHitCount == 0 && telemetry.SlotMissCount == 0 {
+			if slot.Pooled {
+				telemetry.SlotHitCount = 1
+			} else {
+				telemetry.SlotMissCount = 1
+			}
+		}
 		if fallback != nil {
+			if telemetry.SlotHitCount == 0 {
+				telemetry.SlotHitCount = fallback.SlotHitCount
+			}
+			if telemetry.SlotMissCount == 0 {
+				telemetry.SlotMissCount = fallback.SlotMissCount
+			}
 			if telemetry.TimeSavedMS == 0 {
 				telemetry.TimeSavedMS = fallback.TimeSavedMS
 			}
@@ -745,6 +760,9 @@ func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *Reus
 			}
 		}
 		return telemetry
+	}
+	if ws != nil && ws.ReusableTelemetry != nil {
+		return reusableWorkspaceTelemetryFromInput(ws.ReusableTelemetry)
 	}
 	return fallback
 }

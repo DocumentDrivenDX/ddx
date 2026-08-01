@@ -238,3 +238,39 @@ func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testi
 	require.Zero(t, parsed.TimeSavedMS)
 	require.Zero(t, parsed.BytesSaved)
 }
+
+func TestAttemptWorkspaceReuseCombinedTelemetryColdStartValues(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	body := reusableWorkspaceTelemetryForWorkspace(
+		&AttemptWorkspace{
+			ReusableSlot: &AttemptWorkspaceSlot{
+				Pooled: false,
+			},
+		},
+		nil,
+	)
+	require.NotNil(t, body)
+	body.AttemptID = "20260801T010203-cold"
+
+	appendReusableWorkspaceTelemetry(app, "ddx-int-0001", *body)
+
+	require.Len(t, app.events, 1)
+	evt := app.events[0].Event
+	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Equal(t, "slot_hit_count=0 slot_miss_count=1 time_saved_ms=0 bytes_saved=0", evt.Summary)
+
+	var parsed ReusableWorkspaceTelemetry
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+	require.Equal(t, "20260801T010203-cold", parsed.AttemptID)
+	require.Zero(t, parsed.SlotHitCount)
+	require.Equal(t, 1, parsed.SlotMissCount)
+	require.Zero(t, parsed.TimeSavedMS)
+	require.Zero(t, parsed.BytesSaved)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(evt.Body), &got))
+	require.Len(t, got, 5)
+	for _, key := range []string{"attempt_id", "slot_hit_count", "slot_miss_count", "time_saved_ms", "bytes_saved"} {
+		require.Contains(t, got, key)
+	}
+}
