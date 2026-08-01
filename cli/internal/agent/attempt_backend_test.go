@@ -428,6 +428,25 @@ func TestReusableAttemptWorkspaceCleanupReturnsOnlyHealthySlotsToPool(t *testing
 	}
 }
 
+func TestReusableAttemptWorkspaceIntegrityErrorCarriesDiagnosticsAndCause(t *testing.T) {
+	cause := errors.New("forced integrity failure")
+	ws := &AttemptWorkspace{
+		ProjectRoot: "/project/root",
+		WorkDir:     "/fallback/workdir",
+		ReusableSlot: &AttemptWorkspaceSlot{
+			Path: "/pool/slot-0",
+		},
+	}
+
+	err := newReusableAttemptWorkspaceIntegrityError(ws, AttemptBackendLocalClone, "post-clean integrity failed", cause)
+	require.ErrorIs(t, err, cause)
+	require.Contains(t, err.Error(), "slot=/pool/slot-0")
+	require.Contains(t, err.Error(), "backend="+AttemptBackendLocalClone)
+	require.Contains(t, err.Error(), "project=/project/root")
+	require.Contains(t, err.Error(), "reason=post-clean integrity failed")
+	require.Contains(t, err.Error(), "error=forced integrity failure")
+}
+
 func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
 		AttemptBackend: AttemptBackendDockerClone,
