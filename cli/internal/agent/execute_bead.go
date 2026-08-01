@@ -1177,9 +1177,14 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 	reusableTelemetry := reusableWorkspaceTelemetryForWorkspace(workspace, runtime.ReusableWorkspaceTelemetry)
 	if reusableTelemetry != nil {
-		body := *reusableTelemetry
-		body.AttemptID = attemptID
-		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, body)
+		appendAttemptWorkspaceReuseTelemetry(runtime.BeadEvents, beadID, reusableWorkspaceTelemetryEventContract(
+			workspace,
+			reusableTelemetry,
+			projectRoot,
+			runtime.WorkerID,
+			attemptBackend.Name(),
+			attemptID,
+		))
 	}
 	var res *ExecuteBeadResult
 	preserveEvidenceSource := false

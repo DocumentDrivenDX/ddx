@@ -180,7 +180,7 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 	})
 }
 
-func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testing.T) {
+func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
 	projectRoot := setupArtifactTestProjectRoot(t)
 	const beadID = "ddx-int-0001"
 	baseRev := "bbbb000000000001"
@@ -190,6 +190,7 @@ func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testi
 
 	app := &stubBeadEventAppender{}
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		WorkerID:   "worker-slot-a",
 		BeadEvents: app,
 		AgentRunner: &artifactTestAgentRunner{
 			result: &Result{
@@ -225,16 +226,80 @@ func TestAttemptWorkspaceReuseTelemetryCombinedEventKeepsColdStartZeros(t *testi
 	}
 	require.True(t, found, "expected a reusable-workspace event in the execute-bead telemetry stream")
 	require.Equal(t, "reusable-workspace", evt.Kind)
+	require.Contains(t, evt.Summary, "outcome=cold_start")
 	require.Contains(t, evt.Summary, "slot_hit_count=0")
 	require.Contains(t, evt.Summary, "slot_miss_count=1")
 	require.Contains(t, evt.Summary, "time_saved_ms=0")
 	require.Contains(t, evt.Summary, "bytes_saved=0")
 
-	var parsed ReusableWorkspaceTelemetry
+	var parsed AttemptWorkspaceReuseTelemetryEventContract
 	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
 	require.Equal(t, beadID, beadEventID)
+	require.Equal(t, AttemptWorkspaceReuseOutcomeColdStart, parsed.Outcome)
+	require.Equal(t, projectRoot, parsed.ProjectRoot)
+	require.Equal(t, "worker-slot-a", parsed.WorkerSlot)
+	require.Equal(t, AttemptBackendWorktree, parsed.ResolvedBackendPolicy)
+	require.Equal(t, res.AttemptID, parsed.AttemptID)
 	require.Zero(t, parsed.SlotHitCount)
 	require.Equal(t, 1, parsed.SlotMissCount)
 	require.Zero(t, parsed.TimeSavedMS)
 	require.Zero(t, parsed.BytesSaved)
+}
+
+func TestAttemptWorkspaceReuseTelemetryEventContract(t *testing.T) {
+	app := &stubBeadEventAppender{}
+
+	cases := []AttemptWorkspaceReuseTelemetryEventContract{
+		{
+			Outcome:               AttemptWorkspaceReuseOutcomeHit,
+			ProjectRoot:           "/proj/a",
+			WorkerSlot:            "worker-a",
+			ResolvedBackendPolicy: AttemptBackendLocalClone,
+			AttemptID:             "20260801T010203-hit",
+			SlotHitCount:          1,
+		},
+		{
+			Outcome:               AttemptWorkspaceReuseOutcomeMiss,
+			ProjectRoot:           "/proj/b",
+			WorkerSlot:            "worker-b",
+			ResolvedBackendPolicy: AttemptBackendWorktree,
+			AttemptID:             "20260801T010203-miss",
+			SlotMissCount:         1,
+		},
+		{
+			Outcome:               AttemptWorkspaceReuseOutcomeColdStart,
+			ProjectRoot:           "/proj/c",
+			WorkerSlot:            "worker-c",
+			ResolvedBackendPolicy: AttemptBackendDockerClone,
+			AttemptID:             "20260801T010203-cold",
+			SlotMissCount:         1,
+		},
+	}
+
+	for _, contract := range cases {
+		appendAttemptWorkspaceReuseTelemetry(app, "ddx-int-0001", contract)
+	}
+
+	require.Len(t, app.events, len(cases))
+	for i, want := range cases {
+		got := app.events[i].Event
+		require.Equal(t, "reusable-workspace", got.Kind)
+		require.Contains(t, got.Summary, "outcome="+want.Outcome)
+		require.Contains(t, got.Summary, "slot_hit_count=")
+		require.Contains(t, got.Summary, "slot_miss_count=")
+		require.Contains(t, got.Summary, "time_saved_ms=")
+		require.Contains(t, got.Summary, "bytes_saved=")
+
+		var parsed AttemptWorkspaceReuseTelemetryEventContract
+		require.NoError(t, json.Unmarshal([]byte(got.Body), &parsed))
+		require.Equal(t, want.Outcome, parsed.Outcome)
+		require.Equal(t, want.ProjectRoot, parsed.ProjectRoot)
+		require.Equal(t, want.WorkerSlot, parsed.WorkerSlot)
+		require.Equal(t, want.ResolvedBackendPolicy, parsed.ResolvedBackendPolicy)
+		require.Equal(t, want.AttemptID, parsed.AttemptID)
+		require.Equal(t, want.SlotHitCount, parsed.SlotHitCount)
+		require.Equal(t, want.SlotMissCount, parsed.SlotMissCount)
+		require.Equal(t, want.TimeSavedMS, parsed.TimeSavedMS)
+		require.Equal(t, want.BytesSaved, parsed.BytesSaved)
+	}
 }
