@@ -127,6 +127,7 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotEmitSplitReuseSavingsEvents(t *tes
 	require.NotNil(t, combined, "execute-bead event must carry reusable workspace telemetry")
 	assert.Contains(t, combined.Body, "reusable_workspace_slot_hits=3")
 	assert.Contains(t, combined.Body, "reusable_workspace_slot_misses=1")
+	assert.Contains(t, combined.Body, "reusable_workspace_reuse_win=true")
 	assert.Contains(t, combined.Body, "reusable_workspace_time_saved_ms=4200")
 	assert.Contains(t, combined.Body, "reusable_workspace_bytes_saved=8192")
 }

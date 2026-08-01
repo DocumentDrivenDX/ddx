@@ -13,6 +13,7 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 		AttemptID:     "20260728T010203-reuse",
 		SlotHitCount:  1,
 		SlotMissCount: 0,
+		ReuseWin:      true,
 		TimeSavedMS:   8400,
 		BytesSaved:    512 << 20,
 	})
@@ -25,6 +26,7 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 	require.Equal(t, "legacy agent execute-bead", got.Event.Source)
 	require.Contains(t, got.Event.Summary, "slot_hit_count=1")
 	require.Contains(t, got.Event.Summary, "slot_miss_count=0")
+	require.Contains(t, got.Event.Summary, "reuse_win=true")
 	require.Contains(t, got.Event.Summary, "time_saved=8400")
 	require.Contains(t, got.Event.Summary, "bytes_saved=536870912")
 
@@ -33,6 +35,7 @@ func TestAttemptWorkspaceReuseTelemetryReusedAttemptCarriesAllocationSavings(t *
 	require.Equal(t, "20260728T010203-reuse", body.AttemptID)
 	require.Equal(t, 1, body.SlotHitCount)
 	require.Equal(t, 0, body.SlotMissCount)
+	require.True(t, body.ReuseWin)
 	require.Equal(t, int64(8400), body.TimeSavedMS)
 	require.Equal(t, int64(512<<20), body.BytesSaved)
 }

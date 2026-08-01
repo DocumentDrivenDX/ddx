@@ -25,6 +25,7 @@ type AttemptWorkspaceReuseSavingsContract struct {
 type AttemptWorkspaceReuseTelemetryPayload struct {
 	SlotHitCount  int64 `json:"slot_hit_count"`
 	SlotMissCount int64 `json:"slot_miss_count"`
+	ReuseWin      bool  `json:"reuse_win"`
 	AttemptWorkspaceReuseSavingsContract
 }
 
@@ -40,9 +41,10 @@ func AttemptWorkspaceReuseTelemetryEvent(payload AttemptWorkspaceReuseTelemetryP
 	}
 
 	summary := fmt.Sprintf(
-		"hits=%d misses=%d time_saved_ms=%d bytes_saved=%d",
+		"hits=%d misses=%d reuse_win=%t time_saved_ms=%d bytes_saved=%d",
 		payload.SlotHitCount,
 		payload.SlotMissCount,
+		payload.ReuseWin,
 		payload.TimeSavedMS,
 		payload.BytesSaved,
 	)

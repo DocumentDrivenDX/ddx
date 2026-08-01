@@ -12,6 +12,7 @@ func TestAttemptWorkspaceReuseTelemetryCombinedPayloadIncludesHitsMissesAndSavin
 	payload := AttemptWorkspaceReuseTelemetryPayload{
 		SlotHitCount:  3,
 		SlotMissCount: 1,
+		ReuseWin:      true,
 		AttemptWorkspaceReuseSavingsContract: AttemptWorkspaceReuseSavingsContract{
 			TimeSavedMS: 4200,
 			BytesSaved:  1048576,
@@ -20,13 +21,14 @@ func TestAttemptWorkspaceReuseTelemetryCombinedPayloadIncludesHitsMissesAndSavin
 
 	evt := AttemptWorkspaceReuseTelemetryEvent(payload)
 	require.Equal(t, "attempt-workspace-reuse", evt.Kind)
-	require.Equal(t, "hits=3 misses=1 time_saved_ms=4200 bytes_saved=1048576", evt.Summary)
+	require.Equal(t, "hits=3 misses=1 reuse_win=true time_saved_ms=4200 bytes_saved=1048576", evt.Summary)
 	require.NotEmpty(t, evt.Body)
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(evt.Body), &got))
 	assert.Equal(t, float64(3), got["slot_hit_count"])
 	assert.Equal(t, float64(1), got["slot_miss_count"])
+	assert.Equal(t, true, got["reuse_win"])
 	assert.Equal(t, float64(4200), got["time_saved_ms"])
 	assert.Equal(t, float64(1048576), got["bytes_saved"])
 }
@@ -40,6 +42,7 @@ func TestAttemptWorkspaceReuseTelemetryCombinedPayloadUsesSavingsContract(t *tes
 	evt := AttemptWorkspaceReuseTelemetryEvent(AttemptWorkspaceReuseTelemetryPayload{
 		SlotHitCount:                         9,
 		SlotMissCount:                        2,
+		ReuseWin:                             true,
 		AttemptWorkspaceReuseSavingsContract: savings,
 	})
 
@@ -47,6 +50,7 @@ func TestAttemptWorkspaceReuseTelemetryCombinedPayloadUsesSavingsContract(t *tes
 	require.NoError(t, json.Unmarshal([]byte(evt.Body), &got))
 	assert.Equal(t, int64(9), got.SlotHitCount)
 	assert.Equal(t, int64(2), got.SlotMissCount)
+	assert.True(t, got.ReuseWin)
 	assert.Equal(t, savings.TimeSavedMS, got.TimeSavedMS)
 	assert.Equal(t, savings.BytesSaved, got.BytesSaved)
 }

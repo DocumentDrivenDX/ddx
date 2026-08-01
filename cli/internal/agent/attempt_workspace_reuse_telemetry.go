@@ -25,6 +25,7 @@ type AttemptWorkspaceReuseTelemetryInput struct {
 	SlotMissCount int   `json:"slot_miss_count"`
 	TimeSavedMS   int64 `json:"time_saved_ms"`
 	BytesSaved    int64 `json:"bytes_saved"`
+	ReuseWin      bool  `json:"reuse_win"`
 }
 
 // AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome converts the
@@ -40,5 +41,6 @@ func AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
 		SlotMissCount: outcome.SlotMissCount,
 		TimeSavedMS:   savings.TimeSavedMS,
 		BytesSaved:    savings.BytesSaved,
+		ReuseWin:      outcome.SlotHitCount > 0,
 	}
 }
