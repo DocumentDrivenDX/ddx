@@ -779,6 +779,24 @@ func applyReusableWorkspaceTelemetry(res *ExecuteBeadResult, telemetry *Reusable
 	res.ReusableWorkspaceBytesSaved = telemetry.BytesSaved
 }
 
+// consumeReusableWorkspaceTelemetry clears workspace-local reusable telemetry
+// after the allocation outcome has been recorded. Cleanup should preserve the
+// workspace lifecycle state, but it must not observe the same allocation
+// counters again and emit or infer a second outcome.
+func consumeReusableWorkspaceTelemetry(ws *AttemptWorkspace) {
+	if ws == nil {
+		return
+	}
+	ws.ReusableTelemetry = nil
+	if ws.ReusableSlot == nil {
+		return
+	}
+	ws.ReusableSlot.SlotHitCount = 0
+	ws.ReusableSlot.SlotMissCount = 0
+	ws.ReusableSlot.ConservativeTimeSavedMS = 0
+	ws.ReusableSlot.ConservativeBytesSaved = 0
+}
+
 // appendBeadCostEvidence records a kind:cost evidence entry on the bead with
 // per-attempt token and dollar usage. Best-effort: errors are discarded so a
 // store failure never aborts the main execute-bead flow. Emits nothing when
@@ -1205,6 +1223,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			attemptBackend.Name(),
 			attemptID,
 		))
+		consumeReusableWorkspaceTelemetry(workspace)
 	}
 	var res *ExecuteBeadResult
 	preserveEvidenceSource := false

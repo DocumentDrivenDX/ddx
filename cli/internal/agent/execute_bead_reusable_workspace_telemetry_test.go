@@ -400,6 +400,108 @@ func (b *reusableWorkspaceTelemetryPrepBackend) Cleanup(ctx context.Context, ws 
 	return inner.Cleanup(ctx, ws)
 }
 
+type reusableWorkspaceTelemetryCleanupBackend struct {
+	inner         AttemptBackend
+	slot          *AttemptWorkspaceSlot
+	telemetry     *AttemptWorkspaceReuseTelemetryInput
+	t             *testing.T
+	releaseErr    error
+	quarantineErr error
+
+	releaseCalls    int
+	quarantineCalls int
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) Name() string { return AttemptBackendLocalClone }
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	inner := b.inner
+	if inner == nil {
+		inner = LocalCloneAttemptBackend{}
+	}
+	ws, err := inner.Prepare(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if b.slot != nil {
+		slot := *b.slot
+		if slot.Path == "" {
+			slot.Path = ws.WorkDir
+		}
+		ws.ReusableSlot = &slot
+	}
+	if b.telemetry != nil {
+		ws.ReusableTelemetry = b.telemetry
+	}
+	return ws, nil
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	inner := b.inner
+	if inner == nil {
+		inner = LocalCloneAttemptBackend{}
+	}
+	return inner.Run(ctx, req)
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) ImportCandidate(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) ReleaseCandidateImport(context.Context, *AttemptWorkspace) error {
+	return nil
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	inner := b.inner
+	if inner == nil {
+		inner = LocalCloneAttemptBackend{}
+	}
+	return inner.Cleanup(ctx, ws)
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	b.releaseCalls++
+	b.assertTelemetryConsumed(ws)
+	return b.releaseErr
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	b.quarantineCalls++
+	b.assertTelemetryConsumed(ws)
+	return b.quarantineErr
+}
+
+func (b *reusableWorkspaceTelemetryCleanupBackend) assertTelemetryConsumed(ws *AttemptWorkspace) {
+	b.t.Helper()
+	require.NotNil(b.t, ws)
+	require.Nil(b.t, ws.ReusableTelemetry, "cleanup must not observe reusable telemetry after it has been recorded")
+	if ws.ReusableSlot == nil {
+		return
+	}
+	require.Zero(b.t, ws.ReusableSlot.SlotHitCount, "cleanup must not re-read hit counts after allocation telemetry has been recorded")
+	require.Zero(b.t, ws.ReusableSlot.SlotMissCount, "cleanup must not re-read miss counts after allocation telemetry has been recorded")
+	require.Zero(b.t, ws.ReusableSlot.ConservativeTimeSavedMS, "cleanup must not re-read time savings after allocation telemetry has been recorded")
+	require.Zero(b.t, ws.ReusableSlot.ConservativeBytesSaved, "cleanup must not re-read byte savings after allocation telemetry has been recorded")
+}
+
+func reusableWorkspaceEvents(app *stubBeadEventAppender) []bead.BeadEvent {
+	if app == nil {
+		return nil
+	}
+	events := make([]bead.BeadEvent, 0, len(app.events))
+	for _, recorded := range app.events {
+		if recorded.Event.Kind == "reusable-workspace" {
+			events = append(events, recorded.Event)
+		}
+	}
+	return events
+}
+
 // TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings proves a
 // reused-attempt combined telemetry event carries hit allocation counts and
 // non-zero savings when the savings estimate provides proven preserved state.
@@ -463,6 +565,77 @@ func TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings(t *testi
 	require.Zero(t, parsed.SlotMissCount)
 	require.Equal(t, int64(8400), parsed.TimeSavedMS)
 	require.Equal(t, int64(512<<20), parsed.BytesSaved)
+}
+
+func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	telemetry := &AttemptWorkspaceReuseTelemetryInput{
+		SlotHitCount: 1,
+	}
+	ws := &AttemptWorkspace{
+		ReusableSlot: &AttemptWorkspaceSlot{
+			Pooled:       true,
+			SlotHitCount: 1,
+		},
+		ReusableTelemetry: telemetry,
+	}
+	appendAttemptWorkspaceReuseTelemetry(app, "ddx-int-0001", reusableWorkspaceTelemetryEventContract(
+		ws,
+		reusableWorkspaceTelemetryFromInput(telemetry),
+		"/proj",
+		"worker-slot-a",
+		AttemptBackendLocalClone,
+		"20260801T010203-cleanup",
+	))
+	consumeReusableWorkspaceTelemetry(ws)
+
+	backend := &reusableWorkspaceTelemetryCleanupBackend{
+		t: t,
+	}
+
+	ok := cleanupReusableAttemptWorkspace(context.Background(), backend, ws, &ExecuteBeadResult{
+		Outcome: ExecuteBeadOutcomeTaskSucceeded,
+	})
+	require.True(t, ok)
+	require.Equal(t, 1, backend.releaseCalls)
+	require.Zero(t, backend.quarantineCalls)
+	require.Len(t, reusableWorkspaceEvents(app), 1, "cleanup must not emit a second reusable-workspace record")
+}
+
+func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	telemetry := &AttemptWorkspaceReuseTelemetryInput{
+		SlotMissCount: 1,
+	}
+	ws := &AttemptWorkspace{
+		ReusableSlot: &AttemptWorkspaceSlot{
+			Pooled:        true,
+			SlotMissCount: 1,
+		},
+		ReusableTelemetry: telemetry,
+	}
+	appendAttemptWorkspaceReuseTelemetry(app, "ddx-int-0001", reusableWorkspaceTelemetryEventContract(
+		ws,
+		reusableWorkspaceTelemetryFromInput(telemetry),
+		"/proj",
+		"worker-slot-a",
+		AttemptBackendLocalClone,
+		"20260801T010203-failed-cleanup",
+	))
+	consumeReusableWorkspaceTelemetry(ws)
+
+	backend := &reusableWorkspaceTelemetryCleanupBackend{
+		t:             t,
+		quarantineErr: context.Canceled,
+	}
+
+	ok := cleanupReusableAttemptWorkspace(context.Background(), backend, ws, &ExecuteBeadResult{
+		Outcome: ExecuteBeadOutcomeTaskFailed,
+	})
+	require.True(t, ok)
+	require.Zero(t, backend.releaseCalls)
+	require.Equal(t, 1, backend.quarantineCalls)
+	require.Len(t, reusableWorkspaceEvents(app), 1, "failed cleanup must not emit a second reusable-workspace record")
 }
 
 func TestAttemptWorkspaceReuseCombinedTelemetryColdStartValues(t *testing.T) {
