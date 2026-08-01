@@ -98,7 +98,7 @@ func TestAttemptWorkspaceReuseTelemetryRecordsSavings(t *testing.T) {
 	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=536870912")
 }
 
-func TestAttemptWorkspaceReuseTelemetryOmitsSavingsForReuseMiss(t *testing.T) {
+func TestAttemptWorkspaceReuseTelemetryEmitsZeroSavingsForReuseMiss(t *testing.T) {
 	report := ExecuteBeadReport{
 		BeadID:                      "ddx-reuse-miss",
 		Status:                      ExecuteBeadStatusNoChanges,
@@ -113,8 +113,8 @@ func TestAttemptWorkspaceReuseTelemetryOmitsSavingsForReuseMiss(t *testing.T) {
 	require.Equal(t, ExecuteBeadStatusNoChanges, event.Summary)
 	require.Contains(t, event.Body, "reusable_workspace_slot_hits=0")
 	require.Contains(t, event.Body, "reusable_workspace_slot_misses=1")
-	require.NotContains(t, event.Body, "reusable_workspace_time_saved_ms=")
-	require.NotContains(t, event.Body, "reusable_workspace_bytes_saved=")
+	require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=0")
+	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=0")
 }
 
 func TestAttemptWorkspaceReuseTelemetryDoesNotEmitSplitReuseSavingsEvents(t *testing.T) {
