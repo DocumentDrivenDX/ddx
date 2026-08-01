@@ -151,6 +151,14 @@ func keepAttemptWorkspaceSlotReachability(root string) {
 		_ = disabledPool.Release(ephemeral)
 	}
 	_ = pool.Evict(key)
+
+	// Reusable-workspace telemetry input conversion is package-level API
+	// ahead of execution-event wiring; keep the combined payload helper on
+	// the static graph.
+	_ = AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+		AttemptWorkspaceReuseAllocationOutcome{SlotMissCount: 1},
+		AttemptWorkspaceReuseSavings{},
+	)
 }
 
 // keepAttemptBuildCacheReachability exercises the per-slot build-cache surface
