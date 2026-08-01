@@ -475,6 +475,77 @@ func TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings(t *testi
 	require.Equal(t, int64(512<<20), parsed.BytesSaved)
 }
 
+func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	telemetry := &AttemptWorkspaceReuseTelemetryInput{
+		SlotHitCount: 1,
+	}
+	ws := &AttemptWorkspace{
+		ReusableSlot: &AttemptWorkspaceSlot{
+			Pooled:       true,
+			SlotHitCount: 1,
+		},
+		ReusableTelemetry: telemetry,
+	}
+	appendAttemptWorkspaceReuseTelemetry(app, "ddx-int-0001", reusableWorkspaceTelemetryEventContract(
+		ws,
+		reusableWorkspaceTelemetryFromInput(telemetry),
+		"/proj",
+		"worker-slot-a",
+		AttemptBackendLocalClone,
+		"20260801T010203-cleanup",
+	))
+	consumeReusableWorkspaceTelemetry(ws)
+
+	backend := &reusableWorkspaceTelemetryCleanupBackend{
+		t: t,
+	}
+
+	ok := cleanupReusableAttemptWorkspace(context.Background(), backend, ws, &ExecuteBeadResult{
+		Outcome: ExecuteBeadOutcomeTaskSucceeded,
+	})
+	require.True(t, ok)
+	require.Equal(t, 1, backend.releaseCalls)
+	require.Zero(t, backend.quarantineCalls)
+	require.Len(t, reusableWorkspaceEvents(app), 1, "cleanup must not emit a second reusable-workspace record")
+}
+
+func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	telemetry := &AttemptWorkspaceReuseTelemetryInput{
+		SlotMissCount: 1,
+	}
+	ws := &AttemptWorkspace{
+		ReusableSlot: &AttemptWorkspaceSlot{
+			Pooled:        true,
+			SlotMissCount: 1,
+		},
+		ReusableTelemetry: telemetry,
+	}
+	appendAttemptWorkspaceReuseTelemetry(app, "ddx-int-0001", reusableWorkspaceTelemetryEventContract(
+		ws,
+		reusableWorkspaceTelemetryFromInput(telemetry),
+		"/proj",
+		"worker-slot-a",
+		AttemptBackendLocalClone,
+		"20260801T010203-failed-cleanup",
+	))
+	consumeReusableWorkspaceTelemetry(ws)
+
+	backend := &reusableWorkspaceTelemetryCleanupBackend{
+		t:             t,
+		quarantineErr: context.Canceled,
+	}
+
+	ok := cleanupReusableAttemptWorkspace(context.Background(), backend, ws, &ExecuteBeadResult{
+		Outcome: ExecuteBeadOutcomeTaskFailed,
+	})
+	require.True(t, ok)
+	require.Zero(t, backend.releaseCalls)
+	require.Equal(t, 1, backend.quarantineCalls)
+	require.Len(t, reusableWorkspaceEvents(app), 1, "failed cleanup must not emit a second reusable-workspace record")
+}
+
 func TestAttemptWorkspaceReuseCombinedTelemetryColdStartValues(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	body := reusableWorkspaceTelemetryForWorkspace(
