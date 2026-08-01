@@ -699,9 +699,10 @@ type ReusableWorkspaceTelemetry struct {
 }
 
 // reusableWorkspaceTelemetryForWorkspace prefers the allocation metadata on
-// the prepared workspace slot and only falls back to an injected telemetry
-// override when no slot is available. The execute path must not recompute
-// savings; it only threads through the contract already attached to the slot.
+// the prepared workspace slot and threads in an injected savings contract
+// when the slot does not already carry savings values. The execute path must
+// not recompute savings; it only merges the contracts already attached to the
+// slot or provided by allocation/execution outcome handling.
 func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *ReusableWorkspaceTelemetry) *ReusableWorkspaceTelemetry {
 	if ws != nil && ws.ReusableSlot != nil {
 		slot := ws.ReusableSlot
@@ -714,12 +715,21 @@ func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *Reus
 				missCount = 1
 			}
 		}
-		return &ReusableWorkspaceTelemetry{
+		telemetry := &ReusableWorkspaceTelemetry{
 			SlotHitCount:  hitCount,
 			SlotMissCount: missCount,
 			TimeSavedMS:   slot.ConservativeTimeSavedMS,
 			BytesSaved:    slot.ConservativeBytesSaved,
 		}
+		if fallback != nil {
+			if telemetry.TimeSavedMS == 0 {
+				telemetry.TimeSavedMS = fallback.TimeSavedMS
+			}
+			if telemetry.BytesSaved == 0 {
+				telemetry.BytesSaved = fallback.BytesSaved
+			}
+		}
+		return telemetry
 	}
 	return fallback
 }
