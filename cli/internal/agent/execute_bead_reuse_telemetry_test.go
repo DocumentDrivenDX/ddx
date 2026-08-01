@@ -20,16 +20,19 @@ type reusableWorkspaceTelemetryBody struct {
 	BytesSaved    int64 `json:"bytes_saved"`
 }
 
+// Alias kept for tests that still reference the pre-rename type name.
+type reusableWorkspaceTelemetryBodyLegacy = reusableWorkspaceTelemetryBody
+
 func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavingsPayload(t *testing.T) {
 	app := &stubBeadEventAppender{}
 
-	appendReusableWorkspaceTelemetryForTest(app, "ddx-reuse", reusableWorkspaceTelemetryBodyLegacy{
+	appendReusableWorkspaceTelemetryForTest(app, "ddx-reuse", reusableWorkspaceTelemetryBody{
 		SlotHitCount:  1,
 		SlotMissCount: 0,
 		TimeSavedMS:   1250,
 		BytesSaved:    4096,
 	})
-	appendReusableWorkspaceTelemetryForTest(app, "ddx-cold", reusableWorkspaceTelemetryBodyLegacy{
+	appendReusableWorkspaceTelemetryForTest(app, "ddx-cold", reusableWorkspaceTelemetryBody{
 		SlotHitCount:  0,
 		SlotMissCount: 1,
 		TimeSavedMS:   0,
@@ -62,10 +65,10 @@ func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavingsPayload(t *tes
 	require.Equal(t, float64(0), coldBody["bytes_saved"])
 }
 
-// appendReusableWorkspaceTelemetryLegacy records reusable-workspace savings evidence
+// appendReusableWorkspaceTelemetryForTest records reusable-workspace savings evidence
 // on the bead. The body shape is intentionally stable across reused and
 // cold-start attempts, so zero-valued cold-start counters stay visible.
-func appendReusableWorkspaceTelemetryForTest(appender BeadEventAppender, beadID string, body reusableWorkspaceTelemetryBodyLegacy) {
+func appendReusableWorkspaceTelemetryForTest(appender BeadEventAppender, beadID string, body reusableWorkspaceTelemetryBody) {
 	if appender == nil || beadID == "" {
 		return
 	}

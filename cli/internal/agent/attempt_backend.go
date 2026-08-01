@@ -450,6 +450,13 @@ func validateReusableAttemptWorkspaceIntegrity(ctx context.Context, ws *AttemptW
 	return fmt.Errorf("reusable workspace still dirty after reset: %s", strings.Join(dirty, ", "))
 }
 
+// reusableAttemptWorkspaceResiduePaths is the production alias used by
+// integrity validation after scrub. Kept as a thin wrapper so callers can
+// name the check in terms of leftover residue rather than porcelain dirt.
+func reusableAttemptWorkspaceResiduePaths(status string) []string {
+	return reusableAttemptWorkspaceDirtyPaths(status)
+}
+
 func reusableAttemptWorkspaceDirtyPaths(status string) []string {
 	if strings.TrimSpace(status) == "" {
 		return nil

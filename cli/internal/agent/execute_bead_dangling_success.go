@@ -387,9 +387,26 @@ func recoverDanglingSuccess(
 			}, nil
 		}
 		if landRes != nil && landRes.Status == "preserved" {
+			// Merge conflict against current main: prior green work is stale
+			// relative to HEAD. Park-and-preserve thrashes the OA queue; mark
+			// this result_rev rejected and allow a fresh attempt instead.
 			payload["land_status"] = "preserved"
 			payload["land_reason"] = landRes.Reason
-		} else if landErr != nil {
+			payload["action"] = "reject_stale_for_reexec"
+			if emit != nil {
+				emit("bead.dangling_success_rejected_for_reexec", payload)
+			}
+			appendDanglingSuccessEvent(store, beadID, bead.BeadEvent{
+				Kind:      "preserved-result-rejected",
+				Summary:   "auto-rejected merge-conflicting dangling success for re-execution",
+				Body:      fmt.Sprintf("result_rev=%s\nreason=land_conflict\nland_reason=%s\naction=reject_stale_for_reexec", prior.ResultRev, landRes.Reason),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: t,
+			})
+			return nil, nil
+		}
+		if landErr != nil {
 			payload["land_error"] = landErr.Error()
 		}
 

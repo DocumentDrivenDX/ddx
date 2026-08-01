@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -326,10 +327,10 @@ func TestRecoverDanglingSuccess_SkipsRejectedPreservedResultForFreshAttempt(t *t
 	assert.Nil(t, beadEventByKind(events, "dangling-success-preserved"), "matching rejection must suppress dangling-success-preserved")
 }
 
-// TestRecoverDanglingSuccess_NonRejectedPreservedResultStillParks proves the
-// current preserve-and-park behavior still runs when no matching rejection
-// event exists.
-func TestRecoverDanglingSuccess_NonRejectedPreservedResultStillParks(t *testing.T) {
+// TestRecoverDanglingSuccess_LandConflictAutoRejectsForReexec proves merge
+// conflicts against current main do not park OA forever; the stale result_rev
+// is rejected so a fresh attempt can run.
+func TestRecoverDanglingSuccess_LandConflictAutoRejectsForReexec(t *testing.T) {
 	workDir, originDir, _ := setupBareOrigin(t)
 	const beadID = "ddx-preserve-no-reject"
 
@@ -372,22 +373,18 @@ func TestRecoverDanglingSuccess_NonRejectedPreservedResultStillParks(t *testing.
 
 	recovery, err := recoverDanglingSuccess(store, workDir, beadID, "worker", nil, nil)
 	require.NoError(t, err)
-	require.NotNil(t, recovery)
-	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome)
-
-	preserveRef := PreserveRef(beadID, baseSHA)
-	assert.Equal(t, resultSHA, mustGitRevParse(t, workDir, preserveRef))
+	assert.Nil(t, recovery, "land conflict must clear recovery so a fresh attempt can run")
 
 	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status, "non-rejected preserved result must still park to proposed")
+	assert.Equal(t, bead.StatusInProgress, got.Status, "claim must remain so worker can continue into fresh execution")
 
 	events, err := store.Events(beadID)
 	require.NoError(t, err)
-	preservedEvent := beadEventByKind(events, "dangling-success-preserved")
-	require.NotNil(t, preservedEvent)
-	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
-	assert.Contains(t, preservedEvent.Body, "pushed=true")
+	rej := beadEventByKind(events, "preserved-result-rejected")
+	require.NotNil(t, rej)
+	assert.Contains(t, rej.Body, "result_rev="+resultSHA)
+	assert.Contains(t, rej.Body, "land_conflict")
 
 	_ = originDir
 }
@@ -408,7 +405,7 @@ func TestPreservedResultRejectedEventMatchesOnlySameResultRev(t *testing.T) {
 	}))
 	require.NoError(t, store.Claim(beadID, "worker"))
 
-	baseSHA, resultSHA := gitDetachedBranchCommit(
+	_, resultSHA := gitDetachedBranchCommit(
 		t,
 		workDir,
 		"worker-result-other-reject",
@@ -416,7 +413,8 @@ func TestPreservedResultRejectedEventMatchesOnlySameResultRev(t *testing.T) {
 		"detached result for preserve with other rejection\n",
 		"chore: detached worker result for "+beadID,
 	)
-	forceDanglingSuccessLandConflict(t, workDir, "worker-output.txt")
+	// Invalid base forces Land() error → preserve path (not land-conflict reject).
+	invalidBase := strings.Repeat("ab", 20)
 
 	const attemptID = "20260727T120200-otherreject"
 	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
@@ -426,7 +424,7 @@ func TestPreservedResultRejectedEventMatchesOnlySameResultRev(t *testing.T) {
 		ExitCode:  0,
 		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
 		ResultRev: resultSHA,
-		BaseRev:   baseSHA,
+		BaseRev:   invalidBase,
 		Status:    ExecuteBeadStatusSuccess,
 	})
 	appendBeadEvent(t, store, beadID, bead.BeadEvent{
@@ -448,7 +446,8 @@ func TestPreservedResultRejectedEventMatchesOnlySameResultRev(t *testing.T) {
 	require.NotNil(t, recovery)
 	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome)
 
-	preserveRef := PreserveRef(beadID, baseSHA)
+	// PreserveRef keys on the BaseRev recorded in result.json.
+	preserveRef := PreserveRef(beadID, invalidBase)
 	assert.Equal(t, resultSHA, mustGitRevParse(t, workDir, preserveRef))
 
 	got, err := store.Get(context.Background(), beadID)
@@ -658,7 +657,7 @@ func TestRecoverDanglingSuccess_PushesPreserveRefToOrigin(t *testing.T) {
 	}))
 	require.NoError(t, store.Claim(beadID, "worker"))
 
-	baseSHA, resultSHA := gitDetachedBranchCommit(
+	_, resultSHA := gitDetachedBranchCommit(
 		t,
 		workDir,
 		"worker-result-push",
@@ -666,7 +665,9 @@ func TestRecoverDanglingSuccess_PushesPreserveRefToOrigin(t *testing.T) {
 		"detached result for push\n",
 		"chore: detached worker result for "+beadID,
 	)
-	forceDanglingSuccessLandConflict(t, workDir, "worker-output.txt")
+	// Invalid BaseRev forces Land() hard error → preserve_and_park path
+	// (merge-conflict Status=="preserved" now auto-rejects for re-exec).
+	invalidBase := strings.Repeat("cd", 20)
 
 	const attemptID = "20260727T120000-pushok"
 	writeResultJSON(t, workDir, attemptID, ExecuteBeadResult{
@@ -676,7 +677,7 @@ func TestRecoverDanglingSuccess_PushesPreserveRefToOrigin(t *testing.T) {
 		ExitCode:  0,
 		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
 		ResultRev: resultSHA,
-		BaseRev:   baseSHA,
+		BaseRev:   invalidBase,
 		Status:    ExecuteBeadStatusSuccess,
 	})
 
@@ -697,7 +698,7 @@ func TestRecoverDanglingSuccess_PushesPreserveRefToOrigin(t *testing.T) {
 	require.NotNil(t, recovery)
 	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome)
 
-	preserveRef := PreserveRef(beadID, baseSHA)
+	preserveRef := PreserveRef(beadID, invalidBase)
 	assert.Equal(t, preserveRef, recovery.PreserveRef)
 	assert.Equal(t, resultSHA, mustGitRevParse(t, workDir, preserveRef), "local preserve ref must exist")
 
@@ -735,7 +736,7 @@ func TestRecoverDanglingSuccess_PushFailureStillPreservesLocally(t *testing.T) {
 	unreachable := filepath.Join(t.TempDir(), "no-such-remote.git")
 	runGitInteg(t, projectRoot, "remote", "add", "origin", "file://"+unreachable)
 
-	baseSHA, resultSHA := gitDetachedBranchCommit(
+	_, resultSHA := gitDetachedBranchCommit(
 		t,
 		projectRoot,
 		"worker-result-pushfail",
@@ -743,7 +744,8 @@ func TestRecoverDanglingSuccess_PushFailureStillPreservesLocally(t *testing.T) {
 		"detached result for push fail\n",
 		"chore: detached worker result for "+beadID,
 	)
-	forceDanglingSuccessLandConflict(t, projectRoot, "worker-output.txt")
+	// Invalid BaseRev forces Land() hard error → preserve_and_park path.
+	invalidBase := strings.Repeat("ef", 20)
 
 	const attemptID = "20260727T120000-pushfail"
 	writeResultJSON(t, projectRoot, attemptID, ExecuteBeadResult{
@@ -753,7 +755,7 @@ func TestRecoverDanglingSuccess_PushFailureStillPreservesLocally(t *testing.T) {
 		ExitCode:  0,
 		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
 		ResultRev: resultSHA,
-		BaseRev:   baseSHA,
+		BaseRev:   invalidBase,
 		Status:    ExecuteBeadStatusSuccess,
 	})
 
@@ -778,7 +780,7 @@ func TestRecoverDanglingSuccess_PushFailureStillPreservesLocally(t *testing.T) {
 	assert.Equal(t, danglingSuccessOutcomePreserved, recovery.Outcome,
 		"push failure must not block local preserve")
 
-	preserveRef := PreserveRef(beadID, baseSHA)
+	preserveRef := PreserveRef(beadID, invalidBase)
 	assert.Equal(t, resultSHA, mustGitRevParse(t, projectRoot, preserveRef),
 		"local preserve ref must exist despite push failure")
 

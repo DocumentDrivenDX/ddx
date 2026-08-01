@@ -74,10 +74,10 @@ func TestExecuteBeadReusableWorkspaceSavingsEstimateAvailableToExecutionEvents(t
 	const beadID = "ddx-int-0001"
 
 	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
-		AttemptWorkspaceReuseAllocationOutcome{SlotHitCount: 1},
-		AttemptWorkspaceReuseSavings{
-			TimeSavedMS: 8400,
-			BytesSaved:  512 << 20,
+		AttemptWorkspaceReuseAllocationOutcome{
+			SlotHitCount:            1,
+			ConservativeTimeSavedMS: 8400,
+			ConservativeBytesSaved:  512 << 20,
 		},
 	)
 	backend := &reusableWorkspaceSavingsEstimateBackend{
@@ -112,7 +112,6 @@ func TestExecuteBeadReusableWorkspaceSavingsEstimateZeroForMissOutcome(t *testin
 	t.Run("allocation_miss", func(t *testing.T) {
 		telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
 			AttemptWorkspaceReuseAllocationOutcome{SlotMissCount: 1},
-			AttemptWorkspaceReuseSavings{},
 		)
 		backend := &reusableWorkspaceSavingsEstimateBackend{
 			telemetry: &telemetry,
