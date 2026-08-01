@@ -30,6 +30,28 @@ type AttemptWorkspaceReuseTelemetryInput struct {
 func AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
 	outcome AttemptWorkspaceReuseAllocationOutcome,
 ) AttemptWorkspaceReuseTelemetryInput {
+	return AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(outcome)
+}
+
+// AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome converts one
+// reusable-slot allocation outcome into conservative telemetry values.
+//
+// Non-zero savings are only exposed when the outcome already proves reuse via
+// a hit count and carries explicit positive savings metadata. Cold allocations
+// and reused-slot outcomes without savings proof stay zeroed.
+func AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(
+	outcome AttemptWorkspaceReuseAllocationOutcome,
+) AttemptWorkspaceReuseTelemetryInput {
+	telemetry := AttemptWorkspaceReuseTelemetryInput{
+		SlotHitCount:  outcome.SlotHitCount,
+		SlotMissCount: outcome.SlotMissCount,
+	}
+	if outcome.SlotHitCount <= 0 {
+		return telemetry
+	}
+	if outcome.ConservativeTimeSavedMS <= 0 || outcome.ConservativeBytesSaved <= 0 {
+		return telemetry
+	}
 	return AttemptWorkspaceReuseTelemetryInput{
 		SlotHitCount:  outcome.SlotHitCount,
 		SlotMissCount: outcome.SlotMissCount,

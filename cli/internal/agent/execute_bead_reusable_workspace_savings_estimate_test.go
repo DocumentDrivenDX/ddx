@@ -69,11 +69,11 @@ func executeBeadReusableWorkspaceSavingsEstimateTestConfig(t *testing.T) config.
 	return cfg
 }
 
-func TestExecuteBeadReusableWorkspaceSavingsEstimateAvailableToExecutionEvents(t *testing.T) {
+func TestAttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+	telemetry := AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(
 		AttemptWorkspaceReuseAllocationOutcome{
 			SlotHitCount:            1,
 			ConservativeTimeSavedMS: 8400,
@@ -105,12 +105,12 @@ func TestExecuteBeadReusableWorkspaceSavingsEstimateAvailableToExecutionEvents(t
 	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=536870912")
 }
 
-func TestExecuteBeadReusableWorkspaceSavingsEstimateZeroForMissOutcome(t *testing.T) {
+func TestAttemptWorkspaceReuseSavingsEstimateDoesNotInventSavingsForColdOrUnprovenSlots(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	t.Run("allocation_miss", func(t *testing.T) {
-		telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(
+	t.Run("cold_allocation", func(t *testing.T) {
+		telemetry := AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(
 			AttemptWorkspaceReuseAllocationOutcome{SlotMissCount: 1},
 		)
 		backend := &reusableWorkspaceSavingsEstimateBackend{
@@ -133,6 +133,42 @@ func TestExecuteBeadReusableWorkspaceSavingsEstimateZeroForMissOutcome(t *testin
 		event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
 		require.Contains(t, event.Body, "reusable_workspace_slot_hits=0")
 		require.Contains(t, event.Body, "reusable_workspace_slot_misses=1")
+		require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=0")
+		require.Contains(t, event.Body, "reusable_workspace_bytes_saved=0")
+	})
+
+	t.Run("reused_slot_without_preserved_project_local_state", func(t *testing.T) {
+		telemetry := AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(
+			AttemptWorkspaceReuseAllocationOutcome{
+				SlotHitCount: 1,
+			},
+		)
+		require.Equal(t, 1, telemetry.SlotHitCount)
+		require.Zero(t, telemetry.SlotMissCount)
+		require.Zero(t, telemetry.TimeSavedMS)
+		require.Zero(t, telemetry.BytesSaved)
+
+		backend := &reusableWorkspaceSavingsEstimateBackend{
+			telemetry: &telemetry,
+			pooled:    true,
+		}
+
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, executeBeadReusableWorkspaceSavingsEstimateTestConfig(t), ExecuteBeadRuntime{
+			AttemptBackend: backend,
+			AgentRunner:    scriptHarnessAgentRunner{},
+			FromRev:        baseRev,
+		}, &RealGitOps{})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		require.Equal(t, 1, res.ReusableWorkspaceSlotHits)
+		require.Zero(t, res.ReusableWorkspaceSlotMisses)
+		require.Zero(t, res.ReusableWorkspaceTimeSavedMS)
+		require.Zero(t, res.ReusableWorkspaceBytesSaved)
+
+		report := ReportFromExecuteBeadResult(res, "")
+		event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
+		require.Contains(t, event.Body, "reusable_workspace_slot_hits=1")
+		require.Contains(t, event.Body, "reusable_workspace_slot_misses=0")
 		require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=0")
 		require.Contains(t, event.Body, "reusable_workspace_bytes_saved=0")
 	})
