@@ -8,12 +8,52 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAttemptWorkspaceReuseSavingsEstimateContractPreservesExplicitValues(t *testing.T) {
+func TestAttemptWorkspaceReuseSavingsEstimateDefaultContractIsZero(t *testing.T) {
+	outcome := AttemptWorkspaceReuseAllocationOutcome{}
+	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(outcome)
+
+	require.Equal(t, 0, telemetry.SlotHitCount)
+	require.Equal(t, 0, telemetry.SlotMissCount)
+	require.Zero(t, telemetry.TimeSavedMS)
+	require.Zero(t, telemetry.BytesSaved)
+
+	raw, err := json.Marshal(telemetry)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"slot_hit_count":0`)
+	require.Contains(t, string(raw), `"slot_miss_count":0`)
+	require.Contains(t, string(raw), `"time_saved_ms":0`)
+	require.Contains(t, string(raw), `"bytes_saved":0`)
+}
+
+func TestAttemptWorkspaceReuseSavingsEstimateIgnoresUnprovenPreservedState(t *testing.T) {
 	outcome := AttemptWorkspaceReuseAllocationOutcome{
 		SlotHitCount:            1,
 		SlotMissCount:           0,
 		ConservativeTimeSavedMS: 1834,
 		ConservativeBytesSaved:  987654321,
+	}
+	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(outcome)
+
+	require.Equal(t, 1, telemetry.SlotHitCount)
+	require.Equal(t, 0, telemetry.SlotMissCount)
+	require.Zero(t, telemetry.TimeSavedMS)
+	require.Zero(t, telemetry.BytesSaved)
+
+	raw, err := json.Marshal(telemetry)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"slot_hit_count":1`)
+	require.Contains(t, string(raw), `"slot_miss_count":0`)
+	require.Contains(t, string(raw), `"time_saved_ms":0`)
+	require.Contains(t, string(raw), `"bytes_saved":0`)
+}
+
+func TestAttemptWorkspaceReuseSavingsEstimateContractPreservesExplicitValues(t *testing.T) {
+	outcome := AttemptWorkspaceReuseAllocationOutcome{
+		SlotHitCount:                     1,
+		SlotMissCount:                    0,
+		ConservativeTimeSavedMS:          1834,
+		ConservativeBytesSaved:           987654321,
+		ProvenPreservedProjectLocalState: true,
 	}
 	telemetry := AttemptWorkspaceReuseTelemetryInputFromAllocationOutcome(outcome)
 

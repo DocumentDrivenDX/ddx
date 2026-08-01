@@ -75,9 +75,10 @@ func TestAttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(t *testing.
 
 	telemetry := AttemptWorkspaceReuseSavingsEstimateFromReusableSlotOutcome(
 		AttemptWorkspaceReuseAllocationOutcome{
-			SlotHitCount:            1,
-			ConservativeTimeSavedMS: 8400,
-			ConservativeBytesSaved:  512 << 20,
+			SlotHitCount:                     1,
+			ConservativeTimeSavedMS:          8400,
+			ConservativeBytesSaved:           512 << 20,
+			ProvenPreservedProjectLocalState: true,
 		},
 	)
 	backend := &reusableWorkspaceSavingsEstimateBackend{
