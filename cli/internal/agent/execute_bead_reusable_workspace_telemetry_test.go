@@ -71,6 +71,29 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotRecomputeReuseSavings(t *testing.T
 	require.Equal(t, int64(5678), got.BytesSaved)
 }
 
+func assertColdStartCombinedReusableWorkspaceTelemetry(t *testing.T, beadID string, slotMisses int) {
+	t.Helper()
+
+	report := ExecuteBeadReport{
+		BeadID:                       beadID,
+		Status:                       ExecuteBeadStatusNoChanges,
+		ReusableWorkspaceSlotMisses:  slotMisses,
+		ReusableWorkspaceTimeSavedMS: 0,
+		ReusableWorkspaceBytesSaved:  0,
+	}
+
+	event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
+	require.Equal(t, "execute-bead", event.Kind)
+	require.Contains(t, event.Body, "reusable_workspace_slot_hits=0")
+	require.Contains(t, event.Body, "reusable_workspace_slot_misses=1")
+	require.Contains(t, event.Body, "reusable_workspace_time_saved_ms=0")
+	require.Contains(t, event.Body, "reusable_workspace_bytes_saved=0")
+}
+
+func TestAttemptWorkspaceReuseTelemetryRecordsColdStartMissAndZeroSavings(t *testing.T) {
+	assertColdStartCombinedReusableWorkspaceTelemetry(t, "ddx-int-0001", 1)
+}
+
 func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *testing.T) {
 	t.Run("cold_start_payload_emits_explicit_zero_savings", func(t *testing.T) {
 		app := &stubBeadEventAppender{}
@@ -148,7 +171,7 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 		body := executeBeadLoopEvent(report, "worker", time.Unix(0, 0).UTC())
 		require.Equal(t, "execute-bead", body.Kind)
 		require.Contains(t, body.Body, "reusable_workspace_slot_misses=1")
-		require.NotContains(t, body.Body, "reusable_workspace_time_saved_ms=")
-		require.NotContains(t, body.Body, "reusable_workspace_bytes_saved=")
+		require.Contains(t, body.Body, "reusable_workspace_time_saved_ms=0")
+		require.Contains(t, body.Body, "reusable_workspace_bytes_saved=0")
 	})
 }
