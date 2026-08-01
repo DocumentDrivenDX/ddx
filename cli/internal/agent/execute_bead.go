@@ -698,12 +698,27 @@ type ReusableWorkspaceTelemetry struct {
 	BytesSaved    int64  `json:"bytes_saved"`
 }
 
+func reusableWorkspaceTelemetryFromInput(input *AttemptWorkspaceReuseTelemetryInput) *ReusableWorkspaceTelemetry {
+	if input == nil {
+		return nil
+	}
+	return &ReusableWorkspaceTelemetry{
+		SlotHitCount:  input.SlotHitCount,
+		SlotMissCount: input.SlotMissCount,
+		TimeSavedMS:   input.TimeSavedMS,
+		BytesSaved:    input.BytesSaved,
+	}
+}
+
 // reusableWorkspaceTelemetryForWorkspace prefers the allocation metadata on
 // the prepared workspace slot and threads in an injected savings contract
 // when the slot does not already carry savings values. The execute path must
 // not recompute savings; it only merges the contracts already attached to the
 // slot or provided by allocation/execution outcome handling.
 func reusableWorkspaceTelemetryForWorkspace(ws *AttemptWorkspace, fallback *ReusableWorkspaceTelemetry) *ReusableWorkspaceTelemetry {
+	if ws != nil && ws.ReusableTelemetry != nil {
+		return reusableWorkspaceTelemetryFromInput(ws.ReusableTelemetry)
+	}
 	if ws != nil && ws.ReusableSlot != nil {
 		slot := ws.ReusableSlot
 		hitCount := slot.SlotHitCount

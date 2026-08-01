@@ -23,13 +23,13 @@ type reusableWorkspaceTelemetryBodyLegacy struct {
 func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavingsPayload(t *testing.T) {
 	app := &stubBeadEventAppender{}
 
-	appendReusableWorkspaceTelemetryForTest(app, "ddx-reuse", reusableWorkspaceTelemetryBody{
+	appendReusableWorkspaceTelemetryForTest(app, "ddx-reuse", reusableWorkspaceTelemetryBodyLegacy{
 		SlotHitCount:  1,
 		SlotMissCount: 0,
 		TimeSavedMS:   1250,
 		BytesSaved:    4096,
 	})
-	appendReusableWorkspaceTelemetryForTest(app, "ddx-cold", reusableWorkspaceTelemetryBody{
+	appendReusableWorkspaceTelemetryForTest(app, "ddx-cold", reusableWorkspaceTelemetryBodyLegacy{
 		SlotHitCount:  0,
 		SlotMissCount: 1,
 		TimeSavedMS:   0,
@@ -65,7 +65,7 @@ func TestAttemptWorkspaceReuseTelemetryRecordsHitsMissesAndSavingsPayload(t *tes
 // appendReusableWorkspaceTelemetryLegacy records reusable-workspace savings evidence
 // on the bead. The body shape is intentionally stable across reused and
 // cold-start attempts, so zero-valued cold-start counters stay visible.
-func appendReusableWorkspaceTelemetryForTest(appender BeadEventAppender, beadID string, body reusableWorkspaceTelemetryBody) {
+func appendReusableWorkspaceTelemetryForTest(appender BeadEventAppender, beadID string, body reusableWorkspaceTelemetryBodyLegacy) {
 	if appender == nil || beadID == "" {
 		return
 	}

@@ -80,6 +80,7 @@ type AttemptWorkspace struct {
 	AttemptID           string
 	BaseRev             string
 	ReusableSlot        *AttemptWorkspaceSlot
+	ReusableTelemetry   *AttemptWorkspaceReuseTelemetryInput
 	KeepOnError         bool
 	DockerHome          string
 	DockerRun           string
@@ -335,6 +336,20 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 
 var reusableAttemptWorkspaceIntegrityCheck = validateReusableAttemptWorkspaceIntegrity
 
+type reusableAttemptWorkspaceIntegrityError struct {
+	slot    string
+	backend string
+	project string
+	reason  string
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("slot=%s backend=%s project=%s reason=%s", e.slot, e.backend, e.project, e.reason)
+}
+
 func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, ws *AttemptWorkspace, release bool) error {
 	if ws == nil || ws.ReusableSlot == nil || !ws.ReusableSlot.Pooled {
 		return nil
@@ -343,13 +358,37 @@ func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, w
 		ctx = context.Background()
 	}
 	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		if qErr := quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err)); qErr != nil {
+			return qErr
+		}
+		return &reusableAttemptWorkspaceIntegrityError{
+			slot:    ws.WorkDir,
+			backend: backendName,
+			project: ws.ProjectRoot,
+			reason:  fmt.Sprintf("scrub failed: %v", err),
+		}
 	}
 	if err := reusableAttemptWorkspaceIntegrityCheck(ctx, ws); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		if qErr := quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error()); qErr != nil {
+			return qErr
+		}
+		return &reusableAttemptWorkspaceIntegrityError{
+			slot:    ws.WorkDir,
+			backend: backendName,
+			project: ws.ProjectRoot,
+			reason:  err.Error(),
+		}
 	}
 	if !release {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine")
+		if qErr := quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine"); qErr != nil {
+			return qErr
+		}
+		return &reusableAttemptWorkspaceIntegrityError{
+			slot:    ws.WorkDir,
+			backend: backendName,
+			project: ws.ProjectRoot,
+			reason:  "backend requested quarantine",
+		}
 	}
 	return releaseReusableAttemptWorkspaceSlot(ws)
 }
