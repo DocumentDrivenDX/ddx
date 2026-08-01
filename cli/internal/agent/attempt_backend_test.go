@@ -257,7 +257,7 @@ func newReusableWorkspaceFixture(t *testing.T, backendName string) (*AttemptWork
 	return pool, slot, ws, key
 }
 
-func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
+func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheckInSlotPool(t *testing.T) {
 	backendCases := []struct {
 		name    string
 		backend reusableWorkspaceLifecycleBackend
@@ -301,7 +301,7 @@ func TestReusableAttemptWorkspaceQuarantinesFailedIntegrityCheck(t *testing.T) {
 	}
 }
 
-func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPool(t *testing.T) {
+func TestReusableAttemptWorkspaceReturnsOnlyHealthySlotsToPoolAfterIntegrityCheck(t *testing.T) {
 	backendCases := []struct {
 		name    string
 		backend reusableWorkspaceLifecycleBackend
@@ -344,6 +344,30 @@ func TestResolveAttemptBackend_DockerCloneFromOverride(t *testing.T) {
 	backend, err := ResolveAttemptBackend(rcfg)
 	require.NoError(t, err)
 	require.Equal(t, AttemptBackendDockerClone, backend.Name())
+}
+
+func TestResolveAttemptBackendLeavesDockerSharedCacheBehaviourUnchanged(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendDockerClone,
+	})
+
+	backend, err := ResolveAttemptBackend(rcfg)
+	require.NoError(t, err)
+	require.Equal(t, AttemptBackendDockerClone, backend.Name())
+
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-docker-cache",
+		AttemptID:   "20260801T000000-docker",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = backend.Cleanup(context.Background(), ws) })
+
+	require.Nil(t, ws.ReusableSlot, "docker backend must not opt into project-local reusable workspace slots")
+	require.Equal(t, dockerSharedGoCachePath(projectRoot), ws.DockerSharedGoCache)
+	require.DirExists(t, ws.DockerSharedGoCache)
 }
 
 func TestResolveAttemptBackend_RejectsUnknownBackend(t *testing.T) {

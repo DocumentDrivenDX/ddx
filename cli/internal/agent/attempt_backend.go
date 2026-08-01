@@ -335,6 +335,31 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 
 var reusableAttemptWorkspaceIntegrityCheck = validateReusableAttemptWorkspaceIntegrity
 
+type reusableAttemptWorkspaceIntegrityError struct {
+	backendName string
+	ws          *AttemptWorkspace
+	reason      string
+}
+
+func (e *reusableAttemptWorkspaceIntegrityError) Error() string {
+	if e == nil {
+		return ""
+	}
+	slotPath := ""
+	projectRoot := ""
+	if e.ws != nil {
+		projectRoot = e.ws.ProjectRoot
+		if e.ws.ReusableSlot != nil {
+			slotPath = e.ws.ReusableSlot.Path
+		}
+		if slotPath == "" {
+			slotPath = e.ws.WorkDir
+		}
+	}
+	return fmt.Sprintf("reusable workspace integrity failed: backend=%s project=%s slot=%s reason=%s",
+		e.backendName, projectRoot, slotPath, e.reason)
+}
+
 func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, ws *AttemptWorkspace, release bool) error {
 	if ws == nil || ws.ReusableSlot == nil || !ws.ReusableSlot.Pooled {
 		return nil
@@ -343,15 +368,31 @@ func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, w
 		ctx = context.Background()
 	}
 	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
+		return quarantineReusableAttemptWorkspaceIntegrityFailure(ws, backendName, fmt.Sprintf("scrub failed: %v", err))
 	}
 	if err := reusableAttemptWorkspaceIntegrityCheck(ctx, ws); err != nil {
-		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, err.Error())
+		return quarantineReusableAttemptWorkspaceIntegrityFailure(ws, backendName, err.Error())
 	}
 	if !release {
 		return quarantineReusableAttemptWorkspaceSlot(ws, backendName, "backend requested quarantine")
 	}
 	return releaseReusableAttemptWorkspaceSlot(ws)
+}
+
+func quarantineReusableAttemptWorkspaceIntegrityFailure(ws *AttemptWorkspace, backendName, reason string) error {
+	integrityErr := &reusableAttemptWorkspaceIntegrityError{
+		backendName: backendName,
+		ws:          ws,
+		reason:      reason,
+	}
+	if err := quarantineReusableAttemptWorkspaceSlot(ws, backendName, reason); err != nil {
+		return fmt.Errorf("%w; quarantine failed: %v", integrityErr, err)
+	}
+	return integrityErr
+}
+
+func reusableAttemptWorkspaceResiduePaths(status string) []string {
+	return reusableAttemptWorkspaceDirtyPaths(status)
 }
 
 func releaseReusableAttemptWorkspaceSlot(ws *AttemptWorkspace) error {
