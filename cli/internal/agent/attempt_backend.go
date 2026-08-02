@@ -567,7 +567,7 @@ func finalizeReusableAttemptWorkspace(ctx context.Context, backendName string, w
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil); err != nil {
+	if err := scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev); err != nil {
 		if qErr := quarantineReusableAttemptWorkspaceSlot(ws, backendName, fmt.Sprintf("scrub failed: %v", err)); qErr != nil {
 			return qErr
 		}
