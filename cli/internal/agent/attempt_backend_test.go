@@ -73,6 +73,66 @@ func TestResolveAttemptBackendExplicitWorktree(t *testing.T) {
 	require.Equal(t, AttemptBackendWorktree, backend.Name())
 }
 
+func TestResolveAttemptBackendReturnsReusableWorkspaceOutcome(t *testing.T) {
+	enabled := true
+	maxSlots := 3
+	projectCfg := &config.Config{
+		Version: "1.0",
+		Agent:   &config.AgentConfig{},
+		Executions: &config.ExecutionsConfig{
+			AttemptBackend: AttemptBackendWorktree,
+			ReusableWorkspace: &config.ReusableWorkspaceConfig{
+				Enabled:  &enabled,
+				MaxSlots: &maxSlots,
+			},
+		},
+	}
+	rcfg := projectCfg.Resolve(config.CLIOverrides{})
+
+	resolved, err := ResolveAttemptBackend(rcfg)
+	require.NoError(t, err)
+	require.Equal(t, AttemptBackendWorktree, resolved.Name())
+
+	contextual := resolved.ReusableWorkspace.WithContext("/repo/project", "worker-7", "")
+	require.Equal(t, "/repo/project", contextual.ProjectRoot)
+	require.Equal(t, "worker-7", contextual.WorkerSlot)
+	require.Equal(t, "default", contextual.TrustBoundary)
+	require.Equal(t, AttemptBackendWorktree, contextual.Backend)
+	require.NotNil(t, contextual.Policy)
+	require.True(t, contextual.Policy.ResolveEnabled())
+	require.Equal(t, 3, contextual.Policy.ResolveMaxSlots())
+
+	hit := contextual.OutcomeForSlot(&AttemptWorkspaceSlot{
+		Key:    contextual.Key(),
+		Index:  2,
+		Path:   "/repo/project/.execute-bead-slot-hit",
+		Pooled: true,
+	})
+	require.Equal(t, ReusableWorkspaceOutcomeHit, hit.Class)
+	require.True(t, hit.Pooled)
+	require.Equal(t, 2, hit.SlotIndex)
+	require.Equal(t, 1, hit.Telemetry.SlotHitCount)
+	require.Zero(t, hit.Telemetry.SlotMissCount)
+	require.Equal(t, contextual.Key(), hit.Key)
+
+	miss := contextual.OutcomeForSlot(&AttemptWorkspaceSlot{
+		Key:    contextual.Key(),
+		Index:  -1,
+		Path:   "/tmp/ddx-ephemeral",
+		Pooled: false,
+	})
+	require.Equal(t, ReusableWorkspaceOutcomeMiss, miss.Class)
+	require.False(t, miss.Pooled)
+	require.Equal(t, -1, miss.SlotIndex)
+	require.Equal(t, 1, miss.Telemetry.SlotMissCount)
+	require.Zero(t, miss.Telemetry.SlotHitCount)
+
+	cold := contextual.OutcomeForSlot(nil)
+	require.Equal(t, ReusableWorkspaceOutcomeColdStart, cold.Class)
+	require.Zero(t, cold.Telemetry.SlotHitCount)
+	require.Zero(t, cold.Telemetry.SlotMissCount)
+}
+
 func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 	rcfg := (&config.Config{Version: "1.0", Agent: &config.AgentConfig{}}).Resolve(config.CLIOverrides{})
@@ -526,6 +586,100 @@ func TestExecuteBeadWithConfig_LocalCloneBackendImportsResult(t *testing.T) {
 	showOut, showErr := runGitIntegOutput(projectRoot, "show", "HEAD:output.txt")
 	require.NoError(t, showErr, showOut)
 	require.Contains(t, showOut, "from local clone backend")
+}
+
+type recordingReusableWorkspacePrepareBackend struct {
+	inner       AttemptBackend
+	prepareReq  AttemptBackendPrepareRequest
+	prepareSeen bool
+}
+
+func (b *recordingReusableWorkspacePrepareBackend) Name() string { return b.inner.Name() }
+
+func (b *recordingReusableWorkspacePrepareBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	b.prepareReq = req
+	b.prepareSeen = true
+	return b.inner.Prepare(ctx, req)
+}
+
+func (b *recordingReusableWorkspacePrepareBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	return b.inner.Run(ctx, req)
+}
+
+func (b *recordingReusableWorkspacePrepareBackend) ImportCandidate(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.ImportCandidate(ctx, ws, res)
+}
+
+func (b *recordingReusableWorkspacePrepareBackend) ReleaseCandidateImport(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.ReleaseCandidateImport(ctx, ws)
+}
+
+func (b *recordingReusableWorkspacePrepareBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.PublishResult(ctx, ws, res)
+}
+
+func (b *recordingReusableWorkspacePrepareBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.Cleanup(ctx, ws)
+}
+
+func TestExecuteBeadRoutesWorktreeAndLocalCloneThroughSlotAllocator(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	directivePath := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, directivePath, []string{"no-op"})
+
+	enabled := true
+	maxSlots := 2
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: directivePath})
+	cfg.Executions.ReusableWorkspace = &config.ReusableWorkspaceConfig{
+		Enabled:  &enabled,
+		MaxSlots: &maxSlots,
+	}
+	rcfgBase := cfg.Resolve(config.CLIOverrides{Harness: "script", Model: directivePath})
+
+	for _, tc := range []struct {
+		name        string
+		backend     AttemptBackend
+		backendName string
+	}{
+		{
+			name:        "worktree",
+			backend:     WorktreeAttemptBackend{},
+			backendName: AttemptBackendWorktree,
+		},
+		{
+			name:        "local-clone",
+			backend:     LocalCloneAttemptBackend{},
+			backendName: AttemptBackendLocalClone,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := &recordingReusableWorkspacePrepareBackend{inner: tc.backend}
+			rcfg := rcfgBase
+			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+				AgentRunner:    scriptHarnessAgentRunner{},
+				AttemptBackend: backend,
+				WorkerID:       "worker-slot-7",
+			}, &RealGitOps{})
+			require.NoError(t, err)
+			require.NotNil(t, res)
+			require.True(t, backend.prepareSeen, "backend prepare must be invoked")
+			require.Equal(t, projectRoot, backend.prepareReq.ProjectRoot)
+			require.Equal(t, tc.backendName, backend.prepareReq.ReusableWorkspace.Backend)
+			require.Equal(t, projectRoot, backend.prepareReq.ReusableWorkspace.ProjectRoot)
+			require.Equal(t, "worker-slot-7", backend.prepareReq.ReusableWorkspace.WorkerSlot)
+			require.Equal(t, "default", backend.prepareReq.ReusableWorkspace.TrustBoundary)
+			require.NotNil(t, backend.prepareReq.ReusableWorkspace.Policy)
+			require.True(t, backend.prepareReq.ReusableWorkspace.Policy.ResolveEnabled())
+			require.Equal(t, 2, backend.prepareReq.ReusableWorkspace.Policy.ResolveMaxSlots())
+			require.Equal(t, AttemptWorkspaceSlotKey{
+				ProjectRoot:   projectRoot,
+				Backend:       tc.backendName,
+				WorkerSlot:    "worker-slot-7",
+				TrustBoundary: "default",
+			}, backend.prepareReq.ReusableWorkspace.Key())
+		})
+	}
 }
 
 func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {

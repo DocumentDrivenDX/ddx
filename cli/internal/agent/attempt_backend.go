@@ -55,12 +55,56 @@ type AttemptBackend interface {
 	Cleanup(ctx context.Context, ws *AttemptWorkspace) error
 }
 
+// AttemptBackendResolution couples a selected backend with the reusable-
+// workspace metadata surface the execute-bead path threads into workspace
+// preparation.
+type AttemptBackendResolution struct {
+	AttemptBackend
+	ReusableWorkspace ReusableWorkspaceResolution
+}
+
+// ReusableWorkspaceOutcomeClass classifies the reusable-workspace state that
+// produced or would produce the current workspace.
+type ReusableWorkspaceOutcomeClass string
+
+const (
+	ReusableWorkspaceOutcomeHit       ReusableWorkspaceOutcomeClass = "hit"
+	ReusableWorkspaceOutcomeMiss      ReusableWorkspaceOutcomeClass = "miss"
+	ReusableWorkspaceOutcomeColdStart ReusableWorkspaceOutcomeClass = "cold-start"
+)
+
+// ReusableWorkspaceResolution carries the resolved reusable-workspace policy
+// and the project/worker identity used to derive workspace-slot keys.
+type ReusableWorkspaceResolution struct {
+	Backend       string
+	Policy        *config.ReusableWorkspaceConfig
+	ProjectRoot   string
+	WorkerSlot    string
+	TrustBoundary string
+}
+
+// AttemptReusableWorkspaceOutcome is the typed metadata emitted from the
+// reusable-workspace resolution surface.
+type AttemptReusableWorkspaceOutcome struct {
+	Class         ReusableWorkspaceOutcomeClass
+	Backend       string
+	ProjectRoot   string
+	WorkerSlot    string
+	TrustBoundary string
+	Key           AttemptWorkspaceSlotKey
+	Pooled        bool
+	SlotIndex     int
+	Policy        *config.ReusableWorkspaceConfig
+	Telemetry     ReusableWorkspaceTelemetry
+}
+
 type AttemptBackendPrepareRequest struct {
-	ProjectRoot string
-	BeadID      string
-	AttemptID   string
-	BaseRev     string
-	GitOps      GitOps
+	ProjectRoot       string
+	BeadID            string
+	AttemptID         string
+	BaseRev           string
+	GitOps            GitOps
+	ReusableWorkspace ReusableWorkspaceResolution
 }
 
 type AttemptBackendRunRequest struct {
@@ -89,7 +133,72 @@ type AttemptWorkspace struct {
 	inTreeLockFile      *os.File
 }
 
-func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
+func (r ReusableWorkspaceResolution) WithContext(projectRoot, workerSlot, trustBoundary string) ReusableWorkspaceResolution {
+	r.ProjectRoot = strings.TrimSpace(projectRoot)
+	r.WorkerSlot = strings.TrimSpace(workerSlot)
+	r.TrustBoundary = strings.TrimSpace(trustBoundary)
+	if r.TrustBoundary == "" {
+		r.TrustBoundary = "default"
+	}
+	if r.Policy != nil {
+		r.Policy = r.Policy.Clone()
+	}
+	return r
+}
+
+func (r ReusableWorkspaceResolution) Key() AttemptWorkspaceSlotKey {
+	backend := strings.TrimSpace(r.Backend)
+	if backend == "" {
+		backend = AttemptBackendLocalClone
+	}
+	worker := strings.TrimSpace(r.WorkerSlot)
+	if worker == "" {
+		worker = "default"
+	}
+	trust := strings.TrimSpace(r.TrustBoundary)
+	if trust == "" {
+		trust = "default"
+	}
+	return AttemptWorkspaceSlotKey{
+		ProjectRoot:   strings.TrimSpace(r.ProjectRoot),
+		Backend:       backend,
+		WorkerSlot:    worker,
+		TrustBoundary: trust,
+	}
+}
+
+func (r ReusableWorkspaceResolution) OutcomeForSlot(slot *AttemptWorkspaceSlot) AttemptReusableWorkspaceOutcome {
+	outcome := AttemptReusableWorkspaceOutcome{
+		Backend:       strings.TrimSpace(r.Backend),
+		ProjectRoot:   strings.TrimSpace(r.ProjectRoot),
+		WorkerSlot:    strings.TrimSpace(r.WorkerSlot),
+		TrustBoundary: strings.TrimSpace(r.TrustBoundary),
+		Key:           r.Key(),
+		Policy:        r.Policy.Clone(),
+	}
+	if outcome.TrustBoundary == "" {
+		outcome.TrustBoundary = "default"
+	}
+	if outcome.WorkerSlot == "" {
+		outcome.WorkerSlot = "default"
+	}
+	if r.Policy == nil || !r.Policy.ResolveEnabled() || slot == nil {
+		outcome.Class = ReusableWorkspaceOutcomeColdStart
+		return outcome
+	}
+	outcome.SlotIndex = slot.Index
+	if slot.Pooled {
+		outcome.Class = ReusableWorkspaceOutcomeHit
+		outcome.Pooled = true
+		outcome.Telemetry.SlotHitCount = 1
+		return outcome
+	}
+	outcome.Class = ReusableWorkspaceOutcomeMiss
+	outcome.Telemetry.SlotMissCount = 1
+	return outcome
+}
+
+func ResolveAttemptBackend(rcfg config.ResolvedConfig) (*AttemptBackendResolution, error) {
 	name := strings.ToLower(strings.TrimSpace(rcfg.AttemptBackend()))
 	if name == "" {
 		// A linked worktree stores its gitdir under the primary repository's
@@ -101,13 +210,41 @@ func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
 	}
 	switch name {
 	case AttemptBackendWorktree, "linked-worktree":
-		return WorktreeAttemptBackend{}, nil
+		backend := WorktreeAttemptBackend{}
+		return &AttemptBackendResolution{
+			AttemptBackend: backend,
+			ReusableWorkspace: ReusableWorkspaceResolution{
+				Backend: backend.Name(),
+				Policy:  rcfg.ReusableWorkspaceConfig(),
+			},
+		}, nil
 	case AttemptBackendLocalClone, "clone":
-		return LocalCloneAttemptBackend{CloneMode: dockerCloneMode(rcfg.ExecutionsDockerConfig())}, nil
+		backend := LocalCloneAttemptBackend{CloneMode: dockerCloneMode(rcfg.ExecutionsDockerConfig())}
+		return &AttemptBackendResolution{
+			AttemptBackend: backend,
+			ReusableWorkspace: ReusableWorkspaceResolution{
+				Backend: backend.Name(),
+				Policy:  rcfg.ReusableWorkspaceConfig(),
+			},
+		}, nil
 	case AttemptBackendDockerClone, "docker":
-		return DockerCloneAttemptBackend{Docker: rcfg.ExecutionsDockerConfig()}, nil
+		backend := DockerCloneAttemptBackend{Docker: rcfg.ExecutionsDockerConfig()}
+		return &AttemptBackendResolution{
+			AttemptBackend: backend,
+			ReusableWorkspace: ReusableWorkspaceResolution{
+				Backend: backend.Name(),
+				Policy:  rcfg.ReusableWorkspaceConfig(),
+			},
+		}, nil
 	case AttemptBackendInTree:
-		return InTreeAttemptBackend{}, nil
+		backend := InTreeAttemptBackend{}
+		return &AttemptBackendResolution{
+			AttemptBackend: backend,
+			ReusableWorkspace: ReusableWorkspaceResolution{
+				Backend: backend.Name(),
+				Policy:  rcfg.ReusableWorkspaceConfig(),
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown attempt backend %q (valid: %s, %s, %s, %s)",
 			name, AttemptBackendWorktree, AttemptBackendLocalClone, AttemptBackendDockerClone, AttemptBackendInTree)
