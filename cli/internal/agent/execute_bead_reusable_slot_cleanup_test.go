@@ -102,6 +102,94 @@ func TestExecuteBeadQuarantinesUnhealthyReusableSlot(t *testing.T) {
 	require.True(t, os.IsNotExist(statErr), "quarantine should delete the unhealthy workspace")
 }
 
+func TestExecuteBeadReleasesHealthySlotInsteadOfDeleting(t *testing.T) {
+	successRun := func(filename string) func(context.Context, AttemptBackendRunRequest) (*Result, error) {
+		return func(_ context.Context, req AttemptBackendRunRequest) (*Result, error) {
+			require.NoError(t, os.WriteFile(filepath.Join(req.Workspace.WorkDir, filename), []byte("done\n"), 0o644))
+			runGitInteg(t, req.Workspace.WorkDir, "add", filename)
+			runGitInteg(t, req.Workspace.WorkDir, "commit", "-m", "chore: reusable slot cleanup attempt output")
+			return &Result{Harness: "script", ExitCode: 0}, nil
+		}
+	}
+	successConfig := func() config.ResolvedConfig {
+		return config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+			AttemptBackend: AttemptBackendLocalClone,
+		})
+	}
+
+	t.Run("pooled_reusable_slot_is_released", func(t *testing.T) {
+		projectRoot, _ := newScriptHarnessRepo(t, 1)
+		backend := &recordingReusableSlotBackend{
+			inner: LocalCloneAttemptBackend{},
+			prepareHook: func(ws *AttemptWorkspace) {
+				ws.ReusableSlot = &AttemptWorkspaceSlot{Pooled: true, Path: ws.WorkDir}
+			},
+			runFunc: successRun("pooled-reuse.txt"),
+		}
+
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", successConfig(), ExecuteBeadRuntime{
+			AttemptBackend: backend,
+			NoReview:       true,
+		}, &RealGitOps{})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		require.Equal(t, ExecuteBeadStatusSuccess, res.Status)
+		require.Equal(t, 1, backend.releaseCalls, "successful pooled reusable slot should return to the pool")
+		require.Equal(t, 0, backend.quarantineCalls, "successful pooled reusable slot should not be quarantined")
+		require.Equal(t, 0, backend.cleanupCalls, "successful pooled reusable slot should not use destructive cleanup")
+		require.NotNil(t, backend.workspace)
+		_, statErr := os.Stat(backend.workspace.WorkDir)
+		require.NoError(t, statErr, "released pooled slot should remain on disk for reuse")
+	})
+
+	t.Run("non_pooled_slot_uses_destructive_cleanup", func(t *testing.T) {
+		projectRoot, _ := newScriptHarnessRepo(t, 1)
+		backend := &recordingReusableSlotBackend{
+			inner: LocalCloneAttemptBackend{},
+			prepareHook: func(ws *AttemptWorkspace) {
+				ws.ReusableSlot = &AttemptWorkspaceSlot{Pooled: false, Path: ws.WorkDir}
+			},
+			runFunc: successRun("non-pooled-reuse.txt"),
+		}
+
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", successConfig(), ExecuteBeadRuntime{
+			AttemptBackend: backend,
+			NoReview:       true,
+		}, &RealGitOps{})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		require.Equal(t, ExecuteBeadStatusSuccess, res.Status)
+		require.Equal(t, 0, backend.releaseCalls, "non-pooled workspace should not be returned to the reusable slot pool")
+		require.Equal(t, 0, backend.quarantineCalls, "non-pooled workspace should not be quarantined through the reusable slot pool")
+		require.Equal(t, 1, backend.cleanupCalls, "non-pooled workspace should keep destructive cleanup")
+		require.NotNil(t, backend.workspace)
+		_, statErr := os.Stat(backend.workspace.WorkDir)
+		require.True(t, os.IsNotExist(statErr), "non-pooled success should delete the per-attempt workspace")
+	})
+
+	t.Run("non_slot_workspace_uses_destructive_cleanup", func(t *testing.T) {
+		projectRoot, _ := newScriptHarnessRepo(t, 1)
+		backend := &recordingReusableSlotBackend{
+			inner:   LocalCloneAttemptBackend{},
+			runFunc: successRun("non-slot-reuse.txt"),
+		}
+
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", successConfig(), ExecuteBeadRuntime{
+			AttemptBackend: backend,
+			NoReview:       true,
+		}, &RealGitOps{})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		require.Equal(t, ExecuteBeadStatusSuccess, res.Status)
+		require.Equal(t, 0, backend.releaseCalls, "non-slot workspace should not be returned to the reusable slot pool")
+		require.Equal(t, 0, backend.quarantineCalls, "non-slot workspace should not be quarantined through the reusable slot pool")
+		require.Equal(t, 1, backend.cleanupCalls, "non-slot workspace should keep destructive cleanup")
+		require.NotNil(t, backend.workspace)
+		_, statErr := os.Stat(backend.workspace.WorkDir)
+		require.True(t, os.IsNotExist(statErr), "non-slot success should delete the per-attempt workspace")
+	})
+}
+
 func TestExecuteBeadDisabledWorkspaceReuseKeepsPerAttemptWorkspaces(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 
