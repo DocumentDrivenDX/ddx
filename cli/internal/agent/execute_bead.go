@@ -779,6 +779,22 @@ func applyReusableWorkspaceTelemetry(res *ExecuteBeadResult, telemetry *Reusable
 	res.ReusableWorkspaceBytesSaved = telemetry.BytesSaved
 }
 
+// reusableWorkspaceTelemetryPayloadFromReport normalizes the execute-bead
+// report fields into the shared reusable-workspace payload contract. The
+// conversion is intentionally lossless for the four telemetry fields so the
+// loop formatter and the dedicated reusable-workspace event stay aligned on
+// their key set.
+func reusableWorkspaceTelemetryPayloadFromReport(report ExecuteBeadReport) AttemptWorkspaceReuseTelemetryPayload {
+	return AttemptWorkspaceReuseTelemetryPayload{
+		SlotHitCount:  int64(report.ReusableWorkspaceSlotHits),
+		SlotMissCount: int64(report.ReusableWorkspaceSlotMisses),
+		AttemptWorkspaceReuseSavingsContract: AttemptWorkspaceReuseSavingsContract{
+			TimeSavedMS: report.ReusableWorkspaceTimeSavedMS,
+			BytesSaved:  report.ReusableWorkspaceBytesSaved,
+		},
+	}
+}
+
 // consumeReusableWorkspaceTelemetry clears workspace-local reusable telemetry
 // after the allocation outcome has been recorded. Cleanup should preserve the
 // workspace lifecycle state, but it must not observe the same allocation

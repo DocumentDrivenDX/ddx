@@ -5993,13 +5993,12 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	}
 	if report.ReusableWorkspaceSlotHits > 0 || report.ReusableWorkspaceSlotMisses > 0 ||
 		report.ReusableWorkspaceTimeSavedMS > 0 || report.ReusableWorkspaceBytesSaved > 0 {
+		telemetry := reusableWorkspaceTelemetryPayloadFromReport(report)
 		parts = append(parts,
-			fmt.Sprintf("reusable_workspace_slot_hits=%d", report.ReusableWorkspaceSlotHits),
-			fmt.Sprintf("reusable_workspace_slot_misses=%d", report.ReusableWorkspaceSlotMisses),
-		)
-		parts = append(parts,
-			fmt.Sprintf("reusable_workspace_time_saved_ms=%d", report.ReusableWorkspaceTimeSavedMS),
-			fmt.Sprintf("reusable_workspace_bytes_saved=%d", report.ReusableWorkspaceBytesSaved),
+			fmt.Sprintf("reusable_workspace_slot_hits=%d", telemetry.SlotHitCount),
+			fmt.Sprintf("reusable_workspace_slot_misses=%d", telemetry.SlotMissCount),
+			fmt.Sprintf("reusable_workspace_time_saved_ms=%d", telemetry.TimeSavedMS),
+			fmt.Sprintf("reusable_workspace_bytes_saved=%d", telemetry.BytesSaved),
 		)
 	}
 
