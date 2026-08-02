@@ -18,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/scratchowner"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
@@ -257,6 +258,10 @@ More information:
 	// Run-record atomic publisher is ahead of try/work dispatch wiring;
 	// keep Publish/Read on the production graph (ddx-128c35f5).
 	agent.KeepReachabilityForDeadcode()
+	// Process-lifetime scratch owner marker is ahead of fixture producer and
+	// execution_cleanup wiring; keep the contract on the production graph
+	// (ddx-920db0a7).
+	scratchowner.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }
