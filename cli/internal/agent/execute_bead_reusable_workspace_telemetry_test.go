@@ -463,8 +463,14 @@ type reusableWorkspaceTelemetryCleanupCountingBackend struct {
 	reusableWorkspaceTelemetryPrepBackend
 	releaseCalls    int
 	quarantineCalls int
+	cleanupCalls    int
 	releaseErr      error
 	quarantineErr   error
+}
+
+func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	b.cleanupCalls++
+	return b.reusableWorkspaceTelemetryPrepBackend.Cleanup(ctx, ws)
 }
 
 func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
@@ -829,6 +835,7 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testin
 			}, &RealGitOps{})
 			require.NoError(t, err)
 			require.NotNil(t, res)
+			require.Equal(t, 1, tc.backend.cleanupCalls, "cleanup must run exactly once for %s", tc.name)
 			require.Equal(t, tc.wantRelease, tc.backend.releaseCalls)
 			require.Equal(t, tc.wantQuarantine, tc.backend.quarantineCalls)
 
