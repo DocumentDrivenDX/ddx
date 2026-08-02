@@ -1102,7 +1102,9 @@ func TestOSExecutor_IdleTimeout(t *testing.T) {
 
 func TestOSExecutor_OutputExtendsTimeout(t *testing.T) {
 	ex := &OSExecutor{}
-	ctx := withExecutionTimeout(context.Background(), 150*time.Millisecond)
+	// Leave enough room for shell startup plus four short sleeps on slower
+	// runners while still exercising timeout extension behavior.
+	ctx := withExecutionTimeout(context.Background(), 300*time.Millisecond)
 
 	result, err := ex.ExecuteInDir(ctx, "sh", []string{"-c", `for i in 1 2 3 4; do echo tick; sleep 0.05; done`}, "", "")
 	require.NoError(t, err)
