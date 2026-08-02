@@ -791,6 +791,7 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testin
 
 func TestAttemptWorkspaceReuseTelemetryUsesSamePayloadShapeForReuseAndColdStart(t *testing.T) {
 	const attemptID = "20260801T010203-shape"
+	const beadID = "ddx-int-0001"
 	fallback := &ReusableWorkspaceTelemetry{
 		AttemptID:     attemptID,
 		SlotHitCount:  1,
@@ -826,17 +827,44 @@ func TestAttemptWorkspaceReuseTelemetryUsesSamePayloadShapeForReuseAndColdStart(
 
 	reusedApp := &stubBeadEventAppender{}
 	coldApp := &stubBeadEventAppender{}
-	appendReusableWorkspaceTelemetry(reusedApp, "ddx-int-reused", *reused)
-	appendReusableWorkspaceTelemetry(coldApp, "ddx-int-cold", *cold)
+	appendReusableWorkspaceTelemetry(reusedApp, beadID, *reused)
+	appendReusableWorkspaceTelemetry(coldApp, beadID, *cold)
 
 	require.Len(t, reusedApp.events, 1)
 	require.Len(t, coldApp.events, 1)
 
+	reusedEvent := reusedApp.events[0].Event
+	coldEvent := coldApp.events[0].Event
+	require.Equal(t, "reusable-workspace", reusedEvent.Kind)
+	require.Equal(t, reusedEvent.Kind, coldEvent.Kind)
+	require.Equal(t, reusedEvent.Actor, coldEvent.Actor)
+	require.Equal(t, reusedEvent.Source, coldEvent.Source)
+
 	var reusedBody, coldBody map[string]any
-	require.NoError(t, json.Unmarshal([]byte(reusedApp.events[0].Event.Body), &reusedBody))
-	require.NoError(t, json.Unmarshal([]byte(coldApp.events[0].Event.Body), &coldBody))
-	require.Len(t, reusedBody, len(coldBody))
-	require.ElementsMatch(t, telemetryBodyKeys(t, reusedBody), telemetryBodyKeys(t, coldBody))
+	require.NoError(t, json.Unmarshal([]byte(reusedEvent.Body), &reusedBody))
+	require.NoError(t, json.Unmarshal([]byte(coldEvent.Body), &coldBody))
+
+	expectedKeys := []string{"attempt_id", "bytes_saved", "slot_hit_count", "slot_miss_count", "time_saved_ms"}
+	require.Equal(t, expectedKeys, sortedTelemetryBodyKeys(t, reusedBody))
+	require.Equal(t, expectedKeys, sortedTelemetryBodyKeys(t, coldBody))
+
+	allowedDifferences := map[string]struct{}{
+		"slot_hit_count":  {},
+		"slot_miss_count": {},
+		"time_saved_ms":   {},
+		"bytes_saved":     {},
+	}
+	require.Equal(t, len(reusedBody), len(coldBody))
+	for key, reusedValue := range reusedBody {
+		coldValue, ok := coldBody[key]
+		require.Truef(t, ok, "cold-start payload is missing stable key %q", key)
+		if _, allowed := allowedDifferences[key]; allowed {
+			continue
+		}
+		require.Equalf(t, reusedValue, coldValue, "stable payload field %q must match", key)
+	}
+	require.Equal(t, attemptID, reusedBody["attempt_id"])
+	require.Equal(t, attemptID, coldBody["attempt_id"])
 
 	require.Equal(t, float64(1), reusedBody["slot_hit_count"])
 	require.Equal(t, float64(0), reusedBody["slot_miss_count"])
@@ -907,11 +935,12 @@ func TestAttemptWorkspaceReuseTelemetryEventContract(t *testing.T) {
 	}
 }
 
-func telemetryBodyKeys(t *testing.T, body map[string]any) []string {
+func sortedTelemetryBodyKeys(t *testing.T, body map[string]any) []string {
 	t.Helper()
 	keys := make([]string, 0, len(body))
 	for key := range body {
 		keys = append(keys, key)
 	}
+	sort.Strings(keys)
 	return keys
 }
