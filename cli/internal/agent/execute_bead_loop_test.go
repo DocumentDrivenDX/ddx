@@ -3785,6 +3785,70 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 	}
 }
 
+func TestClosureGateRejectionPropagatesToLoop(t *testing.T) {
+	realStore := bead.NewStore(t.TempDir())
+	require.NoError(t, realStore.Init(context.Background()))
+
+	first := &bead.Bead{ID: "ddx-close-reject-first", Title: "First bead"}
+	second := &bead.Bead{ID: "ddx-close-reject-second", Title: "Second bead"}
+	require.NoError(t, realStore.Create(context.Background(), first))
+	require.NoError(t, realStore.Create(context.Background(), second))
+
+	store := &errorInjectingStore{ExecuteBeadLoopStore: realStore}
+	store.onCloseWithEvidence = func(id, sessionID, commitSHA string) error {
+		if id == first.ID {
+			return bead.ErrClosureGateRejected
+		}
+		return realStore.CloseWithEvidence(id, sessionID, commitSHA)
+	}
+
+	var executedIDs []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executedIDs = append(executedIDs, beadID)
+			if beadID == first.ID {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-first",
+					ResultRev: "rev-first",
+				}, nil
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-second",
+				ResultRev: "rev-second",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{first.ID, second.ID}, executedIDs)
+	require.Len(t, result.Results, 2)
+	assert.Equal(t, first.ID, result.Results[0].BeadID)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.Results[0].Status)
+	assert.Equal(t, "closure_rejected", result.Results[0].OutcomeReason)
+	assert.Contains(t, result.Results[0].Detail, "closure_rejected")
+	assert.Equal(t, second.ID, result.Results[1].BeadID)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.LastFailureStatus)
+
+	audit := executionDecisionAuditForReport(result.Results[0], result.Results[0].Status, false, "")
+	assert.Equal(t, "not_landed", audit.LandStatus)
+	assert.Equal(t, "closure_rejected", audit.FailureClass)
+
+	got, err := realStore.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+}
+
 // TestExecuteBeadWorkerEndToEndThreeBeadDrain_UsesHermeticProcessScanner is the integration guard from
 // AC-4: seeds 3 ready beads with outcomes no_changes / success /
 // already_satisfied and asserts all three are processed without premature exit.

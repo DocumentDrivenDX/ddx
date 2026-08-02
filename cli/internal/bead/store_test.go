@@ -1193,8 +1193,9 @@ func TestCloseWithEvidence_RejectedCloseDoesNotWalkUp(t *testing.T) {
 	// Call CloseWithEvidence with no evidence — ClosureGate should reject it.
 	// Empty sessionID and empty commitSHA with no prior events triggers the gate.
 	err := s.CloseWithEvidence(child.ID, "", "")
-	// The call itself does not return an error; the gate records a rejection note.
-	require.NoError(t, err)
+	// The call must return the typed gate rejection so callers can classify it.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrClosureGateRejected)
 
 	// Child must still be open (gate rejected the close).
 	childGot, err := s.Get(testCtx(), child.ID)

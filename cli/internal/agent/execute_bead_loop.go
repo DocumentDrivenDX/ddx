@@ -4551,16 +4551,37 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			if !closeBlocked {
 				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("CloseWithEvidence", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+					if errors.Is(err, bead.ErrClosureGateRejected) {
+						report.Status = ExecuteBeadStatusExecutionFailed
+						report.OutcomeReason = "closure_rejected"
+						report.Error = err.Error()
+						report.Detail = ExecuteBeadStatusDetail(report.Status, report.OutcomeReason, report.Error)
+						if releaseErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); releaseErr != nil {
+							_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+								return commitOutcomeError("Unclaim", assignee, result, releaseErr)
+							})
+							if ctx.Err() != nil {
+								return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+							}
+							return executeBeadIterationOutcome{Continue: true}, nil
+						}
+						result.Failures++
+						result.LastFailureStatus = report.Status
+						closeBlocked = true
+					} else {
+						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+							return commitOutcomeError("CloseWithEvidence", assignee, result, err)
+						})
+						if ctx.Err() != nil {
+							return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+						}
+						return executeBeadIterationOutcome{Continue: true}, nil
 					}
-					return executeBeadIterationOutcome{Continue: true}, nil
 				}
-				result.Successes++
-				result.LastSuccessAt = now().UTC()
+				if !closeBlocked {
+					result.Successes++
+					result.LastSuccessAt = now().UTC()
+				}
 			}
 		}
 	} else if attemptOut.Disposition == agenttry.OutcomePark {

@@ -2087,7 +2087,8 @@ func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string)
 	if err := s.rejectIfUnclosedBlockingDeps(id); err != nil {
 		return err
 	}
-	return s.updateBead(id, true, func(b *Bead) error {
+	var closureErr error
+	if err := s.updateBead(id, true, func(b *Bead) error {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -2104,6 +2105,7 @@ func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string)
 			// close was refused; a single error path would be dropped by the
 			// Update callback signature (no error return).
 			appendClosureRejectNote(b, err)
+			closureErr = err
 			return nil
 		}
 		return transitionLifecycleInPlace(b, StatusClosed, LifecycleTransitionOptions{
@@ -2111,7 +2113,13 @@ func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string)
 			Reason:      "close with evidence",
 			Source:      "Store.CloseWithEvidence",
 		})
-	})
+	}); err != nil {
+		return err
+	}
+	if closureErr != nil {
+		return closureErr
+	}
+	return nil
 }
 
 func appendClosureRejectNote(b *Bead, err error) {
