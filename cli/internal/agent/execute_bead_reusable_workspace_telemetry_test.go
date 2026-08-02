@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -297,9 +298,11 @@ func TestAttemptWorkspaceReuseTelemetryRecordsHitsMisses(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 			app := &stubBeadEventAppender{}
-			backend := &reusableWorkspaceTelemetryPrepBackend{
-				slot:      tc.slot,
-				telemetry: tc.telemetry,
+			backend := &reusableWorkspaceTelemetryCleanupCountingBackend{
+				reusableWorkspaceTelemetryPrepBackend: reusableWorkspaceTelemetryPrepBackend{
+					slot:      tc.slot,
+					telemetry: tc.telemetry,
+				},
 			}
 
 			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
@@ -402,12 +405,26 @@ func (b *reusableWorkspaceTelemetryPrepBackend) Cleanup(ctx context.Context, ws 
 
 type reusableWorkspaceTelemetryCleanupCountingBackend struct {
 	reusableWorkspaceTelemetryPrepBackend
-	cleanupCalls int
+	releaseCalls    int
+	quarantineCalls int
+	releaseErr      error
+	quarantineErr   error
 }
 
-func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
-	b.cleanupCalls++
-	return b.reusableWorkspaceTelemetryPrepBackend.Cleanup(ctx, ws)
+func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	b.releaseCalls++
+	if b.releaseErr != nil {
+		return b.releaseErr
+	}
+	return finalizeReusableAttemptWorkspace(ctx, AttemptBackendLocalClone, ws, true)
+}
+
+func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	b.quarantineCalls++
+	if b.quarantineErr != nil {
+		return b.quarantineErr
+	}
+	return finalizeReusableAttemptWorkspace(ctx, AttemptBackendLocalClone, ws, false)
 }
 
 // TestAttemptWorkspaceReuseTelemetryRecordsReuseHitAndNonZeroSavings proves a
@@ -642,7 +659,6 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
 			}, &RealGitOps{})
 			require.NoError(t, err)
 			require.NotNil(t, res)
-			require.Equal(t, 1, backend.cleanupCalls)
 
 			var reuseEvents []bead.BeadEvent
 			for _, recorded := range app.events {
@@ -660,7 +676,6 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
 			var parsed AttemptWorkspaceReuseTelemetryEventContract
 			require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
 			require.Equal(t, tc.wantOutcome, parsed.Outcome)
-			require.Equal(t, 1, backend.cleanupCalls)
 			switch tc.wantOutcome {
 			case AttemptWorkspaceReuseOutcomeHit:
 				require.Equal(t, 1, parsed.SlotHitCount)
@@ -674,6 +689,102 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
 			default:
 				t.Fatalf("unexpected outcome %q", tc.wantOutcome)
 			}
+		})
+	}
+}
+
+func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testing.T) {
+	const beadID = "ddx-int-0001"
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendLocalClone,
+	})
+
+	testCases := []struct {
+		name           string
+		result         *Result
+		backend        *reusableWorkspaceTelemetryCleanupCountingBackend
+		wantRelease    int
+		wantQuarantine int
+	}{
+		{
+			name: "failed_attempt_quarantines_once",
+			result: &Result{
+				ExitCode: 1,
+				Error:    "simulated attempt failure",
+			},
+			backend: &reusableWorkspaceTelemetryCleanupCountingBackend{
+				reusableWorkspaceTelemetryPrepBackend: reusableWorkspaceTelemetryPrepBackend{
+					slot: &AttemptWorkspaceSlot{
+						Pooled:       true,
+						SlotHitCount: 1,
+					},
+					telemetry: &AttemptWorkspaceReuseTelemetryInput{
+						SlotHitCount: 1,
+					},
+				},
+			},
+			wantRelease:    0,
+			wantQuarantine: 1,
+		},
+		{
+			name: "cleanup_error_does_not_duplicate_event",
+			result: &Result{
+				ExitCode: 1,
+				Error:    "simulated attempt failure with cleanup error",
+			},
+			backend: &reusableWorkspaceTelemetryCleanupCountingBackend{
+				reusableWorkspaceTelemetryPrepBackend: reusableWorkspaceTelemetryPrepBackend{
+					slot: &AttemptWorkspaceSlot{
+						Pooled:       true,
+						SlotHitCount: 1,
+					},
+					telemetry: &AttemptWorkspaceReuseTelemetryInput{
+						SlotHitCount: 1,
+					},
+				},
+				quarantineErr: errors.New("simulated quarantine failure"),
+			},
+			wantRelease:    0,
+			wantQuarantine: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+			app := &stubBeadEventAppender{}
+
+			res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+				WorkerID:       "worker-slot-a",
+				BeadEvents:     app,
+				AgentRunner:    &artifactTestAgentRunner{result: tc.result},
+				FromRev:        baseRev,
+				AttemptBackend: tc.backend,
+			}, &RealGitOps{})
+			require.NoError(t, err)
+			require.NotNil(t, res)
+			require.Equal(t, tc.wantRelease, tc.backend.releaseCalls)
+			require.Equal(t, tc.wantQuarantine, tc.backend.quarantineCalls)
+
+			var reuseEvents []bead.BeadEvent
+			for _, recorded := range app.events {
+				if recorded.Event.Kind == "reusable-workspace" {
+					reuseEvents = append(reuseEvents, recorded.Event)
+				}
+			}
+			require.Len(t, reuseEvents, 1, "cleanup must not append a second reusable-workspace event for %s", tc.name)
+
+			evt := reuseEvents[0]
+			require.Contains(t, evt.Summary, "outcome=hit")
+			require.Contains(t, evt.Summary, "slot_hit_count=1")
+			require.Contains(t, evt.Summary, "slot_miss_count=0")
+
+			var parsed AttemptWorkspaceReuseTelemetryEventContract
+			require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
+			require.Equal(t, AttemptWorkspaceReuseOutcomeHit, parsed.Outcome)
+			require.Equal(t, 1, parsed.SlotHitCount)
+			require.Zero(t, parsed.SlotMissCount)
 		})
 	}
 }
