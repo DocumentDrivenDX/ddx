@@ -882,6 +882,13 @@ func applyLifecycleTransitionMetadata(b *Bead, from, status string, opts Lifecyc
 			b.Extra[ExtraLifecycleExternalBlockerReason] = reason
 		}
 	} else {
+		if rawLocalBlockerRef, ok := b.Extra[ExtraLifecycleLocalBlockerRef]; ok {
+			if ref, ok := ParseLocalBlockerRef(rawLocalBlockerRef); ok {
+				if canonicalRef, err := NewLocalBlockerRef(ref.Kind, ref.ResourceRoots, ref.Fingerprint); err == nil {
+					b.Extra[ExtraLifecycleLocalBlockerRef] = canonicalRef
+				}
+			}
+		}
 		delete(b.Extra, ExtraLifecycleExternalBlockerReason)
 		delete(b.Extra, ExtraLifecycleCrossRepoBlockerRef)
 		delete(b.Extra, ExtraLifecycleLocalBlockerRef)
