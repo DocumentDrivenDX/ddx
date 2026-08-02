@@ -50,6 +50,32 @@ func TestAttemptWorkspaceReuseTelemetryPayloadCarriesSavingsFields(t *testing.T)
 	require.Equal(t, 0, parsed.SlotMissCount)
 }
 
+func TestReusableWorkspaceTelemetryPayloadFromReportPreservesCanonicalFieldSet(t *testing.T) {
+	report := ExecuteBeadReport{
+		ReusableWorkspaceSlotHits:    4,
+		ReusableWorkspaceSlotMisses:  2,
+		ReusableWorkspaceTimeSavedMS: 1234,
+		ReusableWorkspaceBytesSaved:  5678,
+	}
+
+	payload := reusableWorkspaceTelemetryPayloadFromReport(report)
+	raw, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	require.ElementsMatch(t, []string{
+		"slot_hit_count",
+		"slot_miss_count",
+		"time_saved_ms",
+		"bytes_saved",
+	}, sortedTelemetryBodyKeys(t, parsed))
+	require.Equal(t, float64(4), parsed["slot_hit_count"])
+	require.Equal(t, float64(2), parsed["slot_miss_count"])
+	require.Equal(t, float64(1234), parsed["time_saved_ms"])
+	require.Equal(t, float64(5678), parsed["bytes_saved"])
+}
+
 func TestAttemptWorkspaceReuseTelemetryDoesNotRecomputeReuseSavings(t *testing.T) {
 	got := reusableWorkspaceTelemetryForWorkspace(
 		&AttemptWorkspace{
