@@ -252,7 +252,7 @@ func copyImportedAttachmentSidecars(sourceDir, targetDir string, sourceBeads []B
 		if !sourceAttachmentExists(sourceDir, bead) {
 			continue
 		}
-		changed, err := copyImportedAttachmentSidecar(sourceDir, targetDir, bead.ID)
+		changed, err := copyImportedAttachmentSidecar(sourceDir, targetDir, bead)
 		if err != nil {
 			return written, err
 		}
@@ -263,13 +263,13 @@ func copyImportedAttachmentSidecars(sourceDir, targetDir string, sourceBeads []B
 	return written, nil
 }
 
-func copyImportedAttachmentSidecar(sourceDir, targetDir, beadID string) (bool, error) {
-	src := filepath.Join(sourceDir, "attachments", beadID, EventsAttachmentFileName)
+func copyImportedAttachmentSidecar(sourceDir, targetDir string, bead Bead) (bool, error) {
+	src := sourceEventsAttachmentPath(sourceDir, bead)
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return false, fmt.Errorf("bead: read attachment %s: %w", src, err)
 	}
-	dst := filepath.Join(targetDir, AxonDirName, "attachments", beadID, EventsAttachmentFileName)
+	dst := filepath.Join(targetDir, AxonDirName, "attachments", bead.ID, EventsAttachmentFileName)
 	if existing, err := os.ReadFile(dst); err == nil && bytes.Equal(existing, data) {
 		return false, nil
 	}

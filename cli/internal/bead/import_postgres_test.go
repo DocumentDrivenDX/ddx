@@ -40,6 +40,11 @@ func writeBeadJSONLFile(t *testing.T, path string, beads []Bead) {
 func writeEventsSidecar(t *testing.T, sourceDir, beadID string, events []BeadEvent) {
 	t.Helper()
 	path := filepath.Join(sourceDir, "attachments", beadID, EventsAttachmentFileName)
+	writeEventsSidecarAtPath(t, path, events)
+}
+
+func writeEventsSidecarAtPath(t *testing.T, path string, events []BeadEvent) {
+	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	var data []byte
 	for i, event := range events {
@@ -288,7 +293,7 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 		CreatedAt: now,
 		UpdatedAt: now,
 		Extra: map[string]any{
-			"events_attachment": eventsAttachmentRelPath("ddx-attach-1"),
+			"events_attachment": "nested/ddx-attach-1/events.jsonl",
 		},
 	}
 	writeAxonImportCorpus(t, sourceDir, []Bead{sourceBead}, nil)
@@ -296,7 +301,7 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 		{Kind: "closed", Summary: "first", CreatedAt: now.Add(time.Minute)},
 		{Kind: "summary", Summary: "second", CreatedAt: now.Add(2 * time.Minute)},
 	}
-	writeEventsSidecar(t, sourceDir, sourceBead.ID, events)
+	writeEventsSidecarAtPath(t, filepath.Join(sourceDir, "attachments", "nested", sourceBead.ID, EventsAttachmentFileName), events)
 
 	target := newAxonStore(t)
 	stats, err := importJSONLCorpusToAxon(testCtx(), target, sourceDir, MigrateAxonOptions{
@@ -308,7 +313,7 @@ func TestImporter_MigratesAttachments(t *testing.T) {
 	targetPath := filepath.Join(target.Dir, AxonDirName, "attachments", sourceBead.ID, EventsAttachmentFileName)
 	got, err := os.ReadFile(targetPath)
 	require.NoError(t, err)
-	want, err := os.ReadFile(filepath.Join(sourceDir, "attachments", sourceBead.ID, EventsAttachmentFileName))
+	want, err := os.ReadFile(filepath.Join(sourceDir, "attachments", "nested", sourceBead.ID, EventsAttachmentFileName))
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got))
 }
