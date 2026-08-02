@@ -181,7 +181,7 @@ func TestAttemptWorkspaceReuseTelemetryPayloadEmitsZeroSavingsForColdStart(t *te
 	})
 }
 
-func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
+func TestAttemptWorkspaceReuseCombinedTelemetryReusedEventName(t *testing.T) {
 	projectRoot := setupArtifactTestProjectRoot(t)
 	const beadID = "ddx-int-0001"
 	baseRev := "bbbb000000000001"
@@ -196,13 +196,32 @@ func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
 		AgentRunner: &artifactTestAgentRunner{
 			result: &Result{
 				ExitCode: 1,
-				Error:    "simulated cold-start attempt",
+				Error:    "simulated reused attempt",
 			},
 		},
 		ReusableWorkspaceTelemetry: &ReusableWorkspaceTelemetry{
-			SlotMissCount: 1,
+			SlotHitCount:  1,
+			SlotMissCount: 0,
+			TimeSavedMS:   8400,
+			BytesSaved:    512 << 20,
 		},
-		AttemptBackend: WorktreeAttemptBackend{},
+		AttemptBackend: &reusableWorkspaceTelemetryPrepBackend{
+			inner: WorktreeAttemptBackend{},
+			slot: &AttemptWorkspaceSlot{
+				Pooled:                  true,
+				SlotHitCount:            1,
+				SlotMissCount:           0,
+				ConservativeTimeSavedMS: 8400,
+				ConservativeBytesSaved:  512 << 20,
+			},
+			telemetry: &AttemptWorkspaceReuseTelemetryInput{
+				SlotHitCount:  1,
+				SlotMissCount: 0,
+				TimeSavedMS:   8400,
+				BytesSaved:    512 << 20,
+			},
+		},
+		FromRev: baseRev,
 	}, &artifactTestGitOps{
 		projectRoot: projectRoot,
 		baseRev:     baseRev,
@@ -213,38 +232,42 @@ func TestAttemptWorkspaceReuseTelemetryEventFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
+
 	var evt bead.BeadEvent
-	var beadEventID string
 	found := false
 	for _, recorded := range app.events {
 		if recorded.Event.Kind != "reusable-workspace" {
 			continue
 		}
 		evt = recorded.Event
-		beadEventID = recorded.BeadID
 		found = true
 		break
 	}
 	require.True(t, found, "expected a reusable-workspace event in the execute-bead telemetry stream")
 	require.Equal(t, "reusable-workspace", evt.Kind)
-	require.Contains(t, evt.Summary, "outcome=cold_start")
-	require.Contains(t, evt.Summary, "slot_hit_count=0")
-	require.Contains(t, evt.Summary, "slot_miss_count=1")
-	require.Contains(t, evt.Summary, "time_saved_ms=0")
-	require.Contains(t, evt.Summary, "bytes_saved=0")
+	require.Contains(t, evt.Summary, "slot_hit_count=1")
+	require.Contains(t, evt.Summary, "slot_miss_count=0")
+	require.Contains(t, evt.Summary, "time_saved_ms=8400")
+	require.Contains(t, evt.Summary, "bytes_saved=536870912")
+	require.NotContains(t, evt.Summary, "outcome=")
 
-	var parsed AttemptWorkspaceReuseTelemetryEventContract
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
-	require.Equal(t, beadID, beadEventID)
-	require.Equal(t, AttemptWorkspaceReuseOutcomeColdStart, parsed.Outcome)
-	require.Equal(t, projectRoot, parsed.ProjectRoot)
-	require.Equal(t, "worker-slot-a", parsed.WorkerSlot)
-	require.Equal(t, AttemptBackendWorktree, parsed.ResolvedBackendPolicy)
-	require.Equal(t, res.AttemptID, parsed.AttemptID)
-	require.Zero(t, parsed.SlotHitCount)
-	require.Equal(t, 1, parsed.SlotMissCount)
-	require.Zero(t, parsed.TimeSavedMS)
-	require.Zero(t, parsed.BytesSaved)
+	require.ElementsMatch(t, []string{
+		"bytes_saved",
+		"slot_hit_count",
+		"slot_miss_count",
+		"time_saved_ms",
+	}, telemetryBodyKeys(t, parsed))
+	require.Equal(t, float64(1), parsed["slot_hit_count"])
+	require.Equal(t, float64(0), parsed["slot_miss_count"])
+	require.Equal(t, float64(8400), parsed["time_saved_ms"])
+	require.Equal(t, float64(512<<20), parsed["bytes_saved"])
+	require.NotContains(t, parsed, "outcome")
+	require.NotContains(t, parsed, "project_root")
+	require.NotContains(t, parsed, "worker_slot")
+	require.NotContains(t, parsed, "resolved_backend_policy")
+	require.NotContains(t, parsed, "attempt_id")
 }
 
 func TestAttemptWorkspaceReuseTelemetryRecordsHitsMisses(t *testing.T) {
@@ -324,23 +347,29 @@ func TestAttemptWorkspaceReuseTelemetryRecordsHitsMisses(t *testing.T) {
 			require.Len(t, reuseEvents, 1, "expected exactly one reusable-workspace record for %s", tc.name)
 
 			evt := reuseEvents[0]
-			require.Contains(t, evt.Summary, "outcome="+tc.want)
 			require.Contains(t, evt.Summary, "slot_hit_count=")
 			require.Contains(t, evt.Summary, "slot_miss_count=")
 			require.Contains(t, evt.Summary, "time_saved_ms=")
 			require.Contains(t, evt.Summary, "bytes_saved=")
+			require.NotContains(t, evt.Summary, "outcome=")
 
-			var parsed AttemptWorkspaceReuseTelemetryEventContract
+			var parsed map[string]any
 			require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
-			require.Equal(t, tc.want, parsed.Outcome)
-			require.Equal(t, projectRoot, parsed.ProjectRoot)
-			require.Equal(t, "worker-slot-a", parsed.WorkerSlot)
-			require.Equal(t, AttemptBackendLocalClone, parsed.ResolvedBackendPolicy)
-			require.Equal(t, res.AttemptID, parsed.AttemptID)
-			require.Equal(t, tc.telemetry.SlotHitCount, parsed.SlotHitCount)
-			require.Equal(t, tc.telemetry.SlotMissCount, parsed.SlotMissCount)
-			require.Equal(t, tc.telemetry.TimeSavedMS, parsed.TimeSavedMS)
-			require.Equal(t, tc.telemetry.BytesSaved, parsed.BytesSaved)
+			require.ElementsMatch(t, []string{
+				"bytes_saved",
+				"slot_hit_count",
+				"slot_miss_count",
+				"time_saved_ms",
+			}, telemetryBodyKeys(t, parsed))
+			require.Equal(t, float64(tc.telemetry.SlotHitCount), parsed["slot_hit_count"])
+			require.Equal(t, float64(tc.telemetry.SlotMissCount), parsed["slot_miss_count"])
+			require.Equal(t, float64(tc.telemetry.TimeSavedMS), parsed["time_saved_ms"])
+			require.Equal(t, float64(tc.telemetry.BytesSaved), parsed["bytes_saved"])
+			require.NotContains(t, parsed, "outcome")
+			require.NotContains(t, parsed, "project_root")
+			require.NotContains(t, parsed, "worker_slot")
+			require.NotContains(t, parsed, "resolved_backend_policy")
+			require.NotContains(t, parsed, "attempt_id")
 		})
 	}
 }
@@ -669,26 +698,35 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountCleanup(t *testing.T) {
 			require.Len(t, reuseEvents, 1, "cleanup should not append a second reusable-workspace event for %s", tc.name)
 
 			evt := reuseEvents[0]
-			require.Contains(t, evt.Summary, "outcome="+tc.wantOutcome)
 			require.Contains(t, evt.Summary, "slot_hit_count=")
 			require.Contains(t, evt.Summary, "slot_miss_count=")
+			require.Contains(t, evt.Summary, "time_saved_ms=")
+			require.Contains(t, evt.Summary, "bytes_saved=")
+			require.NotContains(t, evt.Summary, "outcome=")
 
-			var parsed AttemptWorkspaceReuseTelemetryEventContract
+			var parsed map[string]any
 			require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
-			require.Equal(t, tc.wantOutcome, parsed.Outcome)
+			require.ElementsMatch(t, []string{
+				"bytes_saved",
+				"slot_hit_count",
+				"slot_miss_count",
+				"time_saved_ms",
+			}, telemetryBodyKeys(t, parsed))
 			switch tc.wantOutcome {
 			case AttemptWorkspaceReuseOutcomeHit:
-				require.Equal(t, 1, parsed.SlotHitCount)
-				require.Zero(t, parsed.SlotMissCount)
+				require.Equal(t, float64(1), parsed["slot_hit_count"])
+				require.Equal(t, float64(0), parsed["slot_miss_count"])
 			case AttemptWorkspaceReuseOutcomeMiss:
-				require.Zero(t, parsed.SlotHitCount)
-				require.Equal(t, 1, parsed.SlotMissCount)
+				require.Equal(t, float64(0), parsed["slot_hit_count"])
+				require.Equal(t, float64(1), parsed["slot_miss_count"])
 			case AttemptWorkspaceReuseOutcomeColdStart:
-				require.Zero(t, parsed.SlotHitCount)
-				require.Equal(t, 1, parsed.SlotMissCount)
+				require.Equal(t, float64(0), parsed["slot_hit_count"])
+				require.Equal(t, float64(1), parsed["slot_miss_count"])
 			default:
 				t.Fatalf("unexpected outcome %q", tc.wantOutcome)
 			}
+			require.Equal(t, float64(0), parsed["time_saved_ms"])
+			require.Equal(t, float64(0), parsed["bytes_saved"])
 		})
 	}
 }
@@ -776,15 +814,18 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testin
 			require.Len(t, reuseEvents, 1, "cleanup must not append a second reusable-workspace event for %s", tc.name)
 
 			evt := reuseEvents[0]
-			require.Contains(t, evt.Summary, "outcome=hit")
 			require.Contains(t, evt.Summary, "slot_hit_count=1")
 			require.Contains(t, evt.Summary, "slot_miss_count=0")
+			require.Contains(t, evt.Summary, "time_saved_ms=")
+			require.Contains(t, evt.Summary, "bytes_saved=")
+			require.NotContains(t, evt.Summary, "outcome=")
 
-			var parsed AttemptWorkspaceReuseTelemetryEventContract
+			var parsed map[string]any
 			require.NoError(t, json.Unmarshal([]byte(evt.Body), &parsed))
-			require.Equal(t, AttemptWorkspaceReuseOutcomeHit, parsed.Outcome)
-			require.Equal(t, 1, parsed.SlotHitCount)
-			require.Zero(t, parsed.SlotMissCount)
+			require.Equal(t, float64(1), parsed["slot_hit_count"])
+			require.Equal(t, float64(0), parsed["slot_miss_count"])
+			require.Equal(t, float64(0), parsed["time_saved_ms"])
+			require.Equal(t, float64(0), parsed["bytes_saved"])
 		})
 	}
 }
