@@ -280,7 +280,7 @@ func (LocalCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspac
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev, nil)
+	_ = scrubReusableAttemptWorkspace(ctx, ws.WorkDir, ws.BaseRev)
 	return os.RemoveAll(ws.WorkDir)
 }
 
@@ -293,10 +293,10 @@ func (b DockerCloneAttemptBackend) Quarantine(ctx context.Context, ws *AttemptWo
 }
 
 // scrubReusableAttemptWorkspace resets a reusable workspace back to baseRev and
-// removes residue that must not survive across beads. The preserveRelPaths hook
-// lets a slot allocator keep an allowlisted subtree such as build cache while
-// still scrubbing all other residue.
-func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev string, preserveRelPaths []string) error {
+// removes residue that must not survive across beads. Only allocator-owned slot
+// bookkeeping files are preserved; all other tracked, untracked, ignored, and
+// cleanup residue must be removed before the workspace can be reused.
+func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev string) error {
 	if strings.TrimSpace(workspacePath) == "" {
 		return fmt.Errorf("scrubbing reusable attempt workspace: workspace path is empty")
 	}
@@ -312,12 +312,8 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 	excludePaths := append([]string{
 		filepath.ToSlash(slotLockFileName),
 		filepath.ToSlash(slotStampFileName),
-	}, preserveRelPaths...)
+	}, reusableAttemptWorkspaceAllowlistRelPaths()...)
 	for _, rel := range excludePaths {
-		rel = strings.TrimSpace(rel)
-		if rel == "" {
-			continue
-		}
 		cleanArgs = append(cleanArgs, "-e", filepath.ToSlash(rel))
 	}
 	cleanArgs = append(cleanArgs, "--", ".")
@@ -331,6 +327,83 @@ func scrubReusableAttemptWorkspace(ctx context.Context, workspacePath, baseRev s
 	}
 	_ = os.RemoveAll(ddxroot.InTree(workspacePath, "executions"))
 	_ = os.Remove(filepath.Join(workspacePath, ExecutionCleanupMetadataFileName))
+
+	if err := verifyReusableAttemptWorkspaceIntegrity(ctx, workspacePath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func reusableAttemptWorkspaceAllowlistRelPaths() []string {
+	allowed := make([]string, 0, 2)
+	seen := map[string]struct{}{}
+	add := func(rel string) {
+		rel = normalizeReusableAttemptWorkspaceRelPath(rel)
+		if rel == "" {
+			return
+		}
+		if _, ok := seen[rel]; ok {
+			return
+		}
+		seen[rel] = struct{}{}
+		allowed = append(allowed, rel)
+	}
+
+	add(slotLockFileName)
+	add(slotStampFileName)
+	return allowed
+}
+
+func normalizeReusableAttemptWorkspaceRelPath(rel string) string {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return ""
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." || rel == "/" || strings.HasPrefix(rel, "../") {
+		return ""
+	}
+	return strings.TrimPrefix(rel, "./")
+}
+
+func reusableAttemptWorkspacePathAllowed(relPath string, allowedPrefixes []string) bool {
+	rel := normalizeReusableAttemptWorkspaceRelPath(relPath)
+	if rel == "" {
+		return false
+	}
+	for _, prefix := range allowedPrefixes {
+		if rel == prefix || strings.HasPrefix(rel, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func verifyReusableAttemptWorkspaceIntegrity(ctx context.Context, workspacePath string) error {
+	out, err := internalgit.Command(ctx, workspacePath, "status", "--porcelain", "--untracked-files=all").Output()
+	if err != nil {
+		return fmt.Errorf("verifying reusable attempt workspace integrity: git status --porcelain --untracked-files=all: %w", err)
+	}
+
+	allowedPrefixes := reusableAttemptWorkspaceAllowlistRelPaths()
+	var disallowed []string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" || len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+		}
+		if reusableAttemptWorkspacePathAllowed(path, allowedPrefixes) {
+			continue
+		}
+		disallowed = append(disallowed, normalizeReusableAttemptWorkspaceRelPath(path))
+	}
+	if len(disallowed) > 0 {
+		return fmt.Errorf("scrubbing reusable attempt workspace: disallowed residue remains after cleanup: %s", strings.Join(disallowed, ", "))
+	}
 	return nil
 }
 
