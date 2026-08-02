@@ -1215,14 +1215,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 	reusableTelemetry := reusableWorkspaceTelemetryForWorkspace(workspace, runtime.ReusableWorkspaceTelemetry)
 	if reusableTelemetry != nil {
-		appendAttemptWorkspaceReuseTelemetry(runtime.BeadEvents, beadID, reusableWorkspaceTelemetryEventContract(
-			workspace,
-			reusableTelemetry,
-			projectRoot,
-			runtime.WorkerID,
-			attemptBackend.Name(),
-			attemptID,
-		))
+		appendReusableWorkspaceTelemetry(runtime.BeadEvents, beadID, *reusableTelemetry)
 		consumeReusableWorkspaceTelemetry(workspace)
 	}
 	var res *ExecuteBeadResult
