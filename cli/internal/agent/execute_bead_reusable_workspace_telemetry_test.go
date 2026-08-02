@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -857,6 +858,53 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testin
 	}
 }
 
+func TestAttemptWorkspaceReuseTelemetryHelpersDoNotLeakProcesses(t *testing.T) {
+	const beadID = "ddx-int-0001"
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendLocalClone,
+	})
+	runner := newCleanupProcessRunner()
+	backend := &reusableWorkspaceTelemetryProcessCleanupBackend{
+		reusableWorkspaceTelemetryCleanupCountingBackend: reusableWorkspaceTelemetryCleanupCountingBackend{
+			reusableWorkspaceTelemetryPrepBackend: reusableWorkspaceTelemetryPrepBackend{
+				slot: &AttemptWorkspaceSlot{
+					Pooled:       true,
+					SlotHitCount: 1,
+				},
+				telemetry: &AttemptWorkspaceReuseTelemetryInput{
+					SlotHitCount: 1,
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	res, err := ExecuteBeadWithConfig(ctx, projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		WorkerID:       "worker-slot-a",
+		BeadEvents:     &stubBeadEventAppender{},
+		AgentRunner:    runner,
+		FromRev:        baseRev,
+		AttemptBackend: backend,
+	}, &RealGitOps{})
+	if err != nil && res == nil {
+		t.Fatalf("ExecuteBeadWithConfig returned no result: %v", err)
+	}
+
+	select {
+	case pid := <-runner.started:
+		assertProcessGone(t, pid)
+	case <-time.After(3 * time.Second):
+		t.Fatal("cleanup runner never reported its child pid")
+	}
+
+	require.NotNil(t, backend.workspace, "prepare should capture the reusable attempt workspace")
+	_, statErr := os.Stat(backend.workspace.WorkDir)
+	require.True(t, os.IsNotExist(statErr), "reusable workspace cleanup should delete the attempt workspace")
+}
+
 func TestAttemptWorkspaceReuseTelemetryUsesSamePayloadShapeForReuseAndColdStart(t *testing.T) {
 	const attemptID = "20260801T010203-shape"
 	const beadID = "ddx-int-0001"
@@ -1073,6 +1121,20 @@ func TestAttemptWorkspaceReuseTelemetryEventContract(t *testing.T) {
 		require.Equal(t, want.TimeSavedMS, parsed.TimeSavedMS)
 		require.Equal(t, want.BytesSaved, parsed.BytesSaved)
 	}
+}
+
+type reusableWorkspaceTelemetryProcessCleanupBackend struct {
+	reusableWorkspaceTelemetryCleanupCountingBackend
+	workspace *AttemptWorkspace
+}
+
+func (b *reusableWorkspaceTelemetryProcessCleanupBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	ws, err := b.reusableWorkspaceTelemetryCleanupCountingBackend.Prepare(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	b.workspace = ws
+	return ws, nil
 }
 
 func sortedTelemetryBodyKeys(t *testing.T, body map[string]any) []string {
