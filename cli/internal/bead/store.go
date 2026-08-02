@@ -884,6 +884,7 @@ func applyLifecycleTransitionMetadata(b *Bead, from, status string, opts Lifecyc
 	} else {
 		delete(b.Extra, ExtraLifecycleExternalBlockerReason)
 		delete(b.Extra, ExtraLifecycleCrossRepoBlockerRef)
+		delete(b.Extra, ExtraLifecycleLocalBlockerRef)
 	}
 	// Clear stale consecutive-wedge marker on operator reopen (proposed/blocked →
 	// open) so the execute-bead loop gets a fresh attempt rather than re-parking
