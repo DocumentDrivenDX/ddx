@@ -39,7 +39,7 @@ func TestExecuteBeadPreCommitEvidence_InvalidatedByStagedMutation(t *testing.T) 
 	if err != nil {
 		t.Fatalf("second fingerprint: %v", err)
 	}
-	if first.Equal(second) {
+	if first.Encode() == second.Encode() {
 		t.Fatalf("staged-tree mutation should invalidate pre-commit evidence fingerprint: %s", first.Encode())
 	}
 
@@ -55,7 +55,7 @@ func TestExecuteBeadPreCommitEvidence_InvalidatedByStagedMutation(t *testing.T) 
 	if err != nil {
 		t.Fatalf("third fingerprint: %v", err)
 	}
-	if first.Equal(third) {
+	if first.Encode() == third.Encode() {
 		t.Fatalf("hook-config mutation should invalidate pre-commit evidence fingerprint: %s", first.Encode())
 	}
 }

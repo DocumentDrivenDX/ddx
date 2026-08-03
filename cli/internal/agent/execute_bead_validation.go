@@ -90,11 +90,6 @@ func (f PreCommitEvidenceFingerprint) Encode() string {
 	return "staged_tree=" + strings.TrimSpace(f.StagedTree) + "\nhook_inputs=" + strings.TrimSpace(f.HookInputs) + "\n"
 }
 
-// Equal reports whether two fingerprints match exactly after normalization.
-func (f PreCommitEvidenceFingerprint) Equal(other PreCommitEvidenceFingerprint) bool {
-	return f.Encode() == other.Encode()
-}
-
 // Integrity reason codes (the Reason field of AttemptIntegrityVerdict).
 const (
 	IntegrityReasonPostCommitMutation = "post_commit_mutation"

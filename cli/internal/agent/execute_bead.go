@@ -131,6 +131,10 @@ type ExecuteBeadResult struct {
 	// "configured", or "unknown"). Distinguishes genuine free calls from
 	// discarded source-less cost. See Result.CostSource.
 	CostSource string `json:"cost_source,omitempty"`
+	// PreCommitEvidenceFingerprint records the staged-tree + hook-input
+	// identity observed for the implementation commit's authoritative
+	// pre-commit gate.
+	PreCommitEvidenceFingerprint string `json:"pre_commit_evidence_fingerprint,omitempty"`
 	// Reusable workspace telemetry stays on the same final execute-bead event
 	// as the rest of the attempt summary so callers do not need a separate
 	// savings-only stream.
@@ -1657,8 +1661,12 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// real was staged (committed is false), leave resultRev == baseRev so the
 	// outcome is classified as task_no_changes.
 	var synthCommitErr error
+	var preCommitEvidenceFingerprint string
 	if resultRev == baseRev {
 		if isDirty, _ := gitOps.IsDirty(wtPath); isDirty {
+			if fp, fpErr := ComputePreCommitEvidenceFingerprint(wtPath); fpErr == nil {
+				preCommitEvidenceFingerprint = fp.Encode()
+			}
 			// Build a preliminary result and write it to result.json before
 			// calling SynthesizeCommit. The commit message is then sourced from
 			// the tracked artifact file, satisfying the provenance contract:
@@ -1671,37 +1679,38 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				prelimOutcome = ExecuteBeadOutcomeTaskFailed
 			}
 			prelimRes := &ExecuteBeadResult{
-				BeadID:                      beadID,
-				AttemptID:                   attemptID,
-				WorkerID:                    runtime.WorkerID,
-				BaseRev:                     baseRev,
-				ResultRev:                   "", // unknown until commit is made
-				Harness:                     resultHarness,
-				Provider:                    resultProvider,
-				Model:                       resultModel,
-				ActualPower:                 actualPower,
-				PredictedPower:              predictedPower,
-				PredictedSpeedTPS:           predictedSpeedTPS,
-				PredictedCostUSDPer1kTokens: predictedCostUSDPer1kTokens,
-				PredictedCostSource:         predictedCostSource,
-				SessionID:                   sessionID,
-				ProjectRoot:                 projectRoot,
-				DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
-				Tokens:                      tokens,
-				CostUSD:                     costUSD,
-				CostSource:                  costSource,
-				ExitCode:                    exitCode,
-				Error:                       agentErrMsg,
-				Stderr:                      agentStderr,
-				RateLimitBudget:             runtime.RateLimitMaxWait,
-				ExecutionDir:                artifacts.DirRel,
-				PromptFile:                  artifacts.PromptRel,
-				ManifestFile:                artifacts.ManifestRel,
-				ResultFile:                  artifacts.ResultRel,
-				UsageFile:                   usageFileRel,
-				StartedAt:                   startedAt,
-				FinishedAt:                  finishedAt,
-				Outcome:                     prelimOutcome,
+				BeadID:                       beadID,
+				AttemptID:                    attemptID,
+				WorkerID:                     runtime.WorkerID,
+				BaseRev:                      baseRev,
+				ResultRev:                    "", // unknown until commit is made
+				Harness:                      resultHarness,
+				Provider:                     resultProvider,
+				Model:                        resultModel,
+				ActualPower:                  actualPower,
+				PredictedPower:               predictedPower,
+				PredictedSpeedTPS:            predictedSpeedTPS,
+				PredictedCostUSDPer1kTokens:  predictedCostUSDPer1kTokens,
+				PredictedCostSource:          predictedCostSource,
+				SessionID:                    sessionID,
+				ProjectRoot:                  projectRoot,
+				DurationMS:                   int(finishedAt.Sub(startedAt).Milliseconds()),
+				Tokens:                       tokens,
+				CostUSD:                      costUSD,
+				CostSource:                   costSource,
+				ExitCode:                     exitCode,
+				Error:                        agentErrMsg,
+				Stderr:                       agentStderr,
+				RateLimitBudget:              runtime.RateLimitMaxWait,
+				ExecutionDir:                 artifacts.DirRel,
+				PromptFile:                   artifacts.PromptRel,
+				ManifestFile:                 artifacts.ManifestRel,
+				ResultFile:                   artifacts.ResultRel,
+				PreCommitEvidenceFingerprint: preCommitEvidenceFingerprint,
+				UsageFile:                    usageFileRel,
+				StartedAt:                    startedAt,
+				FinishedAt:                   finishedAt,
+				Outcome:                      prelimOutcome,
 			}
 			applyReusableWorkspaceTelemetry(prelimRes, reusableTelemetry)
 			populateWorkerStatus(prelimRes)
@@ -1724,37 +1733,38 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 
 	res = &ExecuteBeadResult{
-		BeadID:                      beadID,
-		AttemptID:                   attemptID,
-		WorkerID:                    runtime.WorkerID,
-		BaseRev:                     baseRev,
-		ResultRev:                   resultRev,
-		Harness:                     resultHarness,
-		Provider:                    resultProvider,
-		Model:                       resultModel,
-		ActualPower:                 actualPower,
-		PredictedPower:              predictedPower,
-		PredictedSpeedTPS:           predictedSpeedTPS,
-		PredictedCostUSDPer1kTokens: predictedCostUSDPer1kTokens,
-		PredictedCostSource:         predictedCostSource,
-		SessionID:                   sessionID,
-		DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
-		Tokens:                      tokens,
-		CostUSD:                     costUSD,
-		CostSource:                  costSource,
-		ExitCode:                    exitCode,
-		Error:                       agentErrMsg,
-		Stderr:                      agentStderr,
-		RateLimitBudget:             runtime.RateLimitMaxWait,
-		ProjectRoot:                 projectRoot,
-		ExecutionDir:                artifacts.DirRel,
-		PromptFile:                  artifacts.PromptRel,
-		ManifestFile:                artifacts.ManifestRel,
-		ResultFile:                  artifacts.ResultRel,
-		UsageFile:                   usageFileRel,
-		WorktreePath:                wtPath,
-		StartedAt:                   startedAt,
-		FinishedAt:                  finishedAt,
+		BeadID:                       beadID,
+		AttemptID:                    attemptID,
+		WorkerID:                     runtime.WorkerID,
+		BaseRev:                      baseRev,
+		ResultRev:                    resultRev,
+		Harness:                      resultHarness,
+		Provider:                     resultProvider,
+		Model:                        resultModel,
+		ActualPower:                  actualPower,
+		PredictedPower:               predictedPower,
+		PredictedSpeedTPS:            predictedSpeedTPS,
+		PredictedCostUSDPer1kTokens:  predictedCostUSDPer1kTokens,
+		PredictedCostSource:          predictedCostSource,
+		SessionID:                    sessionID,
+		DurationMS:                   int(finishedAt.Sub(startedAt).Milliseconds()),
+		Tokens:                       tokens,
+		CostUSD:                      costUSD,
+		CostSource:                   costSource,
+		ExitCode:                     exitCode,
+		Error:                        agentErrMsg,
+		Stderr:                       agentStderr,
+		RateLimitBudget:              runtime.RateLimitMaxWait,
+		ProjectRoot:                  projectRoot,
+		ExecutionDir:                 artifacts.DirRel,
+		PromptFile:                   artifacts.PromptRel,
+		ManifestFile:                 artifacts.ManifestRel,
+		ResultFile:                   artifacts.ResultRel,
+		PreCommitEvidenceFingerprint: preCommitEvidenceFingerprint,
+		UsageFile:                    usageFileRel,
+		WorktreePath:                 wtPath,
+		StartedAt:                    startedAt,
+		FinishedAt:                   finishedAt,
 	}
 	applyReusableWorkspaceTelemetry(res, reusableTelemetry)
 	if resultRev != baseRev {
