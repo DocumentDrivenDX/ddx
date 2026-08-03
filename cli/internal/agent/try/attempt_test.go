@@ -170,6 +170,33 @@ func TestAttempt_NoChangesBlockedInternalScopeStaysAutonomous(t *testing.T) {
 	assert.Contains(t, out.NoChanges.SuggestedAction, "decompose")
 }
 
+func TestAttempt_NoChangesBlockedUnrelatedPackageGateStaysOpen(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusNoChanges,
+				NoChangesRationale: "status: blocked\n" +
+					"reason: lefthook run pre-commit is blocked by a reproducible unrelated internal/agent " +
+					"race test failure in TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup; " +
+					"the full package gate is not green\n" +
+					"suggested_action: fix the unrelated package gate then retry",
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	require.NotNil(t, out.NoChanges)
+	assert.Equal(t, NoChangesActionKeepOpenSmartRetry, out.NoChanges.Action)
+	assert.Equal(t, NoChangesEventAutonomousRetry, out.NoChanges.EventKind)
+	assert.Equal(t, "open", out.NoChanges.LifecycleStatus)
+	assert.NotEqual(t, NoChangesActionBlockedExternal, out.NoChanges.Action)
+}
+
 func TestAttempt_NoChangesUnjustified_ReturnsBadAttemptNoLongCooldown(t *testing.T) {
 	store := &attemptStore{}
 

@@ -418,6 +418,22 @@ func noChangesBlockedReasonIsInternal(reason, suggestedAction, rationale string)
 		"repo-wide refactor",
 		"follow_up_needed",
 		"follow-up needed",
+		// In-repo package/pre-commit reds are not external recheckable blockers.
+		// Agents must leave the bead open (or file a follow-up), not status=blocked.
+		"unrelated",
+		"pre-existing",
+		"lefthook run pre-commit",
+		"lefthook pre-commit",
+		"go test ./",
+		"go test ./internal/",
+		"package gate",
+		"full-suite",
+		"full suite",
+		"acceptance gate",
+		"testattempt",
+		"test failed",
+		"tests fail",
+		"test failure",
 	}
 	for _, signal := range internalSignals {
 		if strings.Contains(text, signal) {

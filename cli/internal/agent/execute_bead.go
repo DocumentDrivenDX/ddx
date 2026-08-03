@@ -1258,11 +1258,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if preserveAttemptWorktree {
 			return
 		}
-		if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, result) {
+		if cleanupReusableAttemptWorkspace(ctx, attemptBackend, workspace, res) {
 			return
 		}
-		if result != nil && attemptBackend.Name() == AttemptBackendWorktree {
-			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, result.Outcome, false) {
+		if res != nil && attemptBackend.Name() == AttemptBackendWorktree {
+			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, res.Outcome, false) {
 				return
 			}
 		}
