@@ -50,6 +50,7 @@ func writeStaleDesiredCount(t *testing.T, projectRoot string, count int) {
 // API/CLI enable paths with server.manage_workers off and observes zero DDx
 // worker launches.
 func TestServerManagementDisabledSpawnsNothing(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	root := t.TempDir()
 	writeManageWorkersConfig(t, root, false)
 	require.NoError(t, os.WriteFile(filepath.Join(ddxroot.JoinProject(root), "beads.jsonl"), []byte(""), 0o644))

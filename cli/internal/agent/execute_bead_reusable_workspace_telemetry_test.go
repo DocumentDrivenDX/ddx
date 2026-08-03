@@ -835,7 +835,9 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testin
 			}, &RealGitOps{})
 			require.NoError(t, err)
 			require.NotNil(t, res)
-			require.Equal(t, 1, tc.backend.cleanupCalls, "cleanup must run exactly once for %s", tc.name)
+			// Failed pooled reusable slots take the quarantine path (not generic
+			// Cleanup); see TestExecuteBeadQuarantinesUnhealthySlotInsteadOfDeleting.
+			require.Equal(t, 0, tc.backend.cleanupCalls, "failed pooled slot must not use destructive Cleanup for %s", tc.name)
 			require.Equal(t, tc.wantRelease, tc.backend.releaseCalls)
 			require.Equal(t, tc.wantQuarantine, tc.backend.quarantineCalls)
 
@@ -845,7 +847,7 @@ func TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup(t *testin
 					reuseEvents = append(reuseEvents, recorded.Event)
 				}
 			}
-			require.Len(t, reuseEvents, 1, "cleanup must not append a second reusable-workspace event for %s", tc.name)
+			require.Len(t, reuseEvents, 1, "quarantine path must not append a second reusable-workspace event for %s", tc.name)
 
 			evt := reuseEvents[0]
 			require.Contains(t, evt.Summary, "slot_hit_count=1")
