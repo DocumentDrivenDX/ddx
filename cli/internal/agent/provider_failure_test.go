@@ -232,3 +232,22 @@ func TestProviderFailureEvidenceNamesFallbackDecision(t *testing.T) {
 		assert.Empty(t, ev.ResolvedProvider, "no route resolved when there is no viable provider")
 	})
 }
+
+// TestClassifyProviderFailure_OAuthSessionExpired (ddx-4f4d5a65): live Claude
+// Code OAuth phrasing must classify as provider_auth, not generic failure.
+func TestClassifyProviderFailure_OAuthSessionExpired(t *testing.T) {
+	pf, ok := ClassifyProviderFailure("Failed to authenticate: OAuth session expired and could not be refreshed")
+	require.True(t, ok)
+	assert.Equal(t, FailureModeProviderAuth, pf.Reason)
+	assert.True(t, pf.Retryable)
+}
+
+// TestClassifyProviderFailure_BareSessionExpired (ddx-4f4d5a65): bare session-
+// expired string without the "Failed to authenticate" prefix must still map
+// to provider_auth (aligns with Fizeau ClassifyClaudeRouteFailure markers).
+func TestClassifyProviderFailure_BareSessionExpired(t *testing.T) {
+	pf, ok := ClassifyProviderFailure("OAuth session expired and could not be refreshed")
+	require.True(t, ok)
+	assert.Equal(t, FailureModeProviderAuth, pf.Reason)
+	assert.True(t, pf.Retryable)
+}
