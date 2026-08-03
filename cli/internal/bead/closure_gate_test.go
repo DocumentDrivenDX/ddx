@@ -106,12 +106,12 @@ func TestClosureGate(t *testing.T) {
 	}
 }
 
-// TestCloseWithEvidence_RefusesInsufficientEvidence covers ddx-e30e60a9 AC
+// TestCloseWithEvidenceReturnsErrClosureGateRejectedAndLeavesOpen covers ddx-e30e60a9 AC
 // #1 and #4: Store.CloseWithEvidence must actually use the gate, not just
 // export it as a library function. A bead lacking both execution evidence
-// and a terminal verdict stays open after the call and receives a rejection
-// note so operator audit sees why.
-func TestCloseWithEvidence_RefusesInsufficientEvidence(t *testing.T) {
+// and a terminal verdict returns the typed rejection error, stays open, and
+// receives a rejection note so operator audit sees why.
+func TestCloseWithEvidenceReturnsErrClosureGateRejectedAndLeavesOpen(t *testing.T) {
 	store := NewStore(t.TempDir())
 	require.NoError(t, store.Init(testCtx()))
 
@@ -120,7 +120,8 @@ func TestCloseWithEvidence_RefusesInsufficientEvidence(t *testing.T) {
 
 	// Replay the axon-c5cc071a shape: no events, no commit.
 	err := store.CloseWithEvidence("ddx-gate-test", "session-123", "")
-	require.NoError(t, err, "Store.CloseWithEvidence itself does not error; it records the refusal on the bead so callers can observe it")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrClosureGateRejected)
 
 	after, err := store.Get(testCtx(), "ddx-gate-test")
 	require.NoError(t, err)

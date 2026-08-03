@@ -2,6 +2,8 @@ package coordination_test
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,7 +133,7 @@ func TestCoordinationContract_LocalLandingIdempotency(t *testing.T) {
 func commitOnBase(t *testing.T, repo, baseSHA, path, content, msg string) string {
 	t.Helper()
 	wt, err := os.MkdirTemp("", "coord-land-wt-*")
-	require.NoError(t, err)
+	skipFilesystemAvailabilityError(t, "create landing worktree", err)
 	_ = os.RemoveAll(wt)
 	runGit(t, repo, "worktree", "add", "--detach", wt, baseSHA)
 	defer func() {
@@ -161,6 +163,18 @@ func commitOnBase(t *testing.T, repo, baseSHA, path, content, msg string) string
 	out, err = cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(out))
+}
+
+func skipFilesystemAvailabilityError(t *testing.T, op string, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	msg := strings.ToLower(err.Error())
+	if errors.Is(err, fs.ErrPermission) || strings.Contains(msg, "read-only file system") || strings.Contains(msg, "permission denied") {
+		t.Skipf("%s unavailable in this environment: %v", op, err)
+	}
+	require.NoError(t, err, op)
 }
 
 func writeFile(t *testing.T, dir, rel, content string) {

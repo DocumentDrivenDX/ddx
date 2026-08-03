@@ -474,6 +474,7 @@ func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Cleanup(ctx context.C
 }
 
 func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Release(ctx context.Context, ws *AttemptWorkspace) error {
+	b.cleanupCalls++
 	b.releaseCalls++
 	if b.releaseErr != nil {
 		return b.releaseErr
@@ -482,6 +483,7 @@ func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Release(ctx context.C
 }
 
 func (b *reusableWorkspaceTelemetryCleanupCountingBackend) Quarantine(ctx context.Context, ws *AttemptWorkspace) error {
+	b.cleanupCalls++
 	b.quarantineCalls++
 	if b.quarantineErr != nil {
 		return b.quarantineErr

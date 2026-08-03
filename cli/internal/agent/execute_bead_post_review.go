@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -334,6 +335,21 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			return out
 		}
 		if cerr := in.Store.CloseWithEvidence(in.Bead.ID, report.SessionID, report.ResultRev); cerr != nil {
+			if errors.Is(cerr, bead.ErrClosureGateRejected) {
+				report.Status = ExecuteBeadStatusExecutionFailed
+				report.OutcomeReason = "closure_rejected"
+				report.Error = cerr.Error()
+				report.Detail = ExecuteBeadStatusDetail(report.Status, report.OutcomeReason, report.Error)
+				if err := releaseWorkerClaim(in.Store, in.Bead.ID, in.Assignee); err != nil {
+					out.Report = report
+					out.StoreErrOp = "Unclaim"
+					out.StoreErr = err
+					return out
+				}
+				out.Report = report
+				out.Approved = false
+				return out
+			}
 			out.Report = report
 			out.StoreErrOp = "CloseWithEvidence"
 			out.StoreErr = cerr
