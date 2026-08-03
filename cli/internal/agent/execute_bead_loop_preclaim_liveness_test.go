@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -320,6 +321,129 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 	close(release)
 	require.NoError(t, <-done)
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must never run for pure decomposition")
+}
+
+func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
+	makeDecomp := func(name string) *PreClaimDecomposition {
+		return &PreClaimDecomposition{
+			Rationale: "split for " + name,
+			Children: []PreClaimDecompositionChild{
+				{
+					Title:       "Child " + name,
+					Description: "PROBLEM\nChild\n\nROOT CAUSE\ncli/internal/agent/preclaim_decomp_liveness.go:1\n",
+					Acceptance:  "1. TestChild" + name + "\n2. cd cli && go test ./internal/agent/...",
+				},
+			},
+			ACMap: []ACMapEntry{
+				{ParentAC: "1. parent", Coverage: "covered by Child " + name},
+			},
+		}
+	}
+	syntheticErr := errors.New("synthetic decomposition error")
+
+	cases := []struct {
+		name    string
+		run     func(context.Context, context.CancelFunc, *PreClaimDecomposition) (*PreClaimDecomposition, error)
+		wantErr error
+		wantNil bool
+	}{
+		{
+			name: "success",
+			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
+				return decomp, nil
+			},
+		},
+		{
+			name:    "deterministic_fallback",
+			wantNil: true,
+			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
+				return nil, nil
+			},
+		},
+		{
+			name:    "error",
+			wantErr: syntheticErr,
+			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
+				return nil, syntheticErr
+			},
+		},
+		{
+			name:    "timeout",
+			wantErr: context.DeadlineExceeded,
+			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
+				<-ctx.Done()
+				return nil, ctx.Err()
+			},
+		},
+		{
+			name:    "cancellation",
+			wantErr: context.Canceled,
+			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
+				cancel()
+				<-ctx.Done()
+				return nil, ctx.Err()
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			baselinePID := startFakeProviderChild(t, dir, "claude")
+			waitForProviderChildren(t, os.Getpid(), baselinePID)
+			restoreTerminate := terminateProviderChild
+			var terminated []int
+			terminateProviderChild = func(pid int) {
+				terminated = append(terminated, pid)
+				restoreTerminate(pid)
+			}
+			t.Cleanup(func() { terminateProviderChild = restoreTerminate })
+
+			ctx, cancel := context.WithCancel(context.Background())
+			if tc.name == "timeout" {
+				ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
+			}
+			defer cancel()
+
+			var hookChildPID int
+			decomp := makeDecomp(tc.name)
+			got, err := runPreclaimDecompositionHookWithResolvingLiveness(
+				ctx,
+				func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+					assert.Equal(t, "ddx-preclaim-reap", beadID)
+					hookChildPID = startFakeProviderChild(t, dir, "codex")
+					waitForProviderChildren(t, os.Getpid(), baselinePID, hookChildPID)
+					return tc.run(ctx, cancel, decomp)
+				},
+				"ddx-preclaim-reap",
+				nil,
+				"codex",
+				"gpt-5",
+				"",
+				5*time.Millisecond,
+				time.Now,
+			)
+
+			if tc.wantErr != nil {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, tc.wantErr), "err = %v, want %v", err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			if tc.wantNil {
+				assert.Nil(t, got)
+			} else if tc.wantErr == nil {
+				assert.Equal(t, decomp, got)
+			}
+
+			assert.Contains(t, terminated, hookChildPID, "hook-created provider child must be selected for cleanup")
+			assert.NotContains(t, terminated, baselinePID, "pre-hook baseline provider child must not be selected for cleanup")
+			assertProcessGone(t, hookChildPID)
+			if !signalProcessAlive(baselinePID) {
+				t.Fatalf("pre-hook baseline provider child %d was reaped for %s", baselinePID, tc.name)
+			}
+		})
+	}
 }
 
 // TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness proves the

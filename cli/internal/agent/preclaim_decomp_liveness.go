@@ -12,9 +12,10 @@ import (
 
 // runPreclaimDecompositionHookWithResolvingLiveness publishes candidate-scoped
 // phase=resolving liveness for the duration of the preclaim decomposition
-// hook, heartbeats last_activity_at while the provider runs, and attaches
+// hook, heartbeats last_activity_at while the provider runs, attaches
 // provider-child metadata that excludes processes present in the pre-hook
-// baseline. The sidecar uses an empty attempt_id so this model work is not
+// baseline, and reaps provider descendants introduced by the hook before
+// returning. The sidecar uses an empty attempt_id so this model work is not
 // reported as an implementation attempt. No bead claim or lease is created
 // here — that remains the caller's responsibility.
 func runPreclaimDecompositionHookWithResolvingLiveness(
@@ -32,20 +33,21 @@ func runPreclaimDecompositionHookWithResolvingLiveness(
 	if now == nil {
 		now = time.Now
 	}
-	if liveness == nil {
-		return hook(ctx, beadID)
-	}
 
 	workerPID := os.Getpid()
 	phase := string(work.PhaseResolving)
 	baselineAt := now().UTC()
 	baselineChildren := scanProviderChildrenForStatus(context.Background(), workerPID, "", harness, phase, baselineAt)
 	baseline := providerChildPIDSet(baselineChildren)
+	defer reapProviderChildrenAfterBaseline(context.Background(), workerPID, baseline, time.Now().UTC(), reasonPreclaimDecomposition)
 
 	// Capture and temporarily replace the child probe so candidate metadata
 	// only reports provider descendants introduced after the hook baseline
 	// under this worker. Processes belonging to other workers are already
 	// excluded by the rootPID-scoped scanner.
+	if liveness == nil {
+		return hook(ctx, beadID)
+	}
 	prevProbe := liveness.SwapChildProbe(func(route, harnessName, probePhase string) []workerstatus.ProviderChild {
 		children := scanProviderChildrenForStatus(context.Background(), workerPID, route, harnessName, probePhase, time.Now().UTC())
 		return filterProviderChildrenAfterBaseline(children, baseline)

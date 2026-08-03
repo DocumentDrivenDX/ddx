@@ -15,6 +15,7 @@ const (
 	reasonSupersededProviderChild = "superseded_provider_child"
 	reasonRunningPhaseGuard       = "running_phase_non_route_provider_child"
 	reasonAttemptEnded            = "attempt_ended"
+	reasonPreclaimDecomposition   = "preclaim_decomposition_hook_ended"
 	providerChildCleanupArtifact  = "provider-children.json"
 )
 
@@ -511,6 +512,19 @@ func reapSupersededProviderChildren(ctx context.Context, rootPID int, routeLabel
 func reapAllProviderChildren(ctx context.Context, rootPID int, now time.Time) []providerChildReapRecord {
 	reaped, _, err := reapProviderChildren(ctx, rootPID, now, func(providerChildProcess) string {
 		return reasonAttemptEnded
+	})
+	if err != nil {
+		return nil
+	}
+	return reaped
+}
+
+func reapProviderChildrenAfterBaseline(ctx context.Context, rootPID int, baseline map[int]struct{}, now time.Time, reason string) []providerChildReapRecord {
+	reaped, _, err := reapProviderChildren(ctx, rootPID, now, func(proc providerChildProcess) string {
+		if _, seen := baseline[proc.PID]; seen {
+			return ""
+		}
+		return reason
 	})
 	if err != nil {
 		return nil
