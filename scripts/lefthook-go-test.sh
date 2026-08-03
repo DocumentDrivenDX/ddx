@@ -10,14 +10,53 @@ if [ "$#" -eq 0 ]; then
   exit 0
 fi
 
-packages=$(
-  printf '%s\n' "$@" |
-    xargs -n1 dirname |
-    sort -u |
-    sed 's|^\./||' |
-    sed 's|^cli/||' |
-    grep -v '/testdata/' || true
-)
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+module_root="$repo_root/cli"
+cwd_root=$(pwd)
+
+packages_file=$(mktemp)
+trap 'rm -f "$packages_file"' EXIT HUP INT TERM
+
+status=0
+for input in "$@"; do
+  normalized=${input#./}
+  resolved=""
+  for candidate in "$cwd_root/$normalized" "$repo_root/$normalized" "$module_root/$normalized"; do
+    if [ -e "$candidate" ]; then
+      resolved=$candidate
+      break
+    fi
+  done
+  if [ -z "$resolved" ]; then
+    printf 'lefthook-go-test: cannot map Go path %s to a package under %s\n' "$input" "$module_root" >&2
+    status=1
+    continue
+  fi
+
+  case "$resolved" in
+    "$module_root"/*)
+      rel=${resolved#"$module_root"/}
+      pkg=$(dirname "$rel")
+      case "$pkg" in
+        */testdata|*/testdata/*)
+          continue
+          ;;
+      esac
+      printf '%s\n' "$pkg" >>"$packages_file"
+      ;;
+    *)
+      printf 'lefthook-go-test: cannot map Go path %s to a package under %s\n' "$input" "$module_root" >&2
+      status=1
+      ;;
+  esac
+done
+
+if [ "$status" -ne 0 ]; then
+  exit "$status"
+fi
+
+packages=$(sort -u "$packages_file")
 if [ -z "${packages:-}" ]; then
   exit 0
 fi
@@ -35,17 +74,17 @@ fi
 
 status=0
 for pkg in $expanded; do
-  [ -d "$pkg" ] || continue
-  if ls "$pkg"/*_test.go >/dev/null 2>&1; then
+  [ -d "$module_root/$pkg" ] || continue
+  if ls "$module_root/$pkg"/*_test.go >/dev/null 2>&1; then
     # cmd is huge; when pulled in only as a bead-dependent, run the acceptance
     # tests that hit exec/metric collection locks rather than the full package.
     if [ "$pkg" = "cmd" ] && ! has_pkg "cmd"; then
-      if ! go test -short -race -timeout 10m "./$pkg" -run 'TestExec|TestMetricCommands'; then
+      if ! (cd "$module_root" && go test -short -race -timeout 10m "./$pkg" -run 'TestExec|TestMetricCommands'); then
         status=1
       fi
       continue
     fi
-    if ! go test -short -race -timeout 30m "./$pkg"; then
+    if ! (cd "$module_root" && go test -short -race -timeout 30m "./$pkg"); then
       status=1
     fi
   fi
