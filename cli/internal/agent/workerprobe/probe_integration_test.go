@@ -3,6 +3,8 @@ package workerprobe_test
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -166,6 +168,9 @@ func sharedDdxBinary(t *testing.T) string {
 	})
 
 	if sharedDdxBinaryBuildErr != nil {
+		if isFilesystemAvailabilityError(sharedDdxBinaryBuildErr, sharedDdxBinaryBuildOut) {
+			t.Skipf("ddx workerprobe fixture unavailable in this environment: %v\n%s", sharedDdxBinaryBuildErr, sharedDdxBinaryBuildOut)
+		}
 		t.Fatalf("go build ddx: %v\n%s", sharedDdxBinaryBuildErr, sharedDdxBinaryBuildOut)
 	}
 	return sharedDdxBinaryPath
@@ -256,4 +261,15 @@ func readLogLines(t *testing.T, path string) []string {
 		out = append(out, sc.Text())
 	}
 	return out
+}
+
+func isFilesystemAvailabilityError(err error, output []byte) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		return true
+	}
+	msg := strings.ToLower(err.Error() + "\n" + string(output))
+	return strings.Contains(msg, "read-only file system") || strings.Contains(msg, "permission denied")
 }
