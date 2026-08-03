@@ -202,6 +202,23 @@ pre-commit:
         - rebase
       fail_text: "Forbidden runtime-struct field or legacy *Options type in staged file. Move durable knobs to config.ResolvedConfig and use the *Runtime pair (SD-024 §Stage 4 / TD-024 §Lint rule)."
 
+    # Phase 2 spec-honesty gate: read-only docs/helix corpus scan for
+    # stale observations, duplicate ids, and unverifiable status stamps.
+    # Scoped to staged docs/helix Markdown files; the command itself
+    # never rewrites documents.
+    spec-honesty:
+      <<: *go_checks
+      name: "Spec honesty (docs/helix truth gate)"
+      glob: "docs/helix/**/*.md"
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^docs/helix/.+\.md$' || true)
+        [ -z "$staged" ] && exit 0
+        go run ./tools/lint/spechonesty/cmd/spechonesty ../docs/helix
+      skip:
+        - merge
+        - rebase
+      fail_text: "Spec-honesty violations detected in docs/helix. Fix stale, duplicated, or unverifiable status/evidence before committing."
+
     # ddx-2a319f04: Store.WriteAll inside WithLock re-enters the non-reentrant
     # collection lock and deadlocks until LockWait (cascading CI "bead: lock
     # timeout" failures). Flag nested WriteAll on *bead.Store; use WriteAllLocked.
@@ -548,6 +565,15 @@ ci:
       name: "Runtime Lint (SD-024 forbidden runtime fields + legacy options) — full tree"
       root: "cli/"
       run: 'go run ./tools/lint/runtimelint/cmd/runtimelint ./...'
+
+    # Phase 2 spec-honesty full-tree gate. The pre-commit hook only
+    # runs when docs/helix Markdown files are staged; CI enforces the
+    # corpus-wide invariant on every run.
+    spec-honesty-all:
+      <<: *go_checks
+      name: "Spec honesty (docs/helix truth gate) — full tree"
+      root: "cli/"
+      run: 'go run ./tools/lint/spechonesty/cmd/spechonesty ../docs/helix'
 
     # ddx-2a319f04: full-tree gate for Store.WriteAll nested inside WithLock.
     # Pre-commit only scans staged packages; this CI gate catches regressions
