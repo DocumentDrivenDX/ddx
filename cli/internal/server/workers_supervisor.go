@@ -466,10 +466,21 @@ func (s *WorkerSupervisor) ReconcileAt(now time.Time) error {
 
 	// Stale disk IDs may still represent a live same-machine managed attempt
 	// with a fresh claim/heartbeat (e.g. after restart when the manager
-	// handle is gone and secondary liveness signals are stale). stopStaleDiskEntry
-	// preserves those workers; they must remain counted as active so desired-
-	// count reconciliation does not start a replacement duplicate.
+	// handle is gone and secondary liveness signals are stale). Preserve those
+	// workers before falling back to stale-stop cleanup so desired-count
+	// reconciliation does not start a replacement duplicate.
 	for _, id := range staleIDs {
+		rec, preserved, err := s.manager.preserveLiveDiskOnlyEntry(id)
+		if err != nil {
+			return err
+		}
+		if preserved {
+			active = append(active, rec)
+			if rec.State == "running" {
+				running = append(running, rec)
+			}
+			continue
+		}
 		if err := s.manager.stopStaleDiskEntry(id); err != nil {
 			return err
 		}

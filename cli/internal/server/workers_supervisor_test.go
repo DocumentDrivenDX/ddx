@@ -1286,7 +1286,6 @@ func TestSupervisorReconcile_LiveDiskOnlyAttemptSurvivesTicks(t *testing.T) {
 
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()
-	// Intentionally omit any manager handle: disk-only representation.
 
 	supervisor := NewWorkerSupervisor(m)
 	desired := DefaultWorkerDesiredState(root)
@@ -1317,6 +1316,13 @@ func TestSupervisorReconcile_LiveDiskOnlyAttemptSurvivesTicks(t *testing.T) {
 		},
 	}
 	require.NoError(t, m.writeRecord(dir, diskRec))
+	m.mu.Lock()
+	m.workers[workerID] = &workerHandle{record: diskRec}
+	m.mu.Unlock()
+	require.True(t, m.hasWorkerHandle(workerID), "fixture must begin with a real manager handle")
+	m.mu.Lock()
+	delete(m.workers, workerID)
+	m.mu.Unlock()
 
 	// Force workerRecordLive false via an expired run-state while the claim
 	// lease remains fresh — models the post-restart secondary-signal gap

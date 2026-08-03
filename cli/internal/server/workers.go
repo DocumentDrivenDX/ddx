@@ -1573,6 +1573,63 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	return m.writeRecord(dir, rec)
 }
 
+// preserveLiveDiskOnlyEntry records a preservation diagnostic for a stale
+// disk entry that still has a live same-machine PID and a fresh claim lease.
+// Reconcile uses this to keep the live attempt in the active set without
+// delegating to the destructive stale-stop path.
+func (m *WorkerManager) preserveLiveDiskOnlyEntry(id string) (WorkerRecord, bool, error) {
+	dir := filepath.Join(m.rootDir, id)
+	rec, err := m.readRecord(dir)
+	if err != nil {
+		return WorkerRecord{}, false, err
+	}
+	if rec.State != "running" && rec.State != "stopping" {
+		return rec, false, nil
+	}
+
+	now := time.Now().UTC()
+	beadID := ""
+	if rec.CurrentAttempt != nil {
+		beadID = rec.CurrentAttempt.BeadID
+	}
+	if beadID == "" {
+		beadID = rec.CurrentBead
+	}
+	if beadID == "" {
+		return rec, false, nil
+	}
+
+	projectRoot := rec.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = m.projectRoot
+	}
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	if staleDiskEntryCanReleaseClaim(store, beadID) {
+		return rec, false, nil
+	}
+	if rec.PID <= 0 || !processAlive(rec.PID) {
+		return rec, false, nil
+	}
+
+	reason := "fresh-claim-or-heartbeat"
+	detail := fmt.Sprintf(
+		"reason=%s worker=%s pid=%d bead=%s",
+		reason, id, rec.PID, beadID,
+	)
+	log.Printf("worker supervisor: preserve live disk-record worker %s", detail)
+	rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+		Action:    "preserve",
+		Actor:     "server-workers",
+		Timestamp: now,
+		Detail:    detail,
+		BeadID:    beadID,
+	})
+	if err := m.writeRecord(dir, rec); err != nil {
+		return WorkerRecord{}, false, err
+	}
+	return rec, true, nil
+}
+
 func (m *WorkerManager) UnjamStaleClaims(ctx context.Context) (WorkerClaimCleanupReport, error) {
 	if ctx == nil {
 		ctx = context.Background()
