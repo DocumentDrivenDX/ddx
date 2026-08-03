@@ -188,6 +188,77 @@ func TestSpechonestyCommandExitsNonZeroOnMissingStaticCheck(t *testing.T) {
 	}
 }
 
+// TestSpechonestyCommandIsReadOnlyOnCorpusFixture asserts the command does
+// not write to a docs/helix-shaped corpus even when it emits diagnostics.
+func TestSpechonestyCommandIsReadOnlyOnCorpusFixture(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "01-frame", "features", "FEAT-998-clean.md"),
+		"# Feature 998: Clean fixture\n\n"+
+			"**Status:** Proposed\n\n"+
+			"Clean content for the read-only corpus check.\n")
+	writeFile(t, filepath.Join(dir, "02-design", "technical-designs", "TD-999-unstamped.md"),
+		"---\n"+
+			"ddx:\n"+
+			"  id: TD-999\n"+
+			"---\n"+
+			"# TD-999: Unstamped fixture\n\n"+
+			"This design deliberately omits a status stamp.\n")
+
+	before := hashTree(t, dir)
+	code, stdout, stderr := runSpechonesty(t, dir)
+	after := hashTree(t, dir)
+
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for bad corpus fixture; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	combined := stdout + stderr
+	if !strings.Contains(combined, "missing_status") && !strings.Contains(strings.ToLower(combined), "missing status") {
+		t.Fatalf("expected missing-status diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("file count changed: before=%d after=%d", len(before), len(after))
+	}
+	for path, sum := range before {
+		got, ok := after[path]
+		if !ok {
+			t.Fatalf("file removed: %s", path)
+		}
+		if got != sum {
+			t.Fatalf("file content changed: %s", path)
+		}
+	}
+}
+
+// TestSpechonestyCommandExitsZeroOnCleanCorpusFixture exercises a clean
+// corpus-shaped fixture and expects a zero exit status with no writes.
+func TestSpechonestyCommandExitsZeroOnCleanCorpusFixture(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "01-frame", "features", "FEAT-998-clean.md"),
+		"# Feature 998: Clean fixture\n\n"+
+			"**Status:** Proposed\n\n"+
+			"Clean content for the read-only corpus check.\n")
+
+	before := hashTree(t, dir)
+	code, stdout, stderr := runSpechonesty(t, dir)
+	after := hashTree(t, dir)
+
+	if code != 0 {
+		t.Fatalf("expected exit 0 for clean corpus fixture; exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("file count changed: before=%d after=%d", len(before), len(after))
+	}
+	for path, sum := range before {
+		got, ok := after[path]
+		if !ok {
+			t.Fatalf("file removed: %s", path)
+		}
+		if got != sum {
+			t.Fatalf("file content changed: %s", path)
+		}
+	}
+}
+
 // TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID ensures the
 // docs-directory CLI surfaces duplicate US-id collisions across feature
 // documents and names both offending files in the diagnostic.
