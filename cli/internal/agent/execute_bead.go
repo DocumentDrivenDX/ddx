@@ -1656,6 +1656,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Only do so for real changes — harness noise paths are excluded. If nothing
 	// real was staged (committed is false), leave resultRev == baseRev so the
 	// outcome is classified as task_no_changes.
+	var synthCommitErr error
 	if resultRev == baseRev {
 		if isDirty, _ := gitOps.IsDirty(wtPath); isDirty {
 			// Build a preliminary result and write it to result.json before
@@ -1712,7 +1713,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				commitMsg = "chore: execute-bead iteration " + beadID
 			}
 
-			if committed, synthErr := gitOps.SynthesizeCommit(wtPath, commitMsg); synthErr == nil && committed {
+			if committed, synthErr := gitOps.SynthesizeCommit(wtPath, commitMsg); synthErr != nil {
+				synthCommitErr = synthErr
+			} else if committed {
 				if newRev, _ := gitOps.HeadRev(wtPath); newRev != baseRev {
 					resultRev = newRev
 				}
@@ -1785,6 +1788,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 		res.Reason = mixedCommitAndNoChangesRationaleReason
 		res.Error = mixedCommitAndNoChangesRationaleReason
+	case synthCommitErr != nil:
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.Reason = "implementation commit hook failed"
+		res.Error = synthCommitErr.Error()
 	case exitCode != 0 || agentReportedError:
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 	case resultRev == baseRev || evidenceOnlyNoChangesCommit:
@@ -2463,9 +2470,9 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 //     staged gate; stage the exact commit set, run git commit normally, and use
 //     that hook's output/exit status as the acceptance evidence. If you already
 //     ran lefthook run pre-commit on the same staged tree and hook inputs, only
-//     reuse it when the fingerprint matches; otherwise rerun after staged-tree
-//     or hook-config changes. Pre-staging no-staged-files runs do not count as
-//     acceptance evidence
+//     reuse it when a staged-tree + hook-input fingerprint matches; otherwise
+//     rerun after any staged-tree or hook-config change. Pre-staging
+//     no-staged-files runs do not count as acceptance evidence
 // 11. Never use git commit --no-verify, disable hooks, or commit after a
 //     required gate fails or is interrupted; required gate evidence must
 //     control landing (ddx-ca91ac5b / regression:ddx-725b65b4)

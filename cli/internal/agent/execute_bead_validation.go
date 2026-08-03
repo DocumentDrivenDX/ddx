@@ -2,7 +2,11 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -71,6 +75,24 @@ type AttemptIntegrityVerdict struct {
 	OK     bool
 	Reason string
 	Detail string
+}
+
+// PreCommitEvidenceFingerprint captures the staged-tree and hook-input
+// identity that must match before a prior green pre-commit run can be reused.
+type PreCommitEvidenceFingerprint struct {
+	StagedTree string
+	HookInputs string
+}
+
+// Encode returns a stable string form suitable for equality checks and
+// durable evidence.
+func (f PreCommitEvidenceFingerprint) Encode() string {
+	return "staged_tree=" + strings.TrimSpace(f.StagedTree) + "\nhook_inputs=" + strings.TrimSpace(f.HookInputs) + "\n"
+}
+
+// Equal reports whether two fingerprints match exactly after normalization.
+func (f PreCommitEvidenceFingerprint) Equal(other PreCommitEvidenceFingerprint) bool {
+	return f.Encode() == other.Encode()
 }
 
 // Integrity reason codes (the Reason field of AttemptIntegrityVerdict).
@@ -239,6 +261,65 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict 
 	}
 
 	return AttemptIntegrityVerdict{OK: true}
+}
+
+// ComputePreCommitEvidenceFingerprint hashes the staged tree and hook inputs
+// that control whether a previous green pre-commit run can be reused.
+func ComputePreCommitEvidenceFingerprint(wtPath string) (PreCommitEvidenceFingerprint, error) {
+	stagedTree, err := hashStagedTreeForPreCommitEvidence(wtPath)
+	if err != nil {
+		return PreCommitEvidenceFingerprint{}, err
+	}
+	hookInputs, err := hashPreCommitHookInputs(wtPath)
+	if err != nil {
+		return PreCommitEvidenceFingerprint{}, err
+	}
+	return PreCommitEvidenceFingerprint{
+		StagedTree: stagedTree,
+		HookInputs: hookInputs,
+	}, nil
+}
+
+func hashStagedTreeForPreCommitEvidence(wtPath string) (string, error) {
+	out, err := internalgit.Command(context.Background(), wtPath, "diff", "--cached", "--binary", "--no-renames").Output()
+	if err != nil {
+		return "", fmt.Errorf("hashing staged tree for pre-commit evidence: %w", err)
+	}
+	sum := sha256.Sum256(out)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func hashPreCommitHookInputs(wtPath string) (string, error) {
+	candidates := []struct {
+		label string
+		path  string
+	}{
+		{label: "lefthook.yml", path: filepath.Join(wtPath, "lefthook.yml")},
+	}
+	if gitHookPath, err := internalgit.Command(context.Background(), wtPath, "rev-parse", "--git-path", "hooks/pre-commit").Output(); err == nil {
+		candidates = append(candidates, struct {
+			label string
+			path  string
+		}{label: "git-hooks-pre-commit", path: strings.TrimSpace(string(gitHookPath))})
+	}
+
+	var buf strings.Builder
+	for _, c := range candidates {
+		data, readErr := os.ReadFile(c.path)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				buf.WriteString(c.label + ":<missing>\n")
+				continue
+			}
+			return "", fmt.Errorf("reading pre-commit hook input %s: %w", c.path, readErr)
+		}
+		sum := sha256.Sum256(data)
+		buf.WriteString(c.label + ":")
+		buf.WriteString(hex.EncodeToString(sum[:]))
+		buf.WriteByte('\n')
+	}
+	sum := sha256.Sum256([]byte(buf.String()))
+	return hex.EncodeToString(sum[:]), nil
 }
 
 type attemptGateRunClass int
