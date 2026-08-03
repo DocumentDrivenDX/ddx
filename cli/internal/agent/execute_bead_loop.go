@@ -3460,9 +3460,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					return executeBeadIterationOutcome{Continue: true}, nil
 				}
 			} else {
-				if appendPreClaimWarn(candidate.ID, "readiness_best_effort", warning, now().UTC()) {
-					return executeBeadIterationOutcome{Stop: true}, nil
-				}
+				appendBestEffortPreClaimWarn(candidate.ID, "readiness_best_effort", warning, now().UTC())
 			}
 		}
 	}
