@@ -384,6 +384,70 @@ exit 0
 	}
 }
 
+// TestExecuteBeadImplementationCommit_HookFailureAbortsCommit proves that a
+// non-zero pre-commit hook blocks the implementation commit, records the hook
+// failure in result evidence, and does not retry with a bypass.
+func TestExecuteBeadImplementationCommit_HookFailureAbortsCommit(t *testing.T) {
+	const beadID = "ddx-int-0001"
+
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	baseRev := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	hookCountPath := filepath.Join(projectRoot, ".git", "pre-commit-count")
+	hookPath := filepath.Join(projectRoot, ".git", "hooks", "pre-commit")
+	hookBody := fmt.Sprintf(`#!/bin/sh
+count_file=%q
+count=0
+if [ -f "$count_file" ]; then
+  count=$(cat "$count_file")
+fi
+count=$((count + 1))
+printf '%%s\n' "$count" > "$count_file"
+printf '%%s\n' "pre-commit hook failed" >&2
+exit 1
+`, hookCountPath)
+	writeExecutable(t, hookPath, hookBody)
+
+	runner := singleFileAgentRunner{
+		relPath: "hook-failure.txt",
+		content: "hook-failure\n",
+	}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Model: "test-model",
+	}).Resolve(config.CLIOverrides{
+		Harness: "test-harness",
+		Model:   "test-model",
+	})
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: runner,
+	}, &RealGitOps{})
+	if err != nil {
+		t.Fatalf("ExecuteBeadWithConfig: %v", err)
+	}
+	if res == nil {
+		t.Fatal("nil result")
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+		t.Fatalf("outcome = %q, want %q", res.Outcome, ExecuteBeadOutcomeTaskFailed)
+	}
+	if res.Reason != "implementation commit hook failed" {
+		t.Fatalf("reason = %q, want implementation commit hook failed", res.Reason)
+	}
+	if !strings.Contains(strings.ToLower(res.Error), "pre-commit hook failed") {
+		t.Fatalf("error = %q, want hook failure evidence", res.Error)
+	}
+	if res.ResultRev != baseRev {
+		t.Fatalf("result rev advanced unexpectedly: base=%s result=%s", baseRev, res.ResultRev)
+	}
+	if gotCount := strings.TrimSpace(string(mustReadFile(t, hookCountPath))); gotCount != "1" {
+		t.Fatalf("pre-commit hook invoked %s times, want 1", gotCount)
+	}
+	if headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD"); headAfter != baseRev {
+		t.Fatalf("HEAD advanced despite hook failure: base=%s head=%s", baseRev, headAfter)
+	}
+}
+
 type singleFileAgentRunner struct {
 	relPath string
 	content string
