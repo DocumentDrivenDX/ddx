@@ -162,18 +162,21 @@ func TestCompleteVerificationCoverageCardinality_ReadOnlyReportsMutatedFixtureNa
 	tempRoot := t.TempDir()
 	copyTree(t, srcRoot, tempRoot)
 
-	diffs := runCoverageCardinalityReadOnlyInvariant(t, tempRoot, func(root string) error {
-		path := filepath.Join(root, "src", "clean", "clean.go")
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if _, err := io.WriteString(f, "\n// mutated by TestCompleteVerificationCoverageCardinality_ReadOnlyReportsMutatedFixtureNames\n"); err != nil {
-			return err
-		}
-		return nil
-	})
+	before := snapshotFixtures(t, tempRoot)
+	path := filepath.Join(tempRoot, "src", "clean", "clean.go")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	if _, err := io.WriteString(f, "\n// mutated by TestCompleteVerificationCoverageCardinality_ReadOnlyReportsMutatedFixtureNames\n"); err != nil {
+		f.Close()
+		t.Fatalf("mutate %s: %v", path, err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close %s: %v", path, err)
+	}
+	after := snapshotFixtures(t, tempRoot)
+	diffs := diffFixtures(before, after)
 
 	if len(diffs) == 0 {
 		t.Fatal("expected mutation to be detected")
