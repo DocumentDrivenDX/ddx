@@ -1,7 +1,8 @@
 // Docs-directory scan for the spechonesty CLI (WB-1 validation path).
 //
 // Walks a docs tree for Markdown files, runs the status parser and the
-// zero-evidence pass, and collects diagnostics. Read-only: never writes.
+// Verification-based validation passes, and collects diagnostics.
+// Read-only: never writes.
 package spechonesty
 
 import (
@@ -40,7 +41,7 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 		return nil, err
 	}
 	if !info.IsDir() {
-		diags, err := scanOne(root)
+		diags, err := scanOne(root, filepath.Dir(root))
 		if err != nil {
 			return nil, err
 		}
@@ -61,7 +62,7 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 			return nil
 		}
-		fileDiags, scanErr := scanOne(path)
+		fileDiags, scanErr := scanOne(path, root)
 		if scanErr != nil {
 			diags = append(diags, Diagnostic{
 				Path:    path,
@@ -94,8 +95,8 @@ func ScanDocsDirectory(root string) ([]Diagnostic, error) {
 }
 
 // scanOne parses a single markdown file and returns diagnostics for the
-// status gate plus the zero-evidence coverage pass.
-func scanOne(path string) ([]Diagnostic, error) {
+// status gate plus the Verification-based validation passes.
+func scanOne(path, repoRoot string) ([]Diagnostic, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -128,6 +129,14 @@ func scanOne(path string) ([]Diagnostic, error) {
 		})
 	}
 	for _, finding := range CheckDocumentStaticChecks(path, content) {
+		diags = append(diags, Diagnostic{
+			Path:    finding.Path,
+			Line:    finding.Line,
+			Kind:    string(finding.Kind),
+			Message: finding.Message,
+		})
+	}
+	for _, finding := range CheckDocumentRuntimeArtifacts(path, content, repoRoot) {
 		diags = append(diags, Diagnostic{
 			Path:    finding.Path,
 			Line:    finding.Line,

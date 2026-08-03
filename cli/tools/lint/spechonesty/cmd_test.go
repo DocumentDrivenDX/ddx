@@ -188,6 +188,34 @@ func TestSpechonestyCommandExitsNonZeroOnMissingStaticCheck(t *testing.T) {
 	}
 }
 
+// TestSpechonestyCommandExitsNonZeroOnMissingRuntimeArtifact ensures the
+// docs-directory CLI surfaces missing inspectable runtime-artifact targets.
+func TestSpechonestyCommandExitsNonZeroOnMissingRuntimeArtifact(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "complete-missing-runtime-artifact.md"),
+		"# Complete Document With Missing Runtime Artifact\n\n"+
+			"**Status:** Complete\n\n"+
+			"## Requirements\n\n"+
+			"### REQ-001: Artifact\n\n"+
+			"The document claims a runtime artifact exists.\n\n"+
+			"## Verification\n\n"+
+			"| Requirement | Evidence | Command |\n"+
+			"|-------------|----------|---------|\n"+
+			"| REQ-001 | .ddx/executions/missing/report.json | test -f .ddx/executions/missing/report.json |\n")
+
+	code, stdout, stderr := runSpechonesty(t, dir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for missing runtime artifact; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(combined, "missing_runtime_artifact") && !strings.Contains(strings.ToLower(combined), "missing runtime artifact") {
+		t.Fatalf("expected missing-runtime-artifact diagnostic, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if !strings.Contains(combined, ".ddx/executions/missing/report.json") {
+		t.Fatalf("expected diagnostic to name the missing artifact path, got exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
 // TestSpechonestyCommandIsReadOnlyOnCorpusFixture asserts the command does
 // not write to a docs/helix-shaped corpus even when it emits diagnostics.
 func TestSpechonestyCommandIsReadOnlyOnCorpusFixture(t *testing.T) {

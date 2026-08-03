@@ -499,6 +499,38 @@ func TestImplementedVerificationResolvesExistingRuntimeArtifact(t *testing.T) {
 	}
 }
 
+// TestCompleteVerificationMissingRuntimeArtifactEmitsDiagnostic verifies
+// that a Complete row naming a missing inspectable runtime artifact
+// emits the missing-artifact diagnostic and preserves the exact mapped path.
+func TestCompleteVerificationMissingRuntimeArtifactEmitsDiagnostic(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/complete_missing_runtime_artifact.md"
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteMissingRuntimeArtifact)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteMissingRuntimeArtifact)
+	if len(model.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; %+v", len(model.Rows), model.Rows)
+	}
+
+	findings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteMissingRuntimeArtifact, root)
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.ArtifactPath != ".ddx/executions/missing/report.json" {
+		t.Fatalf("ArtifactPath = %q, want mapped path %q", f.ArtifactPath, ".ddx/executions/missing/report.json")
+	}
+	if !strings.Contains(f.Message, ".ddx/executions/missing/report.json") {
+		t.Fatalf("Message must name the missing artifact path; got %q", f.Message)
+	}
+}
+
 const fixtureCompleteMissingRuntimeArtifact = `---
 ddx:
   id: FIXTURE-COMPLETE-MISSING-RUNTIME-ARTIFACT
@@ -618,6 +650,108 @@ func TestMissingRuntimeArtifactDiagnosticIdentifiesSourceDocument(t *testing.T) 
 	}
 	if docFindings[0].Path != path {
 		t.Fatalf("CheckDocumentRuntimeArtifacts Path = %q, want %q", docFindings[0].Path, path)
+	}
+}
+
+// TestImplementedVerificationMissingRuntimeArtifactEmitsDiagnostic verifies
+// that an Implemented row naming a missing inspectable runtime artifact
+// emits the missing-artifact diagnostic and preserves the exact mapped path.
+func TestImplementedVerificationMissingRuntimeArtifactEmitsDiagnostic(t *testing.T) {
+	root := t.TempDir()
+
+	path := "docs/fixtures/implemented_missing_runtime_artifact.md"
+	const content = `---
+ddx:
+  id: FIXTURE-IMPLEMENTED-MISSING-RUNTIME-ARTIFACT
+---
+# Fixture Implemented Missing Runtime Artifact
+
+**Status:** Implemented
+
+## Requirements
+
+### REQ-043: Observation report
+
+The system MUST retain the observation report artifact.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-043 | .ddx/executions/missing/implemented-report.json | test -f .ddx/executions/missing/implemented-report.json |
+`
+	status := ParseDocumentStatusMarkdown(path, content)
+	if status.Status != StatusImplemented {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusImplemented)
+	}
+
+	findings := CheckDocumentRuntimeArtifacts(path, content, root)
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one missing-runtime-artifact finding; got %+v", findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingMissingRuntimeArtifact {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingMissingRuntimeArtifact)
+	}
+	if f.ArtifactPath != ".ddx/executions/missing/implemented-report.json" {
+		t.Fatalf("ArtifactPath = %q, want mapped path %q", f.ArtifactPath, ".ddx/executions/missing/implemented-report.json")
+	}
+	if !strings.Contains(f.Message, ".ddx/executions/missing/implemented-report.json") {
+		t.Fatalf("Message must name the missing artifact path; got %q", f.Message)
+	}
+}
+
+const fixtureCompleteNonRuntimeArtifactTargets = `---
+ddx:
+  id: FIXTURE-COMPLETE-NON-RUNTIME-ARTIFACT-TARGETS
+---
+# Fixture Complete Non-Runtime Artifact Targets
+
+**Status:** Complete
+
+## Requirements
+
+### REQ-090: Test evidence
+
+The system MUST cover the test symbol.
+
+### REQ-091: Static check evidence
+
+The system MUST cover the static check.
+
+## Verification
+
+| Requirement | Evidence | Command |
+|-------------|----------|---------|
+| REQ-090 | TestCreateResource | cd cli && go test ./pkg -run TestCreateResource |
+| REQ-091 | check:static-delete | go run ./tools/lint/deletecheck |
+`
+
+// TestMissingRuntimeArtifactDoesNotFireForNonRuntimeTargets verifies
+// unresolved evidence targets outside the inspectable runtime-artifact
+// class do not emit the runtime missing-artifact diagnostic.
+func TestMissingRuntimeArtifactDoesNotFireForNonRuntimeTargets(t *testing.T) {
+	root := t.TempDir()
+	path := "docs/fixtures/complete_non_runtime_artifact_targets.md"
+
+	status := ParseDocumentStatusMarkdown(path, fixtureCompleteNonRuntimeArtifactTargets)
+	if status.Status != StatusComplete {
+		t.Fatalf("Status = %q, want %q", status.Status, StatusComplete)
+	}
+	model := ParseVerificationMarkdown(path, fixtureCompleteNonRuntimeArtifactTargets)
+	if len(model.Rows) != 2 {
+		t.Fatalf("rows = %d, want 2; %+v", len(model.Rows), model.Rows)
+	}
+
+	findings := CheckDocumentRuntimeArtifacts(path, fixtureCompleteNonRuntimeArtifactTargets, root)
+	if len(findings) != 0 {
+		t.Fatalf("non-runtime targets must not emit runtime-artifact findings; got %+v", findings)
+	}
+	for _, row := range model.Rows {
+		res := ResolveRuntimeArtifactRow(root, row)
+		if res.Kind != RuntimeArtifactClassOutOfBand {
+			t.Fatalf("row %q classified as %q, want out_of_band", row.EvidenceTarget, res.Kind)
+		}
 	}
 }
 
@@ -899,10 +1033,10 @@ func TestCompleteVerificationRuntimeArtifactChecks_ReadOnly(t *testing.T) {
 	// On-disk Complete/Implemented fixtures: existing + missing paths so
 	// validation exercises both pass and diagnostic emission without writes.
 	docs := map[string]string{
-		"complete_existing.md":  fixtureCompleteExistingRuntimeArtifact,
-		"implemented_existing.md": fixtureImplementedExistingRuntimeArtifact,
-		"complete_missing.md":   fixtureCompleteMissingRuntimeArtifact,
-		"complete_mapped_path.md": fixtureCompleteMissingMappedPathText,
+		"complete_existing.md":      fixtureCompleteExistingRuntimeArtifact,
+		"implemented_existing.md":   fixtureImplementedExistingRuntimeArtifact,
+		"complete_missing.md":       fixtureCompleteMissingRuntimeArtifact,
+		"complete_mapped_path.md":   fixtureCompleteMissingMappedPathText,
 		"complete_backtick_path.md": fixtureCompleteMissingRowVsResolverPath,
 	}
 	for name, content := range docs {
