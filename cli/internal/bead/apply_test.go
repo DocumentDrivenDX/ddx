@@ -147,6 +147,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		require.NoError(t, err)
 		assertBeadMutationInvariants(t, *before, *afterApply, beforeEvents, afterApplyEvents)
 
+		require.NoError(t, s.Close(context.Background(), dep.ID))
 		require.NoError(t, s.Claim(target.ID, "worker-1"))
 		afterClaim, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)

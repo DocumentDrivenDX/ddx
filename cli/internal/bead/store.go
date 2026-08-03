@@ -1009,6 +1009,9 @@ func (s *Store) Claim(id, assignee string) error {
 			default:
 				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
 			}
+			if err := s.rejectIfUnclosedBlockingDeps(id); err != nil {
+				return err
+			}
 			if err := transitionLifecycleInPlace(&beads[i], StatusInProgress, LifecycleTransitionOptions{
 				Reason: "claim",
 				Actor:  assignee,
@@ -1079,6 +1082,9 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 				// stalled claim — reclaim atomically below
 			default:
 				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+			}
+			if err := s.rejectIfUnclosedBlockingDeps(id); err != nil {
+				return err
 			}
 			now := time.Now().UTC()
 			return s.writeClaimHeartbeat(ClaimLeaseRecord{

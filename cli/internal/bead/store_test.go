@@ -2014,6 +2014,67 @@ func TestClaimReleaseStatusReflectsLease(t *testing.T) {
 	assert.Equal(t, 0, afterCounts.InProgress, "released bead must not be counted in_progress")
 }
 
+func TestClaim_RefusesBlockedBead(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{ID: "ddx-claim-dep", Title: "Blocking dependency"}
+	target := &Bead{ID: "ddx-claim-target", Title: "Target bead", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), target))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, dep.ID))
+
+	err := s.Claim(target.ID, "worker-a")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDependencyGateRejected)
+	assert.Contains(t, err.Error(), dep.ID)
+
+	got, getErr := s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusOpen, got.Status, "blocked claim must leave the bead open")
+	assert.Empty(t, got.Owner, "blocked claim must not assign an owner")
+
+	_, leasePresent, err := s.ClaimLease(target.ID)
+	require.NoError(t, err)
+	assert.False(t, leasePresent, "blocked claim must not write a lease")
+
+	require.NoError(t, s.Close(testCtx(), dep.ID))
+	require.NoError(t, s.Claim(target.ID, "worker-a"))
+
+	got, getErr = s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusInProgress, got.Status, "ready bead must claim successfully")
+	assert.Equal(t, "worker-a", got.Owner, "ready bead must record the assignee")
+
+	lease, leasePresent, err := s.ClaimLease(target.ID)
+	require.NoError(t, err)
+	require.True(t, leasePresent)
+	assert.Equal(t, "worker-a", lease.Owner)
+}
+
+func TestClaimWithOptions_RefusesBlockedBead(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{ID: "ddx-claimopts-dep", Title: "Blocking dependency"}
+	target := &Bead{ID: "ddx-claimopts-target", Title: "Target bead", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), target))
+	require.NoError(t, s.DepAdd(testCtx(), target.ID, dep.ID))
+
+	err := s.ClaimWithOptions(target.ID, "worker-a", "sess-lease", "/tmp/worktree")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDependencyGateRejected)
+	assert.Contains(t, err.Error(), dep.ID)
+
+	got, getErr := s.Get(testCtx(), target.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, StatusOpen, got.Status, "blocked claim must leave the bead open")
+	assert.Empty(t, got.Owner, "blocked claim must not assign an owner")
+
+	_, leasePresent, err := s.ClaimLease(target.ID)
+	require.NoError(t, err)
+	assert.False(t, leasePresent, "blocked claim must not write a lease")
+}
+
 // withHeartbeat temporarily overrides HeartbeatInterval and HeartbeatTTL for
 // the duration of a test.
 func withHeartbeat(t *testing.T, interval, ttl time.Duration) {
