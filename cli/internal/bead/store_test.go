@@ -960,6 +960,120 @@ func TestClose_WalkUp_RecursesThroughGrandparentDeadIntermediate(t *testing.T) {
 	assert.True(t, found, "P should have dead_intermediate_close event")
 }
 
+func TestRollUpClose_RefusesBeadWithOpenBlocksDep(t *testing.T) {
+	s := newTestStore(t)
+
+	blocker := &Bead{Title: "Open blocker"}
+	require.NoError(t, s.Create(testCtx(), blocker))
+
+	parent := &Bead{
+		Title:     "Roll-up parent",
+		IssueType: "epic",
+		Status:    StatusOpen,
+		Extra:     map[string]any{ExtraExecutionElig: false},
+	}
+	require.NoError(t, s.Create(testCtx(), parent))
+
+	child := &Bead{Title: "Leaf child", Status: StatusOpen, Parent: parent.ID}
+	require.NoError(t, s.Create(testCtx(), child))
+	require.NoError(t, s.DepAdd(testCtx(), parent.ID, blocker.ID))
+
+	require.NoError(t, s.Close(testCtx(), child.ID))
+
+	parentGot, err := s.Get(testCtx(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, parentGot.Status, "parent must stay open while a blocking dependency is still open")
+	assert.Contains(t, parentGot.Notes, blocker.ID, "audit note must name the open blocking dependency")
+
+	events, err := s.Events(parent.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "dependency_gate_rejected" {
+			assert.Contains(t, e.Summary, blocker.ID)
+			assert.Contains(t, e.Body, blocker.ID)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "parent should record an auditable dependency-gate skip event")
+}
+
+func TestRollUpClose_AllowsBeadWithClosedBlocksDep(t *testing.T) {
+	s := newTestStore(t)
+
+	blocker := &Bead{Title: "Closed blocker"}
+	require.NoError(t, s.Create(testCtx(), blocker))
+	require.NoError(t, s.Close(testCtx(), blocker.ID))
+
+	parent := &Bead{
+		Title:     "Roll-up parent",
+		IssueType: "epic",
+		Status:    StatusOpen,
+		Extra:     map[string]any{ExtraExecutionElig: false},
+	}
+	require.NoError(t, s.Create(testCtx(), parent))
+
+	child := &Bead{Title: "Leaf child", Status: StatusOpen, Parent: parent.ID}
+	require.NoError(t, s.Create(testCtx(), child))
+	require.NoError(t, s.DepAdd(testCtx(), parent.ID, blocker.ID))
+
+	require.NoError(t, s.Close(testCtx(), child.ID))
+
+	parentGot, err := s.Get(testCtx(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, parentGot.Status, "parent should auto-close once its blocking dependency is closed")
+
+	events, err := s.Events(parent.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "dead_intermediate_close" {
+			assert.Contains(t, e.Body, "all_children_closed")
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "parent should still auto-close through the roll-up path")
+}
+
+func TestRollUpClose_RefusesSupersededBeadWithOpenBlocksDep(t *testing.T) {
+	s := newTestStore(t)
+
+	superseder := &Bead{Title: "Superseder"}
+	require.NoError(t, s.Create(testCtx(), superseder))
+
+	blocker := &Bead{Title: "Open blocker"}
+	require.NoError(t, s.Create(testCtx(), blocker))
+
+	superseded := &Bead{
+		Title:  "Superseded bead",
+		Status: StatusOpen,
+		Extra:  map[string]any{"superseded-by": superseder.ID},
+	}
+	require.NoError(t, s.Create(testCtx(), superseded))
+	require.NoError(t, s.DepAdd(testCtx(), superseded.ID, blocker.ID))
+
+	require.NoError(t, s.Close(testCtx(), superseder.ID))
+
+	got, err := s.Get(testCtx(), superseded.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, got.Status, "superseded bead must stay open while a blocking dependency is still open")
+
+	events, err := s.Events(got.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "dependency_gate_rejected" {
+			assert.Contains(t, e.Summary, blocker.ID)
+			assert.Contains(t, e.Body, blocker.ID)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "superseded bead should record an auditable dependency-gate skip event")
+}
+
 func TestClose_EpicAutoClose_AllChildrenClosed(t *testing.T) {
 	s := newTestStore(t)
 

@@ -1707,6 +1707,12 @@ func (s *Store) cascadeAndWalkUp(closedID string, visited map[string]bool) error
 		if !s.canCascadeCloseSuperseeded(&x, closedID, all) {
 			continue
 		}
+		if openDeps, err := s.UnclosedBlockingDeps(x.ID); err != nil {
+			continue
+		} else if len(openDeps) > 0 {
+			s.appendRollupDependencyGateAudit(x.ID, "Store.Close.cascadeCloseSuperseeded", openDeps)
+			continue
+		}
 		visited[x.ID] = true
 		_ = s.SetLifecycleStatus(x.ID, StatusClosed, LifecycleTransitionOptions{
 			ManualClose: true,
@@ -1796,6 +1802,13 @@ func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited
 		eventKind = "epic_auto_close"
 		summary = "auto-closed: all children reached terminal state"
 		body = fmt.Sprintf("closed_because: all_children_terminal\ntotal_children: %d", totalChildCount)
+	}
+
+	if openDeps, err := s.UnclosedBlockingDeps(parentID); err != nil {
+		return
+	} else if len(openDeps) > 0 {
+		s.appendRollupDependencyGateAudit(parentID, "Store.Close.walkUpClosureCandidate", openDeps)
+		return
 	}
 
 	visited[parentID] = true
@@ -1946,15 +1959,7 @@ func (s *Store) canCascadeCloseSuperseeded(x *Bead, closedID string, allBeads []
 		}
 	}
 
-	// Guard 3: X has no open dependencies of its own beyond the supersession marker
-	for _, d := range fresh.Dependencies {
-		target := findBeadByID(allBeads, d.DependsOnID)
-		if target != nil && target.Status != StatusClosed && target.Status != StatusCancelled {
-			return false
-		}
-	}
-
-	// Guard 4: X has attempt_count == 0 (no execution-related events)
+	// Guard 3: X has attempt_count == 0 (no execution-related events)
 	events, _ := s.Events(fresh.ID)
 	for _, e := range events {
 		if strings.Contains(e.Kind, "execution") || strings.Contains(e.Kind, "dispatch") ||
@@ -1963,13 +1968,13 @@ func (s *Store) canCascadeCloseSuperseeded(x *Bead, closedID string, allBeads []
 		}
 	}
 
-	// Guard 5: X has no operator notes added after the supersession marker timestamp
+	// Guard 4: X has no operator notes added after the supersession marker timestamp
 	// For simplicity, check if notes are present (indicates operator activity)
 	if strings.TrimSpace(fresh.Notes) != "" {
 		return false
 	}
 
-	// Guard 6: X is not currently claimed or in-progress (no live claim_id)
+	// Guard 5: X is not currently claimed or in-progress (no live claim_id)
 	if fresh.Status == StatusInProgress {
 		return false
 	}
@@ -2122,6 +2127,23 @@ func appendClosureRejectNote(b *Bead, err error) {
 		return
 	}
 	b.Notes = b.Notes + "\n" + note
+}
+
+func (s *Store) appendRollupDependencyGateAudit(id, source string, openDeps []string) {
+	if len(openDeps) == 0 {
+		return
+	}
+	depList := strings.Join(openDeps, ", ")
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	note := fmt.Sprintf("[%s] %s skipped: open blocking dependencies: %s", stamp, source, depList)
+	_ = s.AppendNotes(id, note)
+	_ = s.AppendEvent(id, BeadEvent{
+		Kind:      "dependency_gate_rejected",
+		Summary:   fmt.Sprintf("auto-close skipped due to open blocking dependencies: %s", depList),
+		Body:      fmt.Sprintf("source: %s\nopen_blocking_dependencies: %s", source, depList),
+		Source:    source,
+		CreatedAt: time.Now().UTC(),
+	})
 }
 
 // AppendNotes appends operator-facing notes to an existing bead.
