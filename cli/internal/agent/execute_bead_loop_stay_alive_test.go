@@ -1311,6 +1311,10 @@ func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
 }
 
 func TestWorkRepairsCoreBareAndContinuesSameCandidate(t *testing.T) {
+	// Fail closed before any fixture setup if the private Git config scope is
+	// unavailable. The repair path must only ever touch the isolated fixture.
+	requirePrivateFixtureGitConfigScope(t)
+
 	// Private fixture config scope + invoking-repo guard must be established
 	// before intentional core.bare corruption so the repair path cannot rewrite
 	// a shared checkout's common config (the 2026-07-17 lefthook leak class).
