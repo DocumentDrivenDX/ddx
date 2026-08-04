@@ -51,6 +51,7 @@ make all            # Clean, deps, test, build
 make dev            # Development mode with file watching (requires air)
 make run ARGS="..."  # Run CLI with arguments
 make install        # Install locally to ~/.local/bin/ddx
+make install-cli    # Install the CLI binary only for agent/worker hosts
 
 # Dependencies
 make deps           # Install and tidy Go modules

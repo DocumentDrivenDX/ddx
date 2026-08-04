@@ -128,6 +128,12 @@ this repo; a red main line is a regression to fix, not background noise.
   explicitly waives it. Pre-existing Security/Demos reds on main are separate
   from CI Validation unless they block merge policy.
 
+## CLI Development
+
+- On agent/worker-only hosts, use `cd cli && make install-cli` to refresh the
+  binary without rebuilding the embedded frontend.
+- Keep `make install` for the full embedded build path.
+
 ## Prohibited Actions
 
 - Do not edit `.ddx/beads.jsonl` manually.

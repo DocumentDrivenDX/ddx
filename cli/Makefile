@@ -8,6 +8,7 @@ LDFLAGS = -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.
 
 # Build directory
 BUILD_DIR = build
+CLI_BINARY = $(BUILD_DIR)/ddx
 
 # Platforms to build for
 PLATFORMS = \
@@ -17,7 +18,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test test-full test-perf coverage-ratchet lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills go-discovery-verify eval-skill bench-graphql
+.PHONY: all build build-cli install-cli clean test test-full test-perf coverage-ratchet lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills go-discovery-verify eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -101,7 +102,13 @@ copy-skills:
 build: copy-skills frontend-build frontend-verify
 	@echo "Building DDx CLI..."
 	@mkdir -p $(BUILD_DIR)
-	go build $(LDFLAGS) -o $(BUILD_DIR)/ddx .
+	go build $(LDFLAGS) -o $(CLI_BINARY) .
+
+# Build the CLI binary without the embedded frontend.
+build-cli: copy-skills
+	@echo "Building DDx CLI without frontend..."
+	@mkdir -p $(BUILD_DIR)
+	go build $(LDFLAGS) -o $(CLI_BINARY) .
 
 # Build for all platforms
 build-all: clean deps copy-skills
@@ -195,7 +202,12 @@ lint:
 # Install locally for development
 install: build
 	@echo "Installing DDx locally..."
-	../install.sh --from-build $(BUILD_DIR)/ddx
+	../install.sh --from-build $(CLI_BINARY)
+
+# Install the CLI binary for agent/worker hosts without rebuilding the frontend.
+install-cli: build-cli
+	@echo "Installing DDx CLI locally without frontend..."
+	../install.sh --from-build $(CLI_BINARY)
 
 # Clean build artifacts
 clean:
@@ -286,6 +298,7 @@ help:
 	@echo "  bead-schema - Validate the shared bead record schema"
 	@echo "  skill-schema - Validate bundled SKILL.md metadata"
 	@echo "  install     - Install locally for development"
+	@echo "  install-cli - Install CLI only without the embedded frontend"
 	@echo "  clean       - Remove build artifacts"
 	@echo "  run         - Run the CLI (set ARGS='...' for arguments)"
 	@echo "  fmt         - Format code"
