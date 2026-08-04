@@ -24,6 +24,7 @@ func runPreclaimDecompositionHookWithResolvingLiveness(
 	beadID string,
 	liveness *work.SidecarLivenessReporter,
 	harness, model, profile string,
+	timeout time.Duration,
 	heartbeatInterval time.Duration,
 	now func() time.Time,
 ) (*PreClaimDecomposition, error) {
@@ -32,6 +33,9 @@ func runPreclaimDecompositionHookWithResolvingLiveness(
 	}
 	if now == nil {
 		now = time.Now
+	}
+	if timeout <= 0 {
+		timeout = work.DefaultPreClaimTimeout
 	}
 
 	workerPID := os.Getpid()
@@ -69,7 +73,10 @@ func runPreclaimDecompositionHookWithResolvingLiveness(
 	stopHB := startLivenessOnlyHeartbeat(ctx, liveness, heartbeatInterval, now)
 	defer stopHB()
 
-	return hook(ctx, beadID)
+	hookCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	return hook(hookCtx, beadID)
 }
 
 // startLivenessOnlyHeartbeat refreshes the worker sidecar on a ticker without

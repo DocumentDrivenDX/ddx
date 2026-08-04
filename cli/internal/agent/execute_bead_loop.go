@@ -3246,6 +3246,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					harness,
 					model,
 					profile,
+					preClaimTimeout,
 					heartbeatInterval,
 					now,
 				)
@@ -3253,6 +3254,23 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					if err := ctx.Err(); err != nil {
 						applyStop(work.StopInput{ContextErr: err})
 						return executeBeadIterationOutcome{Stop: true}, err
+					}
+					if errors.Is(hookErr, context.DeadlineExceeded) {
+						timeoutDetail := fmt.Sprintf("preclaim decomposition timed out after %s", preClaimTimeout)
+						if runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "bead decomposition timed out after %s (%s); leaving candidate unclaimed\n", preClaimTimeout, candidate.ID)
+						}
+						emit("pre_claim_intake.warn", map[string]any{
+							"bead_id": candidate.ID,
+							"outcome": string(PreClaimIntakeTooLargeDecomposed),
+							"reason":  "decomposition_hook_timeout",
+							"detail":  timeoutDetail,
+							"timeout": preClaimTimeout.String(),
+						})
+						if appendPreClaimWarn(candidate.ID, "decomposition_hook_timeout", timeoutDetail, now().UTC()) {
+							return executeBeadIterationOutcome{Stop: true}, nil
+						}
+						return executeBeadIterationOutcome{Continue: true}, nil
 					}
 					warning := fmt.Sprintf("decomposition hook unavailable: %s", hookErr.Error())
 					if runtime.Log != nil {

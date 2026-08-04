@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -420,6 +421,7 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 				"codex",
 				"gpt-5",
 				"",
+				50*time.Millisecond,
 				5*time.Millisecond,
 				time.Now,
 			)
@@ -777,4 +779,127 @@ func TestWorkLoop_PreClaimDecompositionRefreshesResolvingLiveness(t *testing.T) 
 		assert.False(t, after.LastActivityAt.After(postDoneAt),
 			"last_activity_at must not keep advancing under active resolving after hook return")
 	}
+}
+
+// TestWorkLoop_PreClaimDecompositionUsesConfiguredPreClaimTimeout blocks the
+// preclaim decomposer longer than a short configured timeout and proves the
+// loop returns inside that bound, emits a structured timeout warning, leaves
+// the candidate unclaimed, and clears resolving liveness state after return.
+func TestWorkLoop_PreClaimDecompositionUsesConfiguredPreClaimTimeout(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	candidate := &bead.Bead{
+		ID:         "ddx-preclaim-timeout",
+		Title:      "Bound preclaim decomposition timeout",
+		Acceptance: "1. TestWorkLoop_PreClaimDecompositionUsesConfiguredPreClaimTimeout\n2. cd cli && go test ./internal/agent/...",
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	entered := make(chan struct{})
+	var execCalls int32
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			t.Fatalf("executor must not run when preclaim decomposition times out")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	projectRoot := store.Dir
+	sessionID := "sess-preclaim-timeout"
+	var sink bytes.Buffer
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		HeartbeatInterval:     5 * time.Millisecond,
+		MaxDecompositionDepth: 3,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	type runResult struct {
+		attempts int
+		err      error
+	}
+	done := make(chan runResult, 1)
+	start := time.Now()
+	go func() {
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:            true,
+			TargetBeadID:    candidate.ID,
+			ProjectRoot:     projectRoot,
+			SessionID:       sessionID,
+			EventSink:       &sink,
+			PreClaimTimeout: 30 * time.Millisecond,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeTooLargeDecomposed,
+					Detail:  "too large; split required",
+				}, nil
+			},
+			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+				close(entered)
+				<-ctx.Done()
+				return nil, ctx.Err()
+			},
+		})
+		attempts := 0
+		if result != nil {
+			attempts = result.Attempts
+		}
+		done <- runResult{attempts: attempts, err: err}
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("decomposition hook never entered")
+	}
+
+	gotRun := <-done
+	elapsed := time.Since(start)
+	require.NoError(t, gotRun.err)
+	assert.Equal(t, 0, gotRun.attempts, "timeout must not count as an implementation attempt")
+	assert.Less(t, elapsed, 2*time.Second, "preclaim decomposition must return within the configured timeout bound")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must not run when decomposition times out")
+
+	got, err := store.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "timed-out preclaim decomposition must leave the bead unclaimed")
+	assert.Empty(t, got.Owner, "timed-out preclaim decomposition must not claim the bead")
+
+	events := parseLoopEvents(t, sink.String())
+	warns := loopEventDataByType(events, "pre_claim_intake.warn")
+	require.NotEmpty(t, warns, "timeout must emit a structured pre_claim_intake.warn event")
+	var sawTimeout bool
+	for _, warn := range warns {
+		if warn["reason"] == "decomposition_hook_timeout" {
+			sawTimeout = true
+			assert.Equal(t, "preclaim decomposition timed out after 30ms", warn["detail"])
+			assert.Equal(t, "30ms", warn["timeout"])
+		}
+	}
+	assert.True(t, sawTimeout, "timeout warning must carry decomposition_hook_timeout")
+
+	durableEvents, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	var sawDurableTimeout bool
+	for _, ev := range durableEvents {
+		if ev.Kind == "intake.warn" && ev.Summary == "decomposition_hook_timeout" {
+			sawDurableTimeout = true
+			assert.Contains(t, ev.Body, "preclaim decomposition timed out after 30ms")
+			break
+		}
+	}
+	assert.True(t, sawDurableTimeout, "timeout must persist a durable intake.warn event")
+
+	require.Eventually(t, func() bool {
+		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+		if err != nil {
+			return false
+		}
+		return rec.CurrentBead != candidate.ID && rec.Phase != "resolving" && rec.AttemptID == ""
+	}, 2*time.Second, 5*time.Millisecond, "resolving liveness must clear after the timeout returns")
 }
