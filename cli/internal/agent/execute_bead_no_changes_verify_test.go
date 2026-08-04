@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,6 +74,50 @@ func TestParseNoChangesRationale(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestParseNoChangesRationale_LocalResourceBlockerKind(t *testing.T) {
+	got := ParseNoChangesRationale(
+		"status: blocked\n" +
+			"blocker_kind: local_resource_exhaustion\n" +
+			"reason: host temp root exhausted\n" +
+			"suggested_action: free space and retry",
+	)
+
+	require.Equal(t, NoChangesKindLifecycleStatus, got.Kind)
+	assert.Equal(t, "blocked", got.LifecycleStatus)
+	assert.Equal(t, agenttry.NoChangesBlockerKindLocalResourceExhaustion, got.BlockerKind)
+	assert.Equal(t, "host temp root exhausted", got.Reason)
+	assert.Equal(t, "free space and retry", got.SuggestedAction)
+	assert.Empty(t, got.RejectionReason)
+}
+
+func TestParseNoChangesRationale_RejectsUnknownBlockerKind(t *testing.T) {
+	t.Run("unknown kind", func(t *testing.T) {
+		got := ParseNoChangesRationale(
+			"status: blocked\n" +
+				"blocker_kind: disk_full\n" +
+				"reason: host temp root exhausted",
+		)
+
+		require.Equal(t, NoChangesKindUnjustified, got.Kind)
+		assert.Equal(t, "blocked", got.LifecycleStatus)
+		assert.Equal(t, "disk_full", got.BlockerKind)
+		assert.Equal(t, "unsupported blocker_kind: disk_full", got.RejectionReason)
+	})
+
+	t.Run("invalid status combo", func(t *testing.T) {
+		got := ParseNoChangesRationale(
+			"status: open\n" +
+				"blocker_kind: local_resource_exhaustion\n" +
+				"reason: temp directory full",
+		)
+
+		require.Equal(t, NoChangesKindUnjustified, got.Kind)
+		assert.Equal(t, "open", got.LifecycleStatus)
+		assert.Equal(t, agenttry.NoChangesBlockerKindLocalResourceExhaustion, got.BlockerKind)
+		assert.Equal(t, "blocker_kind requires status: blocked", got.RejectionReason)
+	})
 }
 
 func TestDefaultVerificationCommandRunner(t *testing.T) {

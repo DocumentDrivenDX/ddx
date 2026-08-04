@@ -110,6 +110,18 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 		return p
 	}
 	p.Reason = strings.Join(reasonLines, " ")
+	if p.BlockerKind != "" {
+		if p.LifecycleStatus != "blocked" {
+			p.Kind = NoChangesKindUnjustified
+			p.RejectionReason = "blocker_kind requires status: blocked"
+			return p
+		}
+		if p.BlockerKind != NoChangesBlockerKindLocalResourceExhaustion {
+			p.Kind = NoChangesKindUnjustified
+			p.RejectionReason = "unsupported blocker_kind: " + p.BlockerKind
+			return p
+		}
+	}
 	switch p.LifecycleStatus {
 	case "":
 		return p
