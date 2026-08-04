@@ -21,10 +21,22 @@ import (
 var (
 	sharedDdxBinaryOnce       sync.Once
 	sharedDdxBinaryPath       string
+	sharedDdxBinaryDir        string // package-owned temp dir; removed in TestMain
 	sharedDdxBinaryBuildErr   error
 	sharedDdxBinaryBuildOut   []byte
 	sharedDdxBinaryBuildCount atomic.Int32
 )
+
+// TestMain reclaims the package-shared ddx binary temp dir so
+// ddx-workerprobe-bin-* full CLI builds do not accumulate multi-GB residue
+// under $TMPDIR across package test processes.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sharedDdxBinaryDir != "" {
+		_ = os.RemoveAll(sharedDdxBinaryDir)
+	}
+	os.Exit(code)
+}
 
 // TestWorker_RealAttemptEvents_FlowToServer is the wired-in end-to-end
 // proof for ADR-022 step 2: it stands up the production server HTTP path
@@ -160,6 +172,7 @@ func sharedDdxBinary(t *testing.T) string {
 			sharedDdxBinaryBuildErr = err
 			return
 		}
+		sharedDdxBinaryDir = binDir
 		sharedDdxBinaryPath = filepath.Join(binDir, "ddx")
 
 		build := exec.Command("go", "build", "-buildvcs=false", "-o", sharedDdxBinaryPath, ".")
@@ -186,6 +199,18 @@ func TestSharedDdxBinaryBuildsOnce(t *testing.T) {
 
 	if first != second {
 		t.Fatalf("expected shared ddx binary path, got %q and %q", first, second)
+	}
+	if sharedDdxBinaryDir == "" {
+		t.Fatal("expected package-owned sharedDdxBinaryDir after first build")
+	}
+	if !strings.HasPrefix(first, sharedDdxBinaryDir+string(os.PathSeparator)) && first != filepath.Join(sharedDdxBinaryDir, "ddx") {
+		t.Fatalf("shared binary %q must live under package temp dir %q", first, sharedDdxBinaryDir)
+	}
+	// Explicit cleanup helper: removing the package dir is what TestMain does.
+	// Call once on a copy path assertion without deleting the live shared dir
+	// while other tests may still need it — only verify the dir is tracked.
+	if _, err := os.Stat(sharedDdxBinaryDir); err != nil {
+		t.Fatalf("package temp dir should exist until TestMain: %v", err)
 	}
 	if got := sharedDdxBinaryBuildCount.Load(); got != 1 {
 		t.Fatalf("expected one ddx binary build, got %d", got)

@@ -772,6 +772,57 @@ func TestExecutionCleanup_RemovesStaleDDXScratchDirs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
 }
 
+// TestExecutionCleanup_ReclaimsOrphanedProviderShimDir proves host GC scans
+// ddx-provider-shim-* prefixes: dead-owner shims past minAge are removed; live
+// owner PID shims are preserved (ddx-02b98801).
+func TestExecutionCleanup_ReclaimsOrphanedProviderShimDir(t *testing.T) {
+	now := time.Date(2026, 8, 4, 15, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	stalePath := filepath.Join(scratchRoot, "ddx-provider-shim-orphan-dead")
+	livePath := filepath.Join(scratchRoot, "ddx-provider-shim-live-owner")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: stalePath,
+		Liveness: &ExecutionCleanupLiveness{
+			// Unlikely-to-exist PID: dead owner.
+			PID:         2147483646,
+			RefreshedAt: now.Add(-2 * time.Hour),
+			ExpiresAt:   now.Add(-time.Hour),
+		},
+	}, map[string]string{"claude": "#!/bin/sh\nexit 0\n"})
+	writeExecutionCleanupCandidate(t, livePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: livePath,
+		Liveness: &ExecutionCleanupLiveness{
+			PID:         os.Getpid(),
+			RefreshedAt: now,
+		},
+	}, map[string]string{"claude": "#!/bin/sh\nexit 0\n"})
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(stalePath, old, old))
+	require.NoError(t, os.Chtimes(livePath, old, old))
+
+	require.Contains(t, defaultExecutionCleanupScratchPrefixes, "ddx-provider-shim-")
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, stalePath, "orphan provider-shim with dead PID must be reclaimed")
+	assert.DirExists(t, livePath, "provider-shim with live owner PID must be preserved")
+	assert.Equal(t, 2, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(1), summary.RemovedScratchDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_scratch_dir"))
+}
+
 func TestExecutionCleanup_ReclaimsMetadataMarkedHostGlobalScratch(t *testing.T) {
 	fixtureRoot := t.TempDir()
 	hostTempRoot := filepath.Join(fixtureRoot, "host-tmp")

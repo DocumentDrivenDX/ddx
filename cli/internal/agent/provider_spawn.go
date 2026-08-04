@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
@@ -128,6 +129,10 @@ func EnsureProviderShimOnPATH(ddxBinary string) (dir string, cleanup func(), err
 	defer providerShimMu.Unlock()
 
 	if providerShimDirPath != "" {
+		// Process-global shim already installed. Return a no-op cleanup so
+		// secondary callers do not tear down the shared dir; process exit
+		// and the first installer's cleanup (or ReleaseProviderShim) own
+		// lifetime.
 		return providerShimDirPath, func() {}, nil
 	}
 
@@ -160,22 +165,50 @@ func EnsureProviderShimOnPATH(ddxBinary string) (dir string, cleanup func(), err
 		return "", func() {}, fmt.Errorf("provider-shim: setenv PATH: %w", setErr)
 	}
 
-	providerShimDirPath = tmpDir
-	cleanup = func() {
-		providerShimMu.Lock()
-		defer providerShimMu.Unlock()
-		if providerShimDirPath == "" {
-			return
-		}
-		// Restore PATH by stripping our prefix; leave the rest alone in
-		// case other code further mutated PATH after us.
-		current := os.Getenv("PATH")
-		prefix := providerShimDirPath + string(os.PathListSeparator)
-		if strings.HasPrefix(current, prefix) {
-			_ = os.Setenv("PATH", strings.TrimPrefix(current, prefix))
-		}
-		_ = os.RemoveAll(providerShimDirPath)
-		providerShimDirPath = ""
+	// Host GC (ExecutionCleanupManager) reclaims orphaned shim dirs after the
+	// owning worker dies. Write owner-PID metadata so live workers are preserved
+	// and dead-PID shims become reclaimable once past min age.
+	now := time.Now().UTC()
+	if metaErr := WriteExecutionCleanupMetadata(tmpDir, ExecutionCleanupMetadata{
+		WorktreePath: tmpDir,
+		CreatedAt:    now,
+		Liveness: &ExecutionCleanupLiveness{
+			PID:         os.Getpid(),
+			RefreshedAt: now,
+		},
+	}); metaErr != nil {
+		// Best-effort: keep the shim usable even if metadata write fails.
+		// Host GC may preserve unmarked dirs under host-global roots.
+		_, _ = fmt.Fprintf(os.Stderr, "agent: provider shim cleanup metadata write failed: %v\n", metaErr)
 	}
-	return tmpDir, cleanup, nil
+
+	providerShimDirPath = tmpDir
+	return tmpDir, func() { ReleaseProviderShim() }, nil
+}
+
+// ReleaseProviderShim removes the process-local provider PATH shim directory
+// (if any) and restores PATH. Safe to call multiple times. Intended for work
+// loop / process shutdown — not per executeOnService return, because the shim
+// is process-global and shared by concurrent dispatches.
+func ReleaseProviderShim() {
+	providerShimMu.Lock()
+	defer providerShimMu.Unlock()
+	releaseProviderShimLocked()
+}
+
+// releaseProviderShimLocked implements ReleaseProviderShim; caller holds
+// providerShimMu.
+func releaseProviderShimLocked() {
+	if providerShimDirPath == "" {
+		return
+	}
+	// Restore PATH by stripping our prefix; leave the rest alone in
+	// case other code further mutated PATH after us.
+	current := os.Getenv("PATH")
+	prefix := providerShimDirPath + string(os.PathListSeparator)
+	if strings.HasPrefix(current, prefix) {
+		_ = os.Setenv("PATH", strings.TrimPrefix(current, prefix))
+	}
+	_ = os.RemoveAll(providerShimDirPath)
+	providerShimDirPath = ""
 }

@@ -44,6 +44,9 @@ var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-home-",
 	"ddx-fixture-bin-",
 	"ddx-fizeau-testseam-bin-",
+	// Provider PATH shims (cli/internal/agent/provider_spawn.go). Orphaned
+	// after worker crash when process-lifetime release did not run.
+	"ddx-provider-shim-",
 }
 
 const executionCleanupUnownedScratchObservationClass = "preserved_unowned_scratch_dir"

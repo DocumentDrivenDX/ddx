@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -292,4 +295,127 @@ func resetProviderShimStateForTest() {
 		current = strings.Join(entries[1:], string(os.PathListSeparator))
 	}
 	_ = os.Setenv("PATH", current)
+}
+
+// TestProviderShimWritesCleanupMetadataWithOwnerPID proves EnsureProviderShimOnPATH
+// stamps ExecutionCleanupMetadata with the owning PID so host GC can preserve live
+// workers and reclaim dead-owner shims (ddx-63ed4533).
+func TestProviderShimWritesCleanupMetadataWithOwnerPID(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
+	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
+
+	dir, cleanup, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
+	require.NoError(t, err)
+	require.NotEmpty(t, dir)
+	t.Cleanup(cleanup)
+
+	meta, err := ReadExecutionCleanupMetadata(dir)
+	require.NoError(t, err)
+	require.NotNil(t, meta.Liveness, "provider shim must write liveness metadata")
+	assert.Equal(t, os.Getpid(), meta.Liveness.PID)
+	assert.Equal(t, dir, meta.WorktreePath)
+	assert.False(t, meta.CreatedAt.IsZero())
+}
+
+// TestProviderShimReleaseRemovesDirAndRestoresPATH proves ReleaseProviderShim
+// tears down the process-global shim and allows a fresh install.
+func TestProviderShimReleaseRemovesDirAndRestoresPATH(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	originalPATH := os.Getenv("PATH")
+	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
+	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
+
+	dir, _, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
+	require.NoError(t, err)
+	require.DirExists(t, dir)
+	require.True(t, strings.HasPrefix(os.Getenv("PATH"), dir+string(os.PathListSeparator)))
+
+	ReleaseProviderShim()
+	require.NoDirExists(t, dir)
+	require.Equal(t, originalPATH, os.Getenv("PATH"))
+	require.Empty(t, providerShimDirPath)
+
+	dir2, cleanup2, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx2"))
+	require.NoError(t, err)
+	require.NotEqual(t, dir, dir2, "fresh install after release must create a new dir")
+	cleanup2()
+}
+
+// TestProviderShimProcessReuseKeepsSingleDir proves two installs share one
+// process-global dir and secondary cleanup is a no-op (ddx-63ed4533).
+func TestProviderShimProcessReuseKeepsSingleDir(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
+	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
+
+	dir1, cleanup1, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
+	require.NoError(t, err)
+	dir2, cleanup2, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "other"))
+	require.NoError(t, err)
+	require.Equal(t, dir1, dir2)
+
+	cleanup2() // no-op for reuse
+	require.DirExists(t, dir1)
+
+	cleanup1()
+	require.NoDirExists(t, dir1)
+}
+
+// TestWorkLoop_ShutdownReleasesProviderShim proves the execute-loop defer
+// releases the process-local provider shim on loop exit.
+func TestWorkLoop_ShutdownReleasesProviderShim(t *testing.T) {
+	resetProviderShimStateForTest()
+	t.Cleanup(resetProviderShimStateForTest)
+
+	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
+
+	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
+	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
+
+	dir, _, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
+	require.NoError(t, err)
+	require.DirExists(t, dir)
+
+	inner, _, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: inner,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusNoChanges,
+				Detail:    "done",
+				SessionID: "sess-shim-release",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err = worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		ProjectRoot: projectRoot,
+		Once:        true,
+		CleanupRunner: cleanupRunnerFunc(func(context.Context) (ExecutionCleanupSummary, error) {
+			return ExecutionCleanupSummary{}, nil
+		}),
+		CleanupLog: io.Discard,
+		PreClaimHook: func(context.Context) error {
+			return nil
+		},
+	})
+	// Once mode returns after one attempt or empty queue; either way defer
+	// must ReleaseProviderShim. Ignore run error (test store may not close).
+	_ = err
+	require.NoDirExists(t, dir, "work loop exit must ReleaseProviderShim")
+	require.Empty(t, providerShimDirPath)
 }
