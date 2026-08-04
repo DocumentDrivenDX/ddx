@@ -31,11 +31,7 @@ func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 }
 
 func TestManagedWorkerCommandArgsUsesOnlyWorkerID(t *testing.T) {
-	args := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{
-		Harness:  "ignored-harness",
-		Model:    "ignored-model",
-		MinPower: 7,
-	}, "worker-minimal")
+	args := managedWorkerCommandArgs("worker-minimal")
 	assert.Equal(t, []string{"work", "--server-managed", "worker-minimal"}, args)
 	assert.NotContains(t, args, "--project")
 	assert.NotContains(t, args, "--harness")

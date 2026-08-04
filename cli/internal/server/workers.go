@@ -433,12 +433,21 @@ func looksLikeDDXBinary(path string) bool {
 	return base == "ddx" || base == "ddx.exe"
 }
 
-// ManagedWorkerCommandArgs reconstructs the minimal CLI invocation for a
+// managedWorkerCommandArgs reconstructs the minimal CLI invocation for a
 // persisted server-managed worker. The child process loads its full execute
 // spec from .ddx/workers/<id>/spec.json; only the worker id itself needs to be
 // carried on argv.
-func ManagedWorkerCommandArgs(_ ExecuteLoopWorkerSpec, workerID string) []string {
+func managedWorkerCommandArgs(workerID string) []string {
 	return []string{"work", "--server-managed", workerID}
+}
+
+// ManagedWorkerCommandArgs reconstructs the CLI invocation for a persisted
+// server-managed worker spec. The child process loads its full execute spec
+// from .ddx/workers/<id>/spec.json; only the worker id itself needs to be
+// carried on argv, but the spec parameter is kept for compatibility with
+// existing callers.
+func ManagedWorkerCommandArgs(_ ExecuteLoopWorkerSpec, workerID string) []string {
+	return managedWorkerCommandArgs(workerID)
 }
 
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
@@ -625,7 +634,7 @@ func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoo
 		return WorkerRecord{}, err
 	}
 
-	cmd := exec.Command(binary, ManagedWorkerCommandArgs(spec, id)...)
+	cmd := exec.Command(binary, managedWorkerCommandArgs(id)...)
 	cmd.Dir = projectRoot
 	cmd.Stdout = log
 	cmd.Stderr = log
