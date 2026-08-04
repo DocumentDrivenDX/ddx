@@ -153,6 +153,135 @@ func TestWorkLoop_PreClaimDecompositionPublishesCandidateResolvingState(t *testi
 		"executor must never run for pure candidate resolving decomposition")
 }
 
+// TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering proves the
+// structured event stream still begins with loop.start when preclaim
+// decomposition liveness is enabled, and that the resolving heartbeat arrives
+// later without inventing an implementation attempt identity.
+func TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	candidate := &bead.Bead{
+		ID:         "ddx-preclaim-loop-ordering",
+		Title:      "Preserve loop.start ordering",
+		Acceptance: "1. TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering\n2. cd cli && go test ./internal/agent/...",
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var execCalls int32
+	sink := &eventCaptureWriter{}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			t.Error("executor must not run while preclaim resolving liveness is published")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "split for loop.start ordering coverage",
+		Children: []PreClaimDecompositionChild{
+			{
+				Title:       "Child ordering",
+				Description: "PROBLEM\nChild\n\nROOT CAUSE\ncli/internal/agent/preclaim_decomp_liveness.go:1\n",
+				Acceptance:  "1. TestChildOrdering\n2. cd cli && go test ./internal/agent/...",
+			},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering", Coverage: "covered by Child ordering AC 1"},
+			{ParentAC: "2. cd cli && go test ./internal/agent/...", Coverage: "covered by Child ordering AC 2"},
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		HeartbeatInterval:     5 * time.Millisecond,
+		MaxDecompositionDepth: 3,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	projectRoot := store.Dir
+	sessionID := "sess-preclaim-loop-ordering"
+	type runResult struct {
+		attempts int
+		err      error
+	}
+	done := make(chan runResult, 1)
+	go func() {
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			EventSink:    sink,
+			TargetBeadID: candidate.ID,
+			ProjectRoot:  projectRoot,
+			SessionID:    sessionID,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeTooLargeDecomposed,
+					Detail:  "too large; split required",
+				}, nil
+			},
+			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+				close(entered)
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				return decomp, nil
+			},
+		})
+		attempts := 0
+		if result != nil {
+			attempts = result.Attempts
+		}
+		done <- runResult{attempts: attempts, err: err}
+	}()
+
+	require.Eventually(t, func() bool {
+		events := sink.events()
+		if len(events) == 0 {
+			return false
+		}
+		kind, _ := events[0]["type"].(string)
+		return kind == "loop.start"
+	}, 2*time.Second, 5*time.Millisecond, "loop.start must be the first structured event")
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("decomposition hook never entered")
+	}
+
+	require.Eventually(t, func() bool {
+		for _, event := range sink.events() {
+			kind, _ := event["type"].(string)
+			if kind != "worker.heartbeat" {
+				continue
+			}
+			data, _ := event["data"].(map[string]any)
+			if data["bead_id"] == candidate.ID && data["phase"] == "resolving" && data["attempt_id"] == "" {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 5*time.Millisecond, "preclaim resolving heartbeat must follow loop.start")
+
+	got, err := store.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "preclaim resolving must not close or execute the bead")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must not run during preclaim resolving")
+
+	close(release)
+	gotRun := <-done
+	require.NoError(t, gotRun.err)
+	assert.Equal(t, 0, gotRun.attempts, "preclaim resolving must not count as an implementation attempt")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
+}
+
 // TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata blocks a
 // hermetic decomposition hook and proves the sidecar includes provider-child
 // metadata for the candidate while phase=resolving, excluding processes that
