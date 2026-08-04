@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -2737,6 +2738,36 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 		}
 	}
 	assert.True(t, sawOperator, "no_changes_operator_required event must be emitted")
+}
+
+func TestNoChangesBlocked_PersistsLocalResourceBlockerKind(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-blocked-local", Title: "Bead blocked by local resources"}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	noChanges := &agenttry.NoChangesOutcome{
+		Action:          agenttry.NoChangesActionBlockedExternal,
+		EventKind:       NoChangesEventBlocked,
+		LifecycleStatus: bead.StatusBlocked,
+		BlockerKind:     agenttry.NoChangesBlockerKindLocalResourceExhaustion,
+		Reason:          "host temp root exhausted",
+		SuggestedAction: "free space and retry",
+	}
+
+	require.NoError(t, applyNoChangesBlockedExternal(store, b.ID, "worker", noChanges))
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusBlocked, got.Status)
+	assert.Equal(t, "host temp root exhausted", got.Extra[bead.ExtraLifecycleExternalBlockerReason])
+	ref, ok := bead.ParseLocalBlockerRef(got.Extra[bead.ExtraLifecycleLocalBlockerRef])
+	require.True(t, ok, "local blocker ref must be persisted in bead extra")
+	assert.Equal(t, bead.LocalBlockerKindLocalResourceExhaustion, ref.Kind)
+	assert.Empty(t, ref.ResourceRoots)
+	assert.Empty(t, ref.Fingerprint)
+	assert.Equal(t, "host temp root exhausted", got.Extra[bead.ExtraLifecycleExternalBlockerReason])
 }
 
 func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {

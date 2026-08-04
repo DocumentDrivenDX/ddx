@@ -2537,16 +2537,17 @@ const instrNoChangesContract = `
 
 ## no_changes contract
 
-The ` + "`no_changes_rationale.txt`" + ` file under the ` + "`bundle`" + ` path must contain one of:
+Accepted forms:
 
 - ` + "`verification_command: <cmd>`" + ` — exit 0 closes, nonzero rejects.
 - ` + "`status: open`" + ` + ` + "`reason: <retryable>`" + ` — open, smart retry.
 - ` + "`status: proposed`" + ` + ` + "`reason: <operator needed>`" + ` — operator lane.
 - ` + "`status: blocked`" + ` + ` + "`reason: <external blocker>`" + ` — blocked lane.
+- blocker_kind: local_resource_exhaustion only with status: blocked for host temp/inode/writability exhaustion.
 
-No pseudo-statuses. Bare rationales and ` + "`status: needs_investigation`" + ` are rejected.
+Bare rationales and ` + "`status: needs_investigation`" + ` are rejected.
 
-For orchestrator decomposition, add ` + "`orchestrator_action: decompose`" + ` alongside ` + "`status: open`" + `.`
+For decomposition, add ` + "`orchestrator_action: decompose`" + ` with ` + "`status: open`" + `.`
 
 // instrInvestigationReports is the shared report-output rule.
 const instrInvestigationReports = `

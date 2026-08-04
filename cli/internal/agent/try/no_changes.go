@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
 // NoChangesContract — TD-031 §8.1. The try package owns parsing and
@@ -24,6 +26,10 @@ const (
 	NoChangesKindRejectedLegacyStatus NoChangesRationaleKind = "rejected_legacy_status"
 	// NoChangesKindUnjustified means neither structured marker was present.
 	NoChangesKindUnjustified NoChangesRationaleKind = "unjustified"
+)
+
+const (
+	NoChangesBlockerKindLocalResourceExhaustion = string(bead.LocalBlockerKindLocalResourceExhaustion)
 )
 
 const (
@@ -45,6 +51,7 @@ type ParsedNoChangesRationale struct {
 	Kind                NoChangesRationaleKind
 	VerificationCommand string
 	LifecycleStatus     string
+	BlockerKind         string
 	Reason              string
 	SuggestedAction     string
 	RejectionReason     string
@@ -73,6 +80,9 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 		case strings.HasPrefix(lower, "status:"):
 			v := strings.TrimSpace(strings.ToLower(line[len("status:"):]))
 			p.LifecycleStatus = v
+			inReason = false
+		case strings.HasPrefix(lower, "blocker_kind:"):
+			p.BlockerKind = strings.TrimSpace(strings.ToLower(line[len("blocker_kind:"):]))
 			inReason = false
 		case strings.HasPrefix(lower, "reason:"):
 			r := strings.TrimSpace(line[len("reason:"):])
@@ -199,6 +209,7 @@ type NoChangesOutcome struct {
 	EventBody        string
 	Label            string
 	LifecycleStatus  string
+	BlockerKind      string
 	Reason           string
 	SuggestedAction  string
 }
@@ -240,6 +251,9 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 	}
 
 	parsed := ParseNoChangesRationale(report.NoChangesRationale)
+	if parsed.BlockerKind != "" && parsed.LifecycleStatus != "blocked" {
+		return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "blocker_kind requires status: blocked"), report, nil
+	}
 	switch parsed.Kind {
 	case NoChangesKindVerified:
 		if runner == nil {
@@ -346,6 +360,25 @@ func adjudicateNoChangesLifecycleStatus(parsed ParsedNoChangesRationale, report 
 	case "blocked":
 		if reason == "" {
 			return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "status: blocked requires reason: <external recheckable blocker>")
+		}
+		if parsed.BlockerKind != "" {
+			if parsed.BlockerKind != NoChangesBlockerKindLocalResourceExhaustion {
+				return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "unsupported blocker_kind: "+parsed.BlockerKind)
+			}
+			if suggestedAction == "" {
+				suggestedAction = "recheck the host-local resource condition and move status to open when cleared"
+			}
+			return NoChangesOutcome{
+				Satisfied:        false,
+				Action:           NoChangesActionBlockedExternal,
+				CooldownEligible: false,
+				EventKind:        NoChangesEventBlocked,
+				EventBody:        noChangesLifecycleEventBody(parsed.LifecycleStatus, reason, suggestedAction) + "\nblocker_kind=" + parsed.BlockerKind,
+				LifecycleStatus:  parsed.LifecycleStatus,
+				BlockerKind:      parsed.BlockerKind,
+				Reason:           reason,
+				SuggestedAction:  suggestedAction,
+			}
 		}
 		if noChangesBlockedReasonIsInternal(reason, suggestedAction, report.NoChangesRationale) {
 			if suggestedAction == "" {
