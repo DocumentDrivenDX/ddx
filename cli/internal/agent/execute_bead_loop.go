@@ -2258,7 +2258,8 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		emitResourcePreflight(emit, "pre-claim", checkResult, checkErr)
 		logResourcePreflight(runtime.Log, "pre-claim", checkResult, checkErr)
 		if runtime.Mode == executeloop.ModeWatch && runtime.TargetBeadID == "" && checkErr == nil {
-			if reopened, reopenErr := reopenTypedLocalResourceBlockersFromCheck(ctx, w.Store, checkResult, checkErr, assignee, now().UTC(), emit); reopenErr != nil {
+			sharedCheck := staticExecutionResourceChecker{result: checkResult}
+			if reopened, reopenErr := autoReopenHealthyLocalResourceBlockers(ctx, w.Store, sharedCheck, assignee, now().UTC(), emit); reopenErr != nil {
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "local-resource blocker recheck failed: %v; continuing\n", reopenErr)
 				}
@@ -8035,6 +8036,18 @@ func autoReopenHealthyLocalResourceBlockers(
 	}
 	checkResult, checkErr := resourceChecker.Check(ctx)
 	return reopenTypedLocalResourceBlockersFromCheck(ctx, store, checkResult, checkErr, actor, at, emit)
+}
+
+type staticExecutionResourceChecker struct {
+	result ExecutionResourceCheckResult
+	err    error
+}
+
+func (c staticExecutionResourceChecker) Check(ctx context.Context) (ExecutionResourceCheckResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ExecutionResourceCheckResult{}, err
+	}
+	return c.result, c.err
 }
 
 func reopenTypedLocalResourceBlockersFromCheck(
