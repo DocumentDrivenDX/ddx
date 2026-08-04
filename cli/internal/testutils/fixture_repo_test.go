@@ -1,12 +1,15 @@
 package testutils
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/scratchowner"
 )
 
 // TestFixtureBinaryScratchEscapesTestScopedRoots pins the invariant that
@@ -37,4 +40,118 @@ func TestFixtureBinaryScratchEscapesTestScopedRoots(t *testing.T) {
 			t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		})
 	}
+}
+
+func TestFixtureBinaryScratchWritesLiveOwnerMarker(t *testing.T) {
+	originalScratchDirFn := fixtureBinaryScratchDirFn
+	originalBuilder := fixtureBinaryCommandFn
+	originalMarkerWriter := fixtureBinaryMarkerWrite
+	t.Cleanup(func() {
+		fixtureBinaryScratchDirFn = originalScratchDirFn
+		fixtureBinaryCommandFn = originalBuilder
+		fixtureBinaryMarkerWrite = originalMarkerWriter
+		resetFixtureBinaryBuildState()
+	})
+
+	runSuccessCase := func(t *testing.T, build func(*testing.T) string, wantKind string) {
+		t.Helper()
+		scratchRoot := t.TempDir()
+		scratchDir := filepath.Join(scratchRoot, wantKind+"-scratch")
+
+		resetFixtureBinaryBuildState()
+		fixtureBinaryScratchDirFn = func(pattern string) (string, error) {
+			return scratchDir, nil
+		}
+		fixtureBinaryMarkerWrite = scratchowner.WriteForCurrentProcess
+		fixtureBinaryCommandFn = func(dir, out string, args []string) error {
+			t.Helper()
+			if dir != scratchDir {
+				t.Fatalf("build dir: got %q want %q", dir, scratchDir)
+			}
+			status, marker, err := scratchowner.Evaluate(dir)
+			if err != nil {
+				t.Fatalf("Evaluate(%q): %v", dir, err)
+			}
+			if status != scratchowner.StatusLive {
+				t.Fatalf("marker status before build: got %q want %q", status, scratchowner.StatusLive)
+			}
+			if marker.Kind != wantKind {
+				t.Fatalf("marker kind before build: got %q want %q", marker.Kind, wantKind)
+			}
+			if marker.OwnerPID != os.Getpid() {
+				t.Fatalf("marker owner_pid before build: got %d want %d", marker.OwnerPID, os.Getpid())
+			}
+			if _, err := os.Stat(scratchowner.Path(dir)); err != nil {
+				t.Fatalf("marker file missing before build: %v", err)
+			}
+			if len(args) == 0 {
+				t.Fatal("build args must not be empty")
+			}
+			return os.WriteFile(out, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+		}
+
+		path := build(t)
+		if path == "" {
+			t.Fatal("build helper returned empty path")
+		}
+		if filepath.Dir(path) != scratchDir {
+			t.Fatalf("returned path dir: got %q want %q", filepath.Dir(path), scratchDir)
+		}
+		status, marker, err := scratchowner.Evaluate(scratchDir)
+		if err != nil {
+			t.Fatalf("Evaluate(%q) after build: %v", scratchDir, err)
+		}
+		if status != scratchowner.StatusLive {
+			t.Fatalf("marker status after build: got %q want %q", status, scratchowner.StatusLive)
+		}
+		if marker.Kind != wantKind {
+			t.Fatalf("marker kind after build: got %q want %q", marker.Kind, wantKind)
+		}
+	}
+
+	t.Run("ddx", func(t *testing.T) {
+		runSuccessCase(t, BuildDDxBinary, scratchowner.KindFixtureBinary)
+	})
+
+	t.Run("fizeau", func(t *testing.T) {
+		runSuccessCase(t, BuildDDxFizeauTestSeamBinary, scratchowner.KindFizeauTestSeamBinary)
+	})
+
+	t.Run("marker failure removes scratch dir", func(t *testing.T) {
+		scratchDir := filepath.Join(t.TempDir(), "ddx-fixture-bin-failure")
+
+		resetFixtureBinaryBuildState()
+		fixtureBinaryScratchDirFn = func(pattern string) (string, error) {
+			return scratchDir, nil
+		}
+		fixtureBinaryMarkerWrite = func(dir, kind string) (scratchowner.Marker, error) {
+			return scratchowner.Marker{}, errors.New("marker write failed")
+		}
+		fixtureBinaryCommandFn = func(string, string, []string) error {
+			t.Fatal("build should not run when marker creation fails")
+			return nil
+		}
+
+		if _, err := buildFixtureBinaryForTest("ddx-fixture-bin-*", scratchowner.KindFixtureBinary, func(out string) []string {
+			return []string{"build", "-buildvcs=false", "-o", out, "."}
+		}); err == nil {
+			t.Fatal("buildFixtureBinaryForTest should fail when marker creation fails")
+		}
+		if _, err := os.Stat(scratchDir); !os.IsNotExist(err) {
+			t.Fatalf("scratch dir should be removed after marker failure, got err=%v", err)
+		}
+	})
+}
+
+func resetFixtureBinaryBuildState() {
+	builtBinaryOnce = sync.Once{}
+	builtBinaryPath = ""
+	builtBinaryErr = nil
+	builtFizeauTestSeamBinaryOnce = sync.Once{}
+	builtFizeauTestSeamBinaryPath = ""
+	builtFizeauTestSeamBinaryErr = nil
+}
+
+func buildFixtureBinaryForTest(pattern, kind string, buildArgs func(string) []string) (string, error) {
+	return fixtureBinaryBuildFn(pattern, kind, buildArgs)
 }

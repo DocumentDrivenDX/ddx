@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/scratchowner"
 )
 
 // fixtureRepoBaseName is the leaf directory name given to every fixture
@@ -45,7 +46,22 @@ func NewFixtureRepo(t *testing.T, profile string) string {
 
 	bin := DDxBinary(t)
 	dest := filepath.Join(t.TempDir(), fixtureRepoBaseName)
-	script := filepath.Join(repoRoot(t), "scripts", "build-fixture-repo.sh")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	cliRoot := wd
+	for {
+		if _, err := os.Stat(filepath.Join(cliRoot, "go.mod")); err == nil {
+			break
+		}
+		parent := filepath.Dir(cliRoot)
+		if parent == cliRoot {
+			t.Fatalf("could not locate go.mod (cli module root) from %s", wd)
+		}
+		cliRoot = parent
+	}
+	script := filepath.Join(filepath.Dir(cliRoot), "scripts", "build-fixture-repo.sh")
 
 	emptyGlobalCfg := filepath.Join(t.TempDir(), "gitconfig-global")
 	if err := os.WriteFile(emptyGlobalCfg, nil, 0o644); err != nil {
@@ -94,6 +110,52 @@ var (
 	builtFizeauTestSeamBinaryOnce sync.Once
 	builtFizeauTestSeamBinaryPath string
 	builtFizeauTestSeamBinaryErr  error
+
+	fixtureBinaryScratchDirFn = fixtureBinaryScratchDir
+	fixtureBinaryCommandFn    = func(_ string, out string, args []string) error {
+		build := exec.Command("go", args...)
+
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cliRoot := wd
+		for {
+			if _, err := os.Stat(filepath.Join(cliRoot, "go.mod")); err == nil {
+				break
+			}
+			parent := filepath.Dir(cliRoot)
+			if parent == cliRoot {
+				return fmt.Errorf("could not locate go.mod (cli module root) from %s", wd)
+			}
+			cliRoot = parent
+		}
+		build.Dir = cliRoot
+
+		if combined, err := build.CombinedOutput(); err != nil {
+			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(combined)))
+		}
+		if _, err := os.Stat(out); err != nil {
+			return err
+		}
+		return nil
+	}
+	fixtureBinaryBuildFn = func(pattern, kind string, buildArgs func(string) []string) (string, error) {
+		dir, err := fixtureBinaryScratchDirFn(pattern)
+		if err != nil {
+			return "", err
+		}
+		if _, err := fixtureBinaryMarkerWrite(dir, kind); err != nil {
+			_ = os.RemoveAll(dir)
+			return "", fmt.Errorf("write live-owner marker: %w", err)
+		}
+		out := filepath.Join(dir, "ddx")
+		if err := fixtureBinaryCommandFn(dir, out, buildArgs(out)); err != nil {
+			return "", err
+		}
+		return out, nil
+	}
+	fixtureBinaryMarkerWrite = scratchowner.WriteForCurrentProcess
 )
 
 // DDxBinary resolves a ddx binary for fixture seeding and subprocess tests. It
@@ -121,20 +183,9 @@ func DDxBinary(t *testing.T) string {
 func BuildDDxBinary(t *testing.T) string {
 	t.Helper()
 	builtBinaryOnce.Do(func() {
-		dir, err := fixtureBinaryScratchDir("ddx-fixture-bin-*")
-		if err != nil {
-			builtBinaryErr = err
-			return
-		}
-		out := filepath.Join(dir, "ddx")
-		build := exec.Command("go", "build", "-buildvcs=false", "-o", out, ".")
-		build.Dir = cliDir(t)
-		if combined, err := build.CombinedOutput(); err != nil {
-			builtBinaryErr = err
-			t.Logf("go build ddx from source failed:\n%s", combined)
-			return
-		}
-		builtBinaryPath = out
+		builtBinaryPath, builtBinaryErr = fixtureBinaryBuildFn("ddx-fixture-bin-*", scratchowner.KindFixtureBinary, func(out string) []string {
+			return []string{"build", "-buildvcs=false", "-o", out, "."}
+		})
 	})
 	if builtBinaryErr != nil {
 		t.Fatalf("build ddx binary from source: %v", builtBinaryErr)
@@ -149,19 +200,9 @@ func BuildDDxBinary(t *testing.T) string {
 func BuildDDxFizeauTestSeamBinary(t *testing.T) string {
 	t.Helper()
 	builtFizeauTestSeamBinaryOnce.Do(func() {
-		dir, err := fixtureBinaryScratchDir("ddx-fizeau-testseam-bin-*")
-		if err != nil {
-			builtFizeauTestSeamBinaryErr = err
-			return
-		}
-		out := filepath.Join(dir, "ddx")
-		build := exec.Command("go", "build", "-buildvcs=false", "-tags", "testseam", "-o", out, ".")
-		build.Dir = cliDir(t)
-		if combined, err := build.CombinedOutput(); err != nil {
-			builtFizeauTestSeamBinaryErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(string(combined)))
-			return
-		}
-		builtFizeauTestSeamBinaryPath = out
+		builtFizeauTestSeamBinaryPath, builtFizeauTestSeamBinaryErr = fixtureBinaryBuildFn("ddx-fizeau-testseam-bin-*", scratchowner.KindFizeauTestSeamBinary, func(out string) []string {
+			return []string{"build", "-buildvcs=false", "-tags", "testseam", "-o", out, "."}
+		})
 	})
 	if builtFizeauTestSeamBinaryErr != nil {
 		t.Fatalf("build ddx Fizeau test-seam binary from source: %v", builtFizeauTestSeamBinaryErr)
@@ -185,32 +226,4 @@ func fixtureBinaryScratchDir(pattern string) (string, error) {
 		return "", err
 	}
 	return os.MkdirTemp(base, pattern)
-}
-
-// cliDir walks up from the test's working directory to the directory that
-// holds go.mod (the cli/ module root).
-func cliDir(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	dir := wd
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not locate go.mod (cli module root) from %s", wd)
-		}
-		dir = parent
-	}
-}
-
-// repoRoot returns the repository root (parent of the cli/ module dir), where
-// scripts/ lives.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	return filepath.Dir(cliDir(t))
 }
