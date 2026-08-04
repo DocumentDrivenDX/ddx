@@ -7271,6 +7271,13 @@ func applyNoChangesBlockedExternal(store ExecuteBeadLoopStore, beadID, actor str
 		Source:                "ddx work",
 	}, func(b *bead.Bead) error {
 		ensureBeadExtra(b)
+		if noChanges.BlockerKind == agenttry.NoChangesBlockerKindLocalResourceExhaustion {
+			ref, err := bead.NewLocalBlockerRef(bead.LocalBlockerKindLocalResourceExhaustion, nil, "")
+			if err != nil {
+				return err
+			}
+			b.Extra[bead.ExtraLifecycleLocalBlockerRef] = ref
+		}
 		clearNoChangesLifecycleLabels(b)
 		clearSmartRetryMetadata(b)
 		clearNoChangesNextMinPower(b)
