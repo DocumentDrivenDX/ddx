@@ -5,13 +5,18 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
@@ -324,7 +329,7 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must never run for pure decomposition")
 }
 
-func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
+func TestWorkLoop_PreClaimDecompositionClearsTransientLiveness(t *testing.T) {
 	makeDecomp := func(name string) *PreClaimDecomposition {
 		return &PreClaimDecomposition{
 			Rationale: "split for " + name,
@@ -381,24 +386,87 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 			wantErr: context.Canceled,
 			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
 				cancel()
-				<-ctx.Done()
-				return nil, ctx.Err()
+				return nil, context.Canceled
 			},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			baselinePID := startFakeProviderChild(t, dir, "claude")
-			waitForProviderChildren(t, os.Getpid(), baselinePID)
+			projectRoot := t.TempDir()
+			store := bead.NewStore(projectRoot)
+			require.NoError(t, store.Init(context.Background()))
+
+			candidate := &bead.Bead{
+				ID:         "ddx-preclaim-reap",
+				Title:      "Preclaim liveness cleanup",
+				Acceptance: "1. TestWorkLoop_PreClaimDecompositionClearsTransientLiveness\n2. cd cli && go test ./internal/agent/...",
+			}
+			require.NoError(t, store.Create(context.Background(), candidate))
+
+			foreignBead := &bead.Bead{
+				ID:         "ddx-preclaim-foreign",
+				Title:      "Foreign worker liveness",
+				Acceptance: "1. TestWorkLoop_PreClaimDecompositionClearsTransientLiveness\n2. cd cli && go test ./internal/agent/...",
+			}
+			require.NoError(t, store.Create(context.Background(), foreignBead))
+
+			providerDir := t.TempDir()
+			baselinePID := startFakeProviderChild(t, providerDir, "claude")
+			foreignPID := startFakeProviderChild(t, providerDir, "gemini")
+			restoreScanner := providerChildScanner
 			restoreTerminate := terminateProviderChild
 			var terminated []int
+			var mu sync.Mutex
+			var hookChildPID int
+			var hookActive atomic.Bool
+			providerChildScanner = func(_ context.Context, rootPID int, now time.Time) ([]providerChildProcess, error) {
+				if rootPID != os.Getpid() {
+					return []providerChildProcess{{
+						PID:              foreignPID,
+						Provider:         "gemini",
+						Command:          "/usr/local/bin/gemini --sleep",
+						StartedAt:        now.Add(-time.Minute),
+						OwnerProviderPID: foreignPID,
+					}}, nil
+				}
+				procs := []providerChildProcess{{
+					PID:       baselinePID,
+					Provider:  "claude",
+					Command:   "/usr/local/bin/claude --sleep",
+					StartedAt: now.Add(-time.Minute),
+				}}
+				if hookActive.Load() && hookChildPID > 0 {
+					procs = append(procs, providerChildProcess{
+						PID:       hookChildPID,
+						Provider:  "codex",
+						Command:   "/usr/local/bin/codex --sleep",
+						StartedAt: now,
+					})
+				}
+				return procs, nil
+			}
 			terminateProviderChild = func(pid int) {
+				mu.Lock()
 				terminated = append(terminated, pid)
+				mu.Unlock()
 				restoreTerminate(pid)
 			}
-			t.Cleanup(func() { terminateProviderChild = restoreTerminate })
+			t.Cleanup(func() {
+				providerChildScanner = restoreScanner
+				terminateProviderChild = restoreTerminate
+			})
+
+			foreignWorkerID := "worker-foreign-preclaim"
+			require.NoError(t, workerstatus.WriteLiveness(projectRoot, foreignWorkerID, workerstatus.LivenessRecord{
+				WorkerID:       foreignWorkerID,
+				ProjectRoot:    projectRoot,
+				CurrentBead:    foreignBead.ID,
+				AttemptID:      "att-foreign-preclaim",
+				Phase:          "running",
+				PID:            foreignPID,
+				LastActivityAt: time.Now().UTC(),
+			}))
 
 			ctx, cancel := context.WithCancel(context.Background())
 			if tc.name == "timeout" {
@@ -406,18 +474,19 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 			}
 			defer cancel()
 
-			var hookChildPID int
+			workerID := "worker-preclaim-reap"
+			liveness := work.NewSidecarLivenessReporter(projectRoot, workerID, "sess-preclaim-reap", nil)
 			decomp := makeDecomp(tc.name)
 			got, err := runPreclaimDecompositionHookWithResolvingLiveness(
 				ctx,
 				func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
 					assert.Equal(t, "ddx-preclaim-reap", beadID)
-					hookChildPID = startFakeProviderChild(t, dir, "codex")
-					waitForProviderChildren(t, os.Getpid(), baselinePID, hookChildPID)
+					hookChildPID = startFakeProviderChild(t, providerDir, "codex")
+					hookActive.Store(true)
 					return tc.run(ctx, cancel, decomp)
 				},
 				"ddx-preclaim-reap",
-				nil,
+				liveness,
 				"codex",
 				"gpt-5",
 				"",
@@ -438,14 +507,97 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 				assert.Equal(t, decomp, got)
 			}
 
+			hookActive.Store(false)
+
 			assert.Contains(t, terminated, hookChildPID, "hook-created provider child must be selected for cleanup")
 			assert.NotContains(t, terminated, baselinePID, "pre-hook baseline provider child must not be selected for cleanup")
+			assert.NotContains(t, terminated, foreignPID, "foreign worker provider child must not be selected for cleanup")
 			assertProcessGone(t, hookChildPID)
+			if !signalProcessAlive(foreignPID) {
+				t.Fatalf("foreign worker provider child %d was reaped for %s", foreignPID, tc.name)
+			}
 			if !signalProcessAlive(baselinePID) {
 				t.Fatalf("pre-hook baseline provider child %d was reaped for %s", baselinePID, tc.name)
 			}
+
+			require.Eventually(t, func() bool {
+				rec, err := workerstatus.ReadLiveness(projectRoot, workerID)
+				if err != nil {
+					return false
+				}
+				return rec.CurrentBead == "" &&
+					rec.AttemptID == "" &&
+					rec.Phase == "" &&
+					rec.ChildPID == 0 &&
+					len(rec.ProviderChildren) == 0
+			}, 2*time.Second, 5*time.Millisecond,
+				"preclaim decomposition cleanup must clear the candidate sidecar after %s", tc.name)
+
+			rec, err := workerstatus.ReadLiveness(projectRoot, workerID)
+			require.NoError(t, err)
+			assert.Empty(t, rec.CurrentBead)
+			assert.Empty(t, rec.AttemptID)
+			assert.Empty(t, rec.Phase)
+			assert.Zero(t, rec.ChildPID)
+			assert.Empty(t, rec.ProviderChildren)
+
+			fresh, found, err := store.ClaimHeartbeatFresh(candidate.ID)
+			require.NoError(t, err)
+			assert.False(t, found, "preclaim decomposition must not leave a claim heartbeat for the candidate")
+			assert.False(t, fresh, "preclaim decomposition must not leave a fresh claim heartbeat for the candidate")
+
+			report := runWorkStatusJSONForTest(t, projectRoot)
+			assert.Equal(t, 1, report.ActiveWork.Count)
+			assert.NotContains(t, report.ActiveWork.BeadIDs, candidate.ID, "candidate must not remain visible in active work after cleanup")
+			assert.Contains(t, report.ActiveWork.BeadIDs, foreignBead.ID, "foreign worker active work must remain visible after current-hook cleanup")
+			require.Len(t, report.ActiveWork.Records, 1, "only the foreign worker should remain active after cleanup")
+			assert.Equal(t, foreignWorkerID, report.ActiveWork.Records[0].WorkerID)
+			assert.Equal(t, foreignBead.ID, report.ActiveWork.Records[0].BeadID)
+			assert.Equal(t, "att-foreign-preclaim", report.ActiveWork.Records[0].AttemptID)
+			assert.Equal(t, "running", report.ActiveWork.Records[0].Phase)
+
+			foreignRec, err := workerstatus.ReadLiveness(projectRoot, foreignWorkerID)
+			require.NoError(t, err)
+			assert.Equal(t, foreignBead.ID, foreignRec.CurrentBead)
+			assert.Equal(t, "att-foreign-preclaim", foreignRec.AttemptID)
+			assert.Equal(t, "running", foreignRec.Phase)
+			assert.Equal(t, foreignPID, foreignRec.PID)
 		})
 	}
+}
+
+type workStatusJSONReport struct {
+	ActiveWork struct {
+		Count   int      `json:"count"`
+		BeadIDs []string `json:"bead_ids"`
+		Records []struct {
+			WorkerID  string `json:"worker_id"`
+			BeadID    string `json:"bead_id"`
+			AttemptID string `json:"attempt_id"`
+			Phase     string `json:"phase"`
+		} `json:"records"`
+	} `json:"active_work"`
+}
+
+func runWorkStatusJSONForTest(t *testing.T, projectRoot string) workStatusJSONReport {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok, "resolve test file path")
+	cliDir := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+
+	cmd := exec.Command("go", "run", ".", "work", "status", "--json", "--project", projectRoot)
+	cmd.Dir = cliDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ddx work status --json failed: %v\n%s", err, out)
+	}
+
+	var report workStatusJSONReport
+	if err := json.Unmarshal(out, &report); err != nil {
+		t.Fatalf("parse ddx work status --json output: %v\n%s", err, out)
+	}
+	return report
 }
 
 // TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness proves the
