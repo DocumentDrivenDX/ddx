@@ -459,7 +459,7 @@ func TestReleaseWorkflowFreshCheckoutCannotShipGitkeepOnlyBundle(t *testing.T) {
 	require.ErrorContains(t, validateReleaseFrontendConsumer("test", testJob), "verify")
 
 	gitkeepOnly := t.TempDir()
-	gitkeepCmd := exec.Command("git", "-C", repoRoot(t), "show", "HEAD:"+releaseFrontendPath+"/.gitkeep")
+	gitkeepCmd := exec.Command("git", "-C", repoRoot(t), "show", ":"+releaseFrontendPath+"/.gitkeep")
 	gitkeep, err := gitkeepCmd.Output()
 	require.NoError(t, err, "fresh checkout must contain the tracked build/.gitkeep fallback")
 	require.NoError(t, os.WriteFile(filepath.Join(gitkeepOnly, ".gitkeep"), gitkeep, 0o644))

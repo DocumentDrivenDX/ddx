@@ -30,21 +30,17 @@ func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 	return executeloop.Duration{Duration: duration}
 }
 
-func TestManagedWorkerCommandArgsPreserveMinPowerPresence(t *testing.T) {
-	omitted := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{}, "worker-omitted")
-	assert.NotContains(t, omitted, "--min-power", "unset MinPower must not become an explicit Cobra flag")
-
-	explicitZero := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{MinPowerSet: true}, "worker-zero")
-	require.Contains(t, explicitZero, "--min-power")
-	zeroIndex := indexOfString(explicitZero, "--min-power")
-	require.GreaterOrEqual(t, zeroIndex, 0)
-	require.Less(t, zeroIndex+1, len(explicitZero))
-	assert.Equal(t, "0", explicitZero[zeroIndex+1])
-
-	nonzero := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{MinPower: 7}, "worker-seven")
-	require.Contains(t, nonzero, "--min-power")
-	sevenIndex := indexOfString(nonzero, "--min-power")
-	assert.Equal(t, "7", nonzero[sevenIndex+1])
+func TestManagedWorkerCommandArgsUsesOnlyWorkerID(t *testing.T) {
+	args := ManagedWorkerCommandArgs(ExecuteLoopWorkerSpec{
+		Harness:  "ignored-harness",
+		Model:    "ignored-model",
+		MinPower: 7,
+	}, "worker-minimal")
+	assert.Equal(t, []string{"work", "--server-managed", "worker-minimal"}, args)
+	assert.NotContains(t, args, "--project")
+	assert.NotContains(t, args, "--harness")
+	assert.NotContains(t, args, "--model")
+	assert.NotContains(t, args, "--min-power")
 }
 
 func indexOfString(values []string, want string) int {
@@ -82,10 +78,7 @@ func TestExecuteLoopReviewTierRoundTrip(t *testing.T) {
 	assert.NotContains(t, string(data), "review_model")
 
 	args := ManagedWorkerCommandArgs(persisted, record.ID)
-	assert.Contains(t, args, "--review-tier")
-	assert.Contains(t, args, executeloop.ReviewTierElevated)
-	assert.NotContains(t, args, "--review-harness")
-	assert.NotContains(t, args, "--review-model")
+	assert.Equal(t, []string{"work", "--server-managed", record.ID}, args)
 }
 
 func TestWorkerManagerStartAndShow(t *testing.T) {
