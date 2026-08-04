@@ -433,73 +433,21 @@ func looksLikeDDXBinary(path string) bool {
 	return base == "ddx" || base == "ddx.exe"
 }
 
+// managedWorkerCommandArgs reconstructs the minimal CLI invocation for a
+// persisted server-managed worker. The child process loads its full execute
+// spec from .ddx/workers/<id>/spec.json; only the worker id itself needs to be
+// carried on argv.
+func managedWorkerCommandArgs(workerID string) []string {
+	return []string{"work", "--server-managed", workerID}
+}
+
 // ManagedWorkerCommandArgs reconstructs the CLI invocation for a persisted
-// server-managed worker spec. MinPower presence is preserved so an omitted
-// floor does not become an explicit --min-power=0 constraint.
-func ManagedWorkerCommandArgs(spec ExecuteLoopWorkerSpec, workerID string) []string {
-	args := []string{"work", "--server-managed", workerID}
-	if spec.ProjectRoot != "" {
-		args = append(args, "--project", spec.ProjectRoot)
-	}
-	if spec.FromRev != "" {
-		args = append(args, "--from", spec.FromRev)
-	}
-	if spec.Harness != "" {
-		args = append(args, "--harness", spec.Harness)
-	}
-	if spec.Model != "" {
-		args = append(args, "--model", spec.Model)
-	}
-	if spec.Profile != "" {
-		args = append(args, "--profile", spec.Profile)
-	}
-	if spec.Provider != "" {
-		args = append(args, "--provider", spec.Provider)
-	}
-	if spec.LabelFilter != "" {
-		args = append(args, "--label-filter", spec.LabelFilter)
-	}
-	if spec.Effort != "" {
-		args = append(args, "--effort", spec.Effort)
-	}
-	if spec.AttemptBackend != "" {
-		args = append(args, "--attempt-backend", spec.AttemptBackend)
-	}
-	if spec.IgnoreCooldown {
-		args = append(args, "--ignore-cooldown")
-		if spec.CooldownOverrideReason != "" {
-			args = append(args, "--reason", spec.CooldownOverrideReason)
-		}
-	}
-	switch spec.Mode {
-	case executeloop.ModeOnce:
-		args = append(args, "--once")
-	case executeloop.ModeWatch:
-		args = append(args, "--watch")
-		if spec.IdleInterval.Duration > 0 {
-			args = append(args, "--idle-interval", spec.IdleInterval.String())
-		}
-	}
-	if spec.NoReview {
-		args = append(args, "--no-review", "--no-review-i-know-what-im-doing")
-	}
-	if spec.ReviewTier != "" {
-		args = append(args, "--review-tier", spec.ReviewTier)
-	}
-	args = append(args,
-		"--max-cost", fmt.Sprintf("%g", spec.MaxCostUSD),
-		"--max-bead-cost", fmt.Sprintf("%g", spec.MaxBeadCostUSD),
-		"--max-recovery-cost", fmt.Sprintf("%g", spec.MaxRecoveryCostUSD),
-		"--preclaim-timeout", spec.PreClaimTimeout.String(),
-		"--route-resolution-timeout", spec.RouteResolutionTimeout.String(),
-		"--request-timeout", spec.RequestTimeout.String(),
-		"--rate-limit-max-wait", spec.RateLimitMaxWait.String(),
-		"--max-power", fmt.Sprintf("%d", spec.MaxPower),
-	)
-	if spec.MinPowerSet || spec.MinPower != 0 {
-		args = append(args, "--min-power", fmt.Sprintf("%d", spec.MinPower))
-	}
-	return args
+// server-managed worker spec. The child process loads its full execute spec
+// from .ddx/workers/<id>/spec.json; only the worker id itself needs to be
+// carried on argv, but the spec parameter is kept for compatibility with
+// existing callers.
+func ManagedWorkerCommandArgs(_ ExecuteLoopWorkerSpec, workerID string) []string {
+	return managedWorkerCommandArgs(workerID)
 }
 
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
@@ -686,7 +634,7 @@ func (m *WorkerManager) launchManagedExecuteLoop(id, dir string, spec ExecuteLoo
 		return WorkerRecord{}, err
 	}
 
-	cmd := exec.Command(binary, ManagedWorkerCommandArgs(spec, id)...)
+	cmd := exec.Command(binary, managedWorkerCommandArgs(id)...)
 	cmd.Dir = projectRoot
 	cmd.Stdout = log
 	cmd.Stderr = log
