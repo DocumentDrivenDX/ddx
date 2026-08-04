@@ -44,16 +44,16 @@ func TestFixtureBinaryScratchEscapesTestScopedRoots(t *testing.T) {
 
 func TestFixtureBinaryScratchWritesLiveOwnerMarker(t *testing.T) {
 	originalScratchDirFn := fixtureBinaryScratchDirFn
-	originalBuilder := fixtureBinaryBuilder
+	originalBuilder := fixtureBinaryCommandFn
 	originalMarkerWriter := fixtureBinaryMarkerWrite
 	t.Cleanup(func() {
 		fixtureBinaryScratchDirFn = originalScratchDirFn
-		fixtureBinaryBuilder = originalBuilder
+		fixtureBinaryCommandFn = originalBuilder
 		fixtureBinaryMarkerWrite = originalMarkerWriter
 		resetFixtureBinaryBuildState()
 	})
 
-	runSuccessCase := func(t *testing.T, build func() (string, error), wantKind string) {
+	runSuccessCase := func(t *testing.T, build func(*testing.T) string, wantKind string) {
 		t.Helper()
 		scratchRoot := t.TempDir()
 		scratchDir := filepath.Join(scratchRoot, wantKind+"-scratch")
@@ -63,7 +63,7 @@ func TestFixtureBinaryScratchWritesLiveOwnerMarker(t *testing.T) {
 			return scratchDir, nil
 		}
 		fixtureBinaryMarkerWrite = scratchowner.WriteForCurrentProcess
-		fixtureBinaryBuilder = func(dir, out string, args []string) error {
+		fixtureBinaryCommandFn = func(dir, out string, args []string) error {
 			t.Helper()
 			if dir != scratchDir {
 				t.Fatalf("build dir: got %q want %q", dir, scratchDir)
@@ -90,10 +90,7 @@ func TestFixtureBinaryScratchWritesLiveOwnerMarker(t *testing.T) {
 			return os.WriteFile(out, []byte("#!/bin/sh\nexit 0\n"), 0o755)
 		}
 
-		path, err := build()
-		if err != nil {
-			t.Fatalf("build helper failed: %v", err)
-		}
+		path := build(t)
 		if path == "" {
 			t.Fatal("build helper returned empty path")
 		}
@@ -113,11 +110,11 @@ func TestFixtureBinaryScratchWritesLiveOwnerMarker(t *testing.T) {
 	}
 
 	t.Run("ddx", func(t *testing.T) {
-		runSuccessCase(t, buildDDxBinary, scratchowner.KindFixtureBinary)
+		runSuccessCase(t, BuildDDxBinary, scratchowner.KindFixtureBinary)
 	})
 
 	t.Run("fizeau", func(t *testing.T) {
-		runSuccessCase(t, buildDDxFizeauTestSeamBinary, scratchowner.KindFizeauTestSeamBinary)
+		runSuccessCase(t, BuildDDxFizeauTestSeamBinary, scratchowner.KindFizeauTestSeamBinary)
 	})
 
 	t.Run("marker failure removes scratch dir", func(t *testing.T) {
@@ -130,13 +127,15 @@ func TestFixtureBinaryScratchWritesLiveOwnerMarker(t *testing.T) {
 		fixtureBinaryMarkerWrite = func(dir, kind string) (scratchowner.Marker, error) {
 			return scratchowner.Marker{}, errors.New("marker write failed")
 		}
-		fixtureBinaryBuilder = func(string, string, []string) error {
+		fixtureBinaryCommandFn = func(string, string, []string) error {
 			t.Fatal("build should not run when marker creation fails")
 			return nil
 		}
 
-		if _, err := buildDDxBinary(); err == nil {
-			t.Fatal("buildDDxBinary should fail when marker creation fails")
+		if _, err := buildFixtureBinaryForTest("ddx-fixture-bin-*", scratchowner.KindFixtureBinary, func(out string) []string {
+			return []string{"build", "-buildvcs=false", "-o", out, "."}
+		}); err == nil {
+			t.Fatal("buildFixtureBinaryForTest should fail when marker creation fails")
 		}
 		if _, err := os.Stat(scratchDir); !os.IsNotExist(err) {
 			t.Fatalf("scratch dir should be removed after marker failure, got err=%v", err)
@@ -151,4 +150,8 @@ func resetFixtureBinaryBuildState() {
 	builtFizeauTestSeamBinaryOnce = sync.Once{}
 	builtFizeauTestSeamBinaryPath = ""
 	builtFizeauTestSeamBinaryErr = nil
+}
+
+func buildFixtureBinaryForTest(pattern, kind string, buildArgs func(string) []string) (string, error) {
+	return fixtureBinaryBuildFn(pattern, kind, buildArgs)
 }
