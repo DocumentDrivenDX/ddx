@@ -170,6 +170,13 @@ func TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering(t *testing.T) 
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseHook := func() {
+		releaseOnce.Do(func() {
+			close(release)
+		})
+	}
+	defer releaseHook()
 	var execCalls int32
 	sink := &eventCaptureWriter{}
 
@@ -253,6 +260,7 @@ func TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering(t *testing.T) 
 	select {
 	case <-entered:
 	case <-time.After(5 * time.Second):
+		releaseHook()
 		t.Fatal("decomposition hook never entered")
 	}
 
@@ -275,7 +283,7 @@ func TestWorkLoop_PreClaimDecompositionPreservesLoopStartOrdering(t *testing.T) 
 	assert.Equal(t, bead.StatusOpen, got.Status, "preclaim resolving must not close or execute the bead")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must not run during preclaim resolving")
 
-	close(release)
+	releaseHook()
 	gotRun := <-done
 	require.NoError(t, gotRun.err)
 	assert.Equal(t, 0, gotRun.attempts, "preclaim resolving must not count as an implementation attempt")
