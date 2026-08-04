@@ -72,6 +72,38 @@ func TestWorkerLiveness_SidecarRecordsCurrentBeadAttemptAndLastActivity(t *testi
 	require.Equal(t, "running", env.Data.Phase)
 }
 
+// TestWorkerLiveness_CandidateResolvingPublishesProviderChildren verifies that
+// the sidecar can expose provider-child metadata while the worker is in
+// preclaim resolving state and has no attempt_id yet.
+func TestWorkerLiveness_CandidateResolvingPublishesProviderChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	rep := work.NewSidecarLivenessReporter(projectRoot, "wkr-candidate", "sess-candidate", nil)
+	rep.SetChildProbe(func(route, harness, phase string) []workerstatus.ProviderChild {
+		return []workerstatus.ProviderChild{
+			{
+				PID:        4242,
+				Provider:   "codex",
+				Harness:    harness,
+				Phase:      phase,
+				AgeSeconds: 1,
+			},
+		}
+	})
+
+	rep.SetCandidateResolving("ddx-candidate-001", "codex", "gpt-5", "balanced")
+	rep.OnTick(time.Now())
+
+	rec, err := workerstatus.ReadLiveness(projectRoot, "wkr-candidate")
+	require.NoError(t, err)
+	require.Equal(t, "ddx-candidate-001", rec.CurrentBead)
+	require.Empty(t, rec.AttemptID)
+	require.Equal(t, "resolving", rec.Phase)
+	require.Len(t, rec.ProviderChildren, 1)
+	require.Equal(t, 4242, rec.ProviderChildren[0].PID)
+	require.Equal(t, "codex", rec.ProviderChildren[0].Provider)
+}
+
 // TestWorkerLiveness_ServerUnavailableDoesNotBlockWork verifies AC #3:
 // with a nil sink (no server connection) the reporter still writes the
 // sidecar, returns no error, and does not block the calling goroutine.
