@@ -194,6 +194,10 @@ func TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched(t *testi
 }
 
 func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
+	// Fail closed before any fixture setup if the private Git config scope is
+	// unavailable. This keeps the test from ever targeting the invoking checkout.
+	requirePrivateFixtureGitConfigScope(t)
+
 	// Fail closed during setup if the suite cannot prove a private config scope
 	// before any intentional mutation. Then install an invoking-repo guard that
 	// receives hostile GIT_* selection so leaks cannot rewrite a shared checkout.
