@@ -2257,6 +2257,18 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		checkResult, checkErr := runtime.ResourceChecker.Check(ctx)
 		emitResourcePreflight(emit, "pre-claim", checkResult, checkErr)
 		logResourcePreflight(runtime.Log, "pre-claim", checkResult, checkErr)
+		if runtime.Mode == executeloop.ModeWatch && runtime.TargetBeadID == "" && checkErr == nil {
+			if reopened, reopenErr := reopenTypedLocalResourceBlockersFromCheck(ctx, w.Store, checkResult, checkErr, assignee, now().UTC(), emit); reopenErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "local-resource blocker recheck failed: %v; continuing\n", reopenErr)
+				}
+				emit("local_resource_blocker_recheck_error", map[string]any{
+					"error": reopenErr.Error(),
+				})
+			} else if reopened > 0 && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "local-resource blocker recheck reopened %d bead(s)\n", reopened)
+			}
+		}
 		if checkErr != nil {
 			var resourceErr *ResourceExhaustedError
 			if errors.As(checkErr, &resourceErr) {
@@ -8007,6 +8019,121 @@ func isRetryableProviderConnectivityProposal(b bead.Bead) bool {
 		strings.Contains(text, "connectivity")
 }
 
+func autoReopenHealthyLocalResourceBlockers(
+	ctx context.Context,
+	store ExecuteBeadLoopStore,
+	resourceChecker ExecutionResourceChecker,
+	actor string,
+	at time.Time,
+	emit func(string, map[string]any),
+) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if resourceChecker == nil || store == nil {
+		return 0, nil
+	}
+	checkResult, checkErr := resourceChecker.Check(ctx)
+	return reopenTypedLocalResourceBlockersFromCheck(ctx, store, checkResult, checkErr, actor, at, emit)
+}
+
+func reopenTypedLocalResourceBlockersFromCheck(
+	ctx context.Context,
+	store ExecuteBeadLoopStore,
+	checkResult ExecutionResourceCheckResult,
+	checkErr error,
+	actor string,
+	at time.Time,
+	emit func(string, map[string]any),
+) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if store == nil {
+		return 0, nil
+	}
+	reader, ok := store.(allBeadsReader)
+	if !ok {
+		return 0, nil
+	}
+	beads, err := reader.ReadAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	var blocked []bead.Bead
+	for _, b := range beads {
+		if b.Status != bead.StatusBlocked || b.Extra == nil {
+			continue
+		}
+		ref, ok := bead.ParseLocalBlockerRef(b.Extra[bead.ExtraLifecycleLocalBlockerRef])
+		if !ok || ref.Kind != bead.LocalBlockerKindLocalResourceExhaustion {
+			continue
+		}
+		blocked = append(blocked, b)
+	}
+	if len(blocked) == 0 {
+		return 0, nil
+	}
+
+	healthy := checkErr == nil
+	probeError := ""
+	if checkErr != nil {
+		probeError = checkErr.Error()
+	}
+	if ex, ok := checkErr.(*ResourceExhaustedError); ok {
+		checkResult = ex.Result
+		probeError = ex.Error()
+	}
+
+	body := map[string]any{
+		"action":             "recheck_local_resource_blockers",
+		"healthy":            healthy,
+		"bead_ids":           beadIDs(blocked),
+		"bead_count":         len(blocked),
+		"before_root_checks": checkResult.BeforeRootChecks,
+		"root_checks":        checkResult.RootChecks,
+		"cleanup_summary":    checkResult.CleanupSummary,
+	}
+	if probeError != "" {
+		body["probe_error"] = probeError
+	}
+
+	reopened := 0
+	for _, b := range blocked {
+		appendWorkEvent(store, b.ID, "local_resource_blocker_recheck", "local resource blocker recheck", body, actor, at)
+		if !healthy {
+			continue
+		}
+		if err := store.UpdateWithLifecycleStatus(b.ID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason:       "local resource exhaustion resolved during watch preflight; reopening for autonomous fallback",
+			Source:       "ddx work",
+			Actor:        actor,
+			ManualReopen: true,
+		}, func(*bead.Bead) error {
+			return nil
+		}); err != nil {
+			return reopened, err
+		}
+		reopened++
+	}
+
+	if emit != nil {
+		emit("loop.local_resource_blocker_recheck", map[string]any{
+			"bead_ids":           beadIDs(blocked),
+			"bead_count":         len(blocked),
+			"healthy":            healthy,
+			"reopened_count":     reopened,
+			"before_root_checks": checkResult.BeforeRootChecks,
+			"root_checks":        checkResult.RootChecks,
+			"cleanup_summary":    checkResult.CleanupSummary,
+			"probe_error":        probeError,
+		})
+	}
+
+	return reopened, nil
+}
+
 // emitEscalationAbortedEvent records a kind=execution-escalation-aborted event
 // when nextFloorFn returns an error (typically ErrLadderExhausted). Best-effort.
 func emitEscalationAbortedEvent(store BeadEventAppender, beadID, actor, provider, model string, actualPower int, at time.Time) {
@@ -8054,6 +8181,17 @@ func emitRouteFailureEvent(store BeadEventAppender, beadID, actor string, report
 		"error":          report.Error,
 		"outcome_reason": FailureModeProviderConnectivity,
 	}, actor, at)
+}
+
+func beadIDs(beads []bead.Bead) []string {
+	if len(beads) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(beads))
+	for _, b := range beads {
+		ids = append(ids, b.ID)
+	}
+	return ids
 }
 
 func isRoutingInfrastructureReport(report ExecuteBeadReport) bool {
