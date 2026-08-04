@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,6 +75,79 @@ func TestParseNoChangesRationale(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestParseNoChangesRationale_LocalResourceBlockerKind(t *testing.T) {
+	got := ParseNoChangesRationale(
+		"status: blocked\n" +
+			"blocker_kind: local_resource_exhaustion\n" +
+			"reason: host temp root exhausted\n" +
+			"suggested_action: free space and retry",
+	)
+
+	require.Equal(t, NoChangesKindLifecycleStatus, got.Kind)
+	assert.Equal(t, "blocked", got.LifecycleStatus)
+	assert.Equal(t, agenttry.NoChangesBlockerKindLocalResourceExhaustion, got.BlockerKind)
+	assert.Equal(t, "host temp root exhausted", got.Reason)
+	assert.Equal(t, "free space and retry", got.SuggestedAction)
+	assert.Empty(t, got.RejectionReason)
+}
+
+func TestParseNoChangesRationale_RejectsUnknownBlockerKind(t *testing.T) {
+	t.Run("unknown kind", func(t *testing.T) {
+		got := ParseNoChangesRationale(
+			"status: blocked\n" +
+				"blocker_kind: disk_full\n" +
+				"reason: host temp root exhausted",
+		)
+
+		require.Equal(t, NoChangesKindUnjustified, got.Kind)
+		assert.Equal(t, "blocked", got.LifecycleStatus)
+		assert.Equal(t, "disk_full", got.BlockerKind)
+		assert.Equal(t, "unsupported blocker_kind: disk_full", got.RejectionReason)
+	})
+
+	t.Run("invalid status combo", func(t *testing.T) {
+		got := ParseNoChangesRationale(
+			"status: open\n" +
+				"blocker_kind: local_resource_exhaustion\n" +
+				"reason: temp directory full",
+		)
+
+		require.Equal(t, NoChangesKindUnjustified, got.Kind)
+		assert.Equal(t, "open", got.LifecycleStatus)
+		assert.Equal(t, agenttry.NoChangesBlockerKindLocalResourceExhaustion, got.BlockerKind)
+		assert.Equal(t, "blocker_kind requires status: blocked", got.RejectionReason)
+	})
+}
+
+func TestNoChangesBlocked_PersistsLocalResourceBlockerKindViaVerifyPath(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-blocked-local", Title: "Bead blocked by local resources"}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	noChanges := &agenttry.NoChangesOutcome{
+		Action:          agenttry.NoChangesActionBlockedExternal,
+		EventKind:       NoChangesEventBlocked,
+		LifecycleStatus: bead.StatusBlocked,
+		BlockerKind:     agenttry.NoChangesBlockerKindLocalResourceExhaustion,
+		Reason:          "host temp root exhausted",
+		SuggestedAction: "free space and retry",
+	}
+
+	require.NoError(t, applyNoChangesBlockedExternal(store, b.ID, "worker", noChanges))
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusBlocked, got.Status)
+	assert.Equal(t, "host temp root exhausted", got.Extra[bead.ExtraLifecycleExternalBlockerReason])
+	ref, ok := bead.ParseLocalBlockerRef(got.Extra[bead.ExtraLifecycleLocalBlockerRef])
+	require.True(t, ok, "local blocker ref must be persisted in bead extra")
+	assert.Equal(t, bead.LocalBlockerKindLocalResourceExhaustion, ref.Kind)
+	assert.Empty(t, ref.ResourceRoots)
+	assert.Empty(t, ref.Fingerprint)
 }
 
 func TestDefaultVerificationCommandRunner(t *testing.T) {
