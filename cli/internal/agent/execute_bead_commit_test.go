@@ -372,6 +372,9 @@ exit 0
 	if res.ImplementationRev != res.ResultRev {
 		t.Fatalf("implementation_rev = %s, want %s", res.ImplementationRev, res.ResultRev)
 	}
+	if res.PreCommitEvidenceFingerprint == "" {
+		t.Fatal("pre-commit evidence fingerprint was not recorded")
+	}
 
 	commitSpan := runGitInteg(t, projectRoot, "rev-list", "--count", baseRev+".."+res.ResultRev)
 	if commitSpan != "1" {
