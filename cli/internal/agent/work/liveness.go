@@ -66,6 +66,7 @@ func (r *SidecarLivenessReporter) SetAttempt(beadID, attemptID, phase, route, ha
 	r.rec.Model = model
 	r.rec.Profile = profile
 	r.rec.ChildPID = childPID
+	r.rec.ProviderChildren = nil
 	r.mu.Unlock()
 }
 
@@ -88,6 +89,7 @@ func (r *SidecarLivenessReporter) SetCandidateResolving(beadID, harness, model, 
 	r.rec.Model = model
 	r.rec.Profile = profile
 	r.rec.ChildPID = 0
+	r.rec.ProviderChildren = nil
 	r.mu.Unlock()
 }
 
@@ -188,11 +190,11 @@ func (r *SidecarLivenessReporter) OnTick(now time.Time) {
 	route := r.rec.Route
 	harness := r.rec.Harness
 	phase := r.rec.Phase
-	hasAttempt := r.rec.CurrentBead != ""
+	hasCandidateOrAttempt := r.rec.CurrentBead != ""
 	r.mu.Unlock()
 
 	var children []workerstatus.ProviderChild
-	if probe != nil && hasAttempt {
+	if probe != nil && hasCandidateOrAttempt {
 		children = probe(route, harness, phase)
 	}
 
