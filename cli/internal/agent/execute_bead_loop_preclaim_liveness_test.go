@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
@@ -324,7 +325,7 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must never run for pure decomposition")
 }
 
-func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
+func TestWorkLoop_PreClaimDecompositionClearsTransientLiveness(t *testing.T) {
 	makeDecomp := func(name string) *PreClaimDecomposition {
 		return &PreClaimDecomposition{
 			Rationale: "split for " + name,
@@ -381,16 +382,19 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 			wantErr: context.Canceled,
 			run: func(ctx context.Context, cancel context.CancelFunc, decomp *PreClaimDecomposition) (*PreClaimDecomposition, error) {
 				cancel()
-				<-ctx.Done()
-				return nil, ctx.Err()
+				return nil, context.Canceled
 			},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			baselinePID := startFakeProviderChild(t, dir, "claude")
+			projectRoot := t.TempDir()
+			store := bead.NewStore(projectRoot)
+			require.NoError(t, store.Init(context.Background()))
+
+			providerDir := t.TempDir()
+			baselinePID := startFakeProviderChild(t, providerDir, "claude")
 			waitForProviderChildren(t, os.Getpid(), baselinePID)
 			restoreTerminate := terminateProviderChild
 			var terminated []int
@@ -407,17 +411,19 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 			defer cancel()
 
 			var hookChildPID int
+			workerID := "worker-preclaim-reap"
+			liveness := work.NewSidecarLivenessReporter(projectRoot, workerID, "sess-preclaim-reap", nil)
 			decomp := makeDecomp(tc.name)
 			got, err := runPreclaimDecompositionHookWithResolvingLiveness(
 				ctx,
 				func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
 					assert.Equal(t, "ddx-preclaim-reap", beadID)
-					hookChildPID = startFakeProviderChild(t, dir, "codex")
+					hookChildPID = startFakeProviderChild(t, providerDir, "codex")
 					waitForProviderChildren(t, os.Getpid(), baselinePID, hookChildPID)
 					return tc.run(ctx, cancel, decomp)
 				},
 				"ddx-preclaim-reap",
-				nil,
+				liveness,
 				"codex",
 				"gpt-5",
 				"",
@@ -444,8 +450,68 @@ func TestWorkLoop_PreClaimDecompositionReapsProviderDescendants(t *testing.T) {
 			if !signalProcessAlive(baselinePID) {
 				t.Fatalf("pre-hook baseline provider child %d was reaped for %s", baselinePID, tc.name)
 			}
+
+			require.Eventually(t, func() bool {
+				rec, err := workerstatus.ReadLiveness(projectRoot, workerID)
+				if err != nil {
+					return false
+				}
+				return rec.CurrentBead == "" &&
+					rec.AttemptID == "" &&
+					rec.Phase == "" &&
+					rec.ChildPID == 0 &&
+					len(rec.ProviderChildren) == 0
+			}, 2*time.Second, 5*time.Millisecond,
+				"preclaim decomposition cleanup must clear the candidate sidecar after %s", tc.name)
+
+			rec, err := workerstatus.ReadLiveness(projectRoot, workerID)
+			require.NoError(t, err)
+			assert.Empty(t, rec.CurrentBead)
+			assert.Empty(t, rec.AttemptID)
+			assert.Empty(t, rec.Phase)
+			assert.Zero(t, rec.ChildPID)
+			assert.Empty(t, rec.ProviderChildren)
+
+			liveCount, err := collectLiveWorkCountForTest(projectRoot, store, time.Now().UTC())
+			require.NoError(t, err)
+			assert.Zero(t, liveCount, "preclaim decomposition cleanup must not leave active work visible to ddx work status")
 		})
 	}
+}
+
+func collectLiveWorkCountForTest(projectRoot string, store *bead.Store, now time.Time) (int, error) {
+	count := 0
+
+	beads, err := store.ReadAll(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	for _, b := range beads {
+		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
+			continue
+		}
+		lease, found, err := store.ClaimLease(b.ID)
+		if err != nil || !found || lease.UpdatedAt.IsZero() {
+			continue
+		}
+		if now.Sub(lease.UpdatedAt) > bead.HeartbeatTTL {
+			continue
+		}
+		count++
+	}
+
+	liveness, err := workerstatus.ListLiveness(projectRoot)
+	if err != nil {
+		return 0, err
+	}
+	for _, rec := range liveness {
+		if !rec.IsFresh(now) || rec.AttemptID == "" {
+			continue
+		}
+		count++
+	}
+
+	return count, nil
 }
 
 // TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness proves the
