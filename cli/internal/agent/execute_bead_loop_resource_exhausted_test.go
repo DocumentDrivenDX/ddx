@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
@@ -21,12 +22,29 @@ type staticLoopResourceChecker struct {
 	calls  int32
 	result ExecutionResourceCheckResult
 	err    error
+	check  func(context.Context) (ExecutionResourceCheckResult, error)
 }
 
 func (c *staticLoopResourceChecker) Check(ctx context.Context) (ExecutionResourceCheckResult, error) {
-	_ = ctx
 	atomic.AddInt32(&c.calls, 1)
+	if c.check != nil {
+		return c.check(ctx)
+	}
 	return c.result, c.err
+}
+
+type watchProbeOrderingStore struct {
+	*bead.Store
+	beforeReady func()
+	readyCalls  int32
+}
+
+func (s *watchProbeOrderingStore) ReadyExecution() ([]bead.Bead, error) {
+	atomic.AddInt32(&s.readyCalls, 1)
+	if s.beforeReady != nil {
+		s.beforeReady()
+	}
+	return nil, context.Canceled
 }
 
 func resourceExhaustedTestReport(beadID string) ExecuteBeadReport {
@@ -197,6 +215,341 @@ func TestExecuteBeadWorkerResourceExhaustedLoopEndEvent(t *testing.T) {
 	assert.Equal(t, first.ID, data["bead_id"])
 	assert.NotEmpty(t, data["cleanup_summary"], "cleanup summary must be included in resource.exhausted event")
 	assert.Equal(t, ResourceExhaustedStopMessage, result.Results[0].Detail)
+}
+
+func TestWorkWatch_ReopensResolvedLocalResourceBlockers(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	typedRef, err := bead.NewLocalBlockerRef(
+		bead.LocalBlockerKindLocalResourceExhaustion,
+		[]string{"/tmp/ddx-exec", "/project/root/.ddx/executions"},
+		"fingerprint-typed",
+	)
+	require.NoError(t, err)
+
+	typed := &bead.Bead{
+		ID:     "ddx-local-typed",
+		Title:  "typed local resource blocker",
+		Status: bead.StatusBlocked,
+		Labels: []string{"area:agent"},
+		Extra: map[string]any{
+			bead.ExtraLifecycleLocalBlockerRef: typedRef,
+		},
+	}
+	untyped := &bead.Bead{
+		ID:     "ddx-local-untyped",
+		Title:  "manual blocker",
+		Status: bead.StatusBlocked,
+		Labels: []string{"area:agent"},
+		Extra: map[string]any{
+			bead.ExtraLifecycleExternalBlockerReason: "operator decision",
+		},
+	}
+	require.NoError(t, store.Create(context.Background(), typed))
+	require.NoError(t, store.Create(context.Background(), untyped))
+
+	checker := &staticLoopResourceChecker{
+		result: ExecutionResourceCheckResult{
+			ProjectRoot:   "/project/root",
+			TempRoot:      "/tmp/ddx-exec",
+			EvidenceRoots: []string{"/project/root/.ddx/executions"},
+			BeforeRootChecks: []ExecutionResourceRootCheck{
+				{
+					Path:           "/tmp/ddx-exec",
+					Writable:       false,
+					WritableReason: "no space left on device",
+					Notes:          []string{"cleanup ran"},
+				},
+			},
+			RootChecks: []ExecutionResourceRootCheck{
+				{
+					Path:       "/tmp/ddx-exec",
+					Writable:   true,
+					BytesFree:  1024,
+					InodesFree: 2048,
+				},
+			},
+			CleanupSummary: ExecutionCleanupSummary{
+				ProjectRoot:     "/project/root",
+				TempRoot:        "/tmp/ddx-exec",
+				BytesReclaimed:  4096,
+				InodesReclaimed: 8,
+			},
+		},
+	}
+
+	reopened, err := autoReopenHealthyLocalResourceBlockers(context.Background(), store, checker, "worker", time.Unix(0, 0).UTC(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, reopened)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&checker.calls), "resource checker must run once")
+
+	gotTyped, err := store.Get(context.Background(), typed.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotTyped.Status)
+	assert.NotContains(t, gotTyped.Extra, bead.ExtraLifecycleLocalBlockerRef)
+
+	gotUntyped, err := store.Get(context.Background(), untyped.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusBlocked, gotUntyped.Status)
+	assert.Contains(t, gotUntyped.Extra, bead.ExtraLifecycleExternalBlockerReason)
+
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, typed.ID, ready[0].ID)
+}
+
+func TestWorkWatch_KeepsLocalResourceBlockersWhenPreflightFails(t *testing.T) {
+	inner := bead.NewStore(t.TempDir())
+	require.NoError(t, inner.Init(context.Background()))
+
+	typedRef, err := bead.NewLocalBlockerRef(bead.LocalBlockerKindLocalResourceExhaustion, []string{"/tmp/ddx-exec"}, "fingerprint-typed")
+	require.NoError(t, err)
+	typed := &bead.Bead{
+		ID:     "ddx-local-typed",
+		Title:  "typed local resource blocker",
+		Status: bead.StatusBlocked,
+		Extra: map[string]any{
+			bead.ExtraLifecycleLocalBlockerRef: typedRef,
+		},
+	}
+	require.NoError(t, inner.Create(context.Background(), typed))
+
+	store := &claimCountingStore{Store: inner}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	checkerResult := ExecutionResourceCheckResult{
+		ProjectRoot:   "/project/root",
+		TempRoot:      "/tmp/ddx-exec",
+		EvidenceRoots: []string{"/project/root/.ddx/executions"},
+		BeforeRootChecks: []ExecutionResourceRootCheck{
+			{
+				Path:           "/tmp/ddx-exec",
+				Writable:       false,
+				WritableReason: "no space left on device",
+			},
+		},
+		RootChecks: []ExecutionResourceRootCheck{
+			{
+				Path:           "/tmp/ddx-exec",
+				Writable:       false,
+				WritableReason: "no space left on device",
+			},
+		},
+	}
+	checker := &staticLoopResourceChecker{
+		check: func(context.Context) (ExecutionResourceCheckResult, error) {
+			cancel()
+			return checkerResult, &ResourceExhaustedError{
+				Detail: "temp root remains full",
+				Result: checkerResult,
+			}
+		},
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run when the local resource probe stays unhealthy")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:            executeloop.ModeWatch,
+		IdleInterval:    10 * time.Millisecond,
+		ProjectRoot:     t.TempDir(),
+		SessionID:       "sess-local-blocker-unhealthy",
+		WorkerID:        "worker-local-blocker",
+		ResourceChecker: checker,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&checker.calls), "resource checker must run once")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "unhealthy probe must not claim the typed blocker")
+
+	got, err := inner.Get(context.Background(), typed.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusBlocked, got.Status)
+	assert.Contains(t, got.Extra, bead.ExtraLifecycleLocalBlockerRef)
+}
+
+func TestWorkWatch_LocalResourceRecheckEvidence(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	typedRef, err := bead.NewLocalBlockerRef(bead.LocalBlockerKindLocalResourceExhaustion, []string{"/tmp/ddx-exec"}, "fingerprint-typed")
+	require.NoError(t, err)
+	typed := &bead.Bead{
+		ID:     "ddx-local-evidence",
+		Title:  "typed local resource blocker",
+		Status: bead.StatusBlocked,
+		Extra: map[string]any{
+			bead.ExtraLifecycleLocalBlockerRef: typedRef,
+		},
+	}
+	require.NoError(t, store.Create(context.Background(), typed))
+
+	checker := &staticLoopResourceChecker{
+		result: ExecutionResourceCheckResult{
+			ProjectRoot:   "/project/root",
+			TempRoot:      "/tmp/ddx-exec",
+			EvidenceRoots: []string{"/project/root/.ddx/executions"},
+			BeforeRootChecks: []ExecutionResourceRootCheck{
+				{
+					Path:           "/tmp/ddx-exec",
+					Writable:       false,
+					WritableReason: "no space left on device",
+					Notes:          []string{"cleanup completed"},
+				},
+			},
+			RootChecks: []ExecutionResourceRootCheck{
+				{
+					Path:       "/tmp/ddx-exec",
+					Writable:   true,
+					BytesFree:  4096,
+					InodesFree: 8192,
+				},
+			},
+			CleanupSummary: ExecutionCleanupSummary{
+				ProjectRoot:     "/project/root",
+				TempRoot:        "/tmp/ddx-exec",
+				BytesReclaimed:  1024,
+				InodesReclaimed: 4,
+			},
+		},
+	}
+
+	var emittedKind string
+	var emittedPayload map[string]any
+	reopened, err := autoReopenHealthyLocalResourceBlockers(
+		context.Background(),
+		store,
+		checker,
+		"worker",
+		time.Unix(1234, 0).UTC(),
+		func(kind string, payload map[string]any) {
+			emittedKind = kind
+			emittedPayload = payload
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, reopened)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&checker.calls))
+	assert.Equal(t, "loop.local_resource_blocker_recheck", emittedKind)
+	require.NotNil(t, emittedPayload)
+	assert.Equal(t, true, emittedPayload["healthy"])
+	assert.Equal(t, []string{typed.ID}, emittedPayload["bead_ids"])
+	assert.Equal(t, 1, emittedPayload["bead_count"])
+	assert.Equal(t, 1, emittedPayload["reopened_count"])
+	assert.Contains(t, emittedPayload, "before_root_checks")
+	assert.Contains(t, emittedPayload, "root_checks")
+
+	events, err := store.Events(typed.ID)
+	require.NoError(t, err)
+	var evidence *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "local_resource_blocker_recheck" {
+			evidence = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, evidence, "local_resource_blocker_recheck event must be persisted")
+
+	assert.Contains(t, evidence.Body, "before_root_checks")
+	assert.Contains(t, evidence.Body, "root_checks")
+	assert.Contains(t, evidence.Body, "cleanup_summary")
+	assert.Contains(t, evidence.Body, "\"action\":\"recheck_local_resource_blockers\"")
+}
+
+func TestWorkWatch_LocalResourceRecheckRunsBeforeNextCandidate(t *testing.T) {
+	inner := bead.NewStore(t.TempDir())
+	require.NoError(t, inner.Init(context.Background()))
+
+	typedRef, err := bead.NewLocalBlockerRef(bead.LocalBlockerKindLocalResourceExhaustion, []string{"/tmp/ddx-exec"}, "fingerprint-typed")
+	require.NoError(t, err)
+	typed := &bead.Bead{
+		ID:     "ddx-local-order",
+		Title:  "typed local resource blocker",
+		Status: bead.StatusBlocked,
+		Extra: map[string]any{
+			bead.ExtraLifecycleLocalBlockerRef: typedRef,
+		},
+	}
+	require.NoError(t, inner.Create(context.Background(), typed))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var checkerCalls int32
+	checker := &staticLoopResourceChecker{
+		result: ExecutionResourceCheckResult{
+			ProjectRoot:   "/project/root",
+			TempRoot:      "/tmp/ddx-exec",
+			EvidenceRoots: []string{"/project/root/.ddx/executions"},
+			RootChecks: []ExecutionResourceRootCheck{
+				{
+					Path:       "/tmp/ddx-exec",
+					Writable:   true,
+					BytesFree:  4096,
+					InodesFree: 8192,
+				},
+			},
+		},
+		check: func(context.Context) (ExecutionResourceCheckResult, error) {
+			atomic.AddInt32(&checkerCalls, 1)
+			return ExecutionResourceCheckResult{
+				ProjectRoot:   "/project/root",
+				TempRoot:      "/tmp/ddx-exec",
+				EvidenceRoots: []string{"/project/root/.ddx/executions"},
+				RootChecks: []ExecutionResourceRootCheck{
+					{
+						Path:       "/tmp/ddx-exec",
+						Writable:   true,
+						BytesFree:  4096,
+						InodesFree: 8192,
+					},
+				},
+			}, nil
+		},
+	}
+
+	store := &watchProbeOrderingStore{
+		Store: inner,
+		beforeReady: func() {
+			assert.Equal(t, int32(1), atomic.LoadInt32(&checkerCalls), "resource probe must run before ReadyExecution")
+			cancel()
+		},
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run when the queue remains blocked")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:            executeloop.ModeWatch,
+		IdleInterval:    10 * time.Millisecond,
+		ProjectRoot:     t.TempDir(),
+		SessionID:       "sess-local-blocker-order",
+		WorkerID:        "worker-local-blocker-order",
+		ResourceChecker: checker,
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&checkerCalls), "resource checker must run once")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.readyCalls), "watch loop must reach ReadyExecution once after the probe")
 }
 
 func TestWorkResourcePreflight_ContinuesAfterCleanupRestoresBudget(t *testing.T) {
