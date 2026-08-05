@@ -299,7 +299,11 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	candidatePrepared := false
 	cycleTrace := append([]ExecutionCycleTrace(nil), candidate.Report.CycleTrace...)
 	recordCycle := func(report *ExecuteBeadReport, review *CandidateReviewResult, finalDecision string) {
-		entry := executionCycleTraceFor(candidate, review, finalDecision)
+		traceCandidate := candidate
+		if report != nil {
+			traceCandidate.Report = *report
+		}
+		entry := executionCycleTraceFor(traceCandidate, review, finalDecision)
 		cycleTrace = appendExecutionCycleTrace(cycleTrace, entry)
 		if report != nil {
 			report.CycleTrace = append([]ExecutionCycleTrace(nil), cycleTrace...)
