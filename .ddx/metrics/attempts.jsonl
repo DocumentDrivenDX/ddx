@@ -5827,3 +5827,5 @@
 {"schema_version":1,"attempt_id":"20260805T145459-dd39c69d","bead_id":"ddx-3adf2536","session_id":"eb-ce1ffaa1","ts_end":"2026-08-05T19:43:03Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260805T193744-a6bd795a","bead_id":"ddx-95a64ee6","session_id":"eb-90e30ee5","ts_start":"2026-08-05T19:39:26Z","ts_end":"2026-08-05T19:52:05Z","model":"gpt-5.4-mini","harness":"codex","outcome":"execution_failed","exit_code":0,"duration_ms":758629}
 {"schema_version":1,"attempt_id":"20260805T073434-71c74304","bead_id":"ddx-522b0c6d","session_id":"eb-60119960","ts_end":"2026-08-05T19:53:08Z","outcome":"success","exit_code":0,"duration_ms":0}
+{"schema_version":1,"attempt_id":"20260805T185511-6d2eadd2","bead_id":"ddx-a2d183c3","session_id":"eb-ace60054","ts_end":"2026-08-05T19:55:05Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
+{"schema_version":1,"attempt_id":"20260805T140629-e072f67e","bead_id":"ddx-ea20bcbf","session_id":"eb-f46c0ca6","ts_end":"2026-08-05T19:56:45Z","outcome":"success","exit_code":0,"duration_ms":0}
