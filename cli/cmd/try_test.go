@@ -867,6 +867,7 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("model"), "try must expose --model flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("profile"), "try must expose --profile flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("provider"), "try must expose --provider flag")
+	assert.NotNil(t, tryCmd.Flags().Lookup("attempt-wall-clock"), "try must expose --attempt-wall-clock flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("force-claim"), "try must expose --force-claim flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("reason"), "try must expose --reason flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review"), "try must expose --no-review flag")

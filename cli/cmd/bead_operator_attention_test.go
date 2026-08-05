@@ -15,16 +15,18 @@ import (
 
 // TestOperatorAttentionSurfacesWedgeReleases verifies AC #1: `ddx bead
 // operator-attention` lists every lease release caused by a route-resolution
-// timeout, a progress-watchdog fire, or the consecutive-wedge guard, each
+// timeout, a progress-watchdog fire, an active-attempt wall-clock timeout, or
+// the consecutive-wedge guard, each
 // showing bead-id, attempt-id, last_activity_at, and a diagnosis string. The
-// three release events are appended in the same JSON shape the worker's
+// four release events are appended in the same JSON shape the worker's
 // release primitives emit (execute_bead_loop.go).
 func TestOperatorAttentionSurfacesWedgeReleases(t *testing.T) {
 	routeBead := &bead.Bead{ID: "ddx-oa-route", Title: "Route timeout"}
 	watchdogBead := &bead.Bead{ID: "ddx-oa-watchdog", Title: "Watchdog fire"}
+	wallClockBead := &bead.Bead{ID: "ddx-oa-wallclock", Title: "Wall clock timeout"}
 	wedgeBead := &bead.Bead{ID: "ddx-oa-wedge", Title: "Consecutive wedge", Status: bead.StatusProposed}
 	noiseBead := &bead.Bead{ID: "ddx-oa-noise", Title: "No release"}
-	_, factory, store := setupBeadHumanEnv(t, routeBead, watchdogBead, wedgeBead, noiseBead)
+	_, factory, store := setupBeadHumanEnv(t, routeBead, watchdogBead, wallClockBead, wedgeBead, noiseBead)
 
 	routeBody, _ := json.Marshal(map[string]any{
 		"reason":           agentpkg.FailureModeRouteResolutionTimeout,
@@ -60,6 +62,24 @@ func TestOperatorAttentionSurfacesWedgeReleases(t *testing.T) {
 		CreatedAt: time.Date(2026, 5, 26, 12, 5, 0, 0, time.UTC),
 	}))
 
+	wallClockBody, _ := json.Marshal(map[string]any{
+		"reason":           agentpkg.FailureModeAttemptWallClockTimeout,
+		"bead_id":          wallClockBead.ID,
+		"attempt_id":       "attempt-wallclock-1",
+		"elapsed":          "30m1s",
+		"budget":           "30m0s",
+		"last_activity_at": "2026-05-26T12:06:00Z",
+		"diagnosis":        "active attempt exceeded 30m0s after 30m1s; released lease and flagged for operator attention",
+	})
+	require.NoError(t, store.AppendEvent(wallClockBead.ID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   agentpkg.FailureModeAttemptWallClockTimeout,
+		Body:      string(wallClockBody),
+		Actor:     "worker-a",
+		Source:    "ddx work",
+		CreatedAt: time.Date(2026, 5, 26, 12, 6, 0, 0, time.UTC),
+	}))
+
 	wedgeBody, _ := json.Marshal(map[string]any{
 		"reason":           agentpkg.FailureModeConsecutiveWedge,
 		"bead_id":          wedgeBead.ID,
@@ -93,7 +113,7 @@ func TestOperatorAttentionSurfacesWedgeReleases(t *testing.T) {
 
 	var rows []beadOperatorAttentionRow
 	require.NoError(t, json.Unmarshal([]byte(out), &rows))
-	require.Len(t, rows, 3, "every wedge/timeout release surfaces; unrelated operator_attention events are excluded")
+	require.Len(t, rows, 4, "every wedge/timeout release surfaces; unrelated operator_attention events are excluded")
 
 	byBead := make(map[string]beadOperatorAttentionRow, len(rows))
 	for _, row := range rows {
@@ -112,6 +132,12 @@ func TestOperatorAttentionSurfacesWedgeReleases(t *testing.T) {
 	assert.Equal(t, "2026-05-26T12:05:00Z", watchdog.LastActivityAt)
 	assert.Contains(t, watchdog.Diagnosis, "phase-empty heartbeats")
 
+	wallClock := byBead[wallClockBead.ID]
+	assert.Equal(t, agentpkg.FailureModeAttemptWallClockTimeout, wallClock.Reason)
+	assert.Equal(t, "attempt-wallclock-1", wallClock.AttemptID)
+	assert.Equal(t, "2026-05-26T12:06:00Z", wallClock.LastActivityAt)
+	assert.Contains(t, wallClock.Diagnosis, "active attempt exceeded")
+
 	wedge := byBead[wedgeBead.ID]
 	assert.Equal(t, agentpkg.FailureModeConsecutiveWedge, wedge.Reason)
 	assert.Equal(t, "2026-05-26T12:10:00Z", wedge.LastActivityAt)
@@ -125,6 +151,8 @@ func TestOperatorAttentionSurfacesWedgeReleases(t *testing.T) {
 	assert.Contains(t, text, "last_activity_at=2026-05-26T12:00:00Z")
 	assert.Contains(t, text, watchdogBead.ID)
 	assert.Contains(t, text, "attempt=attempt-watchdog-1")
+	assert.Contains(t, text, wallClockBead.ID)
+	assert.Contains(t, text, "attempt=attempt-wallclock-1")
 	assert.Contains(t, text, wedgeBead.ID)
 	assert.Contains(t, text, "last_activity_at=2026-05-26T12:10:00Z")
 	assert.NotContains(t, text, noiseBead.ID)

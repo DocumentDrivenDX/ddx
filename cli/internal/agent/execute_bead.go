@@ -300,22 +300,27 @@ var RunStateRefreshInterval = 10 * time.Second
 //
 // See SD-024 / TD-024 §Runtime structs and §Stage 3.
 type ExecuteBeadRuntime struct {
-	FromRev                    string // base git revision (default: HEAD)
-	PromptFile                 string // override prompt file (auto-generated if empty)
-	Output                     io.Writer
-	WorkerID                   string // from DDX_WORKER_ID env or caller
-	BeadStoreRoot              string // canonical bead store for linked/external tracker roots
-	BeadEvents                 BeadEventAppender
-	BeadCancel                 BeadCancelStore // optional: enables operator-cancel mid-attempt poll
-	ResourceChecker            ExecutionResourceChecker
-	Service                    agentlib.FizeauService
-	AgentRunner                AgentRunner
-	Checks                     CandidateCheckRunner
-	Reviewer                   CandidateReviewer
-	Repair                     RepairPass
-	RepairMaxCycles            int
-	CandidateRefStore          CandidateRefStore
-	NoReview                   bool
+	FromRev           string // base git revision (default: HEAD)
+	PromptFile        string // override prompt file (auto-generated if empty)
+	Output            io.Writer
+	WorkerID          string // from DDX_WORKER_ID env or caller
+	BeadStoreRoot     string // canonical bead store for linked/external tracker roots
+	BeadEvents        BeadEventAppender
+	BeadCancel        BeadCancelStore // optional: enables operator-cancel mid-attempt poll
+	ResourceChecker   ExecutionResourceChecker
+	Service           agentlib.FizeauService
+	AgentRunner       AgentRunner
+	Checks            CandidateCheckRunner
+	Reviewer          CandidateReviewer
+	Repair            RepairPass
+	RepairMaxCycles   int
+	CandidateRefStore CandidateRefStore
+	NoReview          bool
+	// AttemptWallClock bounds the active attempt from execute start to finish.
+	// Zero disables only when AttemptWallClockSet is true; otherwise the loop
+	// falls back to its documented default.
+	AttemptWallClock           time.Duration
+	AttemptWallClockSet        bool
 	AttemptBackend             AttemptBackend
 	ReusableWorkspaceTelemetry *ReusableWorkspaceTelemetry
 	candidateImport            func(candidate CandidateResult) error

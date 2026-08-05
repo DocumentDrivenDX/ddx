@@ -1531,11 +1531,13 @@ type beadOperatorAttentionRow struct {
 // wedgeReleaseReasons is the set of operator_attention event summaries that
 // represent a worker releasing a held lease on a wedge or timeout: the
 // route-resolution timeout (ddx-d8970a7b), the progress-watchdog fire
-// (ddx-dc23f001), and the consecutive-wedge guard (ddx-9714eaac).
+// (ddx-dc23f001), the active-attempt wall-clock timeout, and the
+// consecutive-wedge guard (ddx-9714eaac).
 var wedgeReleaseReasons = map[string]bool{
-	agentpkg.FailureModeRouteResolutionTimeout: true,
-	agentpkg.FailureModeProgressWatchdog:       true,
-	agentpkg.FailureModeConsecutiveWedge:       true,
+	agentpkg.FailureModeRouteResolutionTimeout:  true,
+	agentpkg.FailureModeProgressWatchdog:        true,
+	agentpkg.FailureModeAttemptWallClockTimeout: true,
+	agentpkg.FailureModeConsecutiveWedge:        true,
 }
 
 func (f *CommandFactory) newBeadOperatorAttentionCommand() *cobra.Command {
@@ -1544,7 +1546,8 @@ func (f *CommandFactory) newBeadOperatorAttentionCommand() *cobra.Command {
 		Short: "List wedge/timeout lease releases needing operator attention",
 		Long: `List every lease release a "ddx work" worker emitted because it gave
 up a held lease on a wedge or timeout: a route-resolution timeout, a
-progress-watchdog fire, or the consecutive-wedge guard. Each release shows the
+progress-watchdog fire, an active-attempt wall-clock timeout, or the
+consecutive-wedge guard. Each release shows the
 bead-id, attempt-id, last_activity_at, and a diagnosis so an operator can
 triage it without tailing JSONL agent-logs for empty harness/route fields.`,
 		Args: cobra.NoArgs,

@@ -114,17 +114,19 @@ func TestManagedWorkerServerManagedFlagUsesPersistedSpec(t *testing.T) {
 
 	const workerID = "worker-persisted-spec"
 	want := serverpkg.ExecuteLoopWorkerSpec{
-		Mode:        executeloop.ModeOnce,
-		NoReview:    true,
-		Harness:     "from-disk-harness",
-		Model:       "from-disk-model",
-		Provider:    "from-disk-provider",
-		Profile:     "from-disk-profile",
-		LabelFilter: "area:workers",
-		MinPower:    7,
-		MinPowerSet: true,
-		MaxPower:    11,
-		ReviewTier:  executeloop.ReviewTierElevated,
+		Mode:                executeloop.ModeOnce,
+		NoReview:            true,
+		Harness:             "from-disk-harness",
+		Model:               "from-disk-model",
+		Provider:            "from-disk-provider",
+		Profile:             "from-disk-profile",
+		LabelFilter:         "area:workers",
+		MinPower:            7,
+		MinPowerSet:         true,
+		MaxPower:            11,
+		ReviewTier:          executeloop.ReviewTierElevated,
+		AttemptWallClock:    executeloop.Duration{Duration: 0},
+		AttemptWallClockSet: true,
 	}
 	writePersistedManagedWorkerSpec(t, env.Dir, workerID, want)
 

@@ -110,6 +110,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Int("preclaim-warn-threshold", agent.DefaultPreClaimWarnRepeatThreshold, "Consecutive identical pre-claim warn fingerprints across distinct bead IDs required before the loop emits operator attention")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
 	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout from Fizeau Execute dispatch to routing_decision; on expiry the lease is released and the bead is flagged for operator attention")
+	cmd.Flags().Duration("attempt-wall-clock", 30*time.Minute, "Absolute active-attempt wall-clock budget from execute start; 0 disables")
 	cmd.Flags().Duration("request-timeout", 0, "Explicit per-request provider wall-clock timeout passed to Fizeau (default: unset)")
 	// Per-bead rate-limit retry budget (ddx-c6e3db02 / TD-031 §8.4).
 	cmd.Flags().Duration("rate-limit-max-wait", agent.RateLimitRetryDefaultBudget,
