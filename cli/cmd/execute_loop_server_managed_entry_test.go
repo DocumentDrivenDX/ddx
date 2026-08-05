@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -29,6 +30,101 @@ func writePersistedManagedWorkerSpec(t *testing.T, projectRoot, workerID string,
 	path := filepath.Join(dir, "spec.json")
 	require.NoError(t, os.WriteFile(path, append(data, '\n'), 0o644))
 	return path
+}
+
+func writeRawPersistedManagedWorkerSpec(t *testing.T, projectRoot, workerID string, spec serverpkg.ExecuteLoopWorkerSpec) string {
+	t.Helper()
+	if strings.TrimSpace(spec.ProjectRoot) == "" {
+		spec.ProjectRoot = projectRoot
+	}
+	dir := filepath.Join(ddxroot.JoinProject(projectRoot, "workers"), workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	data, err := json.MarshalIndent(spec, "", "  ")
+	require.NoError(t, err)
+	path := filepath.Join(dir, "spec.json")
+	require.NoError(t, os.WriteFile(path, append(data, '\n'), 0o644))
+	return path
+}
+
+func TestWorkAttemptWallClock_ManualManagedParity(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	env := NewTestEnvironment(t)
+	env.CreateDefaultConfig()
+
+	factory := NewCommandFactory(env.Dir)
+
+	const workerID = "worker-attempt-wall-clock-parity"
+
+	cases := []struct {
+		name          string
+		manualValue   string
+		manualChanged bool
+		managedSpec   serverpkg.ExecuteLoopWorkerSpec
+		wantDuration  time.Duration
+		wantExplicit  bool
+	}{
+		{
+			name:         "default",
+			managedSpec:  serverpkg.ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce, NoReview: true},
+			wantDuration: 30 * time.Minute,
+			wantExplicit: false,
+		},
+		{
+			name:          "override",
+			manualValue:   "17m",
+			manualChanged: true,
+			managedSpec:   serverpkg.ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce, NoReview: true, AttemptWallClock: executeloop.Duration{Duration: 17 * time.Minute}, AttemptWallClockSet: true},
+			wantDuration:  17 * time.Minute,
+			wantExplicit:  true,
+		},
+		{
+			name:          "explicit_zero_disable",
+			manualValue:   "0s",
+			manualChanged: true,
+			managedSpec:   serverpkg.ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce, NoReview: true, AttemptWallClock: executeloop.Duration{Duration: 0}, AttemptWallClockSet: true},
+			wantDuration:  0,
+			wantExplicit:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertResolved := func(commandName string) {
+				root := factory.NewRootCommand()
+				cmd, _, err := root.Find([]string{commandName})
+				require.NoError(t, err)
+				require.NoError(t, cmd.Flags().Set("project", env.Dir))
+				require.NoError(t, cmd.Flags().Set("allow-non-default-branch", "true"))
+				if tc.manualChanged {
+					require.NoError(t, cmd.Flags().Set("attempt-wall-clock", tc.manualValue))
+				}
+
+				manualSpec, _, _, err := factory.resolveExecuteLoopSpec(cmd, true)
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantDuration, manualSpec.AttemptWallClock.Duration)
+				assert.Equal(t, tc.wantExplicit, manualSpec.AttemptWallClockSet)
+			}
+
+			assertResolved("work")
+			assertResolved("try")
+
+			managedWorkerID := workerID + "-" + tc.name
+			workRoot := factory.NewRootCommand()
+			workCmd, _, err := workRoot.Find([]string{"work"})
+			require.NoError(t, err)
+			require.NoError(t, workCmd.Flags().Set("project", env.Dir))
+			require.NoError(t, workCmd.Flags().Set("allow-non-default-branch", "true"))
+			writeRawPersistedManagedWorkerSpec(t, env.Dir, managedWorkerID, tc.managedSpec)
+			require.NoError(t, workCmd.Flags().Set("server-managed", managedWorkerID))
+
+			managedSpec, _, explicitMin, err := factory.resolveExecuteLoopSpec(workCmd, true)
+			require.NoError(t, err)
+			assert.False(t, explicitMin, "parity test does not exercise min-power")
+			assert.Equal(t, tc.wantDuration, managedSpec.AttemptWallClock.Duration)
+			assert.Equal(t, tc.wantExplicit, managedSpec.AttemptWallClockSet)
+		})
+	}
 }
 
 // TestManagedWorkerServerManagedFlagRunsWorkLoop proves the hidden
