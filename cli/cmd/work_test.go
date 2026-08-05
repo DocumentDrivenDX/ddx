@@ -38,7 +38,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	require.NoError(t, err, "ddx work must exist")
 	require.NotNil(t, workCmd)
 
-	for _, name := range []string{"harness", "provider", "model", "label-filter", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
+	for _, name := range []string{"harness", "provider", "model", "label-filter", "min-power", "max-power", "attempt-wall-clock", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
@@ -150,6 +150,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("max-recovery-cost", "2.5")
 	setFlag("preclaim-warn-threshold", "7")
 	setFlag("preclaim-timeout", "45s")
+	setFlag("attempt-wall-clock", "0s")
 	setFlag("request-timeout", "2m")
 	setFlag("rate-limit-max-wait", "90s")
 	setFlag("min-power", "7")
@@ -176,6 +177,8 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, 12.5, spec.MaxCostUSD)
 	assert.Equal(t, 2.5, spec.MaxRecoveryCostUSD)
 	assert.Equal(t, 45*time.Second, spec.PreClaimTimeout.Duration)
+	assert.True(t, spec.AttemptWallClockSet)
+	assert.Equal(t, 0*time.Second, spec.AttemptWallClock.Duration)
 	assert.Equal(t, 2*time.Minute, spec.RequestTimeout.Duration)
 	assert.Equal(t, 90*time.Second, spec.RateLimitMaxWait.Duration)
 	assert.Equal(t, 7, spec.MinPower)

@@ -97,6 +97,7 @@ Exit codes:
 	cmd.Flags().String("review-tier", "", "Abstract review cardinality tier (empty = risk-proportional; elevated = two reviewers)")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
 	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout from Fizeau Execute dispatch to routing_decision; on expiry the lease is released and the bead is flagged for operator attention")
+	cmd.Flags().Duration("attempt-wall-clock", 30*time.Minute, "Absolute active-attempt wall-clock budget from execute start; 0 disables")
 	cmd.Flags().Duration("request-timeout", 0, "Explicit per-request provider wall-clock timeout passed to Fizeau (default: unset)")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
@@ -153,6 +154,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	reviewTier, _ := cmd.Flags().GetString("review-tier")
 	preClaimTimeout, _ := cmd.Flags().GetDuration("preclaim-timeout")
 	routeResolutionTimeout, _ := cmd.Flags().GetDuration("route-resolution-timeout")
+	attemptWallClock, _ := cmd.Flags().GetDuration("attempt-wall-clock")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
@@ -310,13 +312,15 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				}
 				attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 				res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
-					FromRev:         fromRev,
-					Output:          cmd.OutOrStdout(),
-					BeadStoreRoot:   beadStoreRoot,
-					BeadEvents:      bead.NewStore(beadStoreRoot),
-					ResourceChecker: resourceChecker,
-					Reviewer:        reviewer,
-					NoReview:        noReview,
+					FromRev:             fromRev,
+					Output:              cmd.OutOrStdout(),
+					BeadStoreRoot:       beadStoreRoot,
+					BeadEvents:          bead.NewStore(beadStoreRoot),
+					ResourceChecker:     resourceChecker,
+					Reviewer:            reviewer,
+					NoReview:            noReview,
+					AttemptWallClock:    attemptWallClock,
+					AttemptWallClockSet: cmd.Flags().Changed("attempt-wall-clock"),
 				}, gitOps)
 				if execErr != nil && res == nil {
 					return agent.ExecuteBeadReport{}, execErr

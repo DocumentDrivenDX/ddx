@@ -108,7 +108,14 @@ type ExecuteLoopSpec struct {
 	// through routing_decision so a hung route stage cannot wedge the worker.
 	// Zero uses the binary default (agent.DefaultRouteResolutionTimeout, 60s).
 	RouteResolutionTimeout Duration `json:"route_resolution_timeout,omitempty"`
-	MinPower               int      `json:"min_power,omitempty"`
+	// AttemptWallClock bounds the entire active attempt from execute start to
+	// finish. Zero disables only when AttemptWallClockSet is true; otherwise the
+	// binary default applies.
+	AttemptWallClock Duration `json:"attempt_wall_clock,omitempty"`
+	// AttemptWallClockSet distinguishes an explicit zero-value disable from the
+	// field being absent in older persisted specs.
+	AttemptWallClockSet bool `json:"attempt_wall_clock_set,omitempty"`
+	MinPower            int  `json:"min_power,omitempty"`
 	// MinPowerSet distinguishes an explicitly supplied zero from an omitted
 	// floor. It is persisted because managed workers are serialized before a
 	// subprocess is launched.
@@ -163,6 +170,9 @@ func (s *ExecuteLoopSpec) ApplyDefaults() {
 	if s.Mode == ModeWatch && s.IdleInterval.Duration == 0 {
 		s.IdleInterval = Duration{30 * time.Second}
 	}
+	if !s.AttemptWallClockSet && s.AttemptWallClock.Duration == 0 {
+		s.AttemptWallClock = Duration{30 * time.Minute}
+	}
 	if s.SpecVersion == 0 {
 		s.SpecVersion = SpecCurrentVersion
 	}
@@ -180,6 +190,9 @@ func (s *ExecuteLoopSpec) Validate() error {
 	}
 	if s.Mode != ModeWatch && s.IdleInterval.Duration != 0 {
 		return fmt.Errorf("executeloop: idle_interval is only valid when mode=watch")
+	}
+	if s.AttemptWallClock.Duration < 0 {
+		return fmt.Errorf("executeloop: attempt_wall_clock must be >= 0")
 	}
 	if s.SpecVersion != 0 && s.SpecVersion != SpecCurrentVersion {
 		return fmt.Errorf("executeloop: unsupported spec_version %d (want %d)", s.SpecVersion, SpecCurrentVersion)

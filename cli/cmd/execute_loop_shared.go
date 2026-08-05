@@ -63,6 +63,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	maxRecoveryCostUSD, _ := cmd.Flags().GetFloat64("max-recovery-cost")
 	preClaimTimeout, _ := cmd.Flags().GetDuration("preclaim-timeout")
 	routeResolutionTimeout, _ := cmd.Flags().GetDuration("route-resolution-timeout")
+	attemptWallClock, _ := cmd.Flags().GetDuration("attempt-wall-clock")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	rateLimitMaxWait, _ := cmd.Flags().GetDuration("rate-limit-max-wait")
 	minPower, _ := cmd.Flags().GetInt("min-power")
@@ -112,6 +113,8 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		MaxRecoveryCostUSD:     maxRecoveryCostUSD,
 		PreClaimTimeout:        executeloop.Duration{Duration: preClaimTimeout},
 		RouteResolutionTimeout: executeloop.Duration{Duration: routeResolutionTimeout},
+		AttemptWallClock:       executeloop.Duration{Duration: attemptWallClock},
+		AttemptWallClockSet:    cmd.Flags().Changed("attempt-wall-clock"),
 		RequestTimeout:         executeloop.Duration{Duration: requestTimeout},
 		RateLimitMaxWait:       executeloop.Duration{Duration: rateLimitMaxWait},
 		MinPower:               minPower,
@@ -150,15 +153,17 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
 		reviewer = newCommandReviewer(spec.ProjectRoot, beadStoreRoot, spec.ReviewTier, primaryConfig)
 	}
 	return agent.ExecuteBeadRuntime{
-		FromRev:          spec.FromRev,
-		Output:           output,
-		BeadStoreRoot:    beadStoreRoot,
-		BeadEvents:       events,
-		AgentRunner:      runner,
-		ResourceChecker:  checker,
-		Reviewer:         reviewer,
-		NoReview:         spec.NoReview,
-		RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
+		FromRev:             spec.FromRev,
+		Output:              output,
+		BeadStoreRoot:       beadStoreRoot,
+		BeadEvents:          events,
+		AgentRunner:         runner,
+		ResourceChecker:     checker,
+		Reviewer:            reviewer,
+		NoReview:            spec.NoReview,
+		AttemptWallClock:    spec.AttemptWallClock.Duration,
+		AttemptWallClockSet: spec.AttemptWallClockSet,
+		RateLimitMaxWait:    spec.RateLimitMaxWait.Duration,
 	}
 }
 

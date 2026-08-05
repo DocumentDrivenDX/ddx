@@ -56,6 +56,10 @@ const (
 	// and the bead is flagged for operator attention (ddx-dc23f001, parent
 	// ddx-8f2e0ebf criterion B).
 	FailureModeProgressWatchdog = "progress_watchdog"
+	// FailureModeAttemptWallClockTimeout classifies an attempt that exceeded
+	// the configured active-attempt wall-clock budget even though it remained
+	// healthy enough to keep emitting progress/route activity.
+	FailureModeAttemptWallClockTimeout = "attempt_wall_clock_timeout"
 	// FailureModeConsecutiveWedge classifies a bead the consecutive-wedge guard
 	// stopped re-claiming because it wedged (route_resolution_timeout or
 	// progress_watchdog) on consecutive claims up to the threshold. The bead is

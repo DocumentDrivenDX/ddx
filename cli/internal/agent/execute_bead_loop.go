@@ -175,6 +175,11 @@ type ExecuteBeadLoopRuntime struct {
 	Once         bool
 	PollInterval time.Duration
 	NoReview     bool
+	// AttemptWallClock bounds the active attempt from execute start to finish.
+	// Zero disables only when AttemptWallClockSet is true; otherwise the
+	// documented default applies.
+	AttemptWallClock    time.Duration
+	AttemptWallClockSet bool
 	// PostMergeReview enables the legacy post-land/pre-close review state
 	// machine for callers that explicitly opt into that manual flow. The
 	// default production close path remains owned by candidate-cycle review.
@@ -247,6 +252,26 @@ func (r ExecuteBeadLoopRuntime) effectiveRouteResolutionTimeout() time.Duration 
 		return r.RouteResolutionTimeout
 	}
 	return DefaultRouteResolutionTimeout
+}
+
+// DefaultAttemptWallClock bounds the entire active attempt from execute start
+// to finish. It is intentionally separate from the generic provider wall-clock
+// cap so a routed attempt cannot stay live indefinitely just because it keeps
+// emitting healthy heartbeats.
+const DefaultAttemptWallClock = 30 * time.Minute
+
+// effectiveAttemptWallClock returns the configured attempt wall-clock budget.
+// A configured zero disable is represented by AttemptWallClockSet=true and a
+// zero duration; older persisted specs that omit the field fall back to the
+// documented default.
+func (r ExecuteBeadLoopRuntime) effectiveAttemptWallClock() time.Duration {
+	if r.AttemptWallClockSet {
+		return r.AttemptWallClock
+	}
+	if r.AttemptWallClock > 0 {
+		return r.AttemptWallClock
+	}
+	return DefaultAttemptWallClock
 }
 
 // DefaultConsecutiveWedgeThreshold is the number of consecutive wedges on the
@@ -3762,6 +3787,48 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	term := &attemptTermination{}
 	var guardWG sync.WaitGroup
 	candidateID := candidate.ID
+	if wallClock := runtime.effectiveAttemptWallClock(); wallClock > 0 {
+		guardWG.Add(1)
+		go func() {
+			defer guardWG.Done()
+			select {
+			case <-executeStarted:
+			case <-attemptCtx.Done():
+				return
+			}
+			clockTimer := time.NewTimer(wallClock)
+			defer clockTimer.Stop()
+			select {
+			case <-attemptCtx.Done():
+				return
+			case <-clockTimer.C:
+				if term.set(FailureModeAttemptWallClockTimeout) {
+					attemptCancel()
+					snapshot := workerstatus.LivenessRecord{}
+					if liveness != nil {
+						snapshot = liveness.Snapshot()
+					}
+					lastActivityAt := snapshot.LastActivityAt
+					if lastActivityAt.IsZero() {
+						lastActivityAt = executeStartedAt
+					}
+					_, releaseErr := attemptWallClockTimeoutReport(
+						w.Store,
+						candidateID,
+						assignee,
+						provAttemptID,
+						now().UTC(),
+						executeStartedAt.UTC(),
+						wallClock,
+						lastActivityAt,
+					)
+					if releaseErr != nil {
+						term.releaseFailed(FailureModeAttemptWallClockTimeout, releaseErr)
+					}
+				}
+			}
+		}()
+	}
 	if routeGuardEnabled {
 		guardWG.Add(1)
 		go func() {
@@ -3969,6 +4036,9 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		})
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintf(runtime.Log, "attempt %s terminated by %s; lease released\n", candidate.ID, termReason)
+		}
+		if termReason == FailureModeAttemptWallClockTimeout {
+			transientCandidateSkips[candidate.ID] = attemptWallClockTimeoutSkipReason
 		}
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
@@ -5253,10 +5323,16 @@ const routingUnavailableSkipReason = "routing_unavailable"
 // for later Run invocations.
 const routeStageTimeoutSkipReason = "route_stage_timeout"
 
+// attemptWallClockTimeoutSkipReason keeps a wall-clock-wedged bead out of the
+// remainder of the current drain pass after its lease is released. This lets
+// the worker continue draining the rest of the queue instead of immediately
+// reclaiming the same bead on the next picker pass.
+const attemptWallClockTimeoutSkipReason = "attempt_wall_clock_timeout"
+
 func hasGuardSkips(skips []pickerSkip) bool {
 	for _, skip := range skips {
 		switch skip.Reason {
-		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason, routeStageTimeoutSkipReason:
+		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason, routeStageTimeoutSkipReason, attemptWallClockTimeoutSkipReason:
 			continue
 		default:
 			return true
@@ -7680,6 +7756,41 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 		OutcomeReason:    FailureModeRouteResolutionTimeout,
 		Disrupted:        true,
 		DisruptionReason: FailureModeRouteResolutionTimeout,
+	}, nil
+}
+
+// attemptWallClockTimeoutReport releases the bead's lease, appends the
+// active-attempt wall-clock operator_attention event, and returns a typed
+// disrupted report. The event body carries the elapsed attempt wall-clock, the
+// configured budget, and the most recent activity timestamp so operators can
+// tell this timeout apart from a phase-empty wedge or route-resolution stall.
+func attemptWallClockTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now, startedAt time.Time, budget time.Duration, lastActivityAt time.Time) (ExecuteBeadReport, error) {
+	if err := releaseWorkerClaim(store, beadID, assignee); err != nil {
+		return ExecuteBeadReport{}, fmt.Errorf("release wall-clock-timed-out bead %s: %w", beadID, err)
+	}
+	elapsed := now.Sub(startedAt).Round(time.Millisecond)
+	diagnosis := fmt.Sprintf(
+		"active attempt exceeded %s after %s; released lease and flagged for operator attention",
+		budget, elapsed,
+	)
+	if store != nil && beadID != "" {
+		appendWorkEvent(store, beadID, "operator_attention", FailureModeAttemptWallClockTimeout, map[string]any{
+			"reason":           FailureModeAttemptWallClockTimeout,
+			"bead_id":          beadID,
+			"attempt_id":       attemptID,
+			"elapsed":          elapsed.String(),
+			"budget":           budget.String(),
+			"last_activity_at": lastActivityAt.UTC().Format(time.RFC3339),
+			"diagnosis":        diagnosis,
+		}, assignee, now)
+	}
+	return ExecuteBeadReport{
+		BeadID:           beadID,
+		Status:           ExecuteBeadStatusExecutionFailed,
+		Detail:           diagnosis,
+		OutcomeReason:    FailureModeAttemptWallClockTimeout,
+		Disrupted:        true,
+		DisruptionReason: FailureModeAttemptWallClockTimeout,
 	}, nil
 }
 
