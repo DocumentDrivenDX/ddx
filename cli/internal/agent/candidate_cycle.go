@@ -535,6 +535,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				report.Status = ExecuteBeadStatusRepairCycleExhausted
 				report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 				report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+				report.EscalationCount = repairCycles
 				report.PreserveRef = repairCycleExhaustedPreserveRef(report)
 				recordCycle(&report, cycleReview, report.Status)
 				return AttemptCycleResult{Report: report}, nil
@@ -569,6 +570,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			candidate = normalizeRepairedCandidate(candidate, repaired)
 			if candidate.Report.Status != ExecuteBeadStatusSuccess {
 				if candidate.Report.Status == ExecuteBeadStatusRepairCycleExhausted {
+					candidate.Report.EscalationCount = repairCycles
 					candidate.Report.PreserveRef = repairCycleExhaustedPreserveRef(candidate.Report)
 					if cycleReview != nil {
 						candidate.Report.ReviewVerdict = strings.TrimSpace(cycleReview.Verdict)
@@ -978,6 +980,7 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 	entry := ExecutionCycleTrace{
 		CycleIndex:   candidate.CycleIndex,
 		AttemptID:    candidate.Report.AttemptID,
+		BaseRev:      candidate.Report.BaseRev,
 		ResultRev:    candidate.Report.ResultRev,
 		CandidateRef: candidateRef,
 		ImplementerRoute: ExecutionCycleRouteFacts{

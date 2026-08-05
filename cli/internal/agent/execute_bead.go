@@ -210,6 +210,7 @@ type ExecutionCycleReviewResult struct {
 type ExecutionCycleTrace struct {
 	CycleIndex           int                               `json:"cycle_index"`
 	AttemptID            string                            `json:"attempt_id,omitempty"`
+	BaseRev              string                            `json:"base_rev,omitempty"`
 	ResultRev            string                            `json:"result_rev,omitempty"`
 	CandidateRef         string                            `json:"candidate_ref,omitempty"`
 	ImplementerRoute     ExecutionCycleRouteFacts          `json:"implementer_route"`

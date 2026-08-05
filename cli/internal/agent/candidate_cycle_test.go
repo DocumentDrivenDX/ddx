@@ -1524,9 +1524,11 @@ func TestRepairExhaustedRecoveryFailureParksWithEvidence(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(cycleTraceLine, "cycle_trace=")), &trace))
 	require.NotEmpty(t, trace)
 	last := trace[len(trace)-1]
+	assert.Equal(t, "base-rev", last.BaseRev)
 	assert.Equal(t, candidateIterationRef("attempt-repair-evidence", 1), last.CandidateRef)
 	assert.Equal(t, "rg-repair", last.ReviewGroupID)
 	assert.Equal(t, "REQUEST_CHANGES", last.ReviewResult.Verdict)
+	assert.Equal(t, 1, last.EscalationCount)
 	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, last.FinalDecision)
 }
 
@@ -1600,12 +1602,15 @@ func TestRepairExhaustedCycleTraceRecordsRecoveryEvidence(t *testing.T) {
 	assert.Equal(t, "rg-cycle", result.Report.ReviewGroupID)
 	assert.Equal(t, "REQUEST_CHANGES", result.Report.ReviewVerdict)
 	assert.Equal(t, repairedRev, result.Report.ResultRev)
+	assert.Equal(t, 1, result.Report.EscalationCount)
 	require.Len(t, result.Report.CycleTrace, 2)
 
 	last := result.Report.CycleTrace[len(result.Report.CycleTrace)-1]
+	assert.Equal(t, baseRev, last.BaseRev)
 	assert.Equal(t, candidateIterationRef("attempt-repair-cycle", 1), last.CandidateRef)
 	assert.Equal(t, "rg-cycle", last.ReviewGroupID)
 	assert.Equal(t, "REQUEST_CHANGES", last.ReviewResult.Verdict)
+	assert.Equal(t, 1, last.EscalationCount)
 	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, last.FinalDecision)
 	assert.Equal(t, "retry", last.RetryAction)
 }

@@ -6084,7 +6084,15 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		parts = append(parts, report.ReviewRationale)
 	}
 	if len(report.CycleTrace) > 0 {
-		if traceJSON, err := json.Marshal(report.CycleTrace); err == nil {
+		cycleTrace := append([]ExecutionCycleTrace(nil), report.CycleTrace...)
+		if baseRev := strings.TrimSpace(report.BaseRev); baseRev != "" {
+			for i := range cycleTrace {
+				if strings.TrimSpace(cycleTrace[i].BaseRev) == "" {
+					cycleTrace[i].BaseRev = baseRev
+				}
+			}
+		}
+		if traceJSON, err := json.Marshal(cycleTrace); err == nil {
 			parts = append(parts, "cycle_trace="+string(traceJSON))
 		}
 	}
