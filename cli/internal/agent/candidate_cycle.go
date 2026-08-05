@@ -251,11 +251,17 @@ type AttemptCycleCoordinator struct {
 }
 
 func repairCycleExhaustedPreserveRef(report ExecuteBeadReport) string {
-	if strings.TrimSpace(report.ResultRev) == "" || strings.TrimSpace(report.CandidateRef) == "" {
+	if strings.TrimSpace(report.ResultRev) == "" {
 		return ""
 	}
 	if strings.TrimSpace(report.BaseRev) != "" && report.ResultRev == report.BaseRev {
 		return ""
+	}
+	if strings.TrimSpace(report.CandidateRef) == "" {
+		if strings.TrimSpace(report.AttemptID) == "" {
+			return ""
+		}
+		return candidateIterationRef(report.AttemptID, report.CycleIndex)
 	}
 	return report.CandidateRef
 }
@@ -562,6 +568,14 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			repairCycles++
 			candidate = normalizeRepairedCandidate(candidate, repaired)
 			if candidate.Report.Status != ExecuteBeadStatusSuccess {
+				if candidate.Report.Status == ExecuteBeadStatusRepairCycleExhausted {
+					candidate.Report.PreserveRef = repairCycleExhaustedPreserveRef(candidate.Report)
+					if cycleReview != nil {
+						candidate.Report.ReviewVerdict = strings.TrimSpace(cycleReview.Verdict)
+						candidate.Report.ReviewGroupID = strings.TrimSpace(cycleReview.ReviewGroupID)
+						candidate.Report.ReviewRationale = strings.TrimSpace(cycleReview.Rationale)
+					}
+				}
 				recordCycle(&candidate.Report, cycleReview, candidate.Report.Status)
 				return AttemptCycleResult{Report: candidate.Report}, nil
 			}
@@ -957,11 +971,15 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 		reviewVerdict = review.Verdict
 	}
 	audit := executionDecisionAuditForReport(candidate.Report, finalDecision, reviewPresent, reviewVerdict)
+	candidateRef := strings.TrimSpace(candidate.Report.CandidateRef)
+	if candidateRef == "" && strings.TrimSpace(candidate.Report.AttemptID) != "" && strings.TrimSpace(candidate.Report.ResultRev) != "" {
+		candidateRef = candidateIterationRef(candidate.Report.AttemptID, candidate.CycleIndex)
+	}
 	entry := ExecutionCycleTrace{
 		CycleIndex:   candidate.CycleIndex,
 		AttemptID:    candidate.Report.AttemptID,
 		ResultRev:    candidate.Report.ResultRev,
-		CandidateRef: candidate.Report.CandidateRef,
+		CandidateRef: candidateRef,
 		ImplementerRoute: ExecutionCycleRouteFacts{
 			Harness:     candidate.Report.Harness,
 			Provider:    candidate.Report.Provider,

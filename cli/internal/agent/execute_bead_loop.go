@@ -6091,6 +6091,18 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	if auditLine := decisionAuditEventBodyLine(report); auditLine != "" {
 		parts = append(parts, auditLine)
 	}
+	reviewGroupID := strings.TrimSpace(report.ReviewGroupID)
+	if reviewGroupID == "" {
+		for _, trace := range report.CycleTrace {
+			if strings.TrimSpace(trace.ReviewGroupID) != "" {
+				reviewGroupID = strings.TrimSpace(trace.ReviewGroupID)
+				break
+			}
+		}
+	}
+	if reviewGroupID != "" {
+		parts = append(parts, fmt.Sprintf("review_group_id=%s", reviewGroupID))
+	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
 	}

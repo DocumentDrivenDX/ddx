@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
@@ -1448,6 +1450,199 @@ func TestRepairExhaustedWithoutDurableResultRefDoesNotInventPreserveRef(t *testi
 	}
 
 	assert.Empty(t, repairCycleExhaustedPreserveRef(report), "repair exhaustion without a durable result_rev must not invent a preserve ref")
+}
+
+func TestRepairExhaustedRecoveryFailureParksWithEvidence(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-rce-evidence", Title: "Repair exhaustion evidence"}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	report := ExecuteBeadReport{
+		BeadID:      b.ID,
+		AttemptID:   "attempt-repair-evidence",
+		Status:      ExecuteBeadStatusRepairCycleExhausted,
+		BaseRev:     "base-rev",
+		ResultRev:   "repair-rev",
+		ActualPower: 90,
+		PreserveRef: candidateIterationRef("attempt-repair-evidence", 1),
+		CycleTrace: []ExecutionCycleTrace{
+			{
+				CycleIndex:      1,
+				AttemptID:       "attempt-repair-evidence",
+				ResultRev:       "repair-rev",
+				CandidateRef:    candidateIterationRef("attempt-repair-evidence", 1),
+				ReviewGroupID:   "rg-repair",
+				ReviewerIndices: []int{0},
+				ReviewVerdicts:  []string{"BLOCK"},
+				ReviewResult: ExecutionCycleReviewResult{
+					Verdict:   "REQUEST_CHANGES",
+					Rationale: "repair still incomplete",
+				},
+				EscalationCount: 1,
+				RetryAction:     "retry",
+				FinalDecision:   ExecuteBeadStatusRepairCycleExhausted,
+			},
+		},
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			return 0, fmt.Errorf("ladder exhausted at %d", actualPower)
+		},
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			require.Equal(t, b.ID, beadID)
+			return report, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "repair exhaustion must park the bead for operator review")
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var executeEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "execute-bead" {
+			executeEvent = &events[i]
+		}
+	}
+	require.NotNil(t, executeEvent, "repair exhaustion must emit a durable execute-bead event")
+	assert.Contains(t, executeEvent.Body, "preserve_ref="+candidateIterationRef("attempt-repair-evidence", 1))
+	assert.Contains(t, executeEvent.Body, "review_group_id=rg-repair")
+
+	cycleTraceLine := findBodyLine(t, executeEvent.Body, "cycle_trace=")
+	var trace []ExecutionCycleTrace
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(cycleTraceLine, "cycle_trace=")), &trace))
+	require.NotEmpty(t, trace)
+	last := trace[len(trace)-1]
+	assert.Equal(t, candidateIterationRef("attempt-repair-evidence", 1), last.CandidateRef)
+	assert.Equal(t, "rg-repair", last.ReviewGroupID)
+	assert.Equal(t, "REQUEST_CHANGES", last.ReviewResult.Verdict)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, last.FinalDecision)
+}
+
+func TestRepairExhaustedCycleTraceRecordsRecoveryEvidence(t *testing.T) {
+	projectRoot, baseRev := initTestGitRepo(t)
+	initialRev := commitTestFile(t, projectRoot, "repair-cycle.txt", "repair candidate\n", "feat: repair cycle candidate")
+	repairedRev := commitTestFile(t, projectRoot, "repair-cycle.txt", "repair candidate exhausted\n", "feat: repair cycle exhausted")
+
+	refStore := &GitCandidateRefStore{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-repair-cycle",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   baseRev,
+					ResultRev: initialRev,
+				},
+				WorktreePath: projectRoot,
+				CycleIndex:   0,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			switch candidate.Report.ResultRev {
+			case initialRev:
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "missing regression coverage",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-cycle",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+					},
+				}, nil
+			default:
+				t.Fatalf("unexpected review result rev %q", candidate.Report.ResultRev)
+				return CandidateReviewResult{}, nil
+			}
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    candidate.Report.BeadID,
+					AttemptID: candidate.Report.AttemptID,
+					Status:    ExecuteBeadStatusRepairCycleExhausted,
+					BaseRev:   candidate.Report.BaseRev,
+					ResultRev: repairedRev,
+				},
+				WorktreePath: projectRoot,
+				CycleIndex:   1,
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			t.Fatalf("lander must not run for a repair-exhausted candidate: %+v", candidate)
+			return candidate.Report, nil
+		}),
+		RefStore:        refStore,
+		ProjectRoot:     projectRoot,
+		RepairMaxCycles: 1,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-cycle")
+	require.NoError(t, err)
+
+	assert.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
+	assert.Equal(t, candidateIterationRef("attempt-repair-cycle", 1), result.Report.PreserveRef)
+	assert.Equal(t, "rg-cycle", result.Report.ReviewGroupID)
+	assert.Equal(t, "REQUEST_CHANGES", result.Report.ReviewVerdict)
+	assert.Equal(t, repairedRev, result.Report.ResultRev)
+	require.Len(t, result.Report.CycleTrace, 2)
+
+	last := result.Report.CycleTrace[len(result.Report.CycleTrace)-1]
+	assert.Equal(t, candidateIterationRef("attempt-repair-cycle", 1), last.CandidateRef)
+	assert.Equal(t, "rg-cycle", last.ReviewGroupID)
+	assert.Equal(t, "REQUEST_CHANGES", last.ReviewResult.Verdict)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, last.FinalDecision)
+	assert.Equal(t, "retry", last.RetryAction)
+}
+
+func TestRepairExhaustedRecoverySuccessDoesNotParkProposed(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-rce-success", Title: "Repair exhaustion escalates when recovery is available"}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			return actualPower + 20, nil
+		},
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				AttemptID:   "attempt-repair-success",
+				Status:      ExecuteBeadStatusRepairCycleExhausted,
+				BaseRev:     "base-rev",
+				ResultRev:   "repair-rev",
+				ActualPower: 50,
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "repair exhaustion must stay open when the escalation ladder has a stronger follow-up")
+	assert.NotEqual(t, bead.StatusProposed, got.Status)
 }
 
 func TestRepairExhaustedApprovedSameCandidateUsesNormalLandPath(t *testing.T) {
