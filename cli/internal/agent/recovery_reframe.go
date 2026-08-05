@@ -38,7 +38,7 @@ type reframerEventBody struct {
 // dispatches runReframer for SpecGap and PersistentExecutionFailed failure
 // classes. TooLarge is not handled here; it belongs to the Decompose path.
 func NewReframePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string) PostLadderExhaustionHook {
-	return func(ctx context.Context, beadID string, failureClass RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	return func(ctx context.Context, beadID string, failureClass RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		switch failureClass {
 		case SpecGap, PersistentExecutionFailed:
 		default:

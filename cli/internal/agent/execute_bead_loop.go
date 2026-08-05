@@ -846,6 +846,20 @@ type ExecuteBeadReport struct {
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
+	// ReviewGroupID carries the review-group bundle ID for the review that
+	// produced this report, when one exists.
+	ReviewGroupID string `json:"review_group_id,omitempty"`
+	// ReviewClassification carries the structured review class derived from the
+	// reviewer evidence. It is preserved so exhausted repair cycles can recover
+	// the same recovery classification after the repair report is replayed.
+	ReviewClassification string `json:"review_classification,omitempty"`
+	// ReviewPerAC carries the structured per-AC reviewer evidence needed to
+	// reclassify a repair-exhausted result after the repair prompt has been
+	// exhausted and the loop has only the final report left.
+	ReviewPerAC []ReviewAC `json:"review_per_ac,omitempty"`
+	// ReviewFindings carries the structured reviewer findings used by TD-031
+	// recovery classification.
+	ReviewFindings []Finding `json:"review_findings,omitempty"`
 	// ReviewSkipReason carries the durable review:skip-reason:* label when a
 	// success path is allowed to close without running a reviewer.
 	ReviewSkipReason string `json:"review_skip_reason,omitempty"`
@@ -4425,7 +4439,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				_ = parkToProposedSimple(w.Store, candidate.ID, bead.ParkLadderExhaustionManual, "recovery:manual label set", now().UTC())
 			} else if runtime.PostLadderExhaustionHook != nil {
 				failureClass := deriveRecoveryFailureClass(report)
-				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass)
+				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass, postLadderExhaustionContextFromReport(report))
 			}
 		}
 		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -4923,7 +4937,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				}
 			}
 		} else if report.Status == ExecuteBeadStatusRepairCycleExhausted {
-			if err := applyRepairCycleExhaustedEscalation(w.Store, candidate.ID, assignee, report.ActualPower, now(), w.EscalationNextFloor); err != nil {
+			if err := applyRepairCycleExhaustedEscalation(ctx, w.Store, candidate.ID, assignee, report, report.ActualPower, now(), w.EscalationNextFloor, runtime.PostLadderExhaustionHook); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("applyRepairCycleExhaustedEscalation", assignee, result, err)
 				})
@@ -7256,7 +7270,16 @@ func applyNoChangesBadAttemptEscalation(store ExecuteBeadLoopStore, beadID, acto
 // applyRepairCycleExhaustedEscalation keeps the bead open when a stronger retry
 // remains available. If the ladder is already at the top powerClass, the bead
 // is parked to proposed for operator review.
-func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, actor string, actualPower int, at time.Time, nextFloorFn func(int) (int, error)) error {
+func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadLoopStore, beadID, actor string, report ExecuteBeadReport, actualPower int, at time.Time, nextFloorFn func(int) (int, error), hook PostLadderExhaustionHook) error {
+	appendRepairCycleExhaustedEvent(store, beadID, actor, at, report)
+	if hook != nil {
+		failureClass := deriveRecoveryFailureClass(report)
+		if result, err := hook(ctx, beadID, failureClass, postLadderExhaustionContextFromReport(report)); err != nil {
+			return err
+		} else if result != nil && result.Attempted {
+			return nil
+		}
+	}
 	if nextFloorFn != nil {
 		if _, err := nextFloorFn(actualPower); err == nil {
 			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{

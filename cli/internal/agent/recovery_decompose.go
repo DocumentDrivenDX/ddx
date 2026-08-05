@@ -126,7 +126,7 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 // NewDecomposePostLadderExhaustionHook creates a PostLadderExhaustionHook that
 // dispatches runDecomposer for TooLarge failure class.
 func NewDecomposePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string) PostLadderExhaustionHook {
-	return func(ctx context.Context, beadID string, failureClass RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	return func(ctx context.Context, beadID string, failureClass RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		if failureClass != TooLarge {
 			return &PostLadderExhaustionResult{Attempted: false}, nil
 		}
