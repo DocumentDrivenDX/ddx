@@ -5830,3 +5830,4 @@
 {"schema_version":1,"attempt_id":"20260805T185511-6d2eadd2","bead_id":"ddx-a2d183c3","session_id":"eb-ace60054","ts_end":"2026-08-05T19:55:05Z","outcome":"preserved_needs_review","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260805T140629-e072f67e","bead_id":"ddx-ea20bcbf","session_id":"eb-f46c0ca6","ts_end":"2026-08-05T19:56:45Z","outcome":"success","exit_code":0,"duration_ms":0}
 {"schema_version":1,"attempt_id":"20260805T180822-c12a9765","bead_id":"ddx-7a1401c9","session_id":"eb-0f9ea163","ts_end":"2026-08-05T19:57:53Z","outcome":"success","exit_code":0,"duration_ms":0}
+{"schema_version":1,"attempt_id":"20260805T200349-c521c472","bead_id":"ddx-3836e7bd","session_id":"eb-b7e38a23","ts_start":"2026-08-05T20:08:18Z","ts_end":"2026-08-05T20:31:00Z","model":"gpt-5.4-mini","harness":"codex","outcome":"success","exit_code":0,"duration_ms":1361921,"review_verdict":"APPROVE"}
