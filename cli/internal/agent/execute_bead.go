@@ -486,19 +486,6 @@ func workerCandidateCycleReport(res *ExecuteBeadResult, salvageMixedCommit bool)
 	return report
 }
 
-func isSalvageableMixedCommitRationale(text string) bool {
-	parsed := ParseNoChangesRationale(text)
-	if parsed.Kind != NoChangesKindLifecycleStatus {
-		return false
-	}
-	switch parsed.LifecycleStatus {
-	case "open", "proposed":
-		return true
-	default:
-		return false
-	}
-}
-
 func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadReport) {
 	if res == nil {
 		return
@@ -2116,6 +2103,7 @@ func isSalvageableMixedCommitRationale(rationale string) bool {
 		"autonomous work remains possible",
 		"retry with a smart agent",
 		"retry with smart agent",
+		"salvage candidate",
 		"rerun with a stronger model",
 		"rerun with stronger model",
 		"package gate",
@@ -2700,7 +2688,7 @@ const executeBeadInstructionsText = `You are executing one bead in an isolated D
 - Commit exactly once; subject ends with ` + "`[<bead-id>]`" + `.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
-- If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting.` +
+- No commit: use ` + "`no_changes_rationale.txt`" + ` under ` + "`bundle`" + `. After commit: do not; orchestrator owns suite health.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
 	instrBeadOverride +

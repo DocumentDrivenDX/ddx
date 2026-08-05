@@ -33,7 +33,7 @@ Decomposition alone is success. Don't mix it with implementation.
 - Commit exactly once; subject ends with `[<bead-id>]`.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run `ddx bead update <bead-id> --claim`, `ddx bead update <bead-id> --status <status>`, `ddx bead update <bead-id> --unclaim`, or `ddx bead close <bead-id>`. Step 0 allows `ddx bead create`, `ddx bead dep add` for child-to-child or sibling/replacement edges, and `ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
-- If you cannot finish, write `no_changes_rationale.txt` under the bead metadata `bundle` path before exiting.
+- No commit: use `no_changes_rationale.txt` under `bundle`. After commit: do not; orchestrator owns suite health.
 
 ## no_changes contract
 
