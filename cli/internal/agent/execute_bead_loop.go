@@ -846,9 +846,6 @@ type ExecuteBeadReport struct {
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
-	// ReviewGroupID carries the review-group bundle ID for the review that
-	// produced this report, when one exists.
-	ReviewGroupID string `json:"review_group_id,omitempty"`
 	// ReviewClassification carries the structured review class derived from the
 	// reviewer evidence. It is preserved so exhausted repair cycles can recover
 	// the same recovery classification after the repair report is replayed.

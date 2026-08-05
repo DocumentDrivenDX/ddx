@@ -1439,7 +1439,7 @@ func TestRepairExhaustedPreservesResultRefWithoutLand(t *testing.T) {
 	assert.Equal(t, resultRev, gotPreserve)
 }
 
-func TestRepairExhaustedWithoutDurableResultRefDoesNotInventPreserveRef(t *testing.T) {
+func TestRepairExhaustedNoDurableResultRevSkipsFakePreserve(t *testing.T) {
 	report := ExecuteBeadReport{
 		BeadID:       "ddx-repair-no-preserve",
 		AttemptID:    "attempt-repair-no-preserve",
@@ -1450,6 +1450,8 @@ func TestRepairExhaustedWithoutDurableResultRefDoesNotInventPreserveRef(t *testi
 	}
 
 	assert.Empty(t, repairCycleExhaustedPreserveRef(report), "repair exhaustion without a durable result_rev must not invent a preserve ref")
+	report.ResultRev = report.BaseRev
+	assert.Empty(t, repairCycleExhaustedPreserveRef(report), "base_rev-only reports must not invent a fake candidate preserve ref")
 }
 
 func TestRepairExhaustedRecoveryFailureParksWithEvidence(t *testing.T) {
