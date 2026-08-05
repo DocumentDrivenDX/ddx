@@ -24,17 +24,18 @@ func TestFizeauV015ModuleContract(t *testing.T) {
 	helperBin := buildFizeauModuleContractHelper(t)
 	output := goVersionM(t, helperBin)
 
-	line, found := findModuleBuildInfoLine(output, "github.com/easel/fizeau")
+	line, nextLine, found := findModuleBuildInfoLine(output, "github.com/easel/fizeau")
 	if !found {
 		t.Fatalf("github.com/easel/fizeau missing from build info:\n%s", output)
 	}
-	if strings.Contains(line, "=>") {
-		t.Fatalf("github.com/easel/fizeau resolved via replacement: %s", line)
+	if replacementLine := findReplacementLine(line, nextLine); replacementLine != "" {
+		t.Fatalf("github.com/easel/fizeau resolved via replacement: %s", replacementLine)
 	}
-	if !strings.Contains(line, "\tv0.15.0\t") {
-		t.Fatalf("github.com/easel/fizeau version = %q, want v0.15.0\nfull output:\n%s", line, output)
-	}
-	if strings.Contains(line, "v0.0.0-") {
+	if version, ok := moduleVersion(line, "github.com/easel/fizeau"); !ok {
+		t.Fatalf("github.com/easel/fizeau version field missing: %q\nfull output:\n%s", line, output)
+	} else if version != "v0.15.0" {
+		t.Fatalf("github.com/easel/fizeau version = %q, want v0.15.0\nfull output:\n%s", version, output)
+	} else if strings.HasPrefix(version, "v0.0.0-") {
 		t.Fatalf("github.com/easel/fizeau resolved to pseudo-version: %s", line)
 	}
 }
@@ -75,10 +76,35 @@ func goVersionM(t *testing.T, bin string) string {
 	return string(out)
 }
 
-func findModuleBuildInfoLine(output, modulePath string) (string, bool) {
-	for _, line := range strings.Split(output, "\n") {
+func findModuleBuildInfoLine(output, modulePath string) (string, string, bool) {
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
 		if strings.Contains(line, modulePath) {
-			return line, true
+			nextLine := ""
+			if i+1 < len(lines) {
+				nextLine = lines[i+1]
+			}
+			return line, nextLine, true
+		}
+	}
+	return "", "", false
+}
+
+func findReplacementLine(line, nextLine string) string {
+	if strings.Contains(line, "=>") {
+		return line
+	}
+	if strings.HasPrefix(strings.TrimSpace(nextLine), "=>") {
+		return nextLine
+	}
+	return ""
+}
+
+func moduleVersion(line, modulePath string) (string, bool) {
+	fields := strings.Fields(line)
+	for i := 0; i < len(fields); i++ {
+		if fields[i] == modulePath && i+1 < len(fields) {
+			return fields[i+1], true
 		}
 	}
 	return "", false
