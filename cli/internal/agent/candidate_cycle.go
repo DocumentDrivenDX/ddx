@@ -250,6 +250,16 @@ type AttemptCycleCoordinator struct {
 	RepairMaxCycles int
 }
 
+func repairCycleExhaustedPreserveRef(report ExecuteBeadReport) string {
+	if strings.TrimSpace(report.ResultRev) == "" || strings.TrimSpace(report.CandidateRef) == "" {
+		return ""
+	}
+	if strings.TrimSpace(report.BaseRev) != "" && report.ResultRev == report.BaseRev {
+		return ""
+	}
+	return report.CandidateRef
+}
+
 // Run executes one attempt cycle: implementation → checks → optional review →
 // optional repair → optional land. Non-success statuses (no_changes,
 // execution_failed, etc.) return without calling the lander.
@@ -396,6 +406,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 						report.Status = ExecuteBeadStatusRepairCycleExhausted
 						report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 						report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+						report.PreserveRef = repairCycleExhaustedPreserveRef(report)
 						recordCycle(&report, nil, report.Status)
 						return AttemptCycleResult{Report: report}, nil
 					}
@@ -518,6 +529,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				report.Status = ExecuteBeadStatusRepairCycleExhausted
 				report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 				report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+				report.PreserveRef = repairCycleExhaustedPreserveRef(report)
 				recordCycle(&report, cycleReview, report.Status)
 				return AttemptCycleResult{Report: report}, nil
 			}

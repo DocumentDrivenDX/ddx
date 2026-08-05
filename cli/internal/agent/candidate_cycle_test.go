@@ -1365,6 +1365,91 @@ func TestRepairExhaustedDoesNotLandFromExhaustionBranch(t *testing.T) {
 	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-stale/0", "refs/ddx/iterations/attempt-repair-stale/1"}, refStore.pinned)
 }
 
+func TestRepairExhaustedPreservesResultRefWithoutLand(t *testing.T) {
+	projectRoot, baseRev := initTestGitRepo(t)
+	resultRev := commitTestFile(t, projectRoot, "repair-candidate.txt", "repair exhausted preserve\n", "feat: repair exhausted candidate")
+
+	refStore := &GitCandidateRefStore{}
+	landerCalled := false
+	reviewCalls := 0
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-repair-preserve",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   baseRev,
+					ResultRev: resultRev,
+				},
+				WorktreePath: projectRoot,
+				CycleIndex:   0,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewCalls++
+			switch reviewCalls {
+			case 1, 2:
+				return repairCycleFixableReview(), nil
+			default:
+				t.Fatalf("unexpected review call %d for result_rev %s", reviewCalls, candidate.Report.ResultRev)
+				return CandidateReviewResult{}, nil
+			}
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    candidate.Report.BeadID,
+					AttemptID: candidate.Report.AttemptID,
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   candidate.Report.BaseRev,
+					ResultRev: resultRev,
+				},
+				WorktreePath: projectRoot,
+				CycleIndex:   1,
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			landerCalled = true
+			t.Fatalf("lander must not run for repair exhaustion: %+v", candidate)
+			return candidate.Report, nil
+		}),
+		RefStore:        refStore,
+		ProjectRoot:     projectRoot,
+		RepairMaxCycles: 1,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-preserve")
+	require.NoError(t, err)
+
+	assert.False(t, landerCalled, "repair exhaustion must not call the lander")
+	assert.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
+	require.NotEmpty(t, result.Report.CandidateRef, "repair exhaustion must retain the candidate ref")
+	assert.Equal(t, result.Report.CandidateRef, result.Report.PreserveRef, "repair exhaustion must publish a preserve ref for the durable candidate")
+
+	gotCandidate, err := gitRevParse(t, projectRoot, result.Report.CandidateRef)
+	require.NoError(t, err)
+	assert.Equal(t, resultRev, gotCandidate)
+
+	gotPreserve, err := gitRevParse(t, projectRoot, result.Report.PreserveRef)
+	require.NoError(t, err)
+	assert.Equal(t, resultRev, gotPreserve)
+}
+
+func TestRepairExhaustedWithoutDurableResultRefDoesNotInventPreserveRef(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:       "ddx-repair-no-preserve",
+		AttemptID:    "attempt-repair-no-preserve",
+		BaseRev:      "base-rev",
+		ResultRev:    "",
+		CandidateRef: "refs/ddx/iterations/attempt-repair-no-preserve/0",
+		Status:       ExecuteBeadStatusRepairCycleExhausted,
+	}
+
+	assert.Empty(t, repairCycleExhaustedPreserveRef(report), "repair exhaustion without a durable result_rev must not invent a preserve ref")
+}
+
 func TestRepairExhaustedApprovedSameCandidateUsesNormalLandPath(t *testing.T) {
 	refStore := &inMemoryCandidateRefStore{}
 	coord := &AttemptCycleCoordinator{

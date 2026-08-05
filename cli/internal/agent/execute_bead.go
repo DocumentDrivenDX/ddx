@@ -512,6 +512,7 @@ func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadRepor
 	res.ReviewVerdict = report.ReviewVerdict
 	res.ReviewRationale = report.ReviewRationale
 	res.ReviewSkipReason = report.ReviewSkipReason
+	res.PreserveRef = report.PreserveRef
 	res.CandidateRef = report.CandidateRef
 	res.CycleIndex = report.CycleIndex
 	res.CycleTrace = append([]ExecutionCycleTrace(nil), report.CycleTrace...)
