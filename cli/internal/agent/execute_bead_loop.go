@@ -6098,12 +6098,32 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		parts = append(parts, report.ReviewRationale)
 	}
 	if len(report.CycleTrace) > 0 {
-		if traceJSON, err := json.Marshal(report.CycleTrace); err == nil {
+		cycleTrace := append([]ExecutionCycleTrace(nil), report.CycleTrace...)
+		if baseRev := strings.TrimSpace(report.BaseRev); baseRev != "" {
+			for i := range cycleTrace {
+				if strings.TrimSpace(cycleTrace[i].BaseRev) == "" {
+					cycleTrace[i].BaseRev = baseRev
+				}
+			}
+		}
+		if traceJSON, err := json.Marshal(cycleTrace); err == nil {
 			parts = append(parts, "cycle_trace="+string(traceJSON))
 		}
 	}
 	if auditLine := decisionAuditEventBodyLine(report); auditLine != "" {
 		parts = append(parts, auditLine)
+	}
+	reviewGroupID := strings.TrimSpace(report.ReviewGroupID)
+	if reviewGroupID == "" {
+		for _, trace := range report.CycleTrace {
+			if strings.TrimSpace(trace.ReviewGroupID) != "" {
+				reviewGroupID = strings.TrimSpace(trace.ReviewGroupID)
+				break
+			}
+		}
+	}
+	if reviewGroupID != "" {
+		parts = append(parts, fmt.Sprintf("review_group_id=%s", reviewGroupID))
 	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
