@@ -197,6 +197,32 @@ func TestAttempt_NoChangesBlockedUnrelatedPackageGateStaysOpen(t *testing.T) {
 	assert.NotEqual(t, NoChangesActionBlockedExternal, out.NoChanges.Action)
 }
 
+func TestNoChangesBlocked_RejectsUnrelatedPackageGateProse(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusNoChanges,
+				NoChangesRationale: "status: blocked\n" +
+					"reason: lefthook run pre-commit is red because unrelated package test " +
+					"TestAttemptWorkspaceReuseTelemetryDoesNotDoubleCountFailedCleanup failed\n" +
+					"suggested_action: fix the unrelated package gate then retry",
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	require.NotNil(t, out.NoChanges)
+	assert.Equal(t, NoChangesActionKeepOpenSmartRetry, out.NoChanges.Action)
+	assert.Equal(t, NoChangesEventAutonomousRetry, out.NoChanges.EventKind)
+	assert.Equal(t, "open", out.NoChanges.LifecycleStatus)
+	assert.NotEqual(t, NoChangesActionBlockedExternal, out.NoChanges.Action)
+}
+
 func TestAttempt_NoChangesBlockedLocalResourceExhaustion_ReturnsBlockedExternal(t *testing.T) {
 	store := &attemptStore{}
 
