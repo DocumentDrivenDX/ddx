@@ -5052,7 +5052,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 						}
 						report.RetryAfter = retryAfter.Format(time.RFC3339)
 					}
-					if report.Detail == mixedCommitAndNoChangesRationaleReason &&
+					if shouldCountMixedCommitOACircuit(report) &&
 						countRecentMixedCommitEvents(w.Store, candidate.ID, mixedCommitCooldownWindow, now().UTC()) >= 1 {
 						if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkNoChangesOperatorRequired,
 							"circuit-breaker: "+mixedCommitAndNoChangesRationaleReason+" repeated within 24h; operator review required",
@@ -7549,11 +7549,47 @@ func countRecentMixedCommitEvents(store ExecuteBeadLoopStore, beadID string, win
 	count := 0
 	for _, ev := range events {
 		if ev.Kind == "execute-bead" && ev.CreatedAt.After(cutoff) &&
-			strings.Contains(ev.Body, mixedCommitAndNoChangesRationaleReason) {
+			strings.Contains(ev.Body, mixedCommitAndNoChangesRationaleReason) &&
+			!isApprovedMixedCommitSalvageEvent(ev) {
 			count++
 		}
 	}
 	return count
+}
+
+func shouldCountMixedCommitOACircuit(report ExecuteBeadReport) bool {
+	if !strings.Contains(report.Detail, mixedCommitAndNoChangesRationaleReason) {
+		return false
+	}
+	return !isApprovedMixedCommitSalvageReport(report)
+}
+
+func isApprovedMixedCommitSalvageReport(report ExecuteBeadReport) bool {
+	return report.Status == ExecuteBeadStatusSuccess &&
+		strings.EqualFold(strings.TrimSpace(firstNonEmpty(report.ReviewVerdict, report.FirstReviewVerdictFromTrace())), "APPROVE")
+}
+
+func isApprovedMixedCommitSalvageEvent(ev bead.BeadEvent) bool {
+	if ev.Summary != ExecuteBeadStatusSuccess {
+		return false
+	}
+	report := ExecuteBeadReport{Status: ev.Summary}
+	for _, line := range strings.Split(ev.Body, "\n") {
+		if raw, ok := strings.CutPrefix(line, "cycle_trace="); ok {
+			var trace []ExecutionCycleTrace
+			if err := json.Unmarshal([]byte(raw), &trace); err == nil {
+				report.CycleTrace = trace
+			}
+			continue
+		}
+		if raw, ok := strings.CutPrefix(line, "decision_audit="); ok {
+			var audit executionDecisionAudit
+			if err := json.Unmarshal([]byte(raw), &audit); err == nil && strings.TrimSpace(audit.ReviewVerdict) != "" {
+				report.ReviewVerdict = audit.ReviewVerdict
+			}
+		}
+	}
+	return isApprovedMixedCommitSalvageReport(report)
 }
 
 func isTransientOutcomeReason(reason string) bool {

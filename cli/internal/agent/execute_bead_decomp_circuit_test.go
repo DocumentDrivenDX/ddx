@@ -84,6 +84,124 @@ func TestMixedCommitCooldown(t *testing.T) {
 		"bead must be parked to proposed after 2nd mixed_commit within 24h")
 }
 
+func TestMixedCommitOACircuitOnlySuppressesOnSuccessfulSalvage(t *testing.T) {
+	now := time.Now().UTC()
+	approved := ExecuteBeadReport{
+		Status:             ExecuteBeadStatusSuccess,
+		Detail:             mixedCommitAndNoChangesRationaleReason,
+		NoChangesRationale: "status: open\nreason: salvage candidate until review completes",
+		ReviewVerdict:      "APPROVE",
+	}
+
+	assert.False(t, shouldCountMixedCommitOACircuit(approved),
+		"successful salvaged mixed commits with reviewer APPROVE must not increment the OA circuit")
+
+	for name, report := range map[string]ExecuteBeadReport{
+		"checks_failed": {
+			Status:             ExecuteBeadStatusPostRunCheckFailed,
+			Detail:             mixedCommitAndNoChangesRationaleReason,
+			NoChangesRationale: "status: open\nreason: candidate checks failed",
+		},
+		"review_block": {
+			Status:             ExecuteBeadStatusReviewBlock,
+			Detail:             mixedCommitAndNoChangesRationaleReason,
+			NoChangesRationale: "status: open\nreason: reviewer blocked candidate",
+			ReviewVerdict:      "BLOCK",
+		},
+		"success_without_approve": {
+			Status:             ExecuteBeadStatusSuccess,
+			Detail:             mixedCommitAndNoChangesRationaleReason,
+			NoChangesRationale: "status: open\nreason: no final reviewer approval",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.True(t, shouldCountMixedCommitOACircuit(report),
+				"only checks-passed plus reviewer APPROVE suppresses the OA circuit")
+		})
+	}
+
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+	b := &bead.Bead{ID: "ddx-mixed-approved", Title: "Approved mixed commit"}
+	require.NoError(t, store.Create(context.Background(), b))
+	require.NoError(t, store.AppendEvent(b.ID, executeBeadLoopEvent(approved, "worker", now)))
+
+	assert.Equal(t, 0, countRecentMixedCommitEvents(store, b.ID, mixedCommitCooldownWindow, now.Add(time.Minute)),
+		"approved mixed-commit salvage events must not count as prior OA circuit hits")
+
+	traceOnlyApproved, err := json.Marshal([]ExecutionCycleTrace{
+		{ReviewResult: ExecutionCycleReviewResult{Verdict: " approve "}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.AppendEvent(b.ID, bead.BeadEvent{
+		Kind:      "execute-bead",
+		Summary:   ExecuteBeadStatusSuccess,
+		Body:      mixedCommitAndNoChangesRationaleReason + "\ncycle_trace=" + string(traceOnlyApproved),
+		Actor:     "worker",
+		Source:    "test",
+		CreatedAt: now.Add(time.Second),
+	}))
+
+	assert.Equal(t, 0, countRecentMixedCommitEvents(store, b.ID, mixedCommitCooldownWindow, now.Add(time.Minute)),
+		"persisted approved salvage events must honor trace verdicts and casing like live reports")
+}
+
+func TestMixedCommitPinThenFailStillIncrementsOACircuit(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-mixed-pin-fail", Title: "Mixed commit pin then fail"}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	prior := ExecuteBeadReport{
+		Status:             ExecuteBeadStatusReviewBlock,
+		Detail:             mixedCommitAndNoChangesRationaleReason,
+		NoChangesRationale: "status: open\nreason: reviewer blocked candidate",
+		ReviewVerdict:      "BLOCK",
+		BaseRev:            "abc1111",
+		ResultRev:          "def2222",
+	}
+	require.NoError(t, store.AppendEvent(b.ID, executeBeadLoopEvent(prior, "test-worker", time.Now().UTC().Add(-time.Hour))))
+	require.Equal(t, 1, countRecentMixedCommitEvents(store, b.ID, mixedCommitCooldownWindow, time.Now().UTC()),
+		"failed mixed-commit salvage must count as a prior OA circuit hit")
+
+	var callCount int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&callCount, 1)
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusPostRunCheckFailed,
+				Detail:             mixedCommitAndNoChangesRationaleReason,
+				NoChangesRationale: "status: open\nreason: candidate checks failed",
+				BaseRev:            "abc3333",
+				ResultRev:          "def4444",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "test-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: b.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), atomic.LoadInt32(&callCount), "executor must run exactly once")
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status,
+		"second pin-then-fail mixed_commit must park at the OA circuit threshold")
+}
+
+func TestMixedCommitPromptDiscouragesNoChangesRationaleAfterCommits(t *testing.T) {
+	assert.Contains(t, executeBeadInstructionsText,
+		"After commit: do not; orchestrator owns suite health.")
+}
+
 func TestExecuteBeadLoop_NiflheimEvidence_DecomposedParentIsExecutionIneligible(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
