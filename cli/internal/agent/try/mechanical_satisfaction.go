@@ -20,6 +20,21 @@ var (
 	errMechanicalTokenFound              = errors.New("mechanical token found")
 )
 
+var packageGatePollutionSignals = []string{
+	"unrelated package gate",
+	"package gate red",
+	"package gate failed",
+	"package gate is not green",
+	"full package gate is not green",
+	"full package gate",
+	"lefthook run pre-commit",
+	"lefthook pre-commit",
+	"pre-commit is blocked",
+	"go test ./",
+	"go test ./internal/",
+	"go test ./cmd/",
+}
+
 // MechanicalAlreadySatisfiedChecker returns a SatisfactionChecker that closes
 // only fully mechanical acceptance criteria already present in the project
 // tree. It intentionally refuses to auto-close beads with test-name,
@@ -118,6 +133,47 @@ func MechanicalAlreadySatisfiedChecker(acceptance, projectRoot string) Satisfact
 	return checker
 }
 
+func reportHasPackageGatePollution(report Report) bool {
+	if report.Status != StatusNoChanges {
+		return false
+	}
+
+	parsed := ParseNoChangesRationale(report.NoChangesRationale)
+	if parsed.Kind == NoChangesKindVerified {
+		return false
+	}
+
+	if parsed.LifecycleStatus == "blocked" && noChangesBlockedReasonLooksExternalRecheckable(parsed.Reason, parsed.SuggestedAction, report.NoChangesRationale) {
+		return false
+	}
+
+	combined := strings.ToLower(strings.Join([]string{
+		strings.TrimSpace(report.NoChangesRationale),
+		strings.TrimSpace(report.Detail),
+		strings.TrimSpace(report.Error),
+		strings.TrimSpace(report.Stderr),
+		parsed.Reason,
+		parsed.SuggestedAction,
+	}, "\n"))
+	if combined == "" {
+		return false
+	}
+
+	if !containsAnyText(combined, packageGatePollutionSignals...) {
+		return false
+	}
+
+	return containsAnyText(combined,
+		"unrelated",
+		"pre-existing",
+		"not green",
+		"red",
+		"failed",
+		"failure",
+		"race",
+	)
+}
+
 type mechanicalSatisfactionCheckerFunc func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error)
 
 func (f mechanicalSatisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
@@ -214,4 +270,16 @@ func uniqueStrings(items []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func containsAnyText(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if needle == "" {
+			continue
+		}
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
 }

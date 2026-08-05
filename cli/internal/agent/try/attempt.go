@@ -369,7 +369,7 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 		}
 		report.EscalationCount = noChangesCount
 		checker := opts.SatisfactionChecker
-		if checker == nil {
+		if checker == nil && reportHasPackageGatePollution(report) {
 			checker = MechanicalAlreadySatisfiedChecker(opts.Bead.Acceptance, opts.ProjectRoot)
 		}
 		noChangesOut, adjudicatedReport, adjErr := adjudicateNoChangesContract(ctx, beadID, report, opts.ProjectRoot, noChangesCount, checker, opts.VerificationRunner)

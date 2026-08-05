@@ -106,3 +106,48 @@ func TestAlreadySatisfied_ImplementationBeadWithTestFooStillRequiresGreen(t *tes
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
+
+func TestAlreadySatisfied_MechanicalDocsAC_WithoutPackageGateNoiseStaysOpen(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Init(context.Background()))
+
+	const beadID = "ddx-int-0002"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "mechanical docs still open"}))
+	require.NoError(t, store.Update(context.Background(), beadID, func(b *bead.Bead) {
+		b.Acceptance = "1. docs/alpha.md exists\n2. `ddx-06cbaa90` is cited in docs/beta.md"
+	}))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "docs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "docs", "alpha.md"), []byte("alpha doc\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "docs", "beta.md"), []byte("cite: ddx-06cbaa90\n"), 0o644))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusNoChanges,
+				SessionID: "sess-mechanical-open",
+				Detail:    "the work appears complete, but there was no package-gate noise to justify already_satisfied",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true, ProjectRoot: projectRoot})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, result.Results[0].Status)
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+}
