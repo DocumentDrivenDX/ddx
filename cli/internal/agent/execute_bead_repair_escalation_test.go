@@ -63,17 +63,6 @@ func TestRepairExhaustedAfterBlockEntersAutoRecovery(t *testing.T) {
 
 	var hookCalls int
 	var observedClass RecoveryFailureClass
-	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
-		hookCalls++
-		assert.Equal(t, b.ID, beadID)
-		observedClass = class
-		assert.Equal(t, "rg-block", review.ReviewGroupID)
-		assert.Equal(t, ReviewTerminalClassSpecGap, review.ReviewClassification)
-		require.Len(t, review.ReviewFindings, 1)
-		assert.Equal(t, "missing regression test", review.ReviewFindings[0].Summary)
-		return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
-	})
-
 	report := ExecuteBeadReport{
 		BeadID:               b.ID,
 		Status:               ExecuteBeadStatusRepairCycleExhausted,
@@ -82,6 +71,12 @@ func TestRepairExhaustedAfterBlockEntersAutoRecovery(t *testing.T) {
 		ReviewRationale:      "missing regression test",
 		ReviewGroupID:        "rg-block",
 		ReviewClassification: ReviewTerminalClassSpecGap,
+		BaseRev:              "base-rce03",
+		ResultRev:            "result-rce03",
+		CandidateRef:         "refs/ddx/iterations/ddx-rce03/attempt-1",
+		PreserveRef:          "refs/ddx/iterations/ddx-rce03/attempt-1",
+		RepairCycleCount:     1,
+		RecoveryAction:       "td-031:auto-recovery",
 		ReviewPerAC: []ReviewAC{{
 			Number:   1,
 			Item:     "Add regression test",
@@ -93,7 +88,46 @@ func TestRepairExhaustedAfterBlockEntersAutoRecovery(t *testing.T) {
 			Summary:  "missing regression test",
 			Location: "pkg/foo_test.go:42",
 		}},
+		CycleTrace: []ExecutionCycleTrace{{
+			CycleIndex:       1,
+			AttemptID:        "attempt-rce03",
+			BaseRev:          "base-rce03",
+			ResultRev:        "result-rce03",
+			CandidateRef:     "refs/ddx/iterations/ddx-rce03/attempt-1",
+			ReviewGroupID:    "rg-block",
+			RepairCycleCount: 1,
+			RecoveryAction:   "td-031:auto-recovery",
+			ReviewResult: ExecutionCycleReviewResult{
+				Verdict:        string(VerdictBlock),
+				Rationale:      "missing regression test",
+				Classification: ReviewTerminalClassSpecGap,
+				PerAC: []ReviewAC{{
+					Number:   1,
+					Item:     "Add regression test",
+					Grade:    "BLOCK",
+					Evidence: "pkg/foo_test.go:42",
+				}},
+				Findings: []Finding{{
+					Severity: "block",
+					Summary:  "missing regression test",
+					Location: "pkg/foo_test.go:42",
+				}},
+			},
+			FinalDecision: ExecuteBeadStatusRepairCycleExhausted,
+		}},
 	}
+
+	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
+		hookCalls++
+		assert.Equal(t, b.ID, beadID)
+		observedClass = class
+		assert.Equal(t, "rg-block", review.ReviewGroupID)
+		assert.Equal(t, report.PreserveRef, review.PreserveRef)
+		assert.Equal(t, ReviewTerminalClassSpecGap, review.ReviewClassification)
+		require.Len(t, review.ReviewFindings, 1)
+		assert.Equal(t, "missing regression test", review.ReviewFindings[0].Summary)
+		return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
+	})
 
 	err := applyRepairCycleExhaustedEscalation(context.Background(), store, b.ID, "worker", report, report.ActualPower, time.Now().UTC(), func(int) (int, error) {
 		return 0, fmt.Errorf("ladder exhausted")
@@ -111,8 +145,20 @@ func TestRepairExhaustedAfterBlockEntersAutoRecovery(t *testing.T) {
 	var body repairCycleExhaustedEventBody
 	require.NoError(t, json.Unmarshal([]byte(event.Body), &body))
 	assert.Equal(t, "rg-block", body.ReviewGroupID)
+	assert.Equal(t, "base-rce03", body.BaseRev)
+	assert.Equal(t, "result-rce03", body.ResultRev)
+	assert.Equal(t, "refs/ddx/iterations/ddx-rce03/attempt-1", body.CandidateRef)
+	assert.Equal(t, "refs/ddx/iterations/ddx-rce03/attempt-1", body.PreserveRef)
+	assert.Equal(t, 1, body.RepairCycleCount)
+	assert.Equal(t, "td-031:auto-recovery", body.RecoveryAction)
 	require.Len(t, body.ReviewFindings, 1)
 	assert.Equal(t, "missing regression test", body.ReviewFindings[0].Summary)
+	require.Len(t, body.CycleTrace, 1)
+	assert.Equal(t, "base-rce03", body.CycleTrace[0].BaseRev)
+	assert.Equal(t, "rg-block", body.CycleTrace[0].ReviewGroupID)
+	assert.Equal(t, string(VerdictBlock), body.CycleTrace[0].ReviewResult.Verdict)
+	assert.Equal(t, 1, body.CycleTrace[0].RepairCycleCount)
+	assert.Equal(t, "td-031:auto-recovery", body.CycleTrace[0].RecoveryAction)
 }
 
 func TestRepairExhaustedRecoveryLinksReviewGroup(t *testing.T) {
@@ -130,6 +176,11 @@ func TestRepairExhaustedRecoveryLinksReviewGroup(t *testing.T) {
 		ReviewRationale:      "spec gap needs a rewrite",
 		ReviewGroupID:        "rg-link",
 		ReviewClassification: ReviewTerminalClassSpecGap,
+		BaseRev:              "base-rce04",
+		ResultRev:            "result-rce04",
+		CandidateRef:         "refs/ddx/iterations/ddx-rce04/attempt-1",
+		RepairCycleCount:     1,
+		RecoveryAction:       "td-031:auto-recovery",
 		ReviewPerAC: []ReviewAC{{
 			Number:   2,
 			Item:     "Document edge case",
@@ -140,6 +191,33 @@ func TestRepairExhaustedRecoveryLinksReviewGroup(t *testing.T) {
 			Severity: "block",
 			Summary:  "spec gap needs a rewrite",
 			Location: "docs/notes.md:12",
+		}},
+		CycleTrace: []ExecutionCycleTrace{{
+			CycleIndex:       1,
+			AttemptID:        "attempt-rce04",
+			BaseRev:          "base-rce04",
+			ResultRev:        "result-rce04",
+			CandidateRef:     "refs/ddx/iterations/ddx-rce04/attempt-1",
+			ReviewGroupID:    "rg-link",
+			RepairCycleCount: 1,
+			RecoveryAction:   "td-031:auto-recovery",
+			ReviewResult: ExecutionCycleReviewResult{
+				Verdict:        string(VerdictBlock),
+				Rationale:      "spec gap needs a rewrite",
+				Classification: ReviewTerminalClassSpecGap,
+				PerAC: []ReviewAC{{
+					Number:   2,
+					Item:     "Document edge case",
+					Grade:    "BLOCK",
+					Evidence: "docs/notes.md:12",
+				}},
+				Findings: []Finding{{
+					Severity: "block",
+					Summary:  "spec gap needs a rewrite",
+					Location: "docs/notes.md:12",
+				}},
+			},
+			FinalDecision: ExecuteBeadStatusRepairCycleExhausted,
 		}},
 	}
 
@@ -165,6 +243,66 @@ func TestRepairExhaustedRecoveryLinksReviewGroup(t *testing.T) {
 	assert.Equal(t, ReviewTerminalClassSpecGap, body.ReviewClassification)
 	require.Len(t, body.ReviewFindings, 1)
 	assert.Equal(t, "spec gap needs a rewrite", body.ReviewFindings[0].Summary)
+	require.Len(t, body.CycleTrace, 1)
+	assert.Equal(t, "rg-link", body.CycleTrace[0].ReviewGroupID)
+	assert.Equal(t, ReviewTerminalClassSpecGap, body.CycleTrace[0].ReviewResult.Classification)
+}
+
+func TestRepairExhaustedRecoveryFailureParksWithEvidence(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-rce06", Title: "Repair cycle exhausted recovery failure"}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		return &Result{ExitCode: 0, Output: `not json`, CostUSD: 0.11}, nil
+	})
+	hook := NewAutoRecoveryPostLadderExhaustionHook(store, runner, config.NewTestConfigForLoop(config.TestLoopConfigOpts{}).Resolve(config.TestLoopOverrides(config.TestLoopConfigOpts{})), t.TempDir(), AutoRecoveryConfig{
+		MaxRecoveryCostUSD: 2.0,
+		MaxBeadCostUSD:     5.0,
+	})
+
+	report := ExecuteBeadReport{
+		BeadID:          b.ID,
+		Status:          ExecuteBeadStatusRepairCycleExhausted,
+		ActualPower:     55,
+		ReviewVerdict:   string(VerdictBlock),
+		ReviewRationale: "blocked by missing test coverage",
+		ReviewGroupID:   "rg-park",
+		BaseRev:         "base-rce06",
+		ResultRev:       "result-rce06",
+		CandidateRef:    "refs/ddx/iterations/ddx-rce06/attempt-1",
+		PreserveRef:     "refs/ddx/iterations/ddx-rce06/attempt-1",
+		ReviewPerAC: []ReviewAC{{
+			Number:   1,
+			Item:     "Add coverage",
+			Grade:    "BLOCK",
+			Evidence: "pkg/bar_test.go:11",
+		}},
+		ReviewFindings: []Finding{{
+			Severity: "block",
+			Summary:  "blocked by missing test coverage",
+			Location: "pkg/bar_test.go:11",
+		}},
+	}
+
+	err := applyRepairCycleExhaustedEscalation(context.Background(), store, b.ID, "worker", report, report.ActualPower, time.Now().UTC(), func(int) (int, error) {
+		return 0, fmt.Errorf("ladder exhausted")
+	}, hook)
+	require.NoError(t, err)
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "failed auto-recovery must park the bead for operator review")
+
+	body := autoRecoveryFailedBody(t, store, got.ID)
+	assert.Equal(t, "both_failed", body.Reason)
+	assert.Equal(t, "refs/ddx/iterations/ddx-rce06/attempt-1", body.PreserveRef)
+	assert.Equal(t, "rg-park", body.ReviewGroupID)
+	assert.Equal(t, string(VerdictBlock), body.ReviewVerdict)
+	require.Len(t, body.ReviewFindings, 1)
+	assert.Equal(t, "blocked by missing test coverage", body.ReviewFindings[0].Summary)
 }
 
 func TestRepairExhaustedFixableGapEntersAutoRecovery(t *testing.T) {

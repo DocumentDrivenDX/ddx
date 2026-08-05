@@ -221,9 +221,11 @@ type ExecutionCycleTrace struct {
 	ReviewerRoute        ExecutionCycleRouteFacts          `json:"reviewer_route,omitempty"`
 	ReviewResult         ExecutionCycleReviewResult        `json:"review_result,omitempty"`
 	FinalDecision        string                            `json:"final_decision,omitempty"`
+	BaseRev              string                            `json:"base_rev,omitempty"`
 	FailureClass         string                            `json:"failure_class"`
 	RetryAction          string                            `json:"retry_action"`
 	EscalationCount      int                               `json:"escalation_count"`
+	RepairCycleCount     int                               `json:"repair_cycle_count,omitempty"`
 	ReviewStatus         string                            `json:"review_status"`
 	ReviewSkipReason     string                            `json:"review_skip_reason"`
 	ReviewClassification string                            `json:"review_classification"`
@@ -231,6 +233,7 @@ type ExecutionCycleTrace struct {
 	ReconcileStatus      string                            `json:"reconcile_status"`
 	DecomposedChildIDs   []string                          `json:"decomposed_child_ids,omitempty"`
 	ExecutionDecision    string                            `json:"execution_decision,omitempty"`
+	RecoveryAction       string                            `json:"recovery_action,omitempty"`
 }
 
 // AttemptDiagnostic captures infrastructure state when an attempt cannot be

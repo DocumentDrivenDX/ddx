@@ -846,9 +846,6 @@ type ExecuteBeadReport struct {
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
-	// ReviewGroupID carries the review-group bundle ID for the review that
-	// produced this report, when one exists.
-	ReviewGroupID string `json:"review_group_id,omitempty"`
 	// ReviewClassification carries the structured review class derived from the
 	// reviewer evidence. It is preserved so exhausted repair cycles can recover
 	// the same recovery classification after the repair report is replayed.
@@ -865,6 +862,12 @@ type ExecuteBeadReport struct {
 	ReviewSkipReason string `json:"review_skip_reason,omitempty"`
 	// CycleTrace carries the append-only execution cycle trace in order.
 	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
+	// RepairCycleCount records the number of bounded repair cycles already
+	// consumed when a report is parked at repair-cycle exhaustion.
+	RepairCycleCount int `json:"repair_cycle_count,omitempty"`
+	// RecoveryAction records the TD-031 follow-up path selected for the
+	// exhausted repair cycle, such as "td-031:auto-recovery".
+	RecoveryAction string `json:"recovery_action,omitempty"`
 	// PowerClass is the model powerClass used for the final attempt (cheap, standard, smart).
 	// Populated by powerClass-escalating executors; empty for single-power attempts.
 	PowerClass string `json:"power_class,omitempty"`

@@ -58,6 +58,7 @@ type PostLadderExhaustionContext struct {
 	ReviewClassification string
 	ReviewPerAC          []ReviewAC
 	ReviewFindings       []Finding
+	PreserveRef          string
 }
 
 func postLadderExhaustionContextFromReport(report ExecuteBeadReport) PostLadderExhaustionContext {
@@ -68,6 +69,7 @@ func postLadderExhaustionContextFromReport(report ExecuteBeadReport) PostLadderE
 		ReviewClassification: strings.TrimSpace(report.ReviewClassification),
 		ReviewPerAC:          append([]ReviewAC(nil), report.ReviewPerAC...),
 		ReviewFindings:       append([]Finding(nil), report.ReviewFindings...),
+		PreserveRef:          strings.TrimSpace(report.PreserveRef),
 	}
 }
 
@@ -77,13 +79,20 @@ type AutoRecoveryConfig struct {
 }
 
 type repairCycleExhaustedEventBody struct {
-	ReviewGroupID        string     `json:"review_group_id,omitempty"`
-	ReviewVerdict        string     `json:"review_verdict,omitempty"`
-	ReviewRationale      string     `json:"review_rationale,omitempty"`
-	ReviewClassification string     `json:"review_classification,omitempty"`
-	ReviewPerAC          []ReviewAC `json:"review_per_ac,omitempty"`
-	ReviewFindings       []Finding  `json:"review_findings,omitempty"`
-	OutcomeReason        string     `json:"outcome_reason,omitempty"`
+	ReviewGroupID        string                `json:"review_group_id,omitempty"`
+	ReviewVerdict        string                `json:"review_verdict,omitempty"`
+	ReviewRationale      string                `json:"review_rationale,omitempty"`
+	ReviewClassification string                `json:"review_classification,omitempty"`
+	ReviewPerAC          []ReviewAC            `json:"review_per_ac,omitempty"`
+	ReviewFindings       []Finding             `json:"review_findings,omitempty"`
+	BaseRev              string                `json:"base_rev,omitempty"`
+	ResultRev            string                `json:"result_rev,omitempty"`
+	CandidateRef         string                `json:"candidate_ref,omitempty"`
+	PreserveRef          string                `json:"preserve_ref,omitempty"`
+	RepairCycleCount     int                   `json:"repair_cycle_count,omitempty"`
+	RecoveryAction       string                `json:"recovery_action,omitempty"`
+	CycleTrace           []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
+	OutcomeReason        string                `json:"outcome_reason,omitempty"`
 }
 
 func appendRepairCycleExhaustedEvent(store ExecuteBeadLoopStore, beadID, actor string, at time.Time, report ExecuteBeadReport) {
@@ -97,6 +106,13 @@ func appendRepairCycleExhaustedEvent(store ExecuteBeadLoopStore, beadID, actor s
 		ReviewClassification: strings.TrimSpace(report.ReviewClassification),
 		ReviewPerAC:          append([]ReviewAC(nil), report.ReviewPerAC...),
 		ReviewFindings:       append([]Finding(nil), report.ReviewFindings...),
+		BaseRev:              strings.TrimSpace(report.BaseRev),
+		ResultRev:            strings.TrimSpace(report.ResultRev),
+		CandidateRef:         strings.TrimSpace(report.CandidateRef),
+		PreserveRef:          strings.TrimSpace(report.PreserveRef),
+		RepairCycleCount:     report.RepairCycleCount,
+		RecoveryAction:       strings.TrimSpace(report.RecoveryAction),
+		CycleTrace:           append([]ExecutionCycleTrace(nil), report.CycleTrace...),
 		OutcomeReason:        ExecuteBeadStatusRepairCycleExhausted,
 	})
 	if err != nil {
@@ -123,6 +139,7 @@ type autoRecoveryFailedEventBody struct {
 	Reason               string     `json:"reason"`
 	TotalCostUSD         float64    `json:"total_cost_usd"`
 	Detail               string     `json:"detail,omitempty"`
+	PreserveRef          string     `json:"preserve_ref,omitempty"`
 	ReviewGroupID        string     `json:"review_group_id,omitempty"`
 	ReviewVerdict        string     `json:"review_verdict,omitempty"`
 	ReviewRationale      string     `json:"review_rationale,omitempty"`
@@ -246,6 +263,7 @@ func (s *autoRecoveryState) parkFailed(reason, detail string) (*PostLadderExhaus
 		Reason:               reason,
 		TotalCostUSD:         s.total,
 		Detail:               detail,
+		PreserveRef:          strings.TrimSpace(s.review.PreserveRef),
 		ReviewGroupID:        strings.TrimSpace(s.review.ReviewGroupID),
 		ReviewVerdict:        strings.TrimSpace(s.review.ReviewVerdict),
 		ReviewRationale:      strings.TrimSpace(s.review.ReviewRationale),

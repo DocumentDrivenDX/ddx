@@ -407,6 +407,9 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 						report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 						report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
 						report.PreserveRef = repairCycleExhaustedPreserveRef(report)
+						report.BaseRev = candidate.Report.BaseRev
+						report.RepairCycleCount = repairCycles
+						report.RecoveryAction = "td-031:auto-recovery"
 						recordCycle(&report, nil, report.Status)
 						return AttemptCycleResult{Report: report}, nil
 					}
@@ -534,6 +537,9 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 				report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
 				report.PreserveRef = repairCycleExhaustedPreserveRef(report)
+				report.BaseRev = candidate.Report.BaseRev
+				report.RepairCycleCount = repairCycles
+				report.RecoveryAction = "td-031:auto-recovery"
 				recordCycle(&report, cycleReview, report.Status)
 				return AttemptCycleResult{Report: report}, nil
 			}
@@ -964,6 +970,7 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 	entry := ExecutionCycleTrace{
 		CycleIndex:   candidate.CycleIndex,
 		AttemptID:    candidate.Report.AttemptID,
+		BaseRev:      candidate.Report.BaseRev,
 		ResultRev:    candidate.Report.ResultRev,
 		CandidateRef: candidate.Report.CandidateRef,
 		ImplementerRoute: ExecutionCycleRouteFacts{
@@ -977,6 +984,8 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 		FinalDecision:  finalDecision,
 	}
 	applyDecisionAuditToTrace(&entry, audit)
+	entry.RepairCycleCount = candidate.Report.RepairCycleCount
+	entry.RecoveryAction = strings.TrimSpace(candidate.Report.RecoveryAction)
 	if review == nil {
 		return entry
 	}
