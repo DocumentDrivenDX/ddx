@@ -128,6 +128,22 @@ func TestMixedCommitOACircuitOnlySuppressesOnSuccessfulSalvage(t *testing.T) {
 
 	assert.Equal(t, 0, countRecentMixedCommitEvents(store, b.ID, mixedCommitCooldownWindow, now.Add(time.Minute)),
 		"approved mixed-commit salvage events must not count as prior OA circuit hits")
+
+	traceOnlyApproved, err := json.Marshal([]ExecutionCycleTrace{
+		{ReviewResult: ExecutionCycleReviewResult{Verdict: " approve "}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.AppendEvent(b.ID, bead.BeadEvent{
+		Kind:      "execute-bead",
+		Summary:   ExecuteBeadStatusSuccess,
+		Body:      mixedCommitAndNoChangesRationaleReason + "\ncycle_trace=" + string(traceOnlyApproved),
+		Actor:     "worker",
+		Source:    "test",
+		CreatedAt: now.Add(time.Second),
+	}))
+
+	assert.Equal(t, 0, countRecentMixedCommitEvents(store, b.ID, mixedCommitCooldownWindow, now.Add(time.Minute)),
+		"persisted approved salvage events must honor trace verdicts and casing like live reports")
 }
 
 func TestMixedCommitPinThenFailStillIncrementsOACircuit(t *testing.T) {

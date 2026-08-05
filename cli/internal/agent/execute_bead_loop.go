@@ -7570,8 +7570,26 @@ func isApprovedMixedCommitSalvageReport(report ExecuteBeadReport) bool {
 }
 
 func isApprovedMixedCommitSalvageEvent(ev bead.BeadEvent) bool {
-	return ev.Summary == ExecuteBeadStatusSuccess &&
-		strings.Contains(ev.Body, `"review_verdict":"APPROVE"`)
+	if ev.Summary != ExecuteBeadStatusSuccess {
+		return false
+	}
+	report := ExecuteBeadReport{Status: ev.Summary}
+	for _, line := range strings.Split(ev.Body, "\n") {
+		if raw, ok := strings.CutPrefix(line, "cycle_trace="); ok {
+			var trace []ExecutionCycleTrace
+			if err := json.Unmarshal([]byte(raw), &trace); err == nil {
+				report.CycleTrace = trace
+			}
+			continue
+		}
+		if raw, ok := strings.CutPrefix(line, "decision_audit="); ok {
+			var audit executionDecisionAudit
+			if err := json.Unmarshal([]byte(raw), &audit); err == nil && strings.TrimSpace(audit.ReviewVerdict) != "" {
+				report.ReviewVerdict = audit.ReviewVerdict
+			}
+		}
+	}
+	return isApprovedMixedCommitSalvageReport(report)
 }
 
 func isTransientOutcomeReason(reason string) bool {
