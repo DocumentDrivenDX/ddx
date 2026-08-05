@@ -2058,6 +2058,52 @@ func isEvidenceOnlyNoChangesCommit(wtPath, baseRev, resultRev, artifactsDirRel s
 	return changed[0] == rationalePath, nil
 }
 
+// isSalvageableMixedCommitRationale returns true when the rationale text is a
+// contradictory no_changes-style explanation that should be retained as
+// evidence but not allowed to suppress candidate pinning.
+func isSalvageableMixedCommitRationale(rationale string) bool {
+	parsed := ParseNoChangesRationale(rationale)
+	switch parsed.Kind {
+	case NoChangesKindVerified, NoChangesKindUnjustified, NoChangesKindRejectedLegacyStatus:
+		return false
+	}
+
+	switch parsed.LifecycleStatus {
+	case "open", "proposed", "blocked":
+	default:
+		return false
+	}
+
+	text := strings.ToLower(strings.Join([]string{
+		parsed.Reason,
+		parsed.SuggestedAction,
+		rationale,
+	}, "\n"))
+	salvageSignals := []string{
+		"autonomous work remains possible",
+		"retry with a smart agent",
+		"retry with smart agent",
+		"rerun with a stronger model",
+		"rerun with stronger model",
+		"package gate",
+		"unrelated",
+		"pre-existing",
+		"lefthook run pre-commit",
+		"lefthook pre-commit",
+		"go test ./",
+		"go test ./internal/",
+		"test failure",
+		"tests fail",
+		"tests_red",
+	}
+	for _, signal := range salvageSignals {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+	return false
+}
+
 // dispatchAgentRun is a thin SD-024 wrapper around dispatchViaResolvedConfig
 // for the execute-bead worker. It threads the durable knobs from rcfg and the
 // per-invocation plumbing from runtime through the shared dispatch seam in

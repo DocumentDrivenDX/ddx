@@ -310,3 +310,100 @@ func TestCandidateRefStore_RetentionPolicy(t *testing.T) {
 		assert.Equal(t, rev, got)
 	})
 }
+
+func TestMixedCommitPinsCandidateAndIgnoresRationaleForNoProgressOnly(t *testing.T) {
+	projectRoot, rev := initTestGitRepo(t)
+	events := &inMemoryEventAppender{}
+	rationale := "status: open\nreason: autonomous work remains possible\nsuggested_action: retry with a smart agent"
+
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:             beadID,
+					AttemptID:          "attempt-mixed-001",
+					Status:             ExecuteBeadStatusExecutionFailed,
+					Detail:             mixedCommitAndNoChangesRationaleReason,
+					BaseRev:            "base-mixed-001",
+					ResultRev:          rev,
+					NoChangesRationale: rationale,
+				},
+			}, nil
+		}),
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+		BeadEvents:  events,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-mixed-salvage")
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Report.CandidateRef)
+	assert.Equal(t, rev, result.Report.ResultRev, "mixed commit must preserve the implementation tip")
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.Report.Status)
+
+	got, err := gitRevParse(t, projectRoot, result.Report.CandidateRef)
+	require.NoError(t, err)
+	assert.Equal(t, rev, got)
+
+	require.Len(t, events.events, 2, "mixed salvage must pin the candidate and record the ignored rationale")
+	assert.Equal(t, "candidate_cycle_pinned", events.events[0].Kind)
+	assert.Equal(t, mixedRationaleIgnoredEventKind, events.events[1].Kind)
+
+	var ignored MixedRationaleIgnoredEventBody
+	require.NoError(t, json.Unmarshal([]byte(events.events[1].Body), &ignored))
+	assert.Equal(t, result.Report.CandidateRef, ignored.CandidateRef)
+	assert.Equal(t, rev, ignored.ResultRev)
+	assert.Equal(t, rationale, ignored.NoChangesRationale)
+	assert.Equal(t, mixedCommitAndNoChangesRationaleReason, ignored.Reason)
+}
+
+func TestMixedCommitBrokenDesignRationaleIsNotAutoIgnored(t *testing.T) {
+	projectRoot, rev := initTestGitRepo(t)
+	events := &inMemoryEventAppender{}
+
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:             beadID,
+					AttemptID:          "attempt-mixed-002",
+					Status:             ExecuteBeadStatusExecutionFailed,
+					Detail:             mixedCommitAndNoChangesRationaleReason,
+					BaseRev:            "base-mixed-002",
+					ResultRev:          rev,
+					NoChangesRationale: "status: open\nreason: broken design; needs redesign",
+				},
+			}, nil
+		}),
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+		BeadEvents:  events,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-mixed-broken")
+	require.NoError(t, err)
+	assert.Empty(t, result.Report.CandidateRef, "broken-design rationales must not enter the mixed-commit salvage path")
+	assert.Len(t, events.events, 0, "no salvage events should be emitted for broken-design rationales")
+}
+
+func TestEvidenceOnlyNoChangesPathUnchanged(t *testing.T) {
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:             beadID,
+					AttemptID:          "attempt-no-changes-001",
+					Status:             ExecuteBeadStatusNoChanges,
+					BaseRev:            "base-no-changes",
+					ResultRev:          "base-no-changes",
+					NoChangesRationale: "verification_command: true",
+				},
+			}, nil
+		}),
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-no-changes")
+	require.NoError(t, err)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, result.Report.Status)
+	assert.Empty(t, result.Report.CandidateRef, "no_changes paths must not create candidate refs")
+}

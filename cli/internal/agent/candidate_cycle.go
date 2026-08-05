@@ -139,8 +139,21 @@ type CandidateCycleEventBody struct {
 	ResultRev    string `json:"result_rev"`
 }
 
+// MixedRationaleIgnoredEventBody captures a salvageable mixed-commit rationale
+// that is retained as evidence without suppressing candidate pinning.
+type MixedRationaleIgnoredEventBody struct {
+	CandidateRef       string `json:"candidate_ref"`
+	CycleIndex         int    `json:"cycle_index"`
+	AttemptID          string `json:"attempt_id"`
+	BaseRev            string `json:"base_rev"`
+	ResultRev          string `json:"result_rev"`
+	NoChangesRationale string `json:"no_changes_rationale"`
+	Reason             string `json:"reason"`
+}
+
 const candidateChecksFailedEventKind = "candidate-checks-failed"
 const candidateReviewClassifiedEventKind = "candidate-review-classified"
+const mixedRationaleIgnoredEventKind = "mixed-rationale-ignored"
 const repairCycleStartedEventKind = "repair-cycle-started"
 const candidateReviewProviderEmptyRetryLimit = 2
 
@@ -253,7 +266,14 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		return AttemptCycleResult{Report: candidate.Report}, err
 	}
 
-	if candidate.Report.Status != ExecuteBeadStatusSuccess {
+	mixedRationaleSalvage := candidate.Report.Status != ExecuteBeadStatusSuccess &&
+		candidate.Report.ResultRev != "" &&
+		strings.TrimSpace(candidate.Report.NoChangesRationale) != "" &&
+		(candidate.Report.Detail == mixedCommitAndNoChangesRationaleReason ||
+			candidate.Report.OutcomeReason == mixedCommitAndNoChangesRationaleReason) &&
+		isSalvageableMixedCommitRationale(candidate.Report.NoChangesRationale)
+
+	if candidate.Report.Status != ExecuteBeadStatusSuccess && !mixedRationaleSalvage {
 		return AttemptCycleResult{Report: candidate.Report}, nil
 	}
 
@@ -335,6 +355,10 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				CandidateRev: candidate.Report.ResultRev,
 				CycleIndex:   candidate.CycleIndex,
 			})
+			if mixedRationaleSalvage {
+				c.appendMixedRationaleIgnoredEvent(beadID, candidate.Report)
+				return AttemptCycleResult{Report: candidate.Report}, nil
+			}
 
 			if c.Checks != nil {
 				c.recordCandidateCycleState(candidate, CandidateCycleState{
@@ -637,6 +661,26 @@ func (c *AttemptCycleCoordinator) pinCandidateRef(beadID string, candidate *Cand
 		Body: string(body),
 	})
 	return nil
+}
+
+func (c *AttemptCycleCoordinator) appendMixedRationaleIgnoredEvent(beadID string, report ExecuteBeadReport) {
+	if c.BeadEvents == nil {
+		return
+	}
+	body, _ := json.Marshal(MixedRationaleIgnoredEventBody{
+		CandidateRef:       report.CandidateRef,
+		CycleIndex:         report.CycleIndex,
+		AttemptID:          report.AttemptID,
+		BaseRev:            report.BaseRev,
+		ResultRev:          report.ResultRev,
+		NoChangesRationale: strings.TrimSpace(report.NoChangesRationale),
+		Reason:             mixedCommitAndNoChangesRationaleReason,
+	})
+	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    mixedRationaleIgnoredEventKind,
+		Summary: mixedCommitAndNoChangesRationaleReason,
+		Body:    string(body),
+	})
 }
 
 func (c *AttemptCycleCoordinator) appendCandidateChecksFailedEvent(beadID string, report ExecuteBeadReport, checksResult CandidateCheckResult) {
