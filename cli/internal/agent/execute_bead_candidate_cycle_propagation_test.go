@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +14,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func mixedCommitCandidateFixture(t *testing.T) (projectRoot, baseRev, resultRev string) {
+	t.Helper()
+	projectRoot, baseRev = initTestGitRepo(t)
+
+	candidatePath := filepath.Join(projectRoot, "mixed-candidate.txt")
+	require.NoError(t, os.WriteFile(candidatePath, []byte("mixed commit candidate\n"), 0o644))
+	candidateCommit := fixtureGitCommand(t, projectRoot, "add", "mixed-candidate.txt")
+	out, err := candidateCommit.CombinedOutput()
+	require.NoError(t, err, "git add mixed-candidate.txt: %s", out)
+	candidateCommit = fixtureGitCommand(t, projectRoot, "commit", "-m", "feat: mixed commit candidate")
+	out, err = candidateCommit.CombinedOutput()
+	require.NoError(t, err, "git commit mixed candidate: %s", out)
+
+	rawRev, err := fixtureGitCommand(t, projectRoot, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	resultRev = strings.TrimSpace(string(rawRev))
+	return projectRoot, baseRev, resultRev
+}
 
 // TestApplyWorkerCandidateCycle_ReviewMalfunctionOverridesSuccess proves that
 // applyWorkerCandidateCycle projects the candidate-cycle report's outcome
@@ -88,6 +109,178 @@ func TestProjectCandidateCycleReportPropagatesRepairCostAndDuration(t *testing.T
 
 	assert.Equal(t, 0.75, res.CostUSD, "durable result must include cumulative repair cost")
 	assert.Equal(t, 3400, res.DurationMS, "durable result must include cumulative repair duration")
+}
+
+func TestMixedCommitDoesNotCloseBeforeReviewApprove(t *testing.T) {
+	projectRoot, baseRev, resultRev := mixedCommitCandidateFixture(t)
+	wtPath := projectRoot
+	checksCalled := false
+	reviewerCalled := false
+	landerCalled := false
+
+	res := &ExecuteBeadResult{
+		BeadID:             "ddx-mixed-001",
+		AttemptID:          "attempt-mixed-001",
+		BaseRev:            baseRev,
+		ResultRev:          resultRev,
+		Status:             ExecuteBeadStatusExecutionFailed,
+		Reason:             mixedCommitAndNoChangesRationaleReason,
+		Detail:             mixedCommitAndNoChangesRationaleReason,
+		Error:              mixedCommitAndNoChangesRationaleReason,
+		NoChangesRationale: "status: open\nreason: salvage candidate until review completes",
+		SessionID:          "sess-mixed-001",
+	}
+
+	runtime := ExecuteBeadRuntime{
+		Checks: candidateCheckRunnerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateCheckResult, error) {
+			checksCalled = true
+			require.NotEmpty(t, candidate.Report.CandidateRef)
+			return CandidateCheckResult{Passed: false, Detail: "candidate checks failed"}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(context.Context, string, CandidateResult) (CandidateReviewResult, error) {
+			reviewerCalled = true
+			return CandidateReviewResult{Verdict: "APPROVE", Rationale: "should not be reached"}, nil
+		}),
+	}
+
+	require.NoError(t, applyWorkerCandidateCycle(context.Background(), projectRoot, wtPath, runtime, res))
+
+	assert.True(t, checksCalled, "candidate checks must run for salvaged mixed commits")
+	assert.False(t, reviewerCalled, "review must not run when checks fail")
+	assert.False(t, landerCalled, "land must not run when checks fail")
+	assert.Equal(t, ExecuteBeadStatusPostRunCheckFailed, res.Status)
+	assert.NotEqual(t, ExecuteBeadStatusSuccess, res.Status)
+	require.NotEmpty(t, res.CandidateRef, "mixed commit candidate ref must be retained while checks are failing")
+	got, err := gitRevParse(t, projectRoot, res.CandidateRef)
+	require.NoError(t, err)
+	assert.Equal(t, resultRev, got)
+}
+
+func TestMixedCommitClosesOnlyAfterChecksAndApprove(t *testing.T) {
+	projectRoot, baseRev, resultRev := mixedCommitCandidateFixture(t)
+	wtPath := projectRoot
+	checksCalled := false
+	reviewerCalled := false
+	landerCalled := false
+
+	res := &ExecuteBeadResult{
+		BeadID:             "ddx-mixed-002",
+		AttemptID:          "attempt-mixed-002",
+		BaseRev:            baseRev,
+		ResultRev:          resultRev,
+		Status:             ExecuteBeadStatusExecutionFailed,
+		Reason:             mixedCommitAndNoChangesRationaleReason,
+		Detail:             mixedCommitAndNoChangesRationaleReason,
+		Error:              mixedCommitAndNoChangesRationaleReason,
+		NoChangesRationale: "status: open\nreason: salvage candidate until review completes",
+		SessionID:          "sess-mixed-002",
+	}
+
+	coord := &AttemptCycleCoordinator{
+		Pass: staticCandidateResultPass{
+			candidate: CandidateResult{
+				Report:       workerCandidateCycleReport(res, true),
+				WorktreePath: wtPath,
+			},
+		},
+		Checks: candidateCheckRunnerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateCheckResult, error) {
+			checksCalled = true
+			require.NotEmpty(t, candidate.Report.CandidateRef)
+			return CandidateCheckResult{Passed: true, Detail: "candidate checks passed"}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewerCalled = true
+			require.NotEmpty(t, candidate.Report.CandidateRef)
+			return CandidateReviewResult{
+				Verdict:   "APPROVE",
+				Rationale: "per-AC evidence is present",
+				PerAC:     []ReviewAC{{Number: 1, Item: "candidate checks passed", Grade: "pass", Evidence: "candidate checks passed"}},
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			landerCalled = true
+			assert.Equal(t, "APPROVE", candidate.Report.ReviewVerdict)
+			assert.NotEmpty(t, candidate.Report.CandidateRef)
+			return candidate.Report, nil
+		}),
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+	}
+
+	result, err := coord.Run(context.Background(), res.BeadID)
+	require.NoError(t, err)
+
+	assert.True(t, checksCalled, "candidate checks must run before a mixed commit can close")
+	assert.True(t, reviewerCalled, "review must run after checks pass")
+	assert.True(t, landerCalled, "approved mixed commits must proceed to land")
+	assert.True(t, result.Landed, "approved mixed commits must land")
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Report.Status)
+	require.NotEmpty(t, result.Report.CandidateRef, "landed candidate should still report the pinned ref")
+	_, err = gitRevParse(t, projectRoot, result.Report.CandidateRef)
+	require.Error(t, err, "successful land should unpin the temporary candidate ref")
+}
+
+func TestMixedCommitReviewerBlockPreservesCandidate(t *testing.T) {
+	projectRoot, baseRev, resultRev := mixedCommitCandidateFixture(t)
+	wtPath := projectRoot
+	checksCalled := false
+	reviewerCalled := false
+	landerCalled := false
+
+	res := &ExecuteBeadResult{
+		BeadID:             "ddx-mixed-003",
+		AttemptID:          "attempt-mixed-003",
+		BaseRev:            baseRev,
+		ResultRev:          resultRev,
+		Status:             ExecuteBeadStatusExecutionFailed,
+		Reason:             mixedCommitAndNoChangesRationaleReason,
+		Detail:             mixedCommitAndNoChangesRationaleReason,
+		Error:              mixedCommitAndNoChangesRationaleReason,
+		NoChangesRationale: "status: open\nreason: salvage candidate until review completes",
+		SessionID:          "sess-mixed-003",
+	}
+
+	coord := &AttemptCycleCoordinator{
+		Pass: staticCandidateResultPass{
+			candidate: CandidateResult{
+				Report:       workerCandidateCycleReport(res, true),
+				WorktreePath: wtPath,
+			},
+		},
+		Checks: candidateCheckRunnerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateCheckResult, error) {
+			checksCalled = true
+			require.NotEmpty(t, candidate.Report.CandidateRef)
+			return CandidateCheckResult{Passed: true, Detail: "candidate checks passed"}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewerCalled = true
+			require.NotEmpty(t, candidate.Report.CandidateRef)
+			return CandidateReviewResult{
+				Verdict:   "BLOCK",
+				Rationale: "missing per-AC evidence",
+				Findings:  []Finding{{Severity: "block", Summary: "missing per-AC evidence", Location: "bead:AC1"}},
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(context.Context, CandidateResult) (ExecuteBeadReport, error) {
+			landerCalled = true
+			return ExecuteBeadReport{}, nil
+		}),
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+	}
+
+	result, err := coord.Run(context.Background(), res.BeadID)
+	require.NoError(t, err)
+
+	assert.True(t, checksCalled, "checks must run before reviewer BLOCK is considered")
+	assert.True(t, reviewerCalled, "review must run after candidate checks pass")
+	assert.False(t, landerCalled, "BLOCK must stop the candidate before land")
+	assert.False(t, result.Landed, "BLOCK must stop the candidate before land")
+	assert.Equal(t, ExecuteBeadStatusReviewBlock, result.Report.Status)
+	require.NotEmpty(t, result.Report.CandidateRef, "BLOCK must preserve the candidate ref for recovery")
+	got, err := gitRevParse(t, projectRoot, result.Report.CandidateRef)
+	require.NoError(t, err)
+	assert.Equal(t, resultRev, got)
 }
 
 // reviewMalfunctionReport drives the real applyWorkerCandidateCycle path for
