@@ -416,7 +416,15 @@ func (p staticCandidateResultPass) Execute(context.Context, string) (CandidateRe
 }
 
 func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, runtime ExecuteBeadRuntime, res *ExecuteBeadResult) error {
-	if res == nil || wtPath == "" || res.Status != ExecuteBeadStatusSuccess {
+	if res == nil || wtPath == "" {
+		return nil
+	}
+	salvageMixedCommit := res.Status != ExecuteBeadStatusSuccess &&
+		res.Reason == mixedCommitAndNoChangesRationaleReason &&
+		res.ResultRev != "" &&
+		res.ResultRev != res.BaseRev &&
+		isSalvageableMixedCommitRationale(res.NoChangesRationale)
+	if res.Status != ExecuteBeadStatusSuccess && !salvageMixedCommit {
 		return nil
 	}
 
@@ -438,7 +446,7 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 	coord := &AttemptCycleCoordinator{
 		Pass: staticCandidateResultPass{
 			candidate: CandidateResult{
-				Report:       ReportFromExecuteBeadResult(res, ""),
+				Report:       workerCandidateCycleReport(res, salvageMixedCommit),
 				WorktreePath: wtPath,
 				CycleIndex:   res.CycleIndex,
 			},
@@ -464,6 +472,31 @@ func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, 
 	cycleResult, err := coord.Run(ctx, res.BeadID)
 	projectCandidateCycleReport(res, cycleResult.Report)
 	return err
+}
+
+func workerCandidateCycleReport(res *ExecuteBeadResult, salvageMixedCommit bool) ExecuteBeadReport {
+	report := ReportFromExecuteBeadResult(res, "")
+	if salvageMixedCommit {
+		// Mixed commit salvage must enter the same FEAT-010 candidate cycle as a
+		// normal implementation candidate. The worker-level mixed-commit signal is
+		// retained on res.Reason / res.NoChangesRationale, but the coordinator only
+		// accepts a success-shaped candidate.
+		report.Status = ExecuteBeadStatusSuccess
+	}
+	return report
+}
+
+func isSalvageableMixedCommitRationale(text string) bool {
+	parsed := ParseNoChangesRationale(text)
+	if parsed.Kind != NoChangesKindLifecycleStatus {
+		return false
+	}
+	switch parsed.LifecycleStatus {
+	case "open", "proposed":
+		return true
+	default:
+		return false
+	}
 }
 
 func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadReport) {
