@@ -90,23 +90,31 @@ func TestWorkAttemptWallClock_ManualManagedParity(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Reset command flags per subtest so the manual and managed paths
-			// each see a clean construction surface.
-			root := factory.NewRootCommand()
-			workCmd, _, err := root.Find([]string{"work"})
+			assertResolved := func(commandName string) {
+				root := factory.NewRootCommand()
+				cmd, _, err := root.Find([]string{commandName})
+				require.NoError(t, err)
+				require.NoError(t, cmd.Flags().Set("project", env.Dir))
+				require.NoError(t, cmd.Flags().Set("allow-non-default-branch", "true"))
+				if tc.manualChanged {
+					require.NoError(t, cmd.Flags().Set("attempt-wall-clock", tc.manualValue))
+				}
+
+				manualSpec, _, _, err := factory.resolveExecuteLoopSpec(cmd, true)
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantDuration, manualSpec.AttemptWallClock.Duration)
+				assert.Equal(t, tc.wantExplicit, manualSpec.AttemptWallClockSet)
+			}
+
+			assertResolved("work")
+			assertResolved("try")
+
+			managedWorkerID := workerID + "-" + tc.name
+			workRoot := factory.NewRootCommand()
+			workCmd, _, err := workRoot.Find([]string{"work"})
 			require.NoError(t, err)
 			require.NoError(t, workCmd.Flags().Set("project", env.Dir))
 			require.NoError(t, workCmd.Flags().Set("allow-non-default-branch", "true"))
-			if tc.manualChanged {
-				require.NoError(t, workCmd.Flags().Set("attempt-wall-clock", tc.manualValue))
-			}
-
-			manualSpec, _, _, err := factory.resolveExecuteLoopSpec(workCmd, true)
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantDuration, manualSpec.AttemptWallClock.Duration)
-			assert.Equal(t, tc.wantExplicit, manualSpec.AttemptWallClockSet)
-
-			managedWorkerID := workerID + "-" + tc.name
 			writeRawPersistedManagedWorkerSpec(t, env.Dir, managedWorkerID, tc.managedSpec)
 			require.NoError(t, workCmd.Flags().Set("server-managed", managedWorkerID))
 
