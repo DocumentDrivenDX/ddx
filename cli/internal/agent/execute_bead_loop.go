@@ -4436,7 +4436,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				_ = parkToProposedSimple(w.Store, candidate.ID, bead.ParkLadderExhaustionManual, "recovery:manual label set", now().UTC())
 			} else if runtime.PostLadderExhaustionHook != nil {
 				failureClass := deriveRecoveryFailureClass(report)
-				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass)
+				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass, postLadderExhaustionContextFromReport(report))
 			}
 		}
 		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -7271,7 +7271,7 @@ func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadL
 	appendRepairCycleExhaustedEvent(store, beadID, actor, at, report)
 	if hook != nil {
 		failureClass := deriveRecoveryFailureClass(report)
-		if result, err := hook(ctx, beadID, failureClass); err != nil {
+		if result, err := hook(ctx, beadID, failureClass, postLadderExhaustionContextFromReport(report)); err != nil {
 			return err
 		} else if result != nil && result.Attempted {
 			return nil

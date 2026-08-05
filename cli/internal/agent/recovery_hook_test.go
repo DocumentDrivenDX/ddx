@@ -54,10 +54,11 @@ func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		atomic.AddInt32(&hookCalls, 1)
 		hookBeadID = beadID
 		hookClass = class
+		assert.Empty(t, review.ReviewGroupID)
 		cancel()
 		return &PostLadderExhaustionResult{Attempted: false}, nil
 	})
@@ -100,7 +101,7 @@ func TestRecoveryManualLabel_SkipsAutoRecovery(t *testing.T) {
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
 
 	var hookCalled bool
-	hook := PostLadderExhaustionHook(func(_ context.Context, _ string, _ RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := PostLadderExhaustionHook(func(_ context.Context, _ string, _ RecoveryFailureClass, _ PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		hookCalled = true
 		return &PostLadderExhaustionResult{Attempted: false}, nil
 	})

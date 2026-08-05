@@ -45,7 +45,7 @@ func TestReframeFailure_FallsBackToDecompose(t *testing.T) {
 		MaxRecoveryCostUSD: 2.0,
 		MaxBeadCostUSD:     5.0,
 	})
-	result, err := hook(context.Background(), "ddx-recovery-fallback", PersistentExecutionFailed)
+	result, err := hook(context.Background(), "ddx-recovery-fallback", PersistentExecutionFailed, PostLadderExhaustionContext{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.Succeeded)
@@ -65,7 +65,7 @@ func TestBothFail_ParkProposed(t *testing.T) {
 		MaxRecoveryCostUSD: 2.0,
 		MaxBeadCostUSD:     5.0,
 	})
-	result, err := hook(context.Background(), "ddx-recovery-both-fail", PersistentExecutionFailed)
+	result, err := hook(context.Background(), "ddx-recovery-both-fail", PersistentExecutionFailed, PostLadderExhaustionContext{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.False(t, result.Succeeded)
@@ -96,7 +96,7 @@ func TestRecoveryCircuitBreaker_AbortsAtCostCap(t *testing.T) {
 		MaxRecoveryCostUSD: 2.0,
 		MaxBeadCostUSD:     5.0,
 	})
-	result, err := hook(context.Background(), "ddx-recovery-cost-cap", PersistentExecutionFailed)
+	result, err := hook(context.Background(), "ddx-recovery-cost-cap", PersistentExecutionFailed, PostLadderExhaustionContext{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "circuit-breaker", result.OutcomeReason)
@@ -121,7 +121,7 @@ func TestPerBeadBudgetExhausted_TriggersAutoRecovery(t *testing.T) {
 		MaxRecoveryCostUSD: 2.0,
 		MaxBeadCostUSD:     0.50,
 	})
-	result, err := hook(context.Background(), "ddx-recovery-per-bead-budget", PersistentExecutionFailed)
+	result, err := hook(context.Background(), "ddx-recovery-per-bead-budget", PersistentExecutionFailed, PostLadderExhaustionContext{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, escalation.PerBeadBudgetExhaustedReason, result.OutcomeReason)

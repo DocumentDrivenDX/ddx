@@ -63,10 +63,14 @@ func TestRepairExhaustedAfterBlockEntersAutoRecovery(t *testing.T) {
 
 	var hookCalls int
 	var observedClass RecoveryFailureClass
-	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		hookCalls++
 		assert.Equal(t, b.ID, beadID)
 		observedClass = class
+		assert.Equal(t, "rg-block", review.ReviewGroupID)
+		assert.Equal(t, ReviewTerminalClassSpecGap, review.ReviewClassification)
+		require.Len(t, review.ReviewFindings, 1)
+		assert.Equal(t, "missing regression test", review.ReviewFindings[0].Summary)
 		return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
 	})
 
@@ -139,9 +143,13 @@ func TestRepairExhaustedRecoveryLinksReviewGroup(t *testing.T) {
 		}},
 	}
 
-	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		assert.Equal(t, b.ID, beadID)
 		assert.Equal(t, SpecGap, class)
+		assert.Equal(t, "rg-link", review.ReviewGroupID)
+		assert.Equal(t, ReviewTerminalClassSpecGap, review.ReviewClassification)
+		require.Len(t, review.ReviewFindings, 1)
+		assert.Equal(t, "spec gap needs a rewrite", review.ReviewFindings[0].Summary)
 		return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
 	})
 
@@ -168,10 +176,14 @@ func TestRepairExhaustedFixableGapEntersAutoRecovery(t *testing.T) {
 
 	var hookCalls int
 	var observedClass RecoveryFailureClass
-	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
 		hookCalls++
 		assert.Equal(t, b.ID, beadID)
 		observedClass = class
+		assert.Equal(t, "rg-gap", review.ReviewGroupID)
+		assert.Equal(t, ReviewFindingClassFixableGap, review.ReviewClassification)
+		require.Len(t, review.ReviewFindings, 1)
+		assert.Equal(t, "small fixable gap", review.ReviewFindings[0].Summary)
 		return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Decompose}, nil
 	})
 
