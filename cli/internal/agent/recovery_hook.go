@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -50,6 +51,49 @@ type PostLadderExhaustionResult struct {
 type AutoRecoveryConfig struct {
 	MaxRecoveryCostUSD float64
 	MaxBeadCostUSD     float64
+}
+
+type repairCycleExhaustedEventBody struct {
+	ReviewGroupID        string     `json:"review_group_id,omitempty"`
+	ReviewVerdict        string     `json:"review_verdict,omitempty"`
+	ReviewRationale      string     `json:"review_rationale,omitempty"`
+	ReviewClassification string     `json:"review_classification,omitempty"`
+	ReviewPerAC          []ReviewAC `json:"review_per_ac,omitempty"`
+	ReviewFindings       []Finding  `json:"review_findings,omitempty"`
+	OutcomeReason        string     `json:"outcome_reason,omitempty"`
+}
+
+func appendRepairCycleExhaustedEvent(store ExecuteBeadLoopStore, beadID, actor string, at time.Time, report ExecuteBeadReport) {
+	if store == nil || beadID == "" {
+		return
+	}
+	body, err := json.Marshal(repairCycleExhaustedEventBody{
+		ReviewGroupID:        strings.TrimSpace(report.ReviewGroupID),
+		ReviewVerdict:        strings.TrimSpace(report.ReviewVerdict),
+		ReviewRationale:      strings.TrimSpace(report.ReviewRationale),
+		ReviewClassification: strings.TrimSpace(report.ReviewClassification),
+		ReviewPerAC:          append([]ReviewAC(nil), report.ReviewPerAC...),
+		ReviewFindings:       append([]Finding(nil), report.ReviewFindings...),
+		OutcomeReason:        ExecuteBeadStatusRepairCycleExhausted,
+	})
+	if err != nil {
+		body = []byte(fmt.Sprintf(
+			"review_group_id=%s\nreview_verdict=%s\nreview_rationale=%s\nreview_classification=%s\noutcome_reason=%s",
+			strings.TrimSpace(report.ReviewGroupID),
+			strings.TrimSpace(report.ReviewVerdict),
+			strings.TrimSpace(report.ReviewRationale),
+			strings.TrimSpace(report.ReviewClassification),
+			ExecuteBeadStatusRepairCycleExhausted,
+		))
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      ExecuteBeadStatusRepairCycleExhausted,
+		Summary:   ExecuteBeadStatusRepairCycleExhausted,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
 }
 
 type autoRecoveryFailedEventBody struct {
@@ -199,6 +243,29 @@ func (s *autoRecoveryState) parkFailed(reason, detail string) (*PostLadderExhaus
 // deriveRecoveryFailureClass maps the last-attempt report to a
 // RecoveryFailureClass for use by the PostLadderExhaustionHook.
 func deriveRecoveryFailureClass(report ExecuteBeadReport) RecoveryFailureClass {
+	classification := strings.TrimSpace(report.ReviewClassification)
+	switch classification {
+	case ReviewTerminalClassSpecGap, ReviewTerminalClassMissingAcceptance:
+		return SpecGap
+	case ReviewTerminalClassTooLarge:
+		return TooLarge
+	}
+
+	if classification == "" && (len(report.ReviewPerAC) > 0 || len(report.ReviewFindings) > 0 || report.ReviewVerdict != "") {
+		derived := ClassifyReviewFindings(&ReviewResult{
+			Verdict:   Verdict(strings.TrimSpace(report.ReviewVerdict)),
+			Rationale: strings.TrimSpace(report.ReviewRationale),
+			PerAC:     append([]ReviewAC(nil), report.ReviewPerAC...),
+			Findings:  append([]Finding(nil), report.ReviewFindings...),
+		})
+		switch derived.Class {
+		case ReviewTerminalClassSpecGap, ReviewTerminalClassMissingAcceptance:
+			return SpecGap
+		case ReviewTerminalClassTooLarge:
+			return TooLarge
+		}
+	}
+
 	switch {
 	case strings.Contains(report.Status, ReviewTerminalClassSpecGap),
 		strings.Contains(report.Status, ReviewTerminalClassMissingAcceptance):

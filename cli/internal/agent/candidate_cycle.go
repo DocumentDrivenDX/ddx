@@ -494,6 +494,10 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			report := candidate.Report
 			report.ReviewVerdict = string(verdict)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			report.ReviewGroupID = strings.TrimSpace(reviewResult.ReviewGroupID)
+			report.ReviewClassification = strings.TrimSpace(classification.Class)
+			report.ReviewPerAC = append([]ReviewAC(nil), reviewResult.PerAC...)
+			report.ReviewFindings = append([]Finding(nil), reviewResult.Findings...)
 			if verdict == VerdictRequestChanges {
 				report.Status = ExecuteBeadStatusReviewRequestChanges
 				report.Detail = "pre-land review: REQUEST_CHANGES"

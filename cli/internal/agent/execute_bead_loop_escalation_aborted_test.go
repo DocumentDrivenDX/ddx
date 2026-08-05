@@ -122,7 +122,7 @@ func TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent(t *testing.T) {
 
 // TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent asserts that
 // when the escalation ladder is exhausted, applyRepairCycleExhaustedEscalation
-// emits a kind=execution-escalation-aborted event before parking the bead.
+// emits a repair-cycle-exhausted event before parking the bead.
 func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
@@ -133,7 +133,7 @@ func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testin
 	exhaustedFn := func(int) (int, error) { return 0, errLadderExhaustedTest }
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
-	err := applyRepairCycleExhaustedEscalation(store, b.ID, "test-actor", 60, at, exhaustedFn)
+	err := applyRepairCycleExhaustedEscalation(context.Background(), store, b.ID, "test-actor", ExecuteBeadReport{BeadID: b.ID, Status: ExecuteBeadStatusRepairCycleExhausted}, 60, at, exhaustedFn, nil)
 	require.NoError(t, err)
 
 	events, err := store.Events(b.ID)
@@ -141,12 +141,12 @@ func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testin
 
 	var aborted *bead.BeadEvent
 	for i := range events {
-		if events[i].Kind == "execution-escalation-aborted" {
+		if events[i].Kind == ExecuteBeadStatusRepairCycleExhausted {
 			aborted = &events[i]
 			break
 		}
 	}
-	require.NotNil(t, aborted, "execution-escalation-aborted event must be emitted when repair-cycle ladder is exhausted")
-	assert.Contains(t, aborted.Summary, "60", "summary must reference actualPower")
+	require.NotNil(t, aborted, "repair-cycle-exhausted event must be emitted when repair-cycle ladder is exhausted")
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, aborted.Summary)
 	assert.Equal(t, "ddx work", aborted.Source)
 }
