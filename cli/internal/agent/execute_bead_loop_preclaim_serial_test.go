@@ -722,7 +722,7 @@ func TestExecuteBeadWorker_ClaimLeaseStaysFreshDuringPreClaimIntake(t *testing.T
 		t.Fatal("pre-claim intake hook never started")
 	}
 
-	deadline := time.Now().Add(3 * bead.HeartbeatTTL)
+	deadline := time.Now().Add(2 * bead.HeartbeatTTL)
 	poll := bead.HeartbeatTTL / 5
 	if poll <= 0 {
 		poll = 10 * time.Millisecond
@@ -826,7 +826,7 @@ func TestExecuteBeadWorker_StaggeredSecondWorkerCannotReclaimDuringIntake(t *tes
 		t.Fatal("worker A never entered pre-claim intake")
 	}
 
-	deadline := time.Now().Add(3 * bead.HeartbeatTTL)
+	deadline := time.Now().Add(2 * bead.HeartbeatTTL)
 	poll := bead.HeartbeatTTL / 5
 	if poll <= 0 {
 		poll = 10 * time.Millisecond
