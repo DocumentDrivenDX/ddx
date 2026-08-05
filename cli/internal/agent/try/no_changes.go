@@ -407,6 +407,21 @@ func adjudicateNoChangesLifecycleStatus(parsed ParsedNoChangesRationale, report 
 				SuggestedAction:  suggestedAction,
 			}
 		}
+		if !noChangesBlockedReasonLooksExternalRecheckable(reason, suggestedAction, report.NoChangesRationale) {
+			if suggestedAction == "" {
+				suggestedAction = "retry with a smart agent or file a follow-up bead if this remains blocked"
+			}
+			return NoChangesOutcome{
+				Satisfied:        false,
+				Action:           NoChangesActionKeepOpenSmartRetry,
+				CooldownEligible: false,
+				EventKind:        NoChangesEventAutonomousRetry,
+				EventBody:        noChangesLifecycleEventBody("open", reason, suggestedAction),
+				LifecycleStatus:  "open",
+				Reason:           reason,
+				SuggestedAction:  suggestedAction,
+			}
+		}
 		if suggestedAction == "" {
 			suggestedAction = "recheck the external blocker and move status to open when cleared"
 		}
@@ -481,6 +496,50 @@ func noChangesBlockedReasonIsInternal(reason, suggestedAction, rationale string)
 		"test failure",
 	}
 	for _, signal := range internalSignals {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+func noChangesBlockedReasonLooksExternalRecheckable(reason, suggestedAction, rationale string) bool {
+	text := strings.ToLower(strings.Join([]string{reason, suggestedAction, rationale}, "\n"))
+	externalSignals := []string{
+		"external blocker",
+		"blocked on upstream",
+		"blocked by upstream",
+		"waiting on upstream",
+		"waiting for upstream",
+		"requires upstream",
+		"blocked by external",
+		"upstream api",
+		"upstream release",
+		"upstream dependency",
+		"provider 502",
+		"provider 503",
+		"provider 504",
+		"bad gateway",
+		"service unavailable",
+		"gateway timeout",
+		"connection refused",
+		"no route to host",
+		"network is unreachable",
+		"i/o timeout",
+		"rate limit",
+		"ratelimit",
+		"quota exceeded",
+		"insufficient quota",
+		"unauthorized",
+		"authentication",
+		"credential",
+		"credentials",
+		"resolveroute:",
+		"no viable routing candidate",
+		"no live provider supports",
+		"no candidate satisfying local endpoint",
+	}
+	for _, signal := range externalSignals {
 		if strings.Contains(text, signal) {
 			return true
 		}

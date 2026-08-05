@@ -223,6 +223,35 @@ func TestNoChangesBlocked_RejectsUnrelatedPackageGateProse(t *testing.T) {
 	assert.NotEqual(t, NoChangesActionBlockedExternal, out.NoChanges.Action)
 }
 
+func TestNoChangesBlocked_AcceptsLocalResourceKind(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusNoChanges,
+				NoChangesRationale: "status: blocked\n" +
+					"blocker_kind: local_resource_exhaustion\n" +
+					"reason: host temp root exhausted\n" +
+					"suggested_action: free space and retry",
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	require.NotNil(t, out.NoChanges)
+	assert.Equal(t, NoChangesActionBlockedExternal, out.NoChanges.Action)
+	assert.Equal(t, NoChangesEventBlocked, out.NoChanges.EventKind)
+	assert.Equal(t, "blocked", out.NoChanges.LifecycleStatus)
+	assert.Equal(t, NoChangesBlockerKindLocalResourceExhaustion, out.NoChanges.BlockerKind)
+	assert.Equal(t, "host temp root exhausted", out.NoChanges.Reason)
+	assert.Equal(t, "free space and retry", out.NoChanges.SuggestedAction)
+	assert.Contains(t, out.NoChanges.EventBody, "blocker_kind=local_resource_exhaustion")
+}
+
 func TestAttempt_NoChangesBlockedLocalResourceExhaustion_ReturnsBlockedExternal(t *testing.T) {
 	store := &attemptStore{}
 
