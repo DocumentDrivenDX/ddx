@@ -2740,7 +2740,7 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	assert.True(t, sawOperator, "no_changes_operator_required event must be emitted")
 }
 
-func TestNoChangesBlocked_PersistsLocalResourceBlockerKind(t *testing.T) {
+func TestNoChangesBlocked_AcceptsLocalResourceKind(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
