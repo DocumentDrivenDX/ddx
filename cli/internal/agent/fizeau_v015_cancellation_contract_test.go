@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -41,6 +42,27 @@ func (c emptyFizeauServiceConfig) SessionLogDir() string         { return c.sess
 // wrapped harness process and its spawned child/grandchild have exited. Uses
 // only exported Fizeau package APIs.
 func TestFizeauV015ExecuteCancellationWaitsForWrappedTree(t *testing.T) {
+	if os.Getenv("DDX_FIZEAU_V015_CONTRACT_HELPER") != "1" {
+		runFizeauV015ExecuteCancellationWaitsForWrappedTreeInHelper(t)
+		return
+	}
+	runFizeauV015ExecuteCancellationWaitsForWrappedTree(t)
+}
+
+func runFizeauV015ExecuteCancellationWaitsForWrappedTreeInHelper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("wrapped process-tree fixture requires POSIX shell and process-group semantics")
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestFizeauV015ExecuteCancellationWaitsForWrappedTree$", "-test.count=1", "-test.v=false")
+	cmd.Env = append(os.Environ(), "DDX_FIZEAU_V015_CONTRACT_HELPER=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helper subprocess failed: %v\n%s", err, out)
+	}
+}
+
+func runFizeauV015ExecuteCancellationWaitsForWrappedTree(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("wrapped process-tree fixture requires POSIX shell and process-group semantics")
 	}
