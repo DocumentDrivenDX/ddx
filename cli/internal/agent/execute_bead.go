@@ -488,6 +488,18 @@ func workerCandidateCycleReport(res *ExecuteBeadResult, salvageMixedCommit bool)
 	return report
 }
 
+func salvageMixedCommitCandidate(res *ExecuteBeadResult) bool {
+	if res == nil {
+		return false
+	}
+	if res.Status == ExecuteBeadStatusSuccess {
+		return false
+	}
+	return res.ResultRev != "" &&
+		res.Reason == mixedCommitAndNoChangesRationaleReason &&
+		isSalvageableMixedCommitRationale(res.NoChangesRationale)
+}
+
 func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadReport) {
 	if res == nil {
 		return
@@ -1970,10 +1982,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		return attemptBackend.ReleaseCandidateImport(ctx, workspace)
 	}
 	if cycleRuntime.Checks == nil && runtime.AgentRunner == nil {
-		cycleRuntime.Checks = &repositoryCandidateCheckRunner{
-			bead:      beadCtx,
-			result:    res,
-			artifacts: artifacts,
+		if salvageMixedCommitCandidate(res) {
+			cycleRuntime.Checks = &mixedCommitNamedACCheckRunner{
+				bead:      beadCtx,
+				beadStore: runtime.BeadEvents,
+			}
+		} else {
+			cycleRuntime.Checks = &repositoryCandidateCheckRunner{
+				bead:      beadCtx,
+				result:    res,
+				artifacts: artifacts,
+			}
 		}
 	}
 	if cycleRuntime.Repair == nil && runtime.AgentRunner == nil {
