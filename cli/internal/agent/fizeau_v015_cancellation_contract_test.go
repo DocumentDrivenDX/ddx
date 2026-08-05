@@ -36,11 +36,11 @@ func (c emptyFizeauServiceConfig) HealthCooldown() time.Duration { return 0 }
 func (c emptyFizeauServiceConfig) WorkDir() string               { return c.workDir }
 func (c emptyFizeauServiceConfig) SessionLogDir() string         { return c.sessionLogDir }
 
-// TestFizeauExecuteCancellationTerminatesWrappedProcessTree proves the public
+// TestFizeauV015ExecuteCancellationWaitsForWrappedTree proves the public
 // Execute contract: cancelling the Execute context does not complete until the
 // wrapped harness process and its spawned child/grandchild have exited. Uses
 // only exported Fizeau package APIs.
-func TestFizeauExecuteCancellationTerminatesWrappedProcessTree(t *testing.T) {
+func TestFizeauV015ExecuteCancellationWaitsForWrappedTree(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("wrapped process-tree fixture requires POSIX shell and process-group semantics")
 	}
