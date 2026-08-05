@@ -177,6 +177,7 @@ type CandidateReviewClassifiedEventBody struct {
 	AttemptID      string `json:"attempt_id,omitempty"`
 	BaseRev        string `json:"base_rev,omitempty"`
 	ResultRev      string `json:"result_rev,omitempty"`
+	ReviewGroupID  string `json:"review_group_id,omitempty"`
 	Verdict        string `json:"verdict,omitempty"`
 	Classification string `json:"classification,omitempty"`
 	Reason         string `json:"reason,omitempty"`
@@ -511,6 +512,13 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				return AttemptCycleResult{Report: report}, nil
 			}
 			if repairCycles >= c.maxRepairCycles() {
+				if approvedReview, ok := exactApprovedReviewForCurrentCandidate(candidate.Report); ok {
+					candidate.Report.Status = ExecuteBeadStatusSuccess
+					candidate.Report.ReviewVerdict = approvedReview.Verdict
+					candidate.Report.ReviewRationale = approvedReview.Rationale
+					cycleReview = approvedReview
+					break
+				}
 				report.Status = ExecuteBeadStatusRepairCycleExhausted
 				report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 				report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
@@ -819,6 +827,34 @@ func normalizeRepairedCandidate(previous, repaired CandidateResult) CandidateRes
 	return repaired
 }
 
+func exactApprovedReviewForCurrentCandidate(report ExecuteBeadReport) (*CandidateReviewResult, bool) {
+	if report.AttemptID == "" || report.ResultRev == "" {
+		return nil, false
+	}
+	for i := len(report.CycleTrace) - 1; i >= 0; i-- {
+		trace := report.CycleTrace[i]
+		if trace.AttemptID != report.AttemptID || trace.CycleIndex != report.CycleIndex || trace.ResultRev != report.ResultRev {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(trace.ReviewResult.Verdict), string(VerdictApprove)) {
+			continue
+		}
+		review := CandidateReviewResult{
+			Verdict:          string(VerdictApprove),
+			Rationale:        trace.ReviewResult.Rationale,
+			PerAC:            append([]ReviewAC(nil), trace.ReviewResult.PerAC...),
+			Findings:         append([]Finding(nil), trace.ReviewResult.Findings...),
+			Classification:   trace.ReviewResult.Classification,
+			ReviewGroupID:    strings.TrimSpace(trace.ReviewGroupID),
+			ReviewerIndices:  append([]int(nil), trace.ReviewerIndices...),
+			ReviewerVerdicts: append([]string(nil), trace.ReviewVerdicts...),
+			ReviewerRoute:    trace.ReviewerRoute,
+		}
+		return &review, true
+	}
+	return nil, false
+}
+
 func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID string, report ExecuteBeadReport, review CandidateReviewResult, class, reason string) {
 	if c.BeadEvents == nil {
 		return
@@ -829,6 +865,7 @@ func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID st
 		AttemptID:      report.AttemptID,
 		BaseRev:        report.BaseRev,
 		ResultRev:      report.ResultRev,
+		ReviewGroupID:  strings.TrimSpace(review.ReviewGroupID),
 		Verdict:        strings.TrimSpace(review.Verdict),
 		Classification: strings.TrimSpace(class),
 		Reason:         strings.TrimSpace(reason),
