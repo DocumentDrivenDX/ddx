@@ -1295,6 +1295,7 @@ func TestRepairExhaustedDoesNotLandFromExhaustionBranch(t *testing.T) {
 							CycleIndex:    0,
 							AttemptID:     "attempt-repair-stale",
 							ResultRev:     "other-approved-rev",
+							CandidateRef:  "refs/ddx/iterations/attempt-repair-stale/0",
 							ReviewGroupID: "rg-approved-old",
 							ReviewResult: ExecutionCycleReviewResult{
 								Verdict:   "APPROVE",
@@ -1380,6 +1381,7 @@ func TestRepairExhaustedApprovedSameCandidateUsesNormalLandPath(t *testing.T) {
 							CycleIndex:    1,
 							AttemptID:     "attempt-repair-approved",
 							ResultRev:     "repair-rev",
+							CandidateRef:  "refs/ddx/iterations/attempt-repair-approved/1",
 							ReviewGroupID: "rg-approved",
 							ReviewResult: ExecutionCycleReviewResult{
 								Verdict:   "APPROVE",
@@ -1411,18 +1413,15 @@ func TestRepairExhaustedApprovedSameCandidateUsesNormalLandPath(t *testing.T) {
 				}, nil
 			case "repair-rev":
 				return CandidateReviewResult{
-					Verdict:          "REQUEST_CHANGES",
-					Rationale:        "repair still incomplete",
-					Classification:   ReviewFindingClassFixableGap,
-					ReviewGroupID:    "rg-repair",
+					Verdict:          "APPROVE",
+					Rationale:        "repair now satisfies the review",
+					ReviewGroupID:    "rg-approved",
 					ReviewerIndices:  []int{0},
-					ReviewerVerdicts: []string{"BLOCK"},
+					ReviewerVerdicts: []string{"APPROVE"},
 					PerAC: []ReviewAC{
-						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+						{Number: 1, Item: "Add regression", Grade: "APPROVE", Evidence: "TestRepairCycle present"},
 					},
-					Findings: []Finding{
-						{Severity: "warn", Summary: "repair still incomplete", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
-					},
+					Findings: []Finding{},
 				}, nil
 			default:
 				t.Fatalf("unexpected review rev %q", candidate.Report.ResultRev)
@@ -1434,6 +1433,7 @@ func TestRepairExhaustedApprovedSameCandidateUsesNormalLandPath(t *testing.T) {
 		}),
 		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
 			assert.Equal(t, "APPROVE", candidate.Report.ReviewVerdict)
+			assert.Equal(t, "rg-approved", candidate.Report.ReviewGroupID)
 			assert.Equal(t, "repair-rev", candidate.Report.ResultRev)
 			return candidate.Report, nil
 		}),
