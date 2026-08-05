@@ -1364,7 +1364,30 @@ func TestRepairExhaustedDoesNotLandFromExhaustionBranch(t *testing.T) {
 	assert.False(t, result.Landed)
 	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
 	assert.Equal(t, "repair-rev", result.Report.ResultRev)
+	assert.Equal(t, "rg-repair", result.Report.ReviewGroupID)
+	assert.Equal(t, "REQUEST_CHANGES", result.Report.ReviewVerdict)
+	assert.Equal(t, 1, result.Report.EscalationCount)
+	assert.Equal(t, candidateIterationRef("attempt-repair-stale", 1), result.Report.CandidateRef)
+	assert.Equal(t, result.Report.CandidateRef, result.Report.PreserveRef)
 	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-stale/0", "refs/ddx/iterations/attempt-repair-stale/1"}, refStore.pinned)
+	require.NotEmpty(t, result.Report.CycleTrace)
+
+	var sawStaleApprove bool
+	for _, trace := range result.Report.CycleTrace {
+		if trace.ResultRev == "other-approved-rev" && trace.ReviewResult.Verdict == "APPROVE" {
+			sawStaleApprove = true
+		}
+	}
+	assert.True(t, sawStaleApprove, "test setup must include a historical APPROVE for a different result_rev")
+
+	last := result.Report.CycleTrace[len(result.Report.CycleTrace)-1]
+	assert.Equal(t, "base-rev", last.BaseRev)
+	assert.Equal(t, "repair-rev", last.ResultRev)
+	assert.Equal(t, candidateIterationRef("attempt-repair-stale", 1), last.CandidateRef)
+	assert.Equal(t, "rg-repair", last.ReviewGroupID)
+	assert.Equal(t, "REQUEST_CHANGES", last.ReviewResult.Verdict)
+	assert.Equal(t, 1, last.EscalationCount)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, last.FinalDecision)
 }
 
 func TestRepairExhaustedPreservesResultRefWithoutLand(t *testing.T) {
@@ -1429,6 +1452,14 @@ func TestRepairExhaustedPreservesResultRefWithoutLand(t *testing.T) {
 	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
 	require.NotEmpty(t, result.Report.CandidateRef, "repair exhaustion must retain the candidate ref")
 	assert.Equal(t, result.Report.CandidateRef, result.Report.PreserveRef, "repair exhaustion must publish a preserve ref for the durable candidate")
+	assert.Equal(t, 1, result.Report.EscalationCount)
+	require.NotEmpty(t, result.Report.CycleTrace)
+	last := result.Report.CycleTrace[len(result.Report.CycleTrace)-1]
+	assert.Equal(t, baseRev, last.BaseRev)
+	assert.Equal(t, resultRev, last.ResultRev)
+	assert.Equal(t, result.Report.CandidateRef, last.CandidateRef)
+	assert.Equal(t, 1, last.EscalationCount)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, last.FinalDecision)
 
 	gotCandidate, err := gitRevParse(t, projectRoot, result.Report.CandidateRef)
 	require.NoError(t, err)
