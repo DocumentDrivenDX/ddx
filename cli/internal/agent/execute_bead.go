@@ -2547,7 +2547,8 @@ Accepted forms:
 - ` + "`verification_command: <cmd>`" + ` — exit 0 closes, nonzero rejects.
 - ` + "`status: open`" + ` + ` + "`reason: <retryable>`" + ` — open, smart retry.
 - ` + "`status: proposed`" + ` + ` + "`reason: <operator needed>`" + ` — operator lane.
-- ` + "`status: blocked`" + ` + ` + "`reason: <external blocker>`" + ` — blocked lane.
+- ` + "`status: blocked`" + ` + ` + "`reason: <external blocker>`" + ` — external.
+- Gates stay open.
 - blocker_kind: local_resource_exhaustion only with status: blocked for host temp/inode/writability exhaustion.
 
 Bare rationales and ` + "`status: needs_investigation`" + ` are rejected.
