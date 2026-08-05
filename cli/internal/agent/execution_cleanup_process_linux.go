@@ -11,19 +11,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 type procExecutionCleanupAttemptProcessScanner struct {
-	now      func() time.Time
-	tempRoot string
+	now func() time.Time
 }
 
 func newExecutionCleanupAttemptProcessScannerImpl() executionCleanupAttemptProcessScanner {
 	return &procExecutionCleanupAttemptProcessScanner{
-		now:      time.Now,
-		tempRoot: config.ExecutionTempRoot(""),
+		now: time.Now,
 	}
 }
 
@@ -66,7 +62,7 @@ func (s *procExecutionCleanupAttemptProcessScanner) inspect(pid int, bootTime ti
 		return executionCleanupAttemptProcess{}, false
 	}
 	cmdline := decodeExecutionCleanupCmdline(cmdlineRaw)
-	proc := executionCleanupAttemptProcessFromWorkerStatus(cmdline, cwd, pid, ppid, pgid, startedAt, s.tempRoot)
+	proc := executionCleanupAttemptProcessFromWorkerStatus(cmdline, cwd, pid, ppid, pgid, startedAt)
 	if proc.Worktree == "" {
 		return executionCleanupAttemptProcess{}, false
 	}

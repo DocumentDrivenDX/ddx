@@ -238,6 +238,55 @@ func TestExecutionCleanupFixtures_UseHermeticRoots(t *testing.T) {
 	}
 }
 
+func TestNoProviderProcessOwnershipSymbols(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	path := filepath.Join(filepath.Dir(thisFile), "execution_cleanup_process.go")
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	require.NoError(t, err)
+
+	var fn *ast.FuncDecl
+	for _, decl := range file.Decls {
+		candidate, ok := decl.(*ast.FuncDecl)
+		if !ok || candidate.Name.Name != "executionCleanupAttemptProcessFromWorkerStatus" {
+			continue
+		}
+		fn = candidate
+		break
+	}
+	require.NotNil(t, fn, "expected executionCleanupAttemptProcessFromWorkerStatus to exist")
+	require.NotNil(t, fn.Body, "expected executionCleanupAttemptProcessFromWorkerStatus to have a body")
+
+	var forbidden []string
+	if fn.Type.Params != nil {
+		for _, field := range fn.Type.Params.List {
+			for _, name := range field.Names {
+				if name.Name == "tempRoot" {
+					forbidden = append(forbidden, "parameter tempRoot")
+				}
+			}
+		}
+	}
+	ast.Inspect(fn.Body, func(node ast.Node) bool {
+		switch n := node.(type) {
+		case *ast.Ident:
+			switch n.Name {
+			case "tempRoot", "trimmedCwd":
+				forbidden = append(forbidden, "identifier "+n.Name)
+			}
+		case *ast.CallExpr:
+			if ident, ok := n.Fun.(*ast.Ident); ok && ident.Name == "isPathWithin" {
+				forbidden = append(forbidden, "call isPathWithin")
+			}
+		}
+		return true
+	})
+
+	require.Empty(t, forbidden, "cleanup helper still carries provider/route-owned fallback symbols: %v", forbidden)
+}
+
 func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
