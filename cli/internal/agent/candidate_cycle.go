@@ -177,6 +177,7 @@ type CandidateReviewClassifiedEventBody struct {
 	AttemptID      string `json:"attempt_id,omitempty"`
 	BaseRev        string `json:"base_rev,omitempty"`
 	ResultRev      string `json:"result_rev,omitempty"`
+	ReviewGroupID  string `json:"review_group_id,omitempty"`
 	Verdict        string `json:"verdict,omitempty"`
 	Classification string `json:"classification,omitempty"`
 	Reason         string `json:"reason,omitempty"`
@@ -485,14 +486,17 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 
 		candidate.Report.EscalationCount = reviewRetryCount
 		verdict := Verdict(strings.TrimSpace(reviewResult.Verdict))
+		reviewGroupID := strings.TrimSpace(reviewResult.ReviewGroupID)
 		switch verdict {
 		case VerdictApprove:
 			candidate.Report.ReviewVerdict = string(VerdictApprove)
+			candidate.Report.ReviewGroupID = reviewGroupID
 			candidate.Report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
 		case VerdictRequestChanges, VerdictBlock:
 			classification := c.classifyCandidateReview(reviewResult)
 			report := candidate.Report
 			report.ReviewVerdict = string(verdict)
+			report.ReviewGroupID = reviewGroupID
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
 			if verdict == VerdictRequestChanges {
 				report.Status = ExecuteBeadStatusReviewRequestChanges
@@ -815,6 +819,7 @@ func normalizeRepairedCandidate(previous, repaired CandidateResult) CandidateRes
 	}
 	repaired.Report.CandidateRef = ""
 	repaired.Report.ReviewVerdict = ""
+	repaired.Report.ReviewGroupID = ""
 	repaired.Report.ReviewRationale = ""
 	return repaired
 }
@@ -829,6 +834,7 @@ func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID st
 		AttemptID:      report.AttemptID,
 		BaseRev:        report.BaseRev,
 		ResultRev:      report.ResultRev,
+		ReviewGroupID:  strings.TrimSpace(review.ReviewGroupID),
 		Verdict:        strings.TrimSpace(review.Verdict),
 		Classification: strings.TrimSpace(class),
 		Reason:         strings.TrimSpace(reason),
@@ -940,9 +946,10 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 	}
 	audit := executionDecisionAuditForReport(candidate.Report, finalDecision, reviewPresent, reviewVerdict)
 	entry := ExecutionCycleTrace{
-		CycleIndex: candidate.CycleIndex,
-		AttemptID:  candidate.Report.AttemptID,
-		ResultRev:  candidate.Report.ResultRev,
+		CycleIndex:   candidate.CycleIndex,
+		AttemptID:    candidate.Report.AttemptID,
+		ResultRev:    candidate.Report.ResultRev,
+		CandidateRef: candidate.Report.CandidateRef,
 		ImplementerRoute: ExecutionCycleRouteFacts{
 			Harness:     candidate.Report.Harness,
 			Provider:    candidate.Report.Provider,

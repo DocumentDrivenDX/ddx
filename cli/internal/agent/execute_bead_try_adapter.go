@@ -24,6 +24,7 @@ func toTryReport(report ExecuteBeadReport) agenttry.Report {
 		SessionID:                    report.SessionID,
 		BaseRev:                      report.BaseRev,
 		ResultRev:                    report.ResultRev,
+		CandidateRef:                 report.CandidateRef,
 		ImplementationRev:            report.ImplementationRev,
 		LandedRev:                    report.LandedRev,
 		TargetBranch:                 report.TargetBranch,
@@ -34,6 +35,7 @@ func toTryReport(report ExecuteBeadReport) agenttry.Report {
 		RetryAfter:                   report.RetryAfter,
 		NoChangesRationale:           report.NoChangesRationale,
 		ReviewVerdict:                report.ReviewVerdict,
+		ReviewGroupID:                report.ReviewGroupID,
 		ReviewRationale:              report.ReviewRationale,
 		CycleTrace:                   cycleTrace,
 		PowerClass:                   report.PowerClass,
@@ -88,6 +90,7 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 		SessionID:                    report.SessionID,
 		BaseRev:                      report.BaseRev,
 		ResultRev:                    report.ResultRev,
+		CandidateRef:                 report.CandidateRef,
 		ImplementationRev:            report.ImplementationRev,
 		LandedRev:                    report.LandedRev,
 		TargetBranch:                 report.TargetBranch,
@@ -98,6 +101,7 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 		RetryAfter:                   report.RetryAfter,
 		NoChangesRationale:           report.NoChangesRationale,
 		ReviewVerdict:                report.ReviewVerdict,
+		ReviewGroupID:                report.ReviewGroupID,
 		ReviewRationale:              report.ReviewRationale,
 		CycleTrace:                   cycleTrace,
 		PowerClass:                   report.PowerClass,
@@ -155,9 +159,10 @@ func fromTryRateLimitRetryInfo(info agenttry.RateLimitRetryInfo) RateLimitRetryI
 
 func toTryCycleTrace(entry ExecutionCycleTrace) agenttry.ExecutionCycleTrace {
 	return agenttry.ExecutionCycleTrace{
-		CycleIndex: entry.CycleIndex,
-		AttemptID:  entry.AttemptID,
-		ResultRev:  entry.ResultRev,
+		CycleIndex:   entry.CycleIndex,
+		AttemptID:    entry.AttemptID,
+		ResultRev:    entry.ResultRev,
+		CandidateRef: entry.CandidateRef,
 		ImplementerRoute: agenttry.ExecutionCycleRouteFacts{
 			Harness:         entry.ImplementerRoute.Harness,
 			Provider:        entry.ImplementerRoute.Provider,
@@ -215,9 +220,10 @@ func toTryCycleTrace(entry ExecutionCycleTrace) agenttry.ExecutionCycleTrace {
 
 func fromTryCycleTrace(entry agenttry.ExecutionCycleTrace) ExecutionCycleTrace {
 	return ExecutionCycleTrace{
-		CycleIndex: entry.CycleIndex,
-		AttemptID:  entry.AttemptID,
-		ResultRev:  entry.ResultRev,
+		CycleIndex:   entry.CycleIndex,
+		AttemptID:    entry.AttemptID,
+		ResultRev:    entry.ResultRev,
+		CandidateRef: entry.CandidateRef,
 		ImplementerRoute: ExecutionCycleRouteFacts{
 			Harness:         entry.ImplementerRoute.Harness,
 			Provider:        entry.ImplementerRoute.Provider,

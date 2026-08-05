@@ -1279,6 +1279,261 @@ func TestRepairCycle_MaxCyclesExhaustedPreservesCandidate(t *testing.T) {
 	assert.Empty(t, refStore.unpinned, "exhausted repair candidates must retain refs")
 }
 
+func TestRepairExhaustedDoesNotLandFromExhaustionBranch(t *testing.T) {
+	refStore := &inMemoryCandidateRefStore{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-repair-stale",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   "base-rev",
+					ResultRev: "candidate-rev",
+					CycleTrace: []ExecutionCycleTrace{
+						{
+							CycleIndex:    0,
+							AttemptID:     "attempt-repair-stale",
+							ResultRev:     "other-approved-rev",
+							CandidateRef:  "refs/ddx/iterations/attempt-repair-stale/0",
+							ReviewGroupID: "rg-approved-old",
+							ReviewResult: ExecutionCycleReviewResult{
+								Verdict:   "APPROVE",
+								Rationale: "stale approval for a different candidate",
+							},
+							FinalDecision: ExecuteBeadStatusSuccess,
+						},
+					},
+				},
+				CycleIndex: 0,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			switch candidate.Report.ResultRev {
+			case "candidate-rev":
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "missing regression coverage",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-initial",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+					},
+					Findings: []Finding{
+						{Severity: "warn", Summary: "missing regression coverage", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+					},
+				}, nil
+			case "repair-rev":
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "repair still incomplete",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-repair",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+					},
+					Findings: []Finding{
+						{Severity: "warn", Summary: "repair still incomplete", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+					},
+				}, nil
+			default:
+				t.Fatalf("unexpected review rev %q", candidate.Report.ResultRev)
+				return CandidateReviewResult{}, nil
+			}
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			t.Fatalf("lander must not run for an unrelated historical approval: %+v", candidate)
+			return candidate.Report, nil
+		}),
+		RefStore:        refStore,
+		ProjectRoot:     "/project",
+		RepairMaxCycles: 1,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
+	assert.Equal(t, "repair-rev", result.Report.ResultRev)
+	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-stale/0", "refs/ddx/iterations/attempt-repair-stale/1"}, refStore.pinned)
+}
+
+func TestRepairExhaustedApprovedSameCandidateUsesNormalLandPath(t *testing.T) {
+	refStore := &inMemoryCandidateRefStore{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-repair-approved",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   "base-rev",
+					ResultRev: "candidate-rev",
+					CycleTrace: []ExecutionCycleTrace{
+						{
+							CycleIndex:    1,
+							AttemptID:     "attempt-repair-approved",
+							ResultRev:     "repair-rev",
+							CandidateRef:  "refs/ddx/iterations/attempt-repair-approved/1",
+							ReviewGroupID: "rg-approved",
+							ReviewResult: ExecutionCycleReviewResult{
+								Verdict:   "APPROVE",
+								Rationale: "already approved before repair exhaustion",
+							},
+							FinalDecision: ExecuteBeadStatusSuccess,
+						},
+					},
+				},
+				CycleIndex: 0,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			switch candidate.Report.ResultRev {
+			case "candidate-rev":
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "missing regression coverage",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-initial",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+					},
+					Findings: []Finding{
+						{Severity: "warn", Summary: "missing regression coverage", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+					},
+				}, nil
+			case "repair-rev":
+				return CandidateReviewResult{
+					Verdict:          "APPROVE",
+					Rationale:        "repair now satisfies the review",
+					ReviewGroupID:    "rg-approved",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"APPROVE"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "APPROVE", Evidence: "TestRepairCycle present"},
+					},
+					Findings: []Finding{},
+				}, nil
+			default:
+				t.Fatalf("unexpected review rev %q", candidate.Report.ResultRev)
+				return CandidateReviewResult{}, nil
+			}
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			assert.Equal(t, "APPROVE", candidate.Report.ReviewVerdict)
+			assert.Equal(t, "rg-approved", candidate.Report.ReviewGroupID)
+			assert.Equal(t, "repair-rev", candidate.Report.ResultRev)
+			return candidate.Report, nil
+		}),
+		RefStore:        refStore,
+		ProjectRoot:     "/project",
+		RepairMaxCycles: 1,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.True(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Report.Status)
+	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-approved/0", "refs/ddx/iterations/attempt-repair-approved/1"}, refStore.pinned)
+}
+
+func TestRepairExhaustedIgnoresSupersededApprove(t *testing.T) {
+	refStore := &inMemoryCandidateRefStore{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-repair-superseded",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   "base-rev",
+					ResultRev: "candidate-rev",
+					CycleTrace: []ExecutionCycleTrace{
+						{
+							CycleIndex:    0,
+							AttemptID:     "attempt-repair-superseded",
+							ResultRev:     "repair-rev",
+							ReviewGroupID: "rg-superseded-approve",
+							ReviewResult: ExecutionCycleReviewResult{
+								Verdict:   "APPROVE",
+								Rationale: "approval for the superseded repair cycle",
+							},
+							FinalDecision: ExecuteBeadStatusSuccess,
+						},
+					},
+				},
+				CycleIndex: 0,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			switch candidate.Report.ResultRev {
+			case "candidate-rev":
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "missing regression coverage",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-initial",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+					},
+					Findings: []Finding{
+						{Severity: "warn", Summary: "missing regression coverage", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+					},
+				}, nil
+			case "repair-rev":
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "repair still incomplete",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-repair",
+					ReviewerIndices:  []int{0},
+					ReviewerVerdicts: []string{"BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+					},
+					Findings: []Finding{
+						{Severity: "warn", Summary: "repair still incomplete", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+					},
+				}, nil
+			default:
+				t.Fatalf("unexpected review rev %q", candidate.Report.ResultRev)
+				return CandidateReviewResult{}, nil
+			}
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			t.Fatalf("lander must not run for a superseded approval: %+v", candidate)
+			return candidate.Report, nil
+		}),
+		RefStore:        refStore,
+		ProjectRoot:     "/project",
+		RepairMaxCycles: 1,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
+	assert.Equal(t, "repair-rev", result.Report.ResultRev)
+	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-superseded/0", "refs/ddx/iterations/attempt-repair-superseded/1"}, refStore.pinned)
+}
+
 type beadEventWithBody struct {
 	kind string
 	body string

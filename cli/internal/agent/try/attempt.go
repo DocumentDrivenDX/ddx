@@ -41,6 +41,7 @@ type Report struct {
 	SessionID                    string
 	BaseRev                      string
 	ResultRev                    string
+	CandidateRef                 string
 	ImplementationRev            string
 	LandedRev                    string
 	TargetBranch                 string
@@ -51,6 +52,7 @@ type Report struct {
 	RetryAfter                   string
 	NoChangesRationale           string
 	ReviewVerdict                string
+	ReviewGroupID                string
 	ReviewRationale              string
 	CycleTrace                   []ExecutionCycleTrace
 	PowerClass                   string
@@ -123,6 +125,7 @@ type ExecutionCycleTrace struct {
 	CycleIndex           int
 	AttemptID            string
 	ResultRev            string
+	CandidateRef         string
 	ImplementerRoute     ExecutionCycleRouteFacts
 	RequestedRoute       ExecutionCycleRequestedRouteFacts
 	ActualRoute          ExecutionCycleRouteFacts

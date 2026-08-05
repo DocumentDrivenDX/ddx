@@ -840,6 +840,9 @@ type ExecuteBeadReport struct {
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,
 	// or BLOCK) when a reviewer ran. Empty when review was skipped.
 	ReviewVerdict string `json:"review_verdict,omitempty"`
+	// ReviewGroupID is the review-group bundle that produced the current review
+	// verdict, when one ran.
+	ReviewGroupID string `json:"review_group_id,omitempty"`
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
