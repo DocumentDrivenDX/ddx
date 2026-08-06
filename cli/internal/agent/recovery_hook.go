@@ -52,23 +52,16 @@ type PostLadderExhaustionResult struct {
 // recovery so the recovery action can stay linked to the review group and
 // reviewer findings that triggered it.
 type PostLadderExhaustionContext struct {
+	RecoveryReferenceContext
+	ResultRev            string
+	CandidateRef         string
+	PreserveRef          string
 	ReviewGroupID        string
 	ReviewVerdict        string
 	ReviewRationale      string
 	ReviewClassification string
 	ReviewPerAC          []ReviewAC
 	ReviewFindings       []Finding
-}
-
-func postLadderExhaustionContextFromReport(report ExecuteBeadReport) PostLadderExhaustionContext {
-	return PostLadderExhaustionContext{
-		ReviewGroupID:        strings.TrimSpace(report.ReviewGroupID),
-		ReviewVerdict:        strings.TrimSpace(report.ReviewVerdict),
-		ReviewRationale:      strings.TrimSpace(report.ReviewRationale),
-		ReviewClassification: strings.TrimSpace(report.ReviewClassification),
-		ReviewPerAC:          append([]ReviewAC(nil), report.ReviewPerAC...),
-		ReviewFindings:       append([]Finding(nil), report.ReviewFindings...),
-	}
 }
 
 type AutoRecoveryConfig struct {

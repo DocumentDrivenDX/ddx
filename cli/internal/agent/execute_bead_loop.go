@@ -4436,7 +4436,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				_ = parkToProposedSimple(w.Store, candidate.ID, bead.ParkLadderExhaustionManual, "recovery:manual label set", now().UTC())
 			} else if runtime.PostLadderExhaustionHook != nil {
 				failureClass := deriveRecoveryFailureClass(report)
-				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass, postLadderExhaustionContextFromReport(report))
+				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass, postLadderExhaustionContextFromReportAndBead(report, &candidate))
 			}
 		}
 		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -7296,14 +7296,6 @@ func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadL
 			Source: "ddx work",
 		}, nil)
 	}
-	if hook != nil {
-		failureClass := deriveRecoveryFailureClass(report)
-		if result, err := hook(ctx, beadID, failureClass, postLadderExhaustionContextFromReport(report)); err != nil {
-			return err
-		} else if result != nil && result.Attempted {
-			return nil
-		}
-	}
 	if nextFloorFn != nil {
 		if _, err := nextFloorFn(actualPower); err == nil {
 			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
@@ -7313,6 +7305,18 @@ func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadL
 			}, nil)
 		}
 		emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, at)
+	}
+	if hook != nil {
+		failureClass := deriveRecoveryFailureClass(report)
+		recoveryContext := postLadderExhaustionContextFromReport(report)
+		if beadRecord, err := store.Get(ctx, beadID); err == nil {
+			recoveryContext = postLadderExhaustionContextFromReportAndBead(report, beadRecord)
+		}
+		if result, err := hook(ctx, beadID, failureClass, recoveryContext); err != nil {
+			return err
+		} else if result != nil && result.Attempted {
+			return nil
+		}
 	}
 	return parkToProposedWithOperatorMeta(store, beadID, bead.ParkPostReviewMalfunction, ParkToProposedOpts{
 		Reason:          "repair cycle exhausted at top power: operator decision required",

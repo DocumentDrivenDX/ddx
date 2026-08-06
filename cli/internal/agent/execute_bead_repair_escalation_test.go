@@ -14,6 +14,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type recoveryTrackingStore struct {
+	*bead.Store
+	updateWithLifecycleStatusCalls int
+	parkToProposedCalls            int
+	closeWithEvidenceCalls         int
+}
+
+func (s *recoveryTrackingStore) UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error {
+	s.updateWithLifecycleStatusCalls++
+	return s.Store.UpdateWithLifecycleStatus(id, status, opts, mutate)
+}
+
+func (s *recoveryTrackingStore) ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error {
+	s.parkToProposedCalls++
+	return s.Store.ParkToProposed(id, reason, mutate)
+}
+
+func (s *recoveryTrackingStore) CloseWithEvidence(id, sessionID, commitSHA string) error {
+	s.closeWithEvidenceCalls++
+	return s.Store.CloseWithEvidence(id, sessionID, commitSHA)
+}
+
+func newPowerLadderRecoveryBead(t *testing.T, store *bead.Store, id string) *bead.Bead {
+	t.Helper()
+	b := &bead.Bead{
+		ID:       id,
+		Title:    "repair exhaustion recovery context",
+		Priority: 3,
+		Description: "PROBLEM\n" +
+			"When review_fixable_gap repair retries consume the available abstract MinPower ladder, DDx must preserve the candidate result_rev and enter TD-031 auto-recovery.\n\n" +
+			"PARENT\n" +
+			"ddx-b79130f2 (100% reliability program epic)\n\n" +
+			"DEPS\n" +
+			"Related (not hard deps): ddx-83f007b3 preserve on exhaust; ddx-84fd24cb mixed-commit pin.\n\n" +
+			"GOVERNING\n" +
+			"TD-031 §classify_result retry_power and auto-recovery; FEAT-010 MinPower ladder; reliability P1/P7; operator thrash policy (no demotion).",
+		Acceptance: "1. TestRepairExhaustedAfterPowerLadderPreservesAndRecovers\n2. TestRepairExhaustedAfterPowerLadderDoesNotLandOrDemote\n3. TestRepairExhaustedAfterPowerLadderRetainsRecoveryContext",
+	}
+	require.NoError(t, store.Create(context.Background(), b))
+	return b
+}
+
 // TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata asserts that when
 // repair-cycle-exhausted is returned and the escalation ladder has a higher
 // powerClass available, the bead remains open without persisting a bead retry
@@ -391,6 +433,244 @@ func findRepairCycleExhaustedEvent(t *testing.T, store *bead.Store, beadID strin
 	}
 	t.Fatalf("repair-cycle-exhausted event not found")
 	return bead.BeadEvent{}
+}
+
+func TestRepairExhaustedAfterPowerLadderPreservesAndRecovers(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := newPowerLadderRecoveryBead(t, store, "ddx-rce-power-ladder")
+	reviewRev := "repair-rev"
+	candidateRef := candidateIterationRef("attempt-power-ladder", 1)
+	preserveRef := candidateRef
+
+	hookCalls := 0
+	hook := PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
+		hookCalls++
+		assert.Equal(t, b.ID, beadID)
+		assert.Equal(t, PersistentExecutionFailed, class)
+		assert.Equal(t, reviewRev, review.ResultRev)
+		assert.Equal(t, candidateRef, review.CandidateRef)
+		assert.Equal(t, preserveRef, review.PreserveRef)
+		assert.Equal(t, "rg-power-ladder", review.ReviewGroupID)
+		assert.Equal(t, ReviewFindingClassFixableGap, review.ReviewClassification)
+		require.Equal(t, "ddx-b79130f2", review.Parent)
+		assert.ElementsMatch(t, []string{"ddx-83f007b3", "ddx-84fd24cb"}, review.RelatedDeps)
+		assert.ElementsMatch(t, []string{"TD-031", "FEAT-010"}, review.GoverningRefs)
+		require.Len(t, review.ReviewFindings, 1)
+		assert.Equal(t, "missing regression coverage", review.ReviewFindings[0].Summary)
+		return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
+	})
+
+	report := ExecuteBeadReport{
+		BeadID:               b.ID,
+		Status:               ExecuteBeadStatusRepairCycleExhausted,
+		ActualPower:          50,
+		ResultRev:            reviewRev,
+		CandidateRef:         candidateRef,
+		PreserveRef:          preserveRef,
+		ReviewVerdict:        string(VerdictBlock),
+		ReviewRationale:      "missing regression coverage",
+		ReviewGroupID:        "rg-power-ladder",
+		ReviewClassification: ReviewFindingClassFixableGap,
+		ReviewPerAC: []ReviewAC{{
+			Number:   1,
+			Item:     "Add regression coverage",
+			Grade:    "REQUEST_CHANGES",
+			Evidence: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+		ReviewFindings: []Finding{{
+			Severity: "warn",
+			Summary:  "missing regression coverage",
+			Location: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+	}
+
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		report,
+		report.ActualPower,
+		time.Now().UTC(),
+		func(int) (int, error) {
+			return 0, fmt.Errorf("ladder exhausted")
+		},
+		hook,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, hookCalls, "repair exhaustion must enter TD-031 auto-recovery")
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "recovery success must keep the bead open")
+	assert.Equal(t, 3, got.Priority, "recovery success must not demote priority")
+
+	event := findRepairCycleExhaustedEvent(t, store, b.ID)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, event.Kind)
+	assert.Contains(t, event.Body, `"review_classification":"review_fixable_gap"`)
+}
+
+func TestRepairExhaustedAfterPowerLadderDoesNotLandOrDemote(t *testing.T) {
+	baseStore := bead.NewStore(t.TempDir())
+	require.NoError(t, baseStore.Init(context.Background()))
+	store := &recoveryTrackingStore{Store: baseStore}
+
+	b := newPowerLadderRecoveryBead(t, baseStore, "ddx-rce-no-land")
+	report := ExecuteBeadReport{
+		BeadID:               b.ID,
+		Status:               ExecuteBeadStatusRepairCycleExhausted,
+		ActualPower:          50,
+		ResultRev:            "repair-rev",
+		CandidateRef:         candidateIterationRef("attempt-no-land", 1),
+		PreserveRef:          candidateIterationRef("attempt-no-land", 1),
+		ReviewVerdict:        string(VerdictBlock),
+		ReviewRationale:      "missing regression coverage",
+		ReviewGroupID:        "rg-no-land",
+		ReviewClassification: ReviewFindingClassFixableGap,
+		ReviewFindings: []Finding{{
+			Severity: "warn",
+			Summary:  "missing regression coverage",
+			Location: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+	}
+
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		report,
+		report.ActualPower,
+		time.Now().UTC(),
+		func(int) (int, error) {
+			return 0, fmt.Errorf("ladder exhausted")
+		},
+		PostLadderExhaustionHook(func(context.Context, string, RecoveryFailureClass, PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
+			return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
+		}),
+	)
+	require.NoError(t, err)
+
+	got, err := baseStore.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "recovery success must keep the bead open")
+	assert.Equal(t, 3, got.Priority, "recovery success must not demote priority")
+	assert.Equal(t, 0, store.updateWithLifecycleStatusCalls, "recovery success must not demote or close the bead")
+	assert.Equal(t, 0, store.parkToProposedCalls, "recovery success must not park the bead")
+	assert.Equal(t, 0, store.closeWithEvidenceCalls, "recovery success must not land the bead")
+}
+
+func TestRepairExhaustedAfterPowerLadderRetainsRecoveryContext(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := newPowerLadderRecoveryBead(t, store, "ddx-rce-context")
+	report := ExecuteBeadReport{
+		BeadID:               b.ID,
+		Status:               ExecuteBeadStatusRepairCycleExhausted,
+		ActualPower:          50,
+		ResultRev:            "repair-rev",
+		CandidateRef:         candidateIterationRef("attempt-context", 1),
+		PreserveRef:          candidateIterationRef("attempt-context", 1),
+		ReviewVerdict:        string(VerdictBlock),
+		ReviewRationale:      "missing regression coverage",
+		ReviewGroupID:        "rg-context",
+		ReviewClassification: ReviewFindingClassFixableGap,
+		ReviewPerAC: []ReviewAC{{
+			Number:   1,
+			Item:     "Add regression coverage",
+			Grade:    "REQUEST_CHANGES",
+			Evidence: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+		ReviewFindings: []Finding{{
+			Severity: "warn",
+			Summary:  "missing regression coverage",
+			Location: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+	}
+
+	var gotContext PostLadderExhaustionContext
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		report,
+		report.ActualPower,
+		time.Now().UTC(),
+		func(int) (int, error) {
+			return 0, fmt.Errorf("ladder exhausted")
+		},
+		PostLadderExhaustionHook(func(_ context.Context, beadID string, class RecoveryFailureClass, review PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
+			assert.Equal(t, b.ID, beadID)
+			assert.Equal(t, PersistentExecutionFailed, class)
+			gotContext = review
+			return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
+		}),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ddx-b79130f2", gotContext.Parent)
+	assert.ElementsMatch(t, []string{"ddx-83f007b3", "ddx-84fd24cb"}, gotContext.RelatedDeps)
+	assert.ElementsMatch(t, []string{"TD-031", "FEAT-010"}, gotContext.GoverningRefs)
+	assert.Equal(t, "repair-rev", gotContext.ResultRev)
+	assert.Equal(t, candidateIterationRef("attempt-context", 1), gotContext.CandidateRef)
+	assert.Equal(t, candidateIterationRef("attempt-context", 1), gotContext.PreserveRef)
+	assert.Equal(t, "rg-context", gotContext.ReviewGroupID)
+	assert.Equal(t, ReviewFindingClassFixableGap, gotContext.ReviewClassification)
+	require.Len(t, gotContext.ReviewFindings, 1)
+	assert.Equal(t, "missing regression coverage", gotContext.ReviewFindings[0].Summary)
+}
+
+func TestRepairExhaustedAfterPowerLadderSkipsRecoveryHookWhenRetryRemains(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := newPowerLadderRecoveryBead(t, store, "ddx-rce-skip-hook")
+	report := ExecuteBeadReport{
+		BeadID:               b.ID,
+		Status:               ExecuteBeadStatusRepairCycleExhausted,
+		ActualPower:          50,
+		ResultRev:            "repair-rev",
+		CandidateRef:         candidateIterationRef("attempt-skip-hook", 1),
+		PreserveRef:          candidateIterationRef("attempt-skip-hook", 1),
+		ReviewVerdict:        string(VerdictBlock),
+		ReviewRationale:      "missing regression coverage",
+		ReviewGroupID:        "rg-skip-hook",
+		ReviewClassification: ReviewFindingClassFixableGap,
+		ReviewFindings: []Finding{{
+			Severity: "warn",
+			Summary:  "missing regression coverage",
+			Location: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+	}
+
+	hookCalls := 0
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		report,
+		report.ActualPower,
+		time.Now().UTC(),
+		func(int) (int, error) {
+			return 51, nil
+		},
+		PostLadderExhaustionHook(func(context.Context, string, RecoveryFailureClass, PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
+			hookCalls++
+			return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
+		}),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, hookCalls, "a stronger retry must be resolved before TD-031 recovery is attempted")
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, 3, got.Priority)
 }
 
 // TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed asserts that when
