@@ -114,13 +114,42 @@ func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
 	// Host-wide /proc census can stall for tens of seconds on busy machines
 	// (slow/missing cwd readlinks under virtiofs test trees). Cap the scan so
 	// worktree/scratch reclamation still runs in the same cleanup pass.
+	// Run the scan in a goroutine: a single blocked Readlink of /proc/*/cwd
+	// does not honor context cancellation, so we abandon the result on timeout.
 	base := ctx
 	if base == nil {
 		base = context.Background()
 	}
 	scanCtx, scanCancel := context.WithTimeout(base, defaultAttemptProcessScanBudget)
-	processes, err := scanner.Scan(scanCtx)
-	scanCancel()
+	type scanResult struct {
+		processes []executionCleanupAttemptProcess
+		err       error
+	}
+	ch := make(chan scanResult, 1)
+	go func() {
+		p, e := scanner.Scan(scanCtx)
+		ch <- scanResult{p, e}
+	}()
+	var processes []executionCleanupAttemptProcess
+	var err error
+	select {
+	case res := <-ch:
+		scanCancel()
+		processes, err = res.processes, res.err
+	case <-scanCtx.Done():
+		scanCancel()
+		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+			Path:    m.ProjectRoot,
+			Class:   "attempt_process_scan_timeout",
+			Message: scanCtx.Err().Error(),
+		})
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    m.ProjectRoot,
+			Class:   "attempt_process_scan_timeout",
+			Message: "process census timed out; continuing with worktree/scratch reclamation",
+		})
+		return nil
+	}
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
