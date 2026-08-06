@@ -7296,6 +7296,16 @@ func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadL
 			Source: "ddx work",
 		}, nil)
 	}
+	if nextFloorFn != nil {
+		if _, err := nextFloorFn(actualPower); err == nil {
+			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+				Reason: "repair cycle exhausted: escalating implementer to higher powerClass",
+				Actor:  actor,
+				Source: "ddx work",
+			}, nil)
+		}
+		emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, at)
+	}
 	if hook != nil {
 		failureClass := deriveRecoveryFailureClass(report)
 		recoveryContext := postLadderExhaustionContextFromReport(report)
@@ -7307,16 +7317,6 @@ func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadL
 		} else if result != nil && result.Attempted {
 			return nil
 		}
-	}
-	if nextFloorFn != nil {
-		if _, err := nextFloorFn(actualPower); err == nil {
-			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
-				Reason: "repair cycle exhausted: escalating implementer to higher powerClass",
-				Actor:  actor,
-				Source: "ddx work",
-			}, nil)
-		}
-		emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, at)
 	}
 	return parkToProposedWithOperatorMeta(store, beadID, bead.ParkPostReviewMalfunction, ParkToProposedOpts{
 		Reason:          "repair cycle exhausted at top power: operator decision required",

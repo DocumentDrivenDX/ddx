@@ -624,6 +624,55 @@ func TestRepairExhaustedAfterPowerLadderRetainsRecoveryContext(t *testing.T) {
 	assert.Equal(t, "missing regression coverage", gotContext.ReviewFindings[0].Summary)
 }
 
+func TestRepairExhaustedAfterPowerLadderSkipsRecoveryHookWhenRetryRemains(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := newPowerLadderRecoveryBead(t, store, "ddx-rce-skip-hook")
+	report := ExecuteBeadReport{
+		BeadID:               b.ID,
+		Status:               ExecuteBeadStatusRepairCycleExhausted,
+		ActualPower:          50,
+		ResultRev:            "repair-rev",
+		CandidateRef:         candidateIterationRef("attempt-skip-hook", 1),
+		PreserveRef:          candidateIterationRef("attempt-skip-hook", 1),
+		ReviewVerdict:        string(VerdictBlock),
+		ReviewRationale:      "missing regression coverage",
+		ReviewGroupID:        "rg-skip-hook",
+		ReviewClassification: ReviewFindingClassFixableGap,
+		ReviewFindings: []Finding{{
+			Severity: "warn",
+			Summary:  "missing regression coverage",
+			Location: "cli/internal/agent/execute_bead_repair_escalation_test.go:1",
+		}},
+	}
+
+	hookCalls := 0
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		report,
+		report.ActualPower,
+		time.Now().UTC(),
+		func(int) (int, error) {
+			return 51, nil
+		},
+		PostLadderExhaustionHook(func(context.Context, string, RecoveryFailureClass, PostLadderExhaustionContext) (*PostLadderExhaustionResult, error) {
+			hookCalls++
+			return &PostLadderExhaustionResult{Attempted: true, Succeeded: true, Path: Reframe}, nil
+		}),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, hookCalls, "a stronger retry must be resolved before TD-031 recovery is attempted")
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, 3, got.Priority)
+}
+
 // TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed asserts that when
 // repair-cycle-exhausted occurs at the top powerClass (EscalationNextFloor errors),
 // the bead is parked to proposed for operator review.
