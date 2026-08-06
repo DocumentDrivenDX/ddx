@@ -1262,6 +1262,96 @@ func TestLoop_WatchCheckpointDirtyPreserveFailureFallsBackToOperatorAttention(t 
 	assert.Contains(t, logBuf.String(), "commit or clean")
 }
 
+func TestSystemicOAStillExitsWorker(t *testing.T) {
+	t.Run("project_root_implementation_dirt", func(t *testing.T) {
+		inner, first, second := newExecuteLoopTestStore(t)
+		store := &claimCountingStore{Store: inner}
+
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+				t.Fatalf("executor must not run when the project root is dirty")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Mode:         executeloop.ModeWatch,
+			IdleInterval: time.Millisecond,
+			EventSink:    &eventSink,
+			ProjectRoot:  "/repo/watch",
+			SessionID:    "sess-systemic-oa-dirty-root",
+			WorkerID:     "worker-systemic-oa-dirty-root",
+			ProjectRootDirtyCheck: func(string) []string {
+				return []string{"cli/cmd/work.go"}
+			},
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotNil(t, result.OperatorAttention)
+		assert.Equal(t, "dirty_project_root", result.OperatorAttention.Reason)
+		assert.Equal(t, "OperatorAttention", result.StopCondition)
+		assert.Equal(t, "operator_attention", result.ExitReason)
+		assert.NotContains(t, eventSink.String(), "worker.continued_after_bead_oa")
+
+		gotFirst, err := inner.Get(context.Background(), first.ID)
+		require.NoError(t, err)
+		gotSecond, err := inner.Get(context.Background(), second.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+		assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+		assert.Empty(t, gotFirst.Owner)
+		assert.Empty(t, gotSecond.Owner)
+	})
+
+	t.Run("resource_exhausted", func(t *testing.T) {
+		inner, first, second := newExecuteLoopTestStore(t)
+		store := &claimCountingStore{Store: inner}
+
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(context.Context, string) (ExecuteBeadReport, error) {
+				t.Fatalf("executor must not run when resource preflight is exhausted")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Mode:            executeloop.ModeWatch,
+			IdleInterval:    time.Millisecond,
+			EventSink:       &eventSink,
+			ProjectRoot:     "/repo/watch",
+			SessionID:       "sess-systemic-oa-resource",
+			WorkerID:        "worker-systemic-oa-resource",
+			ResourceChecker: &executeBeadFailingResourceChecker{},
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "OperatorAttention", result.StopCondition)
+		assert.Equal(t, "operator_attention", result.ExitReason)
+		require.NotNil(t, result.OperatorAttention)
+		assert.Equal(t, "resource_exhausted", result.OperatorAttention.Reason)
+		assert.NotContains(t, eventSink.String(), "worker.continued_after_bead_oa")
+
+		gotFirst, err := inner.Get(context.Background(), first.ID)
+		require.NoError(t, err)
+		gotSecond, err := inner.Get(context.Background(), second.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+		assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+		assert.Empty(t, gotFirst.Owner)
+		assert.Empty(t, gotSecond.Owner)
+	})
+}
+
 func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
 	inner, first, second := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
