@@ -286,20 +286,6 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		harness = firstNonEmpty(harness, runtime.HarnessOverride, pt.Harness)
 		provider = firstNonEmpty(provider, runtime.ProviderOverride, pt.Provider)
 		model = firstNonEmpty(model, runtime.ModelOverride, pt.Model)
-		route := providerRouteLabel(provider, model)
-		now := time.Now().UTC()
-		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, now)
-		if len(reaped) > 0 {
-			writeProviderChildCleanupArtifact(workDir, runtime.Correlation["attempt_id"], &providerChildCleanupReport{
-				AttemptID:   runtime.Correlation["attempt_id"],
-				BeadID:      runtime.Correlation["bead_id"],
-				Trigger:     reasonSupersededProviderChild,
-				ActiveRoute: firstNonEmpty(route, harness),
-				ScannedAt:   now,
-				Survivors:   survivors,
-				Reaped:      reaped,
-			})
-		}
 		if runtime.OnRouteResolved != nil {
 			runtime.OnRouteResolved(harness, provider, model)
 		}

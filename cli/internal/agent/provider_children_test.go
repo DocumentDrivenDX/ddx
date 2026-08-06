@@ -510,7 +510,7 @@ func waitForPIDFile(t *testing.T, path string) int {
 	return 0
 }
 
-func TestAttemptEndReapsAllProviderChildren(t *testing.T) {
+func TestAttemptEndDoesNotReapProviderChildren(t *testing.T) {
 	for _, mode := range []string{"success", "failure", "interrupt"} {
 		t.Run(mode, func(t *testing.T) {
 			beadID := "ddx-provider-end-" + mode
@@ -542,7 +542,9 @@ func TestAttemptEndReapsAllProviderChildren(t *testing.T) {
 			case <-time.After(10 * time.Second):
 				t.Fatal("ExecuteBeadWithConfig did not return")
 			}
-			assertProcessGone(t, pid)
+			if !signalProcessAlive(pid) {
+				t.Fatalf("provider child pid %d was reaped by attempt-end cleanup", pid)
+			}
 		})
 	}
 }

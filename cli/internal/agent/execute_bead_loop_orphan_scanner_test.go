@@ -19,24 +19,16 @@ func (s *countingOrphanHarnessScanner) Scan(context.Context) ([]orphanHarnessPro
 	return nil, nil
 }
 
-func TestExecuteLoop_StartupOrphanReaperUsesInjectedScanner(t *testing.T) {
+func TestOrphanHarnessReaperDoesNotTouchFizeauOwnedTrees(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
 	scanner := &countingOrphanHarnessScanner{}
-	originalFactory := defaultOrphanHarnessProcessScanner
-	defaultOrphanHarnessProcessScanner = func() orphanHarnessProcessScanner {
-		t.Fatal("startup reaper fell through to the default scanner factory")
-		return nil
-	}
-	t.Cleanup(func() {
-		defaultOrphanHarnessProcessScanner = originalFactory
-	})
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run while exercising startup orphan scanner injection")
+			t.Fatal("executor must not run while exercising the orphan-harness startup path")
 			return ExecuteBeadReport{}, nil
 		}),
 	}
@@ -50,7 +42,7 @@ func TestExecuteLoop_StartupOrphanReaperUsesInjectedScanner(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, int32(1), scanner.calls.Load())
+	require.Equal(t, int32(0), scanner.calls.Load())
 }
 
 func TestExecutionLoop_DefaultFixturesUseHermeticOrphanScanner(t *testing.T) {

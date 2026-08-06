@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,30 +21,13 @@ func (r sleepyRunner) Run(RunArgs) (*Result, error) {
 	return &Result{ExitCode: 0}, nil
 }
 
-// TestExecuteBead_PreCommitProviderFixtureSurvivesRunningGuard exercises the
-// full ExecuteBeadWithConfig attempt path with an active Codex route and a
-// Claude fixture descendant owned by that route through ancestry (the shape
-// of a Codex-run pre-commit/test suite spawning Claude as a fixture,
-// ddx-44e89575's reproduction shape).
-//
-// The provider-child scanner and terminator are stubbed so the ancestry
-// scenario is deterministic and reproducible without spawning real OS
-// processes literally named "codex"/"claude": this host runs a live ddx
-// worker (dogfooding this very repo) whose own, already-deployed
-// running-phase guard scans the whole process tree by name and would treat
-// a multi-second-lived, non-mocked "codex"/"claude" test process as its own
-// non-route leak — exactly the bug this bead fixes, just in a different,
-// not-yet-rebuilt process rather than in this test.
-//
-// It proves the running guard never terminates the fixture while the
-// attempt is in flight, and that the attempt-end backstop still reaps it
-// exactly once the attempt completes.
-func TestExecuteBead_PreCommitProviderFixtureSurvivesRunningGuard(t *testing.T) {
+// TestDDXNeverScansOrSignalsFizeauOwnedProcesses proves the execute-bead
+// path no longer performs provider-child census/signaling during an attempt.
+// The scanner and terminator are stubbed to count invocations; after the
+// change both counts must stay at zero even while a long-lived attempt runs.
+func TestDDXNeverScansOrSignalsFizeauOwnedProcesses(t *testing.T) {
 	const beadID = "ddx-provider-harness-fixture"
 	projectRoot, gitOps := setupProcessCleanupAttempt(t, beadID)
-
-	const harnessPID = 919191
-	const fixturePID = 919192
 
 	restoreScanner := providerChildScanner
 	restoreTerminate := terminateProviderChild
@@ -53,24 +36,19 @@ func TestExecuteBead_PreCommitProviderFixtureSurvivesRunningGuard(t *testing.T) 
 		terminateProviderChild = restoreTerminate
 	})
 
+	var scans atomic.Int32
+	var terminations atomic.Int32
 	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		scans.Add(1)
 		return []providerChildProcess{{
-			PID:              fixturePID,
-			PPID:             harnessPID,
-			Provider:         "claude",
-			Command:          "/usr/local/bin/claude --print",
-			StartedAt:        time.Now().UTC(),
-			OwnerProviderPID: harnessPID,
-			OwnerProvider:    "codex",
+			PID:       919192,
+			Provider:  "claude",
+			Command:   "/usr/local/bin/claude --print",
+			StartedAt: time.Now().UTC(),
 		}}, nil
 	}
-
-	var mu sync.Mutex
-	var terminated []int
 	terminateProviderChild = func(pid int) {
-		mu.Lock()
-		terminated = append(terminated, pid)
-		mu.Unlock()
+		terminations.Add(1)
 	}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Harness: "codex"}).
@@ -87,10 +65,10 @@ func TestExecuteBead_PreCommitProviderFixtureSurvivesRunningGuard(t *testing.T) 
 	if res == nil {
 		t.Fatal("ExecuteBeadWithConfig returned a nil result")
 	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(terminated) != 1 || terminated[0] != fixturePID {
-		t.Fatalf("expected exactly one attempt-end termination of the harness-owned fixture, got %v", terminated)
+	if got := scans.Load(); got != 0 {
+		t.Fatalf("provider child scanner was called %d times; want 0", got)
+	}
+	if got := terminations.Load(); got != 0 {
+		t.Fatalf("provider child terminator was called %d times; want 0", got)
 	}
 }

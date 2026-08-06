@@ -1442,12 +1442,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	minPowerOverride := noChangesMinPowerOverride(beadCtx, rcfg.MinPower())
 
-	// Running-phase provider guard: continuously quarantine provider CLIs that
-	// do not belong to the active route while the attempt runs (ddx-2c973f8c).
-	// Seed it with any pinned harness/model and refresh it when fizeau resolves
-	// the route, then chain to the caller-supplied OnRouteResolved callback.
-	providerGuard := newRunningProviderGuard(projectRoot, beadID, attemptID, os.Getpid())
-	providerGuard.UpdateRoute(rcfg.Harness(), "", rcfg.Model())
 	baseOnRouteResolved := onRouteResolvedFromContext(ctx)
 	baseOnExecuteStart := onExecuteStartFromContext(ctx)
 
@@ -1476,13 +1470,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Role:                config.EvidenceRoleImplementer,
 		CorrelationID:       beadID + ":" + attemptID,
 		Env:                 gitIsolationEnv,
-		OnRouteResolved: func(harness, provider, model string) {
-			providerGuard.UpdateRoute(harness, provider, model)
-			if baseOnRouteResolved != nil {
-				baseOnRouteResolved(harness, provider, model)
-			}
-		},
-		OnExecuteStart: baseOnExecuteStart,
+		OnRouteResolved:     baseOnRouteResolved,
+		OnExecuteStart:      baseOnExecuteStart,
 	}
 	if minPowerOverride > 0 {
 		runRuntime.MinPowerOverride = minPowerOverride
@@ -1503,16 +1492,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
-	// If the active route's own harness process disappears mid-attempt
-	// (crash, OOM, SIGKILL) without ever emitting a final event, cancelling
-	// dispatchCtx here is what lets the drain loop (agent_runner_service.go's
-	// drainWatchdog.ctx backstop) give up promptly instead of waiting on the
-	// generic multi-hour idle timeout (ddx-f2b7cf89).
-	providerGuard.SetHarnessDeadWatch(routeHarnessDeadGrace, dispatchCancel)
-
 	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
-	stopProviderGuard := providerGuard.Start(dispatchCtx)
 	agentResult, agentErr := attemptBackend.Run(dispatchCtx, AttemptBackendRunRequest{
 		ProjectRoot: projectRoot,
 		Workspace:   workspace,
@@ -1521,7 +1502,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Config:      rcfg,
 		Runtime:     runRuntime,
 	})
-	stopProviderGuard()
 	stopRunStateRefresh()
 	cleanupTrigger := ""
 	if dispatchCtx.Err() != nil {
@@ -1530,19 +1510,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		cleanupTrigger = agentErr.Error()
 	}
 	_ = cleanupAttemptProcesses(context.Background(), projectRoot, beadID, attemptID, wtPath, processBaseline, cleanupTrigger)
-	// Attempt-end backstop: reap every remaining provider child regardless of
-	// route, then fold the running-phase guard's evidence into the final
-	// provider-children.json so mid-attempt reaps survive in the audit trail.
-	attemptEndReaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC())
-	if allReaped := append(providerGuard.Reaped(), attemptEndReaped...); len(allReaped) > 0 {
-		writeProviderChildCleanupArtifact(projectRoot, attemptID, &providerChildCleanupReport{
-			AttemptID: attemptID,
-			BeadID:    beadID,
-			Trigger:   firstNonEmpty(cleanupTrigger, reasonAttemptEnded),
-			ScannedAt: time.Now().UTC(),
-			Reaped:    allReaped,
-		})
-	}
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
