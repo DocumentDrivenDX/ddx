@@ -22,6 +22,7 @@ type wallClockReparentingStart struct {
 	PID      int
 	WorkDir  string
 	ChildPID string
+	Err      error
 }
 
 type wallClockReparentingRunner struct {
@@ -50,6 +51,7 @@ func (r *wallClockReparentingRunner) Run(opts RunArgs) (*Result, error) {
 	cmd.Dir = opts.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
+		r.started <- wallClockReparentingStart{Err: err}
 		return &Result{ExitCode: 1, Error: err.Error()}, nil
 	}
 	if fn := onExecuteStartFromContext(opts.Context); fn != nil {
@@ -134,7 +136,15 @@ func TestWorkAttemptWallClock_ReapsSessionChangingDescendants(t *testing.T) {
 		}{result: result, err: err}
 	}()
 
-	attempt := <-runner.started
+	var attempt wallClockReparentingStart
+	select {
+	case attempt = <-runner.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner did not publish its pid or startup error within 2s")
+	}
+	if attempt.Err != nil {
+		t.Fatalf("runner failed before publishing pid: %v", attempt.Err)
+	}
 	childPID := waitForCompletePIDFile(t, attempt.ChildPID, 5*time.Second)
 	require.True(t, signalProcessAlive(attempt.PID), "attempt leader must still be alive before wall-clock expiry")
 	require.True(t, signalProcessAlive(childPID), "reparented descendant must still be alive before wall-clock expiry")
