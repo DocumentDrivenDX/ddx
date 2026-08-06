@@ -7289,6 +7289,13 @@ func applyNoChangesBadAttemptEscalation(store ExecuteBeadLoopStore, beadID, acto
 // is parked to proposed for operator review.
 func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadLoopStore, beadID, actor string, report ExecuteBeadReport, actualPower int, at time.Time, nextFloorFn func(int) (int, error), hook PostLadderExhaustionHook) error {
 	appendRepairCycleExhaustedEvent(store, beadID, actor, at, report)
+	if isTypedFizeauStopAttemptOutcome(report) {
+		return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: "repair cycle exhausted: typed Fizeau stop_attempt outcome",
+			Actor:  actor,
+			Source: "ddx work",
+		}, nil)
+	}
 	if hook != nil {
 		failureClass := deriveRecoveryFailureClass(report)
 		if result, err := hook(ctx, beadID, failureClass, postLadderExhaustionContextFromReport(report)); err != nil {
@@ -7317,6 +7324,22 @@ func applyRepairCycleExhaustedEscalation(ctx context.Context, store ExecuteBeadL
 			ensureBeadExtra(b)
 		},
 	})
+}
+
+func isTypedFizeauStopAttemptOutcome(report ExecuteBeadReport) bool {
+	reason := strings.TrimSpace(report.OutcomeReason)
+	if reason == "" {
+		return false
+	}
+	if IsProviderFailureReason(reason) {
+		return true
+	}
+	switch reason {
+	case FailureModeRouteResolutionTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome, at time.Time) error {
