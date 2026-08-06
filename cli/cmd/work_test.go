@@ -1051,8 +1051,9 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 //
 // The route is pinned (--provider/--model, harness left empty so dispatch
 // still flows through the stubbed Fizeau service) so infrastructure fallback is
-// disabled: exactly one attempt runs, it fails connectivity, and ModeOnce
-// returns — the terminal failure path the bead describes.
+// disabled: exactly one attempt runs, it fails connectivity against a local
+// loopback endpoint, and ModeOnce returns — the terminal failure path the
+// bead describes.
 func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
@@ -1066,8 +1067,8 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 		}
 		// The implementer dispatch fails at the routed provider endpoint before
 		// any agent output — the terminal provider_connectivity path (the exact
-		// niflheim failure: dial tcp ... i/o timeout).
-		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout","routing_actual":{"provider":"grendel-omlx","model":"qwen-local","power":5}}`)}
+		// loopback failure: dial tcp ... i/o timeout).
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"openai: Post \"http://127.0.0.1:1/v1/chat/completions\": dial tcp 127.0.0.1:1: i/o timeout","routing_actual":{"provider":"loopback-omlx","model":"qwen-local","power":5}}`)}
 		close(ch)
 		return ch, nil
 	}
@@ -1101,7 +1102,7 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 		"work",
 		"--once",
 		"--project", dir,
-		"--provider", "grendel-omlx",
+		"--provider", "loopback-omlx",
 		"--model", "qwen-local",
 		"--no-review",
 		"--no-review-i-know-what-im-doing",
@@ -1174,7 +1175,7 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 		}
 	}
 	require.NotNil(t, routeFailure, "expected a kind=route-failure event recorded on the bead")
-	require.Contains(t, routeFailure.Body, "grendel-omlx", "route-failure event must record the failed provider")
+	require.Contains(t, routeFailure.Body, "loopback-omlx", "route-failure event must record the failed provider")
 	require.Contains(t, routeFailure.Body, "provider_connectivity", "route-failure event must record the outcome reason")
 	require.Contains(t, routeFailure.Body, "i/o timeout", "route-failure event must record the transport error detail")
 }
