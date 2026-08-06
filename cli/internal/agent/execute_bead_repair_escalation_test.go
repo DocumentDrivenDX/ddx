@@ -54,6 +54,163 @@ func TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata(t *testin
 	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
 }
 
+func TestRepairFixableGapDoesNotRaiseOnTransportStop(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{
+		ID:    "ddx-rce-transport",
+		Title: "Repair cycle exhausted transport stop attempt",
+		Extra: map[string]any{
+			"powerClass-pin":      "keep-me",
+			"work-failed-routes":  []string{"route-a"},
+			"requested_min_power": 42,
+		},
+	}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	var floorCalls int
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		ExecuteBeadReport{
+			BeadID:            b.ID,
+			Status:            ExecuteBeadStatusRepairCycleExhausted,
+			ActualPower:       55,
+			OutcomeReason:     FailureModeProviderConnectivity,
+			Disrupted:         true,
+			DisruptionReason:  FailureModeProviderConnectivity,
+			Provider:          "anthropic",
+			Model:             "claude-sonnet-4-6",
+			Harness:           "claude",
+			RequestedMinPower: 42,
+		},
+		55,
+		time.Now().UTC(),
+		func(actualPower int) (int, error) {
+			floorCalls++
+			return actualPower + 10, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+
+	assert.Zero(t, floorCalls, "transport stop_attempt must not request a stronger MinPower")
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "transport stop_attempt must remain open")
+	assert.Equal(t, "keep-me", got.Extra["powerClass-pin"])
+	assert.Equal(t, []any{"route-a"}, got.Extra["work-failed-routes"])
+	assert.Equal(t, float64(42), got.Extra["requested_min_power"])
+}
+
+func TestRepairFixableGapDoesNotRaiseOnAuthOrQuotaStop(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		reason string
+	}{
+		{name: "auth", reason: FailureModeProviderAuth},
+		{name: "quota", reason: FailureModeProviderQuota},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := bead.NewStore(t.TempDir())
+			require.NoError(t, store.Init(context.Background()))
+
+			b := &bead.Bead{
+				ID:    "ddx-rce-" + tc.name,
+				Title: "Repair cycle exhausted " + tc.name + " stop attempt",
+			}
+			require.NoError(t, store.Create(context.Background(), b))
+
+			var floorCalls int
+			err := applyRepairCycleExhaustedEscalation(
+				context.Background(),
+				store,
+				b.ID,
+				"worker",
+				ExecuteBeadReport{
+					BeadID:            b.ID,
+					Status:            ExecuteBeadStatusRepairCycleExhausted,
+					ActualPower:       61,
+					OutcomeReason:     tc.reason,
+					Disrupted:         true,
+					DisruptionReason:  tc.reason,
+					Provider:          "openai",
+					Model:             "gpt-5",
+					Harness:           "agent",
+					RequestedMinPower: 61,
+				},
+				61,
+				time.Now().UTC(),
+				func(actualPower int) (int, error) {
+					floorCalls++
+					return actualPower + 10, nil
+				},
+				nil,
+			)
+			require.NoError(t, err)
+
+			assert.Zero(t, floorCalls, "typed %s stop_attempt must not request a stronger MinPower", tc.name)
+
+			got, err := store.Get(context.Background(), b.ID)
+			require.NoError(t, err)
+			assert.Equal(t, bead.StatusOpen, got.Status, "typed %s stop_attempt must remain open", tc.name)
+			assert.NotContains(t, got.Extra, legacyRetryFloorKey)
+		})
+	}
+}
+
+func TestRepairFixableGapStopAttemptDoesNotInspectRouteIdentity(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{
+		ID:    "ddx-rce-route",
+		Title: "Repair cycle exhausted route identity regression",
+		Extra: map[string]any{
+			"powerClass-pin":     "operator-locked",
+			"work-failed-routes": []string{"route-a", "route-b"},
+		},
+	}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	err := applyRepairCycleExhaustedEscalation(
+		context.Background(),
+		store,
+		b.ID,
+		"worker",
+		ExecuteBeadReport{
+			BeadID:            b.ID,
+			Status:            ExecuteBeadStatusRepairCycleExhausted,
+			ActualPower:       58,
+			OutcomeReason:     FailureModeProviderConnectivity,
+			Disrupted:         true,
+			DisruptionReason:  FailureModeProviderConnectivity,
+			Provider:          "local-ollama",
+			Model:             "qwen2.5-coder",
+			Harness:           "codex",
+			RequestedMinPower: 58,
+		},
+		58,
+		time.Now().UTC(),
+		func(int) (int, error) {
+			t.Fatal("typed stop_attempt must not request a higher MinPower")
+			return 0, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, "operator-locked", got.Extra["powerClass-pin"])
+	assert.Equal(t, []any{"route-a", "route-b"}, got.Extra["work-failed-routes"])
+}
+
 func TestRepairExhaustedAfterBlockEntersAutoRecovery(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
