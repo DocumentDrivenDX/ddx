@@ -1125,6 +1125,20 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 	require.Empty(t, dirty,
 		"worktree must be clean after a provider_connectivity attempt; output=%q\nstatus:\n%s", out, statusOut)
 
+	// AC #2b: the run-record substrate is ignored, not left as untracked
+	// residue, after the same terminal failure path.
+	runStoreStatusOut, runStoreStatusErr := exec.Command("git", "-C", dir, "status", "--porcelain", "--untracked-files=all", "--ignored=matching", "--", ".ddx/runs").CombinedOutput()
+	require.NoError(t, runStoreStatusErr, string(runStoreStatusOut))
+	var runStoreDirty []string
+	for _, line := range strings.Split(strings.TrimSpace(string(runStoreStatusOut)), "\n") {
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "!! ") {
+			continue
+		}
+		runStoreDirty = append(runStoreDirty, line)
+	}
+	require.Empty(t, runStoreDirty,
+		".ddx/runs must not leave untracked residue after a provider_connectivity attempt; output=%q\nstatus:\n%s", out, runStoreStatusOut)
+
 	// AC #1: execution evidence is per-machine working state and must NEVER be
 	// committed (ddx-d10073a8). Any bundle that survived to the project root is
 	// preserved on disk but gitignored, so it never appears in git history. A
