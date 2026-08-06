@@ -128,3 +128,32 @@ func TestMkdirExecutionScratch_UsesConfiguredScratchRoot(t *testing.T) {
 		t.Fatalf("scratch dir = %q, want prefix %q", dir, wantPrefix)
 	}
 }
+
+func TestSameDevicePath_SameRoot(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "a")
+	b := filepath.Join(root, "b")
+	if err := os.MkdirAll(a, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !sameDevicePath(a, b) {
+		t.Fatalf("expected same device for %q and %q", a, b)
+	}
+}
+
+func TestExecutionTempRoot_EnvOverrideHonored(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	projectRoot := t.TempDir()
+	envRoot := filepath.Join(home, "env-forced-root")
+	t.Setenv(ExecutionWorktreeRootEnv, envRoot)
+	writeExecutionRootConfig(t, filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), "ignored-project-root")
+
+	got := ExecutionTempRoot(projectRoot)
+	if got != envRoot {
+		t.Fatalf("ExecutionTempRoot = %q, want env override %q", got, envRoot)
+	}
+}

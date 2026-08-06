@@ -126,8 +126,9 @@ func TestWorkLoopNoEvidenceReportsPreserveLocation(t *testing.T) {
 }
 
 // TestRealGitOpsWorktreeRemoveReportsFailure proves that RealGitOps.WorktreeRemove
-// returns an error when git worktree remove --force fails, instead of silently
-// swallowing it.
+// returns an error when git worktree remove --force fails for a path that still
+// exists on disk and cannot be force-removed (not silently swallowed).
+// Paths that are already gone are treated as success (idempotent cleanup).
 func TestRealGitOpsWorktreeRemoveReportsFailure(t *testing.T) {
 	root := t.TempDir()
 
@@ -147,11 +148,24 @@ func TestRealGitOpsWorktreeRemoveReportsFailure(t *testing.T) {
 	gitCmd("config", "user.email", "test@ddx.test")
 	gitCmd("config", "user.name", "DDx Test")
 
-	// The path "/nonexistent/not-a-registered-worktree" is not a registered git
-	// worktree. git worktree remove --force on it must fail.
 	ops := &RealGitOps{}
+
+	// Already-absent path: idempotent success (cleanup re-entry after partial reclaim).
 	err = ops.WorktreeRemove(root, "/nonexistent/not-a-registered-worktree")
-	require.Error(t, err, "WorktreeRemove must return an error when git worktree remove fails")
+	require.NoError(t, err, "WorktreeRemove must be idempotent when the path is already gone")
+
+	// Path exists but is not a registered worktree and cannot be detached via
+	// git: still an error so callers know registration remove failed. We use a
+	// file (not a dir) so RemoveAll also fails after git fails.
+	badPath := filepath.Join(root, "not-a-worktree-file")
+	require.NoError(t, os.WriteFile(badPath, []byte("x"), 0o600))
+	// Make the path unreadable as a dir for RemoveAll of a file is actually OK...
+	// Use a directory that is not a worktree: git remove fails, but RemoveAll
+	// succeeds — that is intentional best-effort cleanup. To force a hard
+	// failure, point at a path under a non-directory component.
+	impossible := filepath.Join(badPath, "child")
+	err = ops.WorktreeRemove(root, impossible)
+	require.Error(t, err, "WorktreeRemove must error when git remove fails and path cannot be deleted")
 	assert.Contains(t, strings.ToLower(err.Error()), "git worktree remove",
 		"error message must identify the failing command")
 }

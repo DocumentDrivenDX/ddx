@@ -502,7 +502,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				})
 				continue
 			}
-			reclaimedBytes, reclaimedInodes, measureErr := measureTreeWithContext(ctx, path)
+			reclaimedBytes, reclaimedInodes, measureErr := measureTreeBounded(ctx, path)
 			if measureErr != nil {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 					Path:    path,
@@ -538,7 +538,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			continue
 		}
 
-		reclaimedBytes, reclaimedInodes, measureErr := measureTreeWithContext(ctx, path)
+		reclaimedBytes, reclaimedInodes, measureErr := measureTreeBounded(ctx, path)
 		if measureErr != nil {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 				Path:    path,
@@ -576,6 +576,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	if err := m.cleanupScratchRoots(ctx, &summary, runStates, registered, probe, now()); err != nil {
 		return summary, err
 	}
+
+	// Reclaim registered DDx worktrees that live outside TempRoot/scratch
+	// scan roots (e.g. cross-device leftovers after config relocation, or
+	// incomplete land-wts only visible via git worktree list).
+	m.cleanupRegisteredDDxWorktrees(ctx, &summary, runStates, registered, probe, now())
 
 	if m.GitOps != nil && summary.RemovedRegisteredWorktrees > 0 && !m.DryRun {
 		if err := m.GitOps.WorktreePrune(m.ProjectRoot); err != nil {
@@ -791,17 +796,27 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 				continue
 			}
 
-			if age := now.Sub(info.ModTime()); age < minAge {
-				summary.PreservedActiveScratchDirs++
-				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
-					Path:    path,
-					Class:   "preserved_active_scratch_dir",
-					Message: fmt.Sprintf("fresh scratch dir age=%s min_age=%s", age.Round(time.Second), minAge),
-				})
-				continue
+			// Registered DDx land/gate worktrees are short-lived and must not
+			// wait out ScratchMinAge: a hung `git worktree add` on a slow FS
+			// leaves locked multi-GB trees that would otherwise sit for hours
+			// while measureTree walks them. Unregistered fresh scratch still
+			// respects minAge so live tests are not reaped mid-run.
+			_, isRegistered := registered[filepath.Clean(path)]
+			if !isRegistered {
+				if age := now.Sub(info.ModTime()); age < minAge {
+					summary.PreservedActiveScratchDirs++
+					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+						Path:    path,
+						Class:   "preserved_active_scratch_dir",
+						Message: fmt.Sprintf("fresh scratch dir age=%s min_age=%s", age.Round(time.Second), minAge),
+					})
+					continue
+				}
 			}
 
-			reclaimedBytes, reclaimedInodes, measureErr := measureTreeWithContext(ctx, path)
+			// Measure is best-effort and time-bounded: multi-GB trees on
+			// virtiofs/NFS must not block reclamation.
+			reclaimedBytes, reclaimedInodes, measureErr := measureTreeBounded(ctx, path)
 			if measureErr != nil {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 					Path:    path,
@@ -812,7 +827,7 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 			// Registered land/gate worktrees must be detached via git, not
 			// os.RemoveAll — otherwise git worktree list keeps ghosts and the
 			// next pass re-preserves them as "registered".
-			if _, ok := registered[filepath.Clean(path)]; ok {
+			if isRegistered {
 				if m.GitOps == nil {
 					summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
 						Path:     path,
@@ -1304,6 +1319,21 @@ func ReadExecutionCleanupMetadata(dir string) (ExecutionCleanupMetadata, error) 
 	return meta, nil
 }
 
+// measureTreeBounded caps tree walks so multi-GB worktrees on slow
+// filesystems cannot stall an entire cleanup pass. A timed-out measure still
+// allows reclamation; bytes/inodes may under-count.
+const defaultMeasureTreeBudget = 3 * time.Second
+
+func measureTreeBounded(ctx context.Context, path string) (bytes int64, inodes int64, err error) {
+	base := ctx
+	if base == nil {
+		base = context.Background()
+	}
+	measureCtx, cancel := context.WithTimeout(base, defaultMeasureTreeBudget)
+	defer cancel()
+	return measureTreeWithContext(measureCtx, path)
+}
+
 func measureTreeWithContext(ctx context.Context, path string) (bytes int64, inodes int64, err error) {
 	if ctx != nil {
 		if err := ctx.Err(); err != nil {
@@ -1335,6 +1365,105 @@ func measureTreeWithContext(ctx context.Context, path string) (bytes int64, inod
 		return nil
 	})
 	return bytes, inodes, err
+}
+
+// cleanupRegisteredDDxWorktrees reaps git-registered paths whose basenames
+// match DDx attempt/scratch prefixes even when they sit outside the configured
+// TempRoot/scratch scan roots (cross-device leftovers after relocation).
+func (m *ExecutionCleanupManager) cleanupRegisteredDDxWorktrees(
+	ctx context.Context,
+	summary *ExecutionCleanupSummary,
+	runStates []RunState,
+	registered map[string]struct{},
+	probe ExecutionCleanupLivenessProbe,
+	now time.Time,
+) {
+	if m == nil || m.GitOps == nil || summary == nil || len(registered) == 0 {
+		return
+	}
+	if probe == nil {
+		probe = defaultExecutionCleanupLivenessProbe{}
+	}
+	prefixes := append(executionAttemptDirPrefixes(), m.scratchPrefixes()...)
+	seenObs := map[string]struct{}{}
+	for _, obs := range summary.Observations {
+		if obs.Path != "" {
+			seenObs[filepath.Clean(obs.Path)] = struct{}{}
+		}
+	}
+	for path := range registered {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return
+			}
+		}
+		clean := filepath.Clean(path)
+		if _, done := seenObs[clean]; done {
+			continue
+		}
+		base := filepath.Base(clean)
+		if !hasAnyPrefix(base, prefixes) {
+			continue
+		}
+		// Main worktree is never a DDx temp path.
+		if sameCleanPath(clean, m.ProjectRoot) {
+			continue
+		}
+		meta, metaErr := ReadExecutionCleanupMetadata(clean)
+		if metaErr != nil {
+			meta = ExecutionCleanupMetadata{
+				ProjectRoot:  m.ProjectRoot,
+				WorktreePath: clean,
+				Registered:   true,
+			}
+		}
+		if meta.WorktreePath == "" {
+			meta.WorktreePath = clean
+		}
+		matched := matchingRunStateForMeta(runStates, meta)
+		if live, reason := probe.IsLive(meta, matched, now); live {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    clean,
+				Class:   "preserved_registered_ddx_worktree",
+				Message: reason,
+			})
+			continue
+		}
+		reclaimedBytes, reclaimedInodes, measureErr := measureTreeBounded(ctx, clean)
+		if measureErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    clean,
+				Class:   "measure_tree",
+				Message: measureErr.Error(),
+			})
+		}
+		if !m.DryRun {
+			if err := m.GitOps.WorktreeRemove(m.ProjectRoot, clean); err != nil {
+				summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
+					Path:     clean,
+					Class:    "registered_ddx_worktree_remove",
+					Message:  err.Error(),
+					Blocking: true,
+				})
+				continue
+			}
+		}
+		summary.RemovedRegisteredWorktrees++
+		summary.BytesReclaimed += reclaimedBytes
+		summary.InodesReclaimed += reclaimedInodes
+		class := "removed_registered_ddx_worktree"
+		if m.DryRun {
+			class = "would_remove_registered_ddx_worktree"
+		}
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    clean,
+			Class:   class,
+			Message: "stale registered DDx worktree outside scan roots",
+			Bytes:   reclaimedBytes,
+			Inodes:  reclaimedInodes,
+		})
+		seenObs[clean] = struct{}{}
+	}
 }
 
 // pruneEvidenceDirs deletes .ddx/executions/<attempt-id>/ dirs whose mtime

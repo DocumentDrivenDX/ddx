@@ -1941,6 +1941,69 @@ func TestExecutionCleanup_RecordsCounts(t *testing.T) {
 	assert.Equal(t, int64(2), summary.RemovedWorkerDirs)
 }
 
+// TestExecutionCleanup_ReclaimsFreshRegisteredLandWorktree proves registered
+// ddx-land-wt-* paths are reclaimed immediately without waiting ScratchMinAge.
+// Hung git worktree add on a slow FS leaves these locked multi-GB trees; the
+// 6h minAge previously preserved them while workers piled up more.
+func TestExecutionCleanup_ReclaimsFreshRegisteredLandWorktree(t *testing.T) {
+	now := time.Date(2026, 8, 6, 3, 15, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	landPath := filepath.Join(scratchRoot, "ddx-land-wt-1234567890")
+	writeExecutionCleanupCandidate(t, landPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: landPath,
+		Registered:   true,
+	}, map[string]string{"payload.txt": "land orphan\n"})
+	// Age well under ScratchMinAge.
+	fresh := now.Add(-2 * time.Minute)
+	require.NoError(t, os.Chtimes(landPath, fresh, fresh))
+
+	gitOps := &executionCleanupTestGitOps{worktrees: []string{landPath}}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = 6 * time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, landPath)
+	assert.Equal(t, []string{landPath}, gitOps.removed)
+	assert.Equal(t, int64(1), summary.RemovedRegisteredWorktrees)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_registered_scratch_worktree"))
+}
+
+// TestExecutionCleanup_ReclaimsRegisteredLandOutsideScratchRoots covers the
+// git-worktree-list path used when land leftovers sit outside TempRoot/scratch
+// scan roots (cross-device config relocation).
+func TestExecutionCleanup_ReclaimsRegisteredLandOutsideScratchRoots(t *testing.T) {
+	now := time.Date(2026, 8, 6, 3, 20, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	orphanRoot := t.TempDir() // deliberately NOT in ScratchRoots
+
+	landPath := filepath.Join(orphanRoot, "ddx-land-finalize-999888777")
+	require.NoError(t, os.MkdirAll(landPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(landPath, "marker.txt"), []byte("orphan\n"), 0o644))
+
+	gitOps := &executionCleanupTestGitOps{worktrees: []string{landPath}}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
+	mgr.ScratchRoots = []string{t.TempDir()} // empty unrelated root
+	mgr.ScratchMinAge = 6 * time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, landPath)
+	assert.Equal(t, []string{landPath}, gitOps.removed)
+	assert.Equal(t, int64(1), summary.RemovedRegisteredWorktrees)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_registered_ddx_worktree"))
+}
+
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {

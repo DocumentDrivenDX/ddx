@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -36,10 +37,37 @@ func (r *RealGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 
 func (r *RealGitOps) WorktreeRemove(dir, wtPath string) error {
 	out, err := internalgit.Command(context.Background(), dir, "worktree", "remove", "--force", wtPath).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git worktree remove: %s: %w", strings.TrimSpace(string(out)), err)
+	if err == nil {
+		return nil
 	}
-	return nil
+	msg := strings.TrimSpace(string(out))
+
+	// Interrupted `git worktree add` leaves admin dir "locked" (often with
+	// reason "initializing"). Unlock and retry force-remove so cleanup can
+	// reclaim multi-GB orphans instead of preserving them forever.
+	if unlockGitWorktreeAdmin(dir, wtPath) {
+		out2, err2 := internalgit.Command(context.Background(), dir, "worktree", "remove", "--force", wtPath).CombinedOutput()
+		if err2 == nil {
+			return nil
+		}
+		msg = strings.TrimSpace(string(out2))
+		err = err2
+	}
+
+	// Path already unregistered but checkout leftover remains, or registry
+	// entry is a ghost: prune + best-effort RemoveAll.
+	_ = r.WorktreePrune(dir)
+	if _, statErr := os.Stat(wtPath); statErr == nil {
+		if rmErr := os.RemoveAll(wtPath); rmErr == nil {
+			_ = r.WorktreePrune(dir)
+			return nil
+		}
+	} else if os.IsNotExist(statErr) && strings.Contains(msg, "is not a working tree") {
+		_ = r.WorktreePrune(dir)
+		return nil
+	}
+
+	return fmt.Errorf("git worktree remove: %s: %w", msg, err)
 }
 
 func (r *RealGitOps) WorktreeList(dir string) ([]string, error) {
@@ -58,6 +86,39 @@ func (r *RealGitOps) WorktreeList(dir string) ([]string, error) {
 
 func (r *RealGitOps) WorktreePrune(dir string) error {
 	return internalgit.Command(context.Background(), dir, "worktree", "prune").Run()
+}
+
+// unlockGitWorktreeAdmin removes a stale "locked" file under
+// .git/worktrees/<name>/ so `git worktree remove --force` can proceed after
+// a crashed or hung `git worktree add`. Returns true when a lock file was
+// removed (caller should retry remove).
+func unlockGitWorktreeAdmin(repoDir, wtPath string) bool {
+	name := filepath.Base(filepath.Clean(wtPath))
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return false
+	}
+	// Common layout: <repo>/.git/worktrees/<basename>/locked
+	candidates := []string{
+		filepath.Join(repoDir, ".git", "worktrees", name, "locked"),
+	}
+	// Linked worktrees / gitdir files: resolve .git file in the worktree if present.
+	if data, err := os.ReadFile(filepath.Join(wtPath, ".git")); err == nil {
+		line := strings.TrimSpace(string(data))
+		if strings.HasPrefix(line, "gitdir: ") {
+			gitdir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir: "))
+			if !filepath.IsAbs(gitdir) {
+				gitdir = filepath.Join(wtPath, gitdir)
+			}
+			candidates = append(candidates, filepath.Join(gitdir, "locked"))
+		}
+	}
+	removed := false
+	for _, lockPath := range candidates {
+		if err := os.Remove(lockPath); err == nil {
+			removed = true
+		}
+	}
+	return removed
 }
 
 // UpdateRef updates ref in dir to sha via `git update-ref`.

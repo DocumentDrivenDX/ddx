@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
@@ -38,12 +39,26 @@ func ExecutionWorktreeRoot(projectRoot string) string {
 // ExecutionTempRoot returns the effective base directory for DDx-owned
 // execution worktrees. It applies the configured worktree root when present and
 // otherwise falls back to the user's cache directory, not the process temp dir.
+//
+// When a *config-file* root sits on a different device from projectRoot (for
+// example a Mac virtiofs share while the project is on local Linux disk), the
+// configured path is ignored and a local cache root is used instead. Cross-
+// device git worktree add of multi-GB checkouts routinely stalls and leaves
+// locked orphans that cleanup cannot reclaim while the add is still running.
+// An explicit DDX_EXEC_WT_DIR environment override is always honored.
 func ExecutionTempRoot(projectRoot string) string {
+	envOverride := strings.TrimSpace(os.Getenv(ExecutionWorktreeRootEnv)) != ""
 	if root := ExecutionWorktreeRoot(projectRoot); root != "" {
-		return root
+		if envOverride || projectRoot == "" || sameDevicePath(projectRoot, root) {
+			return root
+		}
+		// Fall through to a same-device local default.
 	}
 	if cacheDir, err := os.UserCacheDir(); err == nil && strings.TrimSpace(cacheDir) != "" {
-		return filepath.Join(cacheDir, "ddx", "exec-wt")
+		local := filepath.Join(cacheDir, "ddx", "exec-wt")
+		if projectRoot == "" || sameDevicePath(projectRoot, cacheDir) || sameDevicePath(projectRoot, local) {
+			return local
+		}
 	}
 	return LegacyExecutionTempRoot()
 }
@@ -59,12 +74,51 @@ func LegacyExecutionTempRoot() string {
 // paths associated with execution. Scratch lives beside the worktree root so a
 // configured root such as /var/tmp/ddx-exec-wt keeps all DDx-owned temporary
 // paths away from /tmp while still grouping attempt worktrees under one child.
+//
+// When the effective temp root is cross-device relative to projectRoot,
+// ExecutionTempRoot already rewrites it to a local cache path; scratch then
+// sits beside that local root (e.g. ~/.cache/ddx/scratch).
 func ExecutionScratchRoot(projectRoot string) string {
 	root := filepath.Dir(filepath.Clean(ExecutionTempRoot(projectRoot)))
 	if root == "" || root == "." {
 		return os.TempDir()
 	}
 	return root
+}
+
+// sameDevicePath reports whether a and b resolve to the same filesystem
+// device. Missing paths walk up to an existing ancestor. When device IDs
+// cannot be read, the paths are treated as same-device so callers keep the
+// configured root rather than silently relocating.
+func sameDevicePath(a, b string) bool {
+	devA, okA := deviceID(a)
+	devB, okB := deviceID(b)
+	if !okA || !okB {
+		return true
+	}
+	return devA == devB
+}
+
+func deviceID(path string) (uint64, bool) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return 0, false
+	}
+	cur := filepath.Clean(path)
+	for {
+		info, err := os.Stat(cur)
+		if err == nil {
+			if st, ok := info.Sys().(*syscall.Stat_t); ok {
+				return uint64(st.Dev), true
+			}
+			return 0, false
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return 0, false
+		}
+		cur = parent
+	}
 }
 
 // MkdirExecutionScratch creates a DDx-owned scratch directory under the
