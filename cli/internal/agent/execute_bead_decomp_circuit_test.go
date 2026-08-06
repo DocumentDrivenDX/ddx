@@ -91,12 +91,28 @@ func TestMixedCommitOACircuitOnlySuppressesOnSuccessfulSalvage(t *testing.T) {
 		Detail:             mixedCommitAndNoChangesRationaleReason,
 		NoChangesRationale: "status: open\nreason: salvage candidate until review completes",
 		ReviewVerdict:      "APPROVE",
+		CycleTrace: []ExecutionCycleTrace{
+			{
+				FinalDecision: ExecuteBeadStatusSuccess,
+				ReviewResult: ExecutionCycleReviewResult{
+					Verdict: "APPROVE",
+				},
+			},
+		},
 	}
 
 	assert.False(t, shouldCountMixedCommitOACircuit(approved),
-		"successful salvaged mixed commits with reviewer APPROVE must not increment the OA circuit")
+		"successful salvaged mixed commits with reviewer APPROVE and a successful candidate cycle must not increment the OA circuit")
+
+	require.True(t, strings.EqualFold(strings.TrimSpace(firstNonEmpty(approved.ReviewVerdict, approved.FirstReviewVerdictFromTrace())), "APPROVE"))
 
 	for name, report := range map[string]ExecuteBeadReport{
+		"success_without_checks_trace": {
+			Status:             ExecuteBeadStatusSuccess,
+			Detail:             mixedCommitAndNoChangesRationaleReason,
+			NoChangesRationale: "status: open\nreason: no final checks evidence",
+			ReviewVerdict:      "APPROVE",
+		},
 		"checks_failed": {
 			Status:             ExecuteBeadStatusPostRunCheckFailed,
 			Detail:             mixedCommitAndNoChangesRationaleReason,
@@ -130,7 +146,10 @@ func TestMixedCommitOACircuitOnlySuppressesOnSuccessfulSalvage(t *testing.T) {
 		"approved mixed-commit salvage events must not count as prior OA circuit hits")
 
 	traceOnlyApproved, err := json.Marshal([]ExecutionCycleTrace{
-		{ReviewResult: ExecutionCycleReviewResult{Verdict: " approve "}},
+		{
+			FinalDecision: ExecuteBeadStatusSuccess,
+			ReviewResult:  ExecutionCycleReviewResult{Verdict: " approve "},
+		},
 	})
 	require.NoError(t, err)
 	require.NoError(t, store.AppendEvent(b.ID, bead.BeadEvent{

@@ -7659,8 +7659,21 @@ func shouldCountMixedCommitOACircuit(report ExecuteBeadReport) bool {
 }
 
 func isApprovedMixedCommitSalvageReport(report ExecuteBeadReport) bool {
-	return report.Status == ExecuteBeadStatusSuccess &&
-		strings.EqualFold(strings.TrimSpace(firstNonEmpty(report.ReviewVerdict, report.FirstReviewVerdictFromTrace())), "APPROVE")
+	if report.Status != ExecuteBeadStatusSuccess {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(firstNonEmpty(report.ReviewVerdict, report.FirstReviewVerdictFromTrace())), "APPROVE") {
+		return false
+	}
+	for _, trace := range report.CycleTrace {
+		if strings.TrimSpace(trace.FinalDecision) != ExecuteBeadStatusSuccess {
+			continue
+		}
+		if traceHasApproveVerdict(trace) {
+			return true
+		}
+	}
+	return false
 }
 
 func isApprovedMixedCommitSalvageEvent(ev bead.BeadEvent) bool {
@@ -7684,6 +7697,18 @@ func isApprovedMixedCommitSalvageEvent(ev bead.BeadEvent) bool {
 		}
 	}
 	return isApprovedMixedCommitSalvageReport(report)
+}
+
+func traceHasApproveVerdict(trace ExecutionCycleTrace) bool {
+	if strings.EqualFold(strings.TrimSpace(trace.ReviewResult.Verdict), "APPROVE") {
+		return true
+	}
+	for _, verdict := range trace.ReviewVerdicts {
+		if strings.EqualFold(strings.TrimSpace(verdict), "APPROVE") {
+			return true
+		}
+	}
+	return false
 }
 
 func isTransientOutcomeReason(reason string) bool {
