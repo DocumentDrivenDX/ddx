@@ -4181,15 +4181,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			return executeBeadIterationOutcome{Stop: true}, err
 		}
-		attention := &OperatorAttentionStop{
-			Reason:      FailureModeNoEvidenceProduced,
-			BeadID:      candidate.ID,
-			ProjectRoot: runtime.ProjectRoot,
-			DirtyPaths:  append([]string(nil), report.NoEvidencePaths...),
-			Message:     detail,
-		}
-		result.OperatorAttention = attention
-		setExit("OperatorAttention", "operator_attention")
 		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, at)); err != nil {
 			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 				return commitOutcomeError("AppendEvent", assignee, result, err)
@@ -4199,9 +4190,33 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			return executeBeadIterationOutcome{Stop: true}, err
 		}
+		watchContinuesAfterNoEvidence := loopMode == executeloop.ModeWatch
 		if finalizeDurableAuditOrStop(candidate.ID, report) {
 			return executeBeadIterationOutcome{Stop: true}, nil
 		}
+		if watchContinuesAfterNoEvidence {
+			emit("worker.continued_after_bead_oa", map[string]any{
+				"bead_id":      candidate.ID,
+				"failure_mode": FailureModeNoEvidenceProduced,
+				"preserve_ref": report.PreserveRef,
+				"dirty_paths":  append([]string(nil), report.NoEvidencePaths...),
+				"project_root": runtime.ProjectRoot,
+				"message":      detail,
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "watch mode continues after no-evidence park for %s\n", candidate.ID)
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+		attention := &OperatorAttentionStop{
+			Reason:      FailureModeNoEvidenceProduced,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			DirtyPaths:  append([]string(nil), report.NoEvidencePaths...),
+			Message:     detail,
+		}
+		result.OperatorAttention = attention
+		setExit("OperatorAttention", "operator_attention")
 		emit("loop.operator_attention", map[string]any{
 			"reason":       attention.Reason,
 			"bead_id":      candidate.ID,

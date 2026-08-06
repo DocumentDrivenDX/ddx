@@ -626,13 +626,31 @@ func TestFormatLoopResult_NoEvidenceShowsContractFailure(t *testing.T) {
 		formatLoopResult(report))
 }
 
-func TestExecuteBeadWorker_NoEvidenceDirtyRescueStopsWatchForOperatorAttention(t *testing.T) {
-	store, first, _ := newExecuteLoopTestStore(t)
+func TestWatchContinuesAfterNoEvidenceOA(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
 	var execCalls int32
+	var eventSink bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			atomic.AddInt32(&execCalls, 1)
+			if beadID == second.ID {
+				go func() {
+					time.Sleep(25 * time.Millisecond)
+					cancel()
+				}()
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-success-002",
+					Status:    ExecuteBeadStatusSuccess,
+					Detail:    "merged cleanly",
+					SessionID: "sess-watch-continues",
+					BaseRev:   "base-rev",
+					ResultRev: "result-rev",
+				}, nil
+			}
 			return ExecuteBeadReport{
 				BeadID:          beadID,
 				AttemptID:       "attempt-no-evidence-001",
@@ -649,25 +667,36 @@ func TestExecuteBeadWorker_NoEvidenceDirtyRescueStopsWatchForOperatorAttention(t
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
 		Mode:         executeloop.ModeWatch,
 		IdleInterval: time.Millisecond,
+		EventSink:    &eventSink,
 		ProjectRoot:  t.TempDir(),
 	})
-	require.NoError(t, err)
+	if err != nil {
+		require.ErrorIs(t, err, context.Canceled)
+	}
 	require.NotNil(t, result)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "watch worker must not retry a no-evidence dirty rescue")
-	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&execCalls), "watch worker must continue after a bead-scoped no-evidence OA")
+	assert.Equal(t, 2, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusNoEvidenceProduced, result.LastFailureStatus)
-	require.NotNil(t, result.OperatorAttention)
-	assert.Equal(t, FailureModeNoEvidenceProduced, result.OperatorAttention.Reason)
-	assert.Equal(t, "OperatorAttention", result.StopCondition)
-	assert.Equal(t, "operator_attention", result.ExitReason)
+	assert.Nil(t, result.OperatorAttention)
+	assert.NotEqual(t, "OperatorAttention", result.StopCondition)
+	assert.NotEqual(t, "operator_attention", result.ExitReason)
+	assert.Contains(t, eventSink.String(), "worker.continued_after_bead_oa")
 
 	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "no-evidence dirty rescue must park instead of staying immediately retryable")
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Equal(t, "no_evidence_dirty_rescue", meta.Reason)
+	assert.Equal(t, "attempt produced dirty rescue but no landed evidence", meta.Summary)
+
+	secondGot, err := store.Get(context.Background(), second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, secondGot.Status, "watch mode must keep draining after the parked no-evidence bead")
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
