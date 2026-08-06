@@ -1335,8 +1335,10 @@ func TestSystemicOAStillExitsWorker(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, "ResourceExhausted", result.StopCondition)
-		assert.Equal(t, "resource_exhausted", result.ExitReason)
+		assert.Equal(t, "OperatorAttention", result.StopCondition)
+		assert.Equal(t, "operator_attention", result.ExitReason)
+		require.NotNil(t, result.OperatorAttention)
+		assert.Equal(t, "resource_exhausted", result.OperatorAttention.Reason)
 		assert.NotContains(t, eventSink.String(), "worker.continued_after_bead_oa")
 
 		gotFirst, err := inner.Get(context.Background(), first.ID)

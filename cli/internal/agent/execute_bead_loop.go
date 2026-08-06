@@ -2342,7 +2342,19 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				result.Failures++
 				result.LastFailureStatus = report.Status
 				result.Results = append(result.Results, report)
-				setExit("ResourceExhausted", "resource_exhausted")
+				result.OperatorAttention = &OperatorAttentionStop{
+					Reason:      ReadinessSystemReasonResourceExhausted,
+					ProjectRoot: runtime.ProjectRoot,
+					Message:     detail,
+				}
+				setExit("OperatorAttention", "operator_attention")
+				emit("loop.operator_attention", map[string]any{
+					"reason":       ReadinessSystemReasonResourceExhausted,
+					"project_root": runtime.ProjectRoot,
+					"message":      detail,
+					"diagnosis":    diagnosis,
+					"restartable":  restartable,
+				})
 				emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintln(runtime.Log, detail)
@@ -4246,7 +4258,13 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	}
 	if IsResourceExhaustedStatus(report.Status) {
 		result.Attempts++
-		setExit("ResourceExhausted", "resource_exhausted")
+		result.OperatorAttention = &OperatorAttentionStop{
+			Reason:      ReadinessSystemReasonResourceExhausted,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			Message:     report.Detail,
+		}
+		setExit("OperatorAttention", "operator_attention")
 		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 				return commitOutcomeError("Unclaim", assignee, result, err)
@@ -4257,6 +4275,12 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			return executeBeadIterationOutcome{Stop: true}, err
 		}
 		emitResourceExhausted(emit, w.Store, candidate.ID, report, assignee, now().UTC())
+		emit("loop.operator_attention", map[string]any{
+			"reason":       ReadinessSystemReasonResourceExhausted,
+			"bead_id":      candidate.ID,
+			"project_root": runtime.ProjectRoot,
+			"message":      report.Detail,
+		})
 		result.Results = append(result.Results, report)
 		result.Failures++
 		result.LastFailureStatus = report.Status

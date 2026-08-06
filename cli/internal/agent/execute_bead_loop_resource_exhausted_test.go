@@ -119,6 +119,10 @@ func TestExecuteBeadWorkerResourceExhaustedStopsLoop(t *testing.T) {
 	assert.Equal(t, 0, result.Successes)
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusResourceExhausted, result.LastFailureStatus)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "resource_exhausted", result.OperatorAttention.Reason)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
 	assert.Equal(t, first.ID, result.Results[0].BeadID)
 	assert.Contains(t, logBuf.String(), ResourceExhaustedStopMessage)
 
@@ -206,9 +210,11 @@ func TestExecuteBeadWorkerResourceExhaustedLoopEndEvent(t *testing.T) {
 	}
 
 	require.Len(t, byType["loop.end"], 1)
-	assert.Equal(t, "resource_exhausted", byType["loop.end"][0]["exit_reason"])
-	assert.Equal(t, "ResourceExhausted", result.StopCondition)
-	assert.Equal(t, "resource_exhausted", result.ExitReason)
+	assert.Equal(t, "operator_attention", byType["loop.end"][0]["exit_reason"])
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "resource_exhausted", result.OperatorAttention.Reason)
 
 	require.NotEmpty(t, byType["resource.exhausted"], "resource.exhausted loop event must be emitted")
 	data := byType["resource.exhausted"][0]
