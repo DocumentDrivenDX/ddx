@@ -175,7 +175,10 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 	report.registered = registered
 
 	for _, entry := range entries {
-		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {
+		// Clones (.execute-bead-clone-*) are the production attempt worktrees;
+		// only scanning the legacy .execute-bead-wt-* prefix left multi-GB
+		// clone trees unreaped by startup housekeeping.
+		if !entry.IsDir() || !agent.IsExecutionAttemptDirName(entry.Name()) {
 			continue
 		}
 		report.TempWorktreeCount++

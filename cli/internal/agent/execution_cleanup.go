@@ -188,44 +188,90 @@ type ExecutionCleanupLivenessProbe interface {
 }
 
 // defaultExecutionCleanupLivenessProbe preserves preserved metadata, a temp
-// execution directory referenced by the live run-state file, or a candidate
-// with an unexpired liveness marker. Tests can override the probe to model
-// more specific host behavior.
+// execution directory referenced by a *live* run-state (alive PID and/or
+// unexpired heartbeat), or a candidate with an unexpired liveness marker.
+//
+// Matching a run-state file alone is NOT enough: crashed workers leave
+// per-attempt run-state JSON behind with dead PIDs and expired heartbeats.
+// Treating those as live created a deadlock where worktrees were preserved
+// because the run-state existed and run-state was preserved because the
+// worktree still existed. Tests can override the probe to model more specific
+// host behavior.
 type defaultExecutionCleanupLivenessProbe struct{}
 
 func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata, runState *RunState, now time.Time) (bool, string) {
 	if meta.Preserved {
 		return true, "preserved metadata"
 	}
+	// Explicit operator/preserve flags still win. Active-cycle and candidate-ref
+	// recovery only hold the worktree while a process/liveness marker is still
+	// live; durable recovery is via the candidate git ref, not abandoned trees.
 	if meta.ActiveCandidateCycle {
-		return true, candidateCycleRecoveryReason(meta, "active candidate cycle")
+		if livenessMarkerAlive(meta.Liveness, now) || runStateIndicatesLive(runState, now) {
+			return true, candidateCycleRecoveryReason(meta, "active candidate cycle")
+		}
 	}
 	if strings.TrimSpace(meta.CandidateRef) != "" {
-		return true, candidateCycleRecoveryReason(meta, "candidate ref recovery")
+		if livenessMarkerAlive(meta.Liveness, now) || runStateIndicatesLive(runState, now) {
+			return true, candidateCycleRecoveryReason(meta, "candidate ref recovery")
+		}
 	}
-	if runState != nil {
+	if runState != nil && runStateIndicatesLive(runState, now) {
 		if strings.TrimSpace(runState.CandidateCyclePhase) != "" {
 			return true, candidateCycleRecoveryReason(candidateCycleMetadataFromRunState(*runState), "active candidate cycle")
 		}
-		if meta.WorktreePath != "" && filepath.Clean(runState.WorktreePath) == filepath.Clean(meta.WorktreePath) {
+		if meta.WorktreePath != "" && runState.WorktreePath != "" &&
+			filepath.Clean(runState.WorktreePath) == filepath.Clean(meta.WorktreePath) {
 			return true, "matched live run-state"
 		}
 		if meta.AttemptID != "" && runState.AttemptID == meta.AttemptID {
 			return true, "matched live run-state"
 		}
 	}
-	if meta.Liveness != nil {
-		if meta.Liveness.PID > 0 && trackerProcessAlive(meta.Liveness.PID) {
-			return true, "live pid"
-		}
-		if !meta.Liveness.ExpiresAt.IsZero() && now.Before(meta.Liveness.ExpiresAt) {
-			return true, "unexpired liveness"
-		}
-		if !meta.Liveness.RefreshedAt.IsZero() && now.Sub(meta.Liveness.RefreshedAt) <= 2*time.Minute {
-			return true, "fresh liveness"
-		}
+	if reason, ok := livenessMarkerReason(meta.Liveness, now); ok {
+		return true, reason
 	}
 	return false, "stale liveness"
+}
+
+// runStateIndicatesLive reports whether a run-state record still represents a
+// running attempt. Dead PIDs with expired/missing heartbeats are not live even
+// when the JSON file remains on disk after a worker crash.
+func runStateIndicatesLive(state *RunState, now time.Time) bool {
+	if state == nil {
+		return false
+	}
+	if state.PID > 0 && trackerProcessAlive(state.PID) {
+		return true
+	}
+	if !state.ExpiresAt.IsZero() && now.Before(state.ExpiresAt) {
+		return true
+	}
+	if !state.RefreshedAt.IsZero() && now.Sub(state.RefreshedAt) <= RunStateLivenessTTL {
+		return true
+	}
+	return false
+}
+
+func livenessMarkerAlive(liveness *ExecutionCleanupLiveness, now time.Time) bool {
+	_, ok := livenessMarkerReason(liveness, now)
+	return ok
+}
+
+func livenessMarkerReason(liveness *ExecutionCleanupLiveness, now time.Time) (string, bool) {
+	if liveness == nil {
+		return "", false
+	}
+	if liveness.PID > 0 && trackerProcessAlive(liveness.PID) {
+		return "live pid", true
+	}
+	if !liveness.ExpiresAt.IsZero() && now.Before(liveness.ExpiresAt) {
+		return "unexpired liveness", true
+	}
+	if !liveness.RefreshedAt.IsZero() && now.Sub(liveness.RefreshedAt) <= 2*time.Minute {
+		return "fresh liveness", true
+	}
+	return "", false
 }
 
 // DefaultExecutionCleanupLiveness applies the same conservative liveness rules
@@ -541,13 +587,23 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		}
 	}
 
-	// Stale run-state files are removed when they point at an execution
-	// resource that is no longer live.
+	// Stale run-state files are removed when they no longer represent a live
+	// attempt, or when their worktree is already gone. A dead PID with an
+	// expired heartbeat must clear even if a prior pass failed to delete the
+	// tree (otherwise run-state and worktree preserve each other). A "fresh"
+	// run-state whose worktree was just reaped is also cleared so operators do
+	// not see ghost attempts.
 	for _, state := range runStates {
 		if _, ok := liveRunStates[runStateLiveKey(state)]; ok {
 			continue
 		}
-		if runStateWorktreeStillExists(state) {
+		// Goal-only / non-attempt records (empty worktree, synthetic bead ids)
+		// are not attempt liveness.
+		if strings.TrimSpace(state.AttemptID) == "" && strings.TrimSpace(state.WorktreePath) == "" {
+			continue
+		}
+		worktreeExists := runStateWorktreeStillExists(state)
+		if runStateIndicatesLive(&state, now()) && worktreeExists {
 			continue
 		}
 		if removed, bytes := m.removeStaleRunState(state, &summary); removed {
@@ -724,16 +780,6 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 					continue
 				}
 			}
-			if _, ok := registered[filepath.Clean(path)]; ok {
-				summary.PreservedActiveScratchDirs++
-				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
-					Path:    path,
-					Class:   "preserved_active_scratch_dir",
-					Message: "registered worktree",
-				})
-				continue
-			}
-
 			matchedRunState := matchingRunStateForMeta(candidateRunStates, meta)
 			if live, reason := probe.IsLive(meta, matchedRunState, now); live {
 				summary.PreservedActiveScratchDirs++
@@ -762,6 +808,46 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 					Class:   "scratch_measure_tree",
 					Message: measureErr.Error(),
 				})
+			}
+			// Registered land/gate worktrees must be detached via git, not
+			// os.RemoveAll — otherwise git worktree list keeps ghosts and the
+			// next pass re-preserves them as "registered".
+			if _, ok := registered[filepath.Clean(path)]; ok {
+				if m.GitOps == nil {
+					summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
+						Path:     path,
+						Class:    "registered_scratch_worktree",
+						Message:  "no git ops available to remove registered scratch worktree",
+						Blocking: true,
+					})
+					continue
+				}
+				if !m.DryRun {
+					if err := m.GitOps.WorktreeRemove(m.ProjectRoot, path); err != nil {
+						summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
+							Path:     path,
+							Class:    "registered_scratch_worktree_remove",
+							Message:  err.Error(),
+							Blocking: true,
+						})
+						continue
+					}
+				}
+				summary.RemovedRegisteredWorktrees++
+				summary.BytesReclaimed += reclaimedBytes
+				summary.InodesReclaimed += reclaimedInodes
+				class := "removed_registered_scratch_worktree"
+				if m.DryRun {
+					class = "would_remove_registered_scratch_worktree"
+				}
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   class,
+					Message: "stale registered DDx scratch worktree",
+					Bytes:   reclaimedBytes,
+					Inodes:  reclaimedInodes,
+				})
+				continue
 			}
 			if !m.DryRun {
 				if err := os.RemoveAll(path); err != nil {

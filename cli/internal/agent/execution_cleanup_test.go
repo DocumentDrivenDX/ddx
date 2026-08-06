@@ -1528,6 +1528,9 @@ func TestExecutionCleanup_PreservesActiveAttemptCycle(t *testing.T) {
 }
 
 func TestExecutionCleanup_RecoversPinnedCandidateAfterCrash(t *testing.T) {
+	// After a crash the durable recovery surface is the candidate git ref, not
+	// the abandoned worktree. Holding multi-GB trees forever for candidate_ref
+	// metadata alone caused unreclaimed .execute-bead-clone-* growth.
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
 
@@ -1551,13 +1554,54 @@ func TestExecutionCleanup_RecoversPinnedCandidateAfterCrash(t *testing.T) {
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
 
-	assert.DirExists(t, crashedPath)
-	assert.Empty(t, gitOps.removed)
-	assert.Equal(t, int64(0), summary.RemovedUnregisteredTempDirs)
-	assert.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
-	msg := firstObservationMessage(summary.Observations, "preserved_live_attempt")
-	assert.Contains(t, msg, "candidate_ref="+candidateRef)
-	assert.Contains(t, msg, "repair_active=true")
+	assert.NoFileExists(t, crashedPath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
+}
+
+func TestExecutionCleanup_ReclaimsWorktreeWithDeadRunStatePID(t *testing.T) {
+	// Deadlock regression: run-state JSON with a dead PID and expired heartbeat
+	// used to keep the worktree ("matched live run-state") while the worktree
+	// kept the run-state (worktree still exists). Both must reclaim.
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+
+	stalePath := filepath.Join(tempRoot, ExecuteBeadClonePrefix+"ddx-dead-rs-20260801T025552-9898c40c")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-dead-rs",
+		AttemptID:    "20260801T025552-9898c40c",
+		WorktreePath: stalePath,
+	}, map[string]string{"scratch.txt": "orphan\n"})
+
+	// Bypass WriteRunState normalize (which would stamp live PID/expiry).
+	attemptPath, err := runStateAttemptPath(projectRoot, "20260801T025552-9898c40c")
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(attemptPath), 0o755))
+	raw := []byte(`{
+  "bead_id": "ddx-dead-rs",
+  "attempt_id": "20260801T025552-9898c40c",
+  "started_at": "2026-08-01T02:56:04Z",
+  "refreshed_at": "2026-08-01T03:07:54Z",
+  "expires_at": "2026-08-01T03:09:54Z",
+  "worktree_path": "` + stalePath + `",
+  "pid": 667132
+}
+`)
+	require.NoError(t, os.WriteFile(attemptPath, raw, 0o600))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, stalePath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.GreaterOrEqual(t, summary.RemovedRunStateFiles, int64(1))
+	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "removed_run_state"))
 }
 
 func TestExecutionCleanup_ReclaimsStaleUnpinnedCandidateWorktree(t *testing.T) {

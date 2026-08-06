@@ -462,8 +462,11 @@ func TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation(t
 			BeadID:       "ddx-live-runstate",
 			AttemptID:    "20260628T120000-feedface",
 			StartedAt:    now.Add(-5 * time.Minute),
+			RefreshedAt:  now.Add(-30 * time.Second),
+			ExpiresAt:    now.Add(RunStateLivenessTTL),
 			WorktreePath: liveRunStatePath,
-			PID:          9999,
+			// PID may be dead; unexpired heartbeat is the live signal.
+			PID: 9999,
 		},
 	}
 

@@ -1057,6 +1057,12 @@ func executionAttemptDirPrefixes() []string {
 	return []string{ExecuteBeadWtPrefix, ExecuteBeadClonePrefix, ExecuteBeadDockerHomePrefix, ExecuteBeadDockerRunPrefix}
 }
 
+// IsExecutionAttemptDirName reports whether name is a DDx-owned attempt
+// worktree/clone/runtime directory basename under the execution temp root.
+func IsExecutionAttemptDirName(name string) bool {
+	return hasAnyPrefix(name, executionAttemptDirPrefixes())
+}
+
 func seedAttemptCloneUserConfig(ctx context.Context, projectRoot, clonePath string) {
 	userName := strings.TrimSpace(gitConfigValue(ctx, projectRoot, "user.name"))
 	userEmail := strings.TrimSpace(gitConfigValue(ctx, projectRoot, "user.email"))

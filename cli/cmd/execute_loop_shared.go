@@ -716,47 +716,18 @@ func (f *CommandFactory) buildAttemptAuditFinalizers(projectRoot string, store a
 }
 
 func worktreeStillLive(meta agent.ExecutionCleanupMetadata, runStates []agent.RunState, now time.Time) bool {
-	if meta.Preserved || meta.ActiveCandidateCycle || strings.TrimSpace(meta.CandidateRef) != "" {
-		return true
-	}
-	if worktreeLivenessAlive(meta.Liveness, now) {
-		return true
-	}
-	for _, state := range runStates {
-		if !runStateMatchesWorktree(state, meta) {
-			continue
-		}
-		if strings.TrimSpace(state.CandidateCyclePhase) != "" || strings.TrimSpace(state.CandidateRef) != "" {
-			return true
-		}
-		if worktreeRunStateAlive(state, now) {
-			return true
+	// Share the same liveness rules as ExecutionCleanupManager: dead PIDs and
+	// expired heartbeats must not pin worktrees forever via abandoned run-state
+	// or candidate-ref metadata alone.
+	var matched *agent.RunState
+	for i := range runStates {
+		if runStateMatchesWorktree(runStates[i], meta) {
+			matched = &runStates[i]
+			break
 		}
 	}
-	return false
-}
-
-func worktreeLivenessAlive(liveness *agent.ExecutionCleanupLiveness, now time.Time) bool {
-	if liveness == nil {
-		return false
-	}
-	if processAlive(liveness.PID) {
-		return true
-	}
-	if !liveness.ExpiresAt.IsZero() && now.Before(liveness.ExpiresAt) {
-		return true
-	}
-	return !liveness.RefreshedAt.IsZero() && now.Sub(liveness.RefreshedAt) <= 2*time.Minute
-}
-
-func worktreeRunStateAlive(state agent.RunState, now time.Time) bool {
-	if processAlive(state.PID) {
-		return true
-	}
-	if !state.ExpiresAt.IsZero() && now.Before(state.ExpiresAt) {
-		return true
-	}
-	return !state.RefreshedAt.IsZero() && now.Sub(state.RefreshedAt) <= agent.RunStateLivenessTTL
+	live, _ := agent.DefaultExecutionCleanupLiveness(meta, matched, now)
+	return live
 }
 
 func runStateMatchesWorktree(state agent.RunState, meta agent.ExecutionCleanupMetadata) bool {
