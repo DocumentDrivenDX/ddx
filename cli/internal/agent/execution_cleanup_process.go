@@ -15,6 +15,10 @@ import (
 
 var errExecutionCleanupAttemptProcessUnavailable = errors.New("execution cleanup attempt process census unavailable")
 
+// defaultAttemptProcessScanBudget caps the host-wide process census so a
+// slow /proc walk cannot starve worktree and scratch reclamation.
+const defaultAttemptProcessScanBudget = 5 * time.Second
+
 type executionCleanupAttemptProcessScanner interface {
 	Scan(context.Context) ([]executionCleanupAttemptProcess, error)
 }
@@ -107,8 +111,30 @@ func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
 	if scanner == nil {
 		return nil
 	}
-	processes, err := scanner.Scan(ctx)
+	// Host-wide /proc census can stall for tens of seconds on busy machines
+	// (slow/missing cwd readlinks under virtiofs test trees). Cap the scan so
+	// worktree/scratch reclamation still runs in the same cleanup pass.
+	base := ctx
+	if base == nil {
+		base = context.Background()
+	}
+	scanCtx, scanCancel := context.WithTimeout(base, defaultAttemptProcessScanBudget)
+	processes, err := scanner.Scan(scanCtx)
+	scanCancel()
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    m.ProjectRoot,
+				Class:   "attempt_process_scan_timeout",
+				Message: err.Error(),
+			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    m.ProjectRoot,
+				Class:   "attempt_process_scan_timeout",
+				Message: "process census timed out; continuing with worktree/scratch reclamation",
+			})
+			return nil
+		}
 		if errors.Is(err, errExecutionCleanupAttemptProcessUnavailable) {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 				Path:    m.ProjectRoot,
