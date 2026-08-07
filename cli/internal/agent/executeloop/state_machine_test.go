@@ -161,3 +161,57 @@ func TestAttemptPolicyEscalatesOnlyMinimumPower(t *testing.T) {
 		}
 	}
 }
+
+func TestAttemptPolicyDrivesRetryCooldownParkAndNoViableProvider(t *testing.T) {
+	cases := []struct {
+		name       string
+		input      AttemptTransitionInput
+		wantAction TryLoopAction
+		wantReason string
+	}{
+		{
+			name: "semantic failure retries",
+			input: AttemptTransitionInput{
+				Status:          "execution_failed",
+				Detail:          "build failed",
+				CurrentMinPower: 5,
+				ActualPower:     8,
+			},
+			wantAction: TryLoopActionRetryPower,
+			wantReason: "semantic_retry_with_higher_min_power",
+		},
+		{
+			name: "provider connectivity retries",
+			input: AttemptTransitionInput{
+				Status:                   "execution_failed",
+				Detail:                   "provider request failed: dial tcp 100.70.199.113:1235: connect: connection refused",
+				CurrentMinPower:          5,
+				ActualPower:              8,
+				OutcomeReason:            "provider_connectivity",
+				AllowInfrastructureRetry: true,
+			},
+			wantAction: TryLoopActionRetryPower,
+			wantReason: "infrastructure_retry_with_higher_min_power",
+		},
+		{
+			name: "no viable provider stops",
+			input: AttemptTransitionInput{
+				Status:          "execution_failed",
+				Detail:          "ResolveRoute: no viable routing candidate",
+				CurrentMinPower: 5,
+				ActualPower:     8,
+				OutcomeReason:   "no_viable_provider",
+			},
+			wantAction: TryLoopActionStop,
+			wantReason: "non_semantic_outcome_reason",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			transition := DecideAttemptTransition(tc.input)
+			assert.Equal(t, tc.wantAction, transition.Action)
+			assert.Equal(t, tc.wantReason, transition.Reason)
+		})
+	}
+}

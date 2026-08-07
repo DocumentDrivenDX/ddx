@@ -39,6 +39,18 @@ func TestIsInfrastructureFailure(t *testing.T) {
 	}
 }
 
+func TestEscalationInfrastructurePatternsRemovedOrAuditOnly(t *testing.T) {
+	if got := IsInfrastructureFailure("execution_failed", "dial tcp 127.0.0.1:1234: connect: connection refused"); !got {
+		t.Fatal("typed infrastructure audit pattern should still classify execution_failed connectivity failures")
+	}
+	if got := IsInfrastructureFailure("execution_failed", "ResolveRoute: no viable routing candidate: 3 candidates rejected"); !got {
+		t.Fatal("typed infrastructure audit pattern should still classify execution_failed route failures")
+	}
+	if got := IsInfrastructureFailure("no_changes", "dial tcp 127.0.0.1:1234: connect: connection refused"); got {
+		t.Fatal("audit patterns must not classify non-execution failures")
+	}
+}
+
 func TestCountsTowardCostCap(t *testing.T) {
 	tests := []struct {
 		name           string
