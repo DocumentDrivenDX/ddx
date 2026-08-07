@@ -136,14 +136,25 @@ func breakStaleExecutionCleanupLock(lockDir string) bool {
 	pidData, err := os.ReadFile(filepath.Join(lockDir, "pid"))
 	if err == nil {
 		pid := 0
-		if _, scanErr := fmt.Sscanf(string(pidData), "%d", &pid); scanErr == nil && pid > 0 && pid != os.Getpid() {
-			if !trackerProcessAlive(pid) {
-				_ = os.RemoveAll(lockDir)
-				return true
+		if _, scanErr := fmt.Sscanf(string(pidData), "%d", &pid); scanErr == nil && pid > 0 {
+			if pid == os.Getpid() {
+				// Our own lock (re-entry / nested call): do not steal.
+				return false
 			}
+			if trackerProcessAlive(pid) {
+				// Live holder: never break on age alone. Mass reclaim of
+				// multi-GB local-clone trees routinely exceeds
+				// trackerLockStaleAge (10m); stealing mid-pass races two
+				// cleanups and can leave partial removals behind.
+				return false
+			}
+			_ = os.RemoveAll(lockDir)
+			return true
 		}
 	}
 
+	// No usable PID file: fall back to age for crashed writers that left
+	// a lock dir without process identity.
 	acquiredData, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
 	if err == nil {
 		acquired, parseErr := time.Parse(time.RFC3339, string(acquiredData))

@@ -26,6 +26,7 @@ type executionCleanupTestGitOps struct {
 	removed     []string
 	deletedRefs []string
 	pruneCalls  int
+	listCalls   int
 	listErr     error
 	removeErr   error
 	pruneErr    error
@@ -42,6 +43,7 @@ func (g *executionCleanupTestGitOps) WorktreeRemove(dir, wtPath string) error {
 	return os.RemoveAll(wtPath)
 }
 func (g *executionCleanupTestGitOps) WorktreeList(string) ([]string, error) {
+	g.listCalls++
 	if g.listErr != nil {
 		return nil, g.listErr
 	}
@@ -983,6 +985,24 @@ func TestExecutionCleanup_CanReclaimForeignTestOwnedPathUnderConfiguredRoot(t *t
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
 
 	assert.True(t, mgr.canReclaimForeignTestOwnedPath(foreignTestProject, foreignWorktree))
+}
+
+func TestExecutionCleanup_IsRegisteredWorktreeSkipsMissingOrNonGitProjectRoot(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	gitOps := &executionCleanupTestGitOps{}
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
+
+	var summary ExecutionCleanupSummary
+	missing := filepath.Join(t.TempDir(), "gone-foreign-project")
+	assert.False(t, mgr.isRegisteredWorktree(missing, filepath.Join(tempRoot, "wt"), &summary))
+	assert.Zero(t, gitOps.listCalls, "must not spawn git worktree list for a missing project root")
+	assert.Empty(t, summary.Warnings)
+
+	// Existing non-git fixture root (fleet-tmp style) must also skip git.
+	nonGit := t.TempDir()
+	assert.False(t, mgr.isRegisteredWorktree(nonGit, filepath.Join(tempRoot, "wt"), &summary))
+	assert.Zero(t, gitOps.listCalls, "must not spawn git worktree list for a non-git project root")
 }
 
 func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {

@@ -929,6 +929,17 @@ func (m *ExecutionCleanupManager) isRegisteredWorktree(projectRoot, path string,
 	if m.GitOps == nil || projectRoot == "" || path == "" {
 		return false
 	}
+	// Foreign/test project roots (fleet-tmp fixtures, deleted t.TempDir paths)
+	// cannot still register worktrees once the root is gone or is not a git
+	// checkout. Skip the git subprocess — with thousands of pollution dirs
+	// under a shared exec root, spawning `git worktree list` per missing or
+	// non-git root dominated cleanup wall time.
+	if st, err := os.Stat(projectRoot); err != nil || !st.IsDir() {
+		return false
+	}
+	if !gitCheckoutPresent(projectRoot) {
+		return false
+	}
 	paths, err := m.GitOps.WorktreeList(projectRoot)
 	if err != nil {
 		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
@@ -945,6 +956,20 @@ func (m *ExecutionCleanupManager) isRegisteredWorktree(projectRoot, path string,
 		}
 	}
 	return false
+}
+
+// gitCheckoutPresent reports whether path looks like a usable git working
+// tree (directory .git or a .git file pointing at a worktree gitdir).
+func gitCheckoutPresent(path string) bool {
+	if path == "" {
+		return false
+	}
+	gitPath := filepath.Join(path, ".git")
+	st, err := os.Stat(gitPath)
+	if err != nil {
+		return false
+	}
+	return st.IsDir() || st.Mode().IsRegular()
 }
 
 func (m *ExecutionCleanupManager) scratchRoots(tempRoot string) []string {

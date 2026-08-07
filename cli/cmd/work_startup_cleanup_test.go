@@ -78,6 +78,45 @@ func TestWorkStartup_PreservesLiveWorktrees(t *testing.T) {
 	assert.Contains(t, runCleanupCommandGit(t, projectRoot, "worktree", "list", "--porcelain"), worktreePath)
 }
 
+// TestWorkStartup_ReapsYoungDeadWorktreesWithMetadata proves that the
+// worker cleanup path reclaims attempt trees as soon as liveness is dead,
+// without waiting out DDX_WORKTREE_REAP_MAX_AGE. The age gate only applies
+// when cleanup.json is missing (no durable ownership signal).
+func TestWorkStartup_ReapsYoungDeadWorktreesWithMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-liveness startup cleanup test is unix-oriented")
+	}
+
+	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
+	// Long age gate would previously preserve everything under 72h.
+	t.Setenv("DDX_WORKTREE_REAP_MAX_AGE", "72h")
+
+	attemptID := "20260515T030405-youngdead"
+	worktreePath := createRegisteredStartupWorktree(t, projectRoot, tempRoot, "ddx-startup-young", attemptID)
+	// Fresh mtime well under the age gate; dead PID proves liveness is stale.
+	fresh := time.Now().Add(-10 * time.Minute).UTC()
+	writeStartupRunState(t, projectRoot, "ddx-startup-young", attemptID, worktreePath, deadProcessPID(t), fresh)
+	require.NoError(t, os.Chtimes(worktreePath, fresh, fresh))
+
+	// Metadata-less sibling under the age gate must still be preserved.
+	noMetaPath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-startup-nometa-20260515T030405-cafebabe")
+	require.NoError(t, os.MkdirAll(noMetaPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(noMetaPath, "scratch.txt"), []byte("keep\n"), 0o644))
+	require.NoError(t, os.Chtimes(noMetaPath, fresh, fresh))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "work", "--json", "--once", "--project", projectRoot)
+	require.NoError(t, err)
+
+	var res struct {
+		NoReadyWork bool `json:"no_ready_work"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	assert.True(t, res.NoReadyWork)
+	assert.NoDirExists(t, worktreePath, "dead attempt with cleanup metadata must be reaped under the age gate")
+	assert.DirExists(t, noMetaPath, "metadata-less young dir must wait for the age gate")
+}
+
 func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	projectRoot, _ := setupWorkStartupCleanupProject(t)
 
