@@ -28,12 +28,23 @@ type AttemptPolicyEvidence struct {
 	RequestMinimumStrength   bool
 }
 
+// AttemptPolicyAudit carries route identity for reporting and diagnostics
+// only. It is preserved on the returned decision but never participates in
+// policy selection.
+type AttemptPolicyAudit struct {
+	Harness  string
+	Provider string
+	Model    string
+	Route    string
+}
+
 // AttemptPolicyInput is the typed Fizeau lifecycle result plus explicit DDx
 // evidence consumed by the adapter.
 type AttemptPolicyInput struct {
 	Final        *agentlib.ServiceFinalData
 	ImmediateErr error
 	Evidence     AttemptPolicyEvidence
+	Audit        AttemptPolicyAudit
 }
 
 // AttemptPolicyDecision is the one DDx attempt decision selected for the
@@ -41,6 +52,7 @@ type AttemptPolicyInput struct {
 type AttemptPolicyDecision struct {
 	Action AttemptPolicyAction
 	Reason string
+	Audit  AttemptPolicyAudit
 }
 
 const (
@@ -57,36 +69,36 @@ const (
 // provider-text parsing.
 func DecideAttemptPolicy(input AttemptPolicyInput) AttemptPolicyDecision {
 	if input.Final != nil && input.ImmediateErr != nil {
-		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: "fizeau_lifecycle_ambiguous"}
+		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: "fizeau_lifecycle_ambiguous", Audit: input.Audit}
 	}
 
 	lifecycle, reason := classifyAttemptLifecycle(input.Final, input.ImmediateErr)
 	switch lifecycle {
 	case attemptLifecycleCompleted:
 		if input.Evidence.LandReady {
-			return AttemptPolicyDecision{Action: AttemptPolicyActionLand, Reason: reason}
+			return AttemptPolicyDecision{Action: AttemptPolicyActionLand, Reason: reason, Audit: input.Audit}
 		}
-		return AttemptPolicyDecision{Action: AttemptPolicyActionClose, Reason: reason}
+		return AttemptPolicyDecision{Action: AttemptPolicyActionClose, Reason: reason, Audit: input.Audit}
 	case attemptLifecycleRetryable:
 		switch {
 		case input.Evidence.CurrentAttemptRepairable:
-			return AttemptPolicyDecision{Action: AttemptPolicyActionCurrentAttemptRepair, Reason: reason}
+			return AttemptPolicyDecision{Action: AttemptPolicyActionCurrentAttemptRepair, Reason: reason, Audit: input.Audit}
 		case input.Evidence.NewAttemptRetryAllowed:
-			return AttemptPolicyDecision{Action: AttemptPolicyActionNewAttemptRetry, Reason: reason}
+			return AttemptPolicyDecision{Action: AttemptPolicyActionNewAttemptRetry, Reason: reason, Audit: input.Audit}
 		default:
-			return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason}
+			return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason, Audit: input.Audit}
 		}
 	case attemptLifecycleUnavailableNow:
-		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason}
+		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason, Audit: input.Audit}
 	case attemptLifecycleCancelled:
-		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason}
+		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason, Audit: input.Audit}
 	case attemptLifecyclePermanent:
 		if input.Evidence.RequestMinimumStrength {
-			return AttemptPolicyDecision{Action: AttemptPolicyActionMinimumStrengthEscalation, Reason: reason}
+			return AttemptPolicyDecision{Action: AttemptPolicyActionMinimumStrengthEscalation, Reason: reason, Audit: input.Audit}
 		}
-		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason}
+		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason, Audit: input.Audit}
 	default:
-		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason}
+		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: reason, Audit: input.Audit}
 	}
 }
 

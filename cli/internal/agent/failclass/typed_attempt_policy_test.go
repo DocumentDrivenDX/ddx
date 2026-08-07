@@ -11,10 +11,10 @@ import (
 
 func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 	inputType := reflect.TypeOf(AttemptPolicyInput{})
-	if got, want := inputType.NumField(), 3; got != want {
+	if got, want := inputType.NumField(), 4; got != want {
 		t.Fatalf("AttemptPolicyInput has %d fields, want %d", got, want)
 	}
-	for _, fieldName := range []string{"Final", "ImmediateErr", "Evidence"} {
+	for _, fieldName := range []string{"Final", "ImmediateErr", "Evidence", "Audit"} {
 		if _, ok := inputType.FieldByName(fieldName); !ok {
 			t.Fatalf("AttemptPolicyInput missing typed field %q", fieldName)
 		}
@@ -22,6 +22,15 @@ func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 	for _, fieldName := range []string{"ProviderText", "ErrorText", "Stderr", "RouteText"} {
 		if _, ok := inputType.FieldByName(fieldName); ok {
 			t.Fatalf("AttemptPolicyInput unexpectedly exposes text field %q", fieldName)
+		}
+	}
+	decisionType := reflect.TypeOf(AttemptPolicyDecision{})
+	if got, want := decisionType.NumField(), 3; got != want {
+		t.Fatalf("AttemptPolicyDecision has %d fields, want %d", got, want)
+	}
+	for _, fieldName := range []string{"Action", "Reason", "Audit"} {
+		if _, ok := decisionType.FieldByName(fieldName); !ok {
+			t.Fatalf("AttemptPolicyDecision missing typed field %q", fieldName)
 		}
 	}
 
@@ -41,6 +50,12 @@ func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 					Stage:   agentlib.SessionStageHarness,
 				},
 				Evidence: AttemptPolicyEvidence{LandReady: true},
+				Audit: AttemptPolicyAudit{
+					Harness:  "codex",
+					Provider: "openai",
+					Model:    "gpt-5",
+					Route:    "route-a",
+				},
 			},
 			wantAct:    AttemptPolicyActionLand,
 			wantReason: "fizeau_outcome_success",
@@ -55,6 +70,12 @@ func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 					Stage:   agentlib.SessionStageProvider,
 				},
 				Evidence: AttemptPolicyEvidence{CurrentAttemptRepairable: true},
+				Audit: AttemptPolicyAudit{
+					Harness:  "codex",
+					Provider: "openai",
+					Model:    "gpt-5",
+					Route:    "route-b",
+				},
 			},
 			wantAct:    AttemptPolicyActionCurrentAttemptRepair,
 			wantReason: "fizeau_terminal_retryable",
@@ -92,6 +113,12 @@ func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 					Stage:   agentlib.SessionStageCleanup,
 				},
 				Evidence: AttemptPolicyEvidence{RequestMinimumStrength: true},
+				Audit: AttemptPolicyAudit{
+					Harness:  "claude",
+					Provider: "anthropic",
+					Model:    "claude-sonnet-4-5",
+					Route:    "route-c",
+				},
 			},
 			wantAct:    AttemptPolicyActionMinimumStrengthEscalation,
 			wantReason: "fizeau_terminal_permanent_failure",
@@ -106,6 +133,9 @@ func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 			}
 			if got.Reason != tc.wantReason {
 				t.Fatalf("DecideAttemptPolicy(%s).Reason = %q, want %q", tc.name, got.Reason, tc.wantReason)
+			}
+			if got.Audit != tc.input.Audit {
+				t.Fatalf("DecideAttemptPolicy(%s).Audit = %#v, want %#v", tc.name, got.Audit, tc.input.Audit)
 			}
 		})
 	}
@@ -198,7 +228,141 @@ func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 			if got.Action != tc.want {
 				t.Fatalf("DecideAttemptPolicy(%s).Action = %q, want %q", tc.name, got.Action, tc.want)
 			}
+			if got.Audit != tc.in.Audit {
+				t.Fatalf("DecideAttemptPolicy(%s).Audit = %#v, want %#v", tc.name, got.Audit, tc.in.Audit)
+			}
 		})
+	}
+}
+
+func TestProviderIdentityDoesNotAffectPolicy(t *testing.T) {
+	baseFinal := &agentlib.ServiceFinalData{
+		Status:  "failed",
+		Outcome: agentlib.SessionOutcomeFailed,
+		Cause:   agentlib.TerminalCauseProviderFailed,
+		Stage:   agentlib.SessionStageProvider,
+	}
+
+	first := AttemptPolicyInput{
+		Final: baseFinal,
+		Evidence: AttemptPolicyEvidence{
+			NewAttemptRetryAllowed: true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-a",
+		},
+	}
+	second := AttemptPolicyInput{
+		Final: baseFinal,
+		Evidence: AttemptPolicyEvidence{
+			NewAttemptRetryAllowed: true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "claude",
+			Provider: "anthropic",
+			Model:    "claude-sonnet-4-5",
+			Route:    "route-b",
+		},
+	}
+
+	gotFirst := DecideAttemptPolicy(first)
+	gotSecond := DecideAttemptPolicy(second)
+
+	if gotFirst.Action != gotSecond.Action {
+		t.Fatalf("actions differ: first=%q second=%q", gotFirst.Action, gotSecond.Action)
+	}
+	if gotFirst.Reason != gotSecond.Reason {
+		t.Fatalf("reasons differ: first=%q second=%q", gotFirst.Reason, gotSecond.Reason)
+	}
+	if gotFirst.Action != AttemptPolicyActionNewAttemptRetry {
+		t.Fatalf("unexpected action %q", gotFirst.Action)
+	}
+	if gotFirst.Audit != first.Audit {
+		t.Fatalf("first audit = %#v, want %#v", gotFirst.Audit, first.Audit)
+	}
+	if gotSecond.Audit != second.Audit {
+		t.Fatalf("second audit = %#v, want %#v", gotSecond.Audit, second.Audit)
+	}
+}
+
+func TestAttemptPolicyKeepsProviderIdentityAsAuditEvidence(t *testing.T) {
+	input := AttemptPolicyInput{
+		Final: &agentlib.ServiceFinalData{
+			Status:  "success",
+			Outcome: agentlib.SessionOutcomeSuccess,
+			Cause:   agentlib.TerminalCauseCompleted,
+			Stage:   agentlib.SessionStageHarness,
+		},
+		Evidence: AttemptPolicyEvidence{
+			LandReady: true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-a",
+		},
+	}
+
+	got := DecideAttemptPolicy(input)
+	if got.Action != AttemptPolicyActionLand {
+		t.Fatalf("DecideAttemptPolicy(input).Action = %q, want %q", got.Action, AttemptPolicyActionLand)
+	}
+	if got.Audit != input.Audit {
+		t.Fatalf("DecideAttemptPolicy(input).Audit = %#v, want %#v", got.Audit, input.Audit)
+	}
+}
+
+func TestAttemptPolicyDoesNotReadProviderText(t *testing.T) {
+	first := AttemptPolicyInput{
+		ImmediateErr: fmt.Errorf("provider detail that should be ignored: %w", &agentlib.NoViableProviderForNow{
+			RetryAfter: time.Unix(1_700_000_000, 0),
+		}),
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-a",
+		},
+	}
+	second := AttemptPolicyInput{
+		ImmediateErr: fmt.Errorf("stderr/detail text changed but the typed error is the same: %w", &agentlib.NoViableProviderForNow{
+			RetryAfter: time.Unix(1_700_000_000, 0),
+		}),
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-a",
+		},
+	}
+
+	gotFirst := DecideAttemptPolicy(first)
+	gotSecond := DecideAttemptPolicy(second)
+
+	if gotFirst.Action != AttemptPolicyActionPark {
+		t.Fatalf("DecideAttemptPolicy(first).Action = %q, want %q", gotFirst.Action, AttemptPolicyActionPark)
+	}
+	if gotSecond.Action != AttemptPolicyActionPark {
+		t.Fatalf("DecideAttemptPolicy(second).Action = %q, want %q", gotSecond.Action, AttemptPolicyActionPark)
+	}
+	if gotFirst.Action != gotSecond.Action {
+		t.Fatalf("actions differ: first=%q second=%q", gotFirst.Action, gotSecond.Action)
+	}
+	if gotFirst.Reason != gotSecond.Reason {
+		t.Fatalf("reasons differ: first=%q second=%q", gotFirst.Reason, gotSecond.Reason)
+	}
+	if gotFirst.Reason != "fizeau_immediate_unavailable_now" {
+		t.Fatalf("DecideAttemptPolicy(first).Reason = %q, want %q", gotFirst.Reason, "fizeau_immediate_unavailable_now")
+	}
+	if gotFirst.Audit != first.Audit {
+		t.Fatalf("DecideAttemptPolicy(first).Audit = %#v, want %#v", gotFirst.Audit, first.Audit)
+	}
+	if gotSecond.Audit != second.Audit {
+		t.Fatalf("DecideAttemptPolicy(second).Audit = %#v, want %#v", gotSecond.Audit, second.Audit)
 	}
 }
 
