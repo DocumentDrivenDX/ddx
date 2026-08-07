@@ -206,19 +206,36 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			missingMetadata = true
 			meta = agent.ExecutionCleanupMetadata{WorktreePath: path}
 		}
-		// Liveness is authoritative (same rules as ExecutionCleanupManager). A
-		// hard age gate used to run first and blocked reclaim for up to 72h
-		// even when cleanup.json + dead run-state proved the attempt was gone —
-		// leaving multi-GB local-clone trees and test pollution unreaped while
-		// `ddx cleanup` (liveness-based) would have removed them immediately.
+		// Liveness is authoritative (same rules as ExecutionCleanupManager).
 		if worktreeStillLive(meta, runStates, now) {
 			continue
 		}
-		// Age gate only for paths without cleanup metadata: no durable
-		// ownership/liveness signal, so wait before reaping (live tests may
-		// still be writing). Metadata + dead liveness is enough to reclaim now.
-		if missingMetadata && now.Sub(info.ModTime()) < r.worktreeMaxAge {
-			continue
+
+		// Proven dead: a run-state matches this tree but is no longer live
+		// (dead PID / expired heartbeat). Reclaim immediately regardless of
+		// age — this is the multi-GB leftover case the 72h gate used to block.
+		matchedRunState := false
+		for i := range runStates {
+			if runStateMatchesWorktree(runStates[i], meta) {
+				matchedRunState = true
+				break
+			}
+		}
+		if !matchedRunState {
+			// No run-state match yet. Keep a grace period so:
+			//  1) local-clone setup (cleanup.json before WriteRunState) is not
+			//     reaped mid-flight (that race produced worktree_lost), and
+			//  2) metadata-less dirs still wait out the long max age.
+			grace := r.worktreeMaxAge
+			if !missingMetadata {
+				grace = defaultWorktreeReapGraceAge
+				if grace <= 0 || (r.worktreeMaxAge > 0 && r.worktreeMaxAge < grace) {
+					grace = r.worktreeMaxAge
+				}
+			}
+			if now.Sub(info.ModTime()) < grace {
+				continue
+			}
 		}
 
 		report.StaleWorktrees++

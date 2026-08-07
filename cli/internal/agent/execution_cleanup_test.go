@@ -454,6 +454,9 @@ func TestExecutionCleanup_PreservesActiveAndPreservedAttempts(t *testing.T) {
 		AttemptID:    "20260506T154739-55556666",
 		WorktreePath: stalePath,
 	}, map[string]string{"scratch.txt": "stale\n"})
+	// Stale path has metadata but no run-state: age past setup grace.
+	old := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(stalePath, old, old))
 	require.NoError(t, WriteRunState(projectRoot, RunState{
 		BeadID:       "ddx-active",
 		AttemptID:    "20260506T154739-11112222",

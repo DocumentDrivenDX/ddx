@@ -460,6 +460,21 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			})
 			continue
 		}
+		// Setup-race grace: cleanup.json is written before WriteRunState during
+		// local-clone isolation. Without a matching run-state yet, do not reap
+		// young trees — that race deleted live attempt clones (worktree_lost).
+		// Proven-dead run-states (matched but not live) skip this grace.
+		if matchedRunState == nil {
+			const setupGrace = 30 * time.Minute
+			if info, statErr := os.Stat(path); statErr == nil && now().Sub(info.ModTime()) < setupGrace {
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   "preserved_setup_grace",
+					Message: fmt.Sprintf("no matching run-state; age under setup grace %s", setupGrace),
+				})
+				continue
+			}
+		}
 		if ownershipMismatch {
 			if !m.canReclaimForeignTestOwnedPath(meta.ProjectRoot, path) {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
