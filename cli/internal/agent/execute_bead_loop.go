@@ -1800,10 +1800,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	attemptStarted := false
 	defer func() {
 		cleanupStop(ctx.Err() != nil && attemptStarted)
-		// Process-lifetime provider PATH shim: release on loop exit so
-		// ddx-provider-shim-* dirs do not accumulate after each worker
-		// process. Do not release per-dispatch (shim is process-global).
-		ReleaseProviderShim()
 	}()
 	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
 	defer func() {

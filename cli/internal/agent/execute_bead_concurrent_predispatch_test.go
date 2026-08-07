@@ -167,7 +167,7 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace_DoesNotSpawnProviders(t *te
 
 	fakeBin := t.TempDir()
 	providerSpawnLog := filepath.Join(t.TempDir(), "provider-spawns.log")
-	for _, command := range []string{"codex", "claude", "gemini", ProviderLaunchSubcommand} {
+	for _, command := range []string{"codex", "claude", "gemini"} {
 		tripwire := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\t%%s\\n' %q \"$*\" >>\"$PROVIDER_SPAWN_LOG\"\nexit 99\n", command)
 		writeExecutable(t, filepath.Join(fakeBin, command), tripwire)
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,78 +34,35 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	providerShimRoot, err := os.MkdirTemp("", "ddx-test-cli-")
+	testRoot, err := os.MkdirTemp("", "ddx-test-cli-")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "TestMain: create fake ddx CLI:", err)
+		fmt.Fprintln(os.Stderr, "TestMain: create isolated test root:", err)
 		os.Exit(1)
 	}
-	fakeDDX := filepath.Join(providerShimRoot, "ddx")
-	fakeDDXScript := "#!/bin/sh\nif [ \"$1\" = \"__provider-launch\" ]; then\n  shift\n  exec \"$@\"\nfi\nexit 0\n"
-	if err := os.WriteFile(fakeDDX, []byte(fakeDDXScript), 0o755); err != nil {
-		_ = os.RemoveAll(providerShimRoot)
-		fmt.Fprintln(os.Stderr, "TestMain: write fake ddx CLI:", err)
-		os.Exit(1)
-	}
-	trueBin, err := exec.LookPath("true")
-	if err != nil {
-		_ = os.RemoveAll(providerShimRoot)
-		fmt.Fprintln(os.Stderr, "TestMain: locate true binary:", err)
-		os.Exit(1)
-	}
-	// Keep the complete package suite hermetic. The fake ddx wrapper above is
-	// intentionally pass-through so provider-wrapper behavior remains realistic,
-	// but every known provider name must therefore resolve to a harmless fixture
-	// rather than a developer-machine Codex/Claude binary.
-	for _, provider := range providerShimNames {
-		fakeProvider := filepath.Join(providerShimRoot, provider)
-		if err := os.Symlink(trueBin, fakeProvider); err != nil {
-			_ = os.RemoveAll(providerShimRoot)
-			fmt.Fprintf(os.Stderr, "TestMain: link fake %s provider: %v\n", provider, err)
-			os.Exit(1)
-		}
-	}
-	originalPATH := os.Getenv("PATH")
 	originalHome, hadHome := os.LookupEnv("HOME")
 	originalXDGConfigHome, hadXDGConfigHome := os.LookupEnv("XDG_CONFIG_HOME")
-	if err := os.Setenv("PATH", providerShimRoot+string(os.PathListSeparator)+originalPATH); err != nil {
-		_ = os.RemoveAll(providerShimRoot)
-		fmt.Fprintln(os.Stderr, "TestMain: install fake provider PATH:", err)
-		os.Exit(1)
-	}
-	testHome := filepath.Join(providerShimRoot, "home")
+	testHome := filepath.Join(testRoot, "home")
 	if err := os.MkdirAll(testHome, 0o755); err != nil {
-		_ = os.RemoveAll(providerShimRoot)
+		_ = os.RemoveAll(testRoot)
 		fmt.Fprintln(os.Stderr, "TestMain: create isolated HOME:", err)
 		os.Exit(1)
 	}
 	if err := os.WriteFile(filepath.Join(testHome, ".gitconfig"), []byte("[user]\n\tname = DDx Test\n\temail = ddx-test@example.invalid\n"), 0o600); err != nil {
-		_ = os.RemoveAll(providerShimRoot)
+		_ = os.RemoveAll(testRoot)
 		fmt.Fprintln(os.Stderr, "TestMain: write isolated Git identity:", err)
 		os.Exit(1)
 	}
-	fixtureGitConfig := filepath.Join(providerShimRoot, "fixture.gitconfig")
+	fixtureGitConfig := filepath.Join(testRoot, "fixture.gitconfig")
 	if err := os.WriteFile(fixtureGitConfig, []byte("[user]\n\tname = DDx Fixture\n\temail = fixture@ddx-test.example.invalid\n"), 0o600); err != nil {
-		_ = os.RemoveAll(providerShimRoot)
+		_ = os.RemoveAll(testRoot)
 		fmt.Fprintln(os.Stderr, "TestMain: write isolated fixture Git config:", err)
 		os.Exit(1)
 	}
 	testFixtureGitConfigPath = fixtureGitConfig
 	_ = os.Setenv("HOME", testHome)
-	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(providerShimRoot, "config"))
-	originalLookup := providerShimExecutableLookup
-	originalOrphanScannerFactory := defaultOrphanHarnessProcessScanner
-	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
-	defaultOrphanHarnessProcessScanner = func() orphanHarnessProcessScanner {
-		return newHermeticOrphanHarnessProcessScanner()
-	}
-
-	resetProviderShimStateForTest()
+	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(testRoot, "config"))
 	code := m.Run()
 
-	resetProviderShimStateForTest()
-	providerShimExecutableLookup = originalLookup
-	defaultOrphanHarnessProcessScanner = originalOrphanScannerFactory
-	_ = os.Setenv("PATH", originalPATH)
 	if hadHome {
 		_ = os.Setenv("HOME", originalHome)
 	} else {
@@ -117,7 +73,7 @@ func TestMain(m *testing.M) {
 	} else {
 		_ = os.Unsetenv("XDG_CONFIG_HOME")
 	}
-	_ = os.RemoveAll(providerShimRoot)
+	_ = os.RemoveAll(testRoot)
 	testFixtureGitConfigPath = ""
 	os.Exit(code)
 }

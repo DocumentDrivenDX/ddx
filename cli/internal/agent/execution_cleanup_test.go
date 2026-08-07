@@ -243,50 +243,56 @@ func TestExecutionCleanupFixtures_UseHermeticRoots(t *testing.T) {
 func TestNoProviderProcessOwnershipSymbols(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	path := filepath.Join(filepath.Dir(thisFile), "execution_cleanup_process.go")
+	cliRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
 
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	require.NoError(t, err)
-
-	var fn *ast.FuncDecl
-	for _, decl := range file.Decls {
-		candidate, ok := decl.(*ast.FuncDecl)
-		if !ok || candidate.Name.Name != "executionCleanupAttemptProcessFromWorkerStatus" {
-			continue
-		}
-		fn = candidate
-		break
+	for _, rel := range []string{
+		"internal/agent/provider_spawn.go",
+		"internal/agent/provider_spawn_test.go",
+		"cmd/provider_launch.go",
+		"cmd/provider_launch_linux.go",
+		"cmd/provider_launch_unix.go",
+		"cmd/provider_launch_windows.go",
+		"cmd/work_provider_orphan_linux_test.go",
+	} {
+		abs := filepath.Join(cliRoot, rel)
+		_, err := os.Stat(abs)
+		require.ErrorIsf(t, err, os.ErrNotExist, "legacy provider-launch file must be removed: %s", rel)
 	}
-	require.NotNil(t, fn, "expected executionCleanupAttemptProcessFromWorkerStatus to exist")
-	require.NotNil(t, fn.Body, "expected executionCleanupAttemptProcessFromWorkerStatus to have a body")
 
-	var forbidden []string
-	if fn.Type.Params != nil {
-		for _, field := range fn.Type.Params.List {
-			for _, name := range field.Names {
-				if name.Name == "tempRoot" {
-					forbidden = append(forbidden, "parameter tempRoot")
+	forbiddenSymbols := []string{
+		"ProviderLaunchSubcommand",
+		"BuildProviderLaunchCmd",
+		"EnsureProviderShimOnPATH",
+		"installProviderShimOnPATH",
+		"ReleaseProviderShim",
+		"providerShimExecutableLookup",
+		"providerShimNames",
+		"newProviderLaunchCommand",
+		"runProviderLaunch",
+	}
+
+	for _, rel := range []string{"internal/agent", "cmd"} {
+		root := filepath.Join(cliRoot, rel)
+		err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, symbol := range forbiddenSymbols {
+				if strings.Contains(string(data), symbol) {
+					return fmt.Errorf("%s still contains forbidden provider-launch symbol %q", path, symbol)
 				}
 			}
-		}
+			return nil
+		})
+		require.NoError(t, err)
 	}
-	ast.Inspect(fn.Body, func(node ast.Node) bool {
-		switch n := node.(type) {
-		case *ast.Ident:
-			switch n.Name {
-			case "tempRoot", "trimmedCwd":
-				forbidden = append(forbidden, "identifier "+n.Name)
-			}
-		case *ast.CallExpr:
-			if ident, ok := n.Fun.(*ast.Ident); ok && ident.Name == "isPathWithin" {
-				forbidden = append(forbidden, "call isPathWithin")
-			}
-		}
-		return true
-	})
-
-	require.Empty(t, forbidden, "cleanup helper still carries provider/route-owned fallback symbols: %v", forbidden)
 }
 
 func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {

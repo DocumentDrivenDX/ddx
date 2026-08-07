@@ -4,17 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,118 +119,27 @@ func TestFizeauExecuteStartCallbackImmediatelyPrecedesExecute(t *testing.T) {
 	assert.True(t, stub.executeCalled)
 }
 
-// TestRunWithConfigViaService_InstallsProviderShim asserts that a production
-// call to RunWithConfigViaService (the entry point exercised by ddx run, ddx
-// try, ddx work, and the server) installs the provider PATH shim before
-// constructing the Fizeau service. Without this, fizeau's LookPath("codex")
-// finds the raw provider binary and spawns it with only Setpgid — no
-// Pdeathsig — so a SIGKILL of the worker leaks the provider child as a
-// ppid=1 orphan (bead ddx-f2b413ea).
-func TestRunWithConfigViaService_InstallsProviderShim(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
+// TestRunWithConfigViaService_DoesNotMutatePATH proves the production service
+// dispatch path reaches Fizeau without mutating PATH first.
+func TestRunWithConfigViaService_DoesNotMutatePATH(t *testing.T) {
 	stub := &passthroughTestService{}
 	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
 		return stub, nil
 	})
 	t.Cleanup(func() { SetServiceRunFactory(nil) })
 
-	fakeDDX := filepath.Join(t.TempDir(), "ddx")
-	writeExecutable(t, fakeDDX, "#!/bin/sh\nexit 0\n")
-	oldLookup := providerShimExecutableLookup
-	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
-	t.Cleanup(func() { providerShimExecutableLookup = oldLookup })
-
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "haiku",
-	}).Resolve(config.CLIOverrides{Harness: "agent", Model: "haiku"})
-
-	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
-		Prompt: "test",
-	})
+	initialPATH := os.Getenv("PATH")
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "haiku"}).Resolve(config.CLIOverrides{Harness: "agent", Model: "haiku"})
+	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
-	require.True(t, stub.executeCalled)
-
-	path := os.Getenv("PATH")
-	found := false
-	for _, entry := range strings.Split(path, string(os.PathListSeparator)) {
-		if strings.Contains(entry, "ddx-provider-shim-") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found,
-		"RunWithConfigViaService must install ddx-provider-shim on PATH so fizeau's LookPath(codex/claude/…) finds the Pdeathsig wrapper; got PATH=%s", path)
-}
-
-func TestProviderShimUsesConfiguredExecutionScratchRoot(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
-	originalPATH := os.Getenv("PATH")
-	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
-	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
-	wantScratchRoot := filepath.Dir(configuredRoot)
-	require.Equal(t, wantScratchRoot, config.ExecutionScratchRoot(""))
-
-	dir, cleanup, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
-	require.NoError(t, err)
-	require.NotEmpty(t, dir)
-	require.Equal(t, wantScratchRoot, filepath.Dir(dir))
-	require.NotEqual(t, os.TempDir(), filepath.Dir(dir), "provider shim must not be created directly beneath the raw OS temp root")
-	require.True(t, strings.HasPrefix(filepath.Base(dir), "ddx-provider-shim-"))
-	require.Equal(t, dir+string(os.PathListSeparator)+originalPATH, os.Getenv("PATH"))
-	require.Equal(t, dir, providerShimDirPath)
-
-	reusedDir, reusedCleanup, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "different-ddx"))
-	require.NoError(t, err)
-	require.Equal(t, dir, reusedDir)
-	reusedCleanup()
-	require.DirExists(t, dir, "cleanup from a reuse call must remain a no-op")
-	require.Equal(t, dir+string(os.PathListSeparator)+originalPATH, os.Getenv("PATH"))
-
-	cleanup()
-	require.NoDirExists(t, dir)
-	require.Equal(t, originalPATH, os.Getenv("PATH"))
-	require.Empty(t, providerShimDirPath, "cleanup must reset process-wide reuse state")
-}
-
-// TestRunWithConfigViaService_UsesProviderShimExecutableResolver proves the
-// sole production service entrypoint resolves the ddx executable through the
-// shared validator before mutating PATH.
-func TestRunWithConfigViaService_UsesProviderShimExecutableResolver(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
-	stub := &passthroughTestService{}
-	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
-		return stub, nil
-	})
-	t.Cleanup(func() { SetServiceRunFactory(nil) })
-
-	fakeDDX := filepath.Join(t.TempDir(), "ddx")
-	writeExecutable(t, fakeDDX, "#!/bin/sh\nexit 0\n")
-	oldLookup := providerShimExecutableLookup
-	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
-	t.Cleanup(func() { providerShimExecutableLookup = oldLookup })
-
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{})
-	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
-		Prompt: "test",
-	})
-	require.NoError(t, err)
-	require.True(t, stub.executeCalled, "RunWithConfigViaService must resolve the service through the shared seam")
-	require.Contains(t, os.Getenv("PATH"), "ddx-provider-shim-", "RunWithConfigViaService must install a provider shim")
+	require.True(t, stub.executeCalled, "RunWithConfigViaService should still reach the stub service")
+	require.Equal(t, initialPATH, os.Getenv("PATH"))
 }
 
 // TestAgentPackageSuite_DoesNotExecTestBinaryAsProviderLauncher proves the
-// package-level guard never lets the package tests recurse into
-// `agent.test __provider-launch` or a real provider binary.
+// package-level guard never lets the package tests recurse into a real
+// provider binary.
 func TestAgentPackageSuite_DoesNotExecTestBinaryAsProviderLauncher(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
 	stub := &passthroughTestService{}
 	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
 		return stub, nil
@@ -270,152 +176,4 @@ func TestAgentPackageSuite_DoesNotExecTestBinaryAsProviderLauncher(t *testing.T)
 	}
 	_, err = os.Stat(sentinel)
 	assert.ErrorIs(t, err, os.ErrNotExist, "no provider binary should have executed")
-}
-
-func resetProviderShimStateForTest() {
-	providerShimMu.Lock()
-	defer providerShimMu.Unlock()
-	current := os.Getenv("PATH")
-	if providerShimDirPath != "" {
-		prefix := providerShimDirPath + string(os.PathListSeparator)
-		current = strings.TrimPrefix(current, prefix)
-		_ = os.RemoveAll(providerShimDirPath)
-		providerShimDirPath = ""
-	}
-	for {
-		entries := strings.Split(current, string(os.PathListSeparator))
-		if len(entries) == 0 {
-			break
-		}
-		first := strings.TrimSpace(entries[0])
-		if first == "" || !strings.Contains(filepath.Base(first), "ddx-provider-shim-") {
-			break
-		}
-		_ = os.RemoveAll(first)
-		current = strings.Join(entries[1:], string(os.PathListSeparator))
-	}
-	_ = os.Setenv("PATH", current)
-}
-
-// TestProviderShimWritesCleanupMetadataWithOwnerPID proves EnsureProviderShimOnPATH
-// stamps ExecutionCleanupMetadata with the owning PID so host GC can preserve live
-// workers and reclaim dead-owner shims (ddx-63ed4533).
-func TestProviderShimWritesCleanupMetadataWithOwnerPID(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
-	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
-	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
-
-	dir, cleanup, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
-	require.NoError(t, err)
-	require.NotEmpty(t, dir)
-	t.Cleanup(cleanup)
-
-	meta, err := ReadExecutionCleanupMetadata(dir)
-	require.NoError(t, err)
-	require.NotNil(t, meta.Liveness, "provider shim must write liveness metadata")
-	assert.Equal(t, os.Getpid(), meta.Liveness.PID)
-	assert.Equal(t, dir, meta.WorktreePath)
-	assert.False(t, meta.CreatedAt.IsZero())
-}
-
-// TestProviderShimReleaseRemovesDirAndRestoresPATH proves ReleaseProviderShim
-// tears down the process-global shim and allows a fresh install.
-func TestProviderShimReleaseRemovesDirAndRestoresPATH(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
-	originalPATH := os.Getenv("PATH")
-	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
-	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
-
-	dir, _, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
-	require.NoError(t, err)
-	require.DirExists(t, dir)
-	require.True(t, strings.HasPrefix(os.Getenv("PATH"), dir+string(os.PathListSeparator)))
-
-	ReleaseProviderShim()
-	require.NoDirExists(t, dir)
-	require.Equal(t, originalPATH, os.Getenv("PATH"))
-	require.Empty(t, providerShimDirPath)
-
-	dir2, cleanup2, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx2"))
-	require.NoError(t, err)
-	require.NotEqual(t, dir, dir2, "fresh install after release must create a new dir")
-	cleanup2()
-}
-
-// TestProviderShimProcessReuseKeepsSingleDir proves two installs share one
-// process-global dir and secondary cleanup is a no-op (ddx-63ed4533).
-func TestProviderShimProcessReuseKeepsSingleDir(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
-	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
-	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
-
-	dir1, cleanup1, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
-	require.NoError(t, err)
-	dir2, cleanup2, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "other"))
-	require.NoError(t, err)
-	require.Equal(t, dir1, dir2)
-
-	cleanup2() // no-op for reuse
-	require.DirExists(t, dir1)
-
-	cleanup1()
-	require.NoDirExists(t, dir1)
-}
-
-// TestWorkLoop_ShutdownReleasesProviderShim proves the execute-loop defer
-// releases the process-local provider shim on loop exit.
-func TestWorkLoop_ShutdownReleasesProviderShim(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
-	projectRoot := t.TempDir()
-	testutils.MakeInitializedDDxRoot(t, projectRoot)
-
-	configuredRoot := filepath.Join(t.TempDir(), "scratch", "ddx-exec-wt")
-	t.Setenv(config.ExecutionWorktreeRootEnv, configuredRoot)
-
-	dir, _, err := EnsureProviderShimOnPATH(filepath.Join(t.TempDir(), "ddx"))
-	require.NoError(t, err)
-	require.DirExists(t, dir)
-
-	inner, _, _ := newExecuteLoopTestStore(t)
-	worker := &ExecuteBeadWorker{
-		Store: inner,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusNoChanges,
-				Detail:    "done",
-				SessionID: "sess-shim-release",
-			}, nil
-		}),
-	}
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	_, err = worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		ProjectRoot: projectRoot,
-		Once:        true,
-		CleanupRunner: cleanupRunnerFunc(func(context.Context) (ExecutionCleanupSummary, error) {
-			return ExecutionCleanupSummary{}, nil
-		}),
-		CleanupLog: io.Discard,
-		PreClaimHook: func(context.Context) error {
-			return nil
-		},
-	})
-	// Once mode returns after one attempt or empty queue; either way defer
-	// must ReleaseProviderShim. Ignore run error (test store may not close).
-	_ = err
-	require.NoDirExists(t, dir, "work loop exit must ReleaseProviderShim")
-	require.Empty(t, providerShimDirPath)
 }

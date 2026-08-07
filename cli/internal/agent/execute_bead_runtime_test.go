@@ -118,21 +118,12 @@ func TestLifecycleClearRoutingPinsRequiresExplicitAutonomousRouteEvidence(t *tes
 	}
 }
 
-func TestDispatchViaResolvedConfig_UsesProviderShimExecutableResolver(t *testing.T) {
-	resetProviderShimStateForTest()
-	t.Cleanup(resetProviderShimStateForTest)
-
+func TestDispatchViaResolvedConfig_DoesNotMutatePATH(t *testing.T) {
 	stub := &passthroughTestService{}
 	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
 		return stub, nil
 	})
 	t.Cleanup(func() { SetServiceRunFactory(nil) })
-
-	fakeDDX := filepath.Join(t.TempDir(), "ddx")
-	writeExecutable(t, fakeDDX, "#!/bin/sh\nexit 0\n")
-	originalLookup := providerShimExecutableLookup
-	providerShimExecutableLookup = func() (string, error) { return fakeDDX, nil }
-	t.Cleanup(func() { providerShimExecutableLookup = originalLookup })
 
 	initialPATH := os.Getenv("PATH")
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "haiku"})
@@ -143,8 +134,7 @@ func TestDispatchViaResolvedConfig_UsesProviderShimExecutableResolver(t *testing
 	})
 	require.NoError(t, err)
 	require.True(t, stub.executeCalled, "dispatchViaResolvedConfig must still reach the service adapter")
-	require.NotEqual(t, initialPATH, os.Getenv("PATH"), "dispatchViaResolvedConfig must install a provider PATH shim")
-	require.Contains(t, os.Getenv("PATH"), "ddx-provider-shim-", "dispatchViaResolvedConfig must prepend the provider shim dir")
+	require.Equal(t, initialPATH, os.Getenv("PATH"))
 }
 
 // TestExecutionsMirrorFromConfig verifies that an ExecutionsConfig.Mirror
