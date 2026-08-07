@@ -49,6 +49,12 @@ func TestFizeauV015ExecuteCancellationWaitsForWrappedTree(t *testing.T) {
 	runFizeauV015ExecuteCancellationWaitsForWrappedTree(t)
 }
 
+// TestFizeauExecuteCancellationTerminatesWrappedProcessTree is the AC-named
+// compatibility entrypoint for the same cancellation conformance proof.
+func TestFizeauExecuteCancellationTerminatesWrappedProcessTree(t *testing.T) {
+	TestFizeauV015ExecuteCancellationWaitsForWrappedTree(t)
+}
+
 func runFizeauV015ExecuteCancellationWaitsForWrappedTreeInHelper(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("wrapped process-tree fixture requires POSIX shell and process-group semantics")
