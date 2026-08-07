@@ -80,15 +80,15 @@ func TestWorkStartup_PreservesLiveWorktrees(t *testing.T) {
 
 // TestWorkStartup_ReapsYoungDeadWorktreesWithMetadata proves that the
 // worker cleanup path reclaims attempt trees as soon as liveness is dead,
-// without waiting out DDX_WORKTREE_REAP_MAX_AGE. The age gate only applies
-// when cleanup.json is missing (no durable ownership signal).
+// without waiting out DDX_WORKTREE_REAP_MAX_AGE. Young metadata-less dirs
+// still wait for the setup grace (same clock as ExecutionCleanupManager).
 func TestWorkStartup_ReapsYoungDeadWorktreesWithMetadata(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process-liveness startup cleanup test is unix-oriented")
 	}
 
 	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
-	// Long age gate would previously preserve everything under 72h.
+	// Long max-age hangover must not block liveness-based reclaim.
 	t.Setenv("DDX_WORKTREE_REAP_MAX_AGE", "72h")
 
 	attemptID := "20260515T030405-youngdead"
@@ -98,7 +98,7 @@ func TestWorkStartup_ReapsYoungDeadWorktreesWithMetadata(t *testing.T) {
 	writeStartupRunState(t, projectRoot, "ddx-startup-young", attemptID, worktreePath, deadProcessPID(t), fresh)
 	require.NoError(t, os.Chtimes(worktreePath, fresh, fresh))
 
-	// Metadata-less sibling under the age gate must still be preserved.
+	// Metadata-less sibling under the setup grace must still be preserved.
 	noMetaPath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-startup-nometa-20260515T030405-cafebabe")
 	require.NoError(t, os.MkdirAll(noMetaPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(noMetaPath, "scratch.txt"), []byte("keep\n"), 0o644))
@@ -114,7 +114,37 @@ func TestWorkStartup_ReapsYoungDeadWorktreesWithMetadata(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res))
 	assert.True(t, res.NoReadyWork)
 	assert.NoDirExists(t, worktreePath, "dead attempt with cleanup metadata must be reaped under the age gate")
-	assert.DirExists(t, noMetaPath, "metadata-less young dir must wait for the age gate")
+	assert.DirExists(t, noMetaPath, "metadata-less young dir must wait for the setup grace")
+}
+
+// TestWorkStartup_ReapsOldMetadataLessUnregisteredWorktrees proves that
+// unregistered attempt dirs without cleanup.json are reaped after the setup
+// grace — not held for DDX_WORKTREE_REAP_MAX_AGE (formerly 72h).
+func TestWorkStartup_ReapsOldMetadataLessUnregisteredWorktrees(t *testing.T) {
+	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
+	t.Setenv("DDX_WORKTREE_REAP_MAX_AGE", "72h")
+
+	old := time.Now().Add(-45 * time.Minute).UTC()
+	noMetaPath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-startup-nometa-old-20260515T040506-deadbeef")
+	require.NoError(t, os.MkdirAll(noMetaPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(noMetaPath, "scratch.txt"), []byte("reap\n"), 0o644))
+	require.NoError(t, os.Chtimes(noMetaPath, old, old))
+
+	// Registered worktree missing cleanup.json stays preserved even when old.
+	registeredPath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-startup-reg-nometa-20260515T040506-feedface")
+	runCleanupCommandGit(t, projectRoot, "worktree", "add", "--detach", registeredPath, "HEAD")
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", registeredPath).Run()
+	})
+	require.NoError(t, os.Chtimes(registeredPath, old, old))
+
+	runner := newStartupHousekeepingRunner(projectRoot)
+	report, err := runner.scan(context.Background(), true)
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, noMetaPath, "unregistered metadata-less dir past setup grace must be reaped")
+	assert.DirExists(t, registeredPath, "registered worktree without cleanup.json must be preserved")
+	assert.GreaterOrEqual(t, report.RemovedUnregisteredTempDirs, int64(1))
 }
 
 func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {

@@ -222,18 +222,27 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			}
 		}
 		if !matchedRunState {
-			// No run-state match yet. Keep a grace period so:
+			// No run-state match yet. Keep a short setup grace so:
 			//  1) local-clone setup (cleanup.json before WriteRunState) is not
 			//     reaped mid-flight (that race produced worktree_lost), and
-			//  2) metadata-less dirs still wait out the long max age.
-			grace := r.worktreeMaxAge
-			if !missingMetadata {
-				grace = defaultWorktreeReapGraceAge
-				if grace <= 0 || (r.worktreeMaxAge > 0 && r.worktreeMaxAge < grace) {
-					grace = r.worktreeMaxAge
-				}
+			//  2) metadata-less attempt dirs (test leftovers / abandoned trees)
+			//     are reaped on the same clock as ExecutionCleanupManager —
+			//     not the multi-day DDX_WORKTREE_REAP_MAX_AGE hangover that
+			//     left multi-GB orphans unreclaimed for 72h.
+			grace := defaultWorktreeReapGraceAge
+			if grace <= 0 || (r.worktreeMaxAge > 0 && r.worktreeMaxAge < grace) {
+				grace = r.worktreeMaxAge
 			}
 			if now.Sub(info.ModTime()) < grace {
+				continue
+			}
+		}
+
+		// Registered worktrees without cleanup metadata are preserved — same
+		// rule as ExecutionCleanupManager — so we never force-remove a linked
+		// worktree we cannot attribute.
+		if missingMetadata {
+			if _, ok := registered[filepath.Clean(path)]; ok {
 				continue
 			}
 		}

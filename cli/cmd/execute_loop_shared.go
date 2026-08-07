@@ -27,9 +27,12 @@ import (
 const defaultWorktreeReapMaxAge = 72 * time.Hour
 
 // defaultWorktreeReapGraceAge is the setup-race grace for attempt trees that
-// already have cleanup.json but do not yet match a live (or dead) run-state.
-// Local-clone isolation writes cleanup metadata before WriteRunState; reaping
-// in that window deleted live attempt clones and produced worktree_lost.
+// do not yet match a live (or dead) run-state — whether or not cleanup.json
+// is present. Local-clone isolation writes cleanup metadata before
+// WriteRunState; reaping in that window deleted live attempt clones and
+// produced worktree_lost. Metadata-less dirs under the same temp root use
+// the same clock so test leftovers and abandoned trees do not wait out the
+// multi-day DDX_WORKTREE_REAP_MAX_AGE default.
 const defaultWorktreeReapGraceAge = 30 * time.Minute
 
 func hostnameOrEmpty() string {
