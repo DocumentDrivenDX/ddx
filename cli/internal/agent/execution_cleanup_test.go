@@ -1476,6 +1476,9 @@ func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	testutils.MakeInitializedDDxRoot(t, staleProjectRoot)
 	testutils.MakeInitializedDDxRoot(t, activeProjectRoot)
+	// isRegisteredWorktree skips non-git foreign roots; mark the active
+	// foreign project as a git checkout so registration is honored.
+	require.NoError(t, os.MkdirAll(filepath.Join(activeProjectRoot, ".git"), 0o755))
 	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
 	require.NoError(t, os.MkdirAll(scratchRoot, 0o755))
 
@@ -1499,6 +1502,8 @@ func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{
 		worktrees: []string{activePath},
 	}, scratchRoot)
+	// Past setup grace so unmatched trees are eligible for reclaim.
+	mgr.Now = func() time.Time { return time.Now().UTC().Add(time.Hour) }
 	assertExecutionCleanupFixtureRootsUnder(t, fixtureRoot, mgr)
 
 	summary, err := mgr.Cleanup(context.Background())
@@ -1579,6 +1584,9 @@ func TestExecutionCleanup_RecoversPinnedCandidateAfterCrash(t *testing.T) {
 
 	gitOps := &executionCleanupTestGitOps{}
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
+	// Past setup grace: abandoned candidate trees reclaim after the mid-setup
+	// window; recovery is via candidate_ref, not the disk tree.
+	mgr.Now = func() time.Time { return time.Now().UTC().Add(time.Hour) }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -1649,6 +1657,8 @@ func TestExecutionCleanup_ReclaimsStaleUnpinnedCandidateWorktree(t *testing.T) {
 	}, map[string]string{"scratch.txt": "stale\n"})
 
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	// Past setup grace so a young unmatched tree is not held as mid-setup.
+	mgr.Now = func() time.Time { return time.Now().UTC().Add(time.Hour) }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
