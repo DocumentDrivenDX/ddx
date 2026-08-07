@@ -2219,11 +2219,8 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintln(runtime.Log, "server reachable: resuming queue")
 				}
-				break
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-		}
-		if serverOutage.Active() {
-			return executeBeadIterationOutcome{Continue: true}, nil
 		}
 	}
 	if runtime.BudgetStop != nil {

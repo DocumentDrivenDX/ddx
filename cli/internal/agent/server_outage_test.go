@@ -9,6 +9,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -134,4 +135,106 @@ func TestExecuteBeadWorker_ServerOutagePausesAndResumesWatchQueue(t *testing.T) 
 		assert.Empty(t, got.Owner)
 		assert.Empty(t, got.Extra["work-retry-after"], "server outage must not set a per-bead cooldown on %s", id)
 	}
+}
+
+func TestExecuteBeadLoopReleasesServerUnavailableWhenProbeHealthy(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+	beadIDs := []string{"ddx-server-recover-a", "ddx-server-recover-b"}
+	for i, id := range beadIDs {
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
+			ID:       id,
+			Title:    "server recovery bead " + id,
+			Priority: i,
+		}))
+	}
+
+	projectRoot := store.Dir
+	sessionID := "sess-server-recover"
+	var (
+		attempts   atomic.Int32
+		probeCalls atomic.Int32
+		started    = make(chan struct{})
+		release    = make(chan struct{})
+		done       = make(chan error, 1)
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			attempt := attempts.Add(1)
+			switch attempt {
+			case 1:
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusExecutionFailed,
+					Detail:    "ResolveRoute: no viable routing candidate: 3 candidates rejected",
+					SessionID: sessionID,
+					BaseRev:   "aaaa1111",
+					ResultRev: "aaaa1111",
+				}, nil
+			case 2:
+				close(started)
+				<-release
+				cancel()
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: sessionID,
+					BaseRev:   "aaaa1111",
+					ResultRev: "bbbb2222",
+				}, nil
+			default:
+				t.Fatalf("unexpected extra attempt for bead %s", beadID)
+				return ExecuteBeadReport{}, nil
+			}
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	go func() {
+		_, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Mode:                      executeloop.ModeWatch,
+			IdleInterval:              time.Millisecond,
+			ProjectRoot:               projectRoot,
+			SessionID:                 sessionID,
+			WorkerID:                  "worker-server-recover",
+			ServerFailureThreshold:    1,
+			ServerHealthProbeInterval: 5 * time.Millisecond,
+			ServerHealthProbe: func(context.Context) (bool, error) {
+				switch probeCalls.Add(1) {
+				case 1:
+					return false, nil
+				default:
+					return true, nil
+				}
+			},
+		})
+		done <- err
+	}()
+
+	require.Eventually(t, func() bool {
+		select {
+		case <-started:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond, "worker never resumed onto the next ready bead")
+
+	require.Eventually(t, func() bool {
+		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
+		if err != nil {
+			return false
+		}
+		return rec.CurrentBead == beadIDs[1] && rec.Phase != serverUnavailableStatePhase
+	}, time.Second, 5*time.Millisecond, "server.unavailable must clear after a healthy probe")
+
+	close(release)
+	require.ErrorIs(t, <-done, context.Canceled)
+	assert.GreaterOrEqual(t, probeCalls.Load(), int32(2), "probe must have observed recovery")
+	assert.GreaterOrEqual(t, attempts.Load(), int32(2), "worker must claim the next ready bead after recovery")
 }
