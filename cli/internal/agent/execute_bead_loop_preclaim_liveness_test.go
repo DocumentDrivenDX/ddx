@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -310,51 +309,6 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 	}
 	require.NoError(t, store.Create(context.Background(), candidate))
 
-	// Three synthetic providers: baseline (pre-hook), foreign (other worker),
-	// and hook-introduced (must appear in candidate metadata).
-	const (
-		baselinePID  = 11001
-		foreignPID   = 22002
-		hookChildPID = 33003
-	)
-	var (
-		mu           sync.Mutex
-		hookActive   bool
-		observedPIDs []int
-	)
-	restoreScanner := providerChildScanner
-	t.Cleanup(func() { providerChildScanner = restoreScanner })
-	providerChildScanner = func(_ context.Context, rootPID int, now time.Time) ([]providerChildProcess, error) {
-		// rootPID-scoped scan: only report foreignPID when the caller asks
-		// for a different worker root (other-worker exclusion).
-		mu.Lock()
-		active := hookActive
-		mu.Unlock()
-		var procs []providerChildProcess
-		if rootPID == os.Getpid() {
-			// Always present under this worker before and during the hook.
-			procs = append(procs, providerChildProcess{
-				PID: baselinePID, Provider: "claude", StartedAt: now.Add(-time.Minute),
-			})
-			if active {
-				procs = append(procs, providerChildProcess{
-					PID: hookChildPID, Provider: "codex", StartedAt: now,
-				})
-			}
-		} else {
-			// Other worker's tree — must never appear in candidate metadata.
-			procs = append(procs, providerChildProcess{
-				PID: foreignPID, Provider: "gemini", StartedAt: now,
-			})
-		}
-		mu.Lock()
-		for _, p := range procs {
-			observedPIDs = append(observedPIDs, p.PID)
-		}
-		mu.Unlock()
-		return procs, nil
-	}
-
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var execCalls int32
@@ -369,7 +323,7 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 	}
 
 	decomp := &PreClaimDecomposition{
-		Rationale: "split for provider-child metadata coverage",
+		Rationale: "split for resolving liveness coverage",
 		Children: []PreClaimDecompositionChild{
 			{Title: "Child A", Description: "PROBLEM\nChild A\n\nROOT CAUSE\ncli/internal/agent/preclaim_decomp_liveness.go:1\n", Acceptance: "1. TestChildA\n2. cd cli && go test ./internal/agent/..."},
 		},
@@ -402,9 +356,6 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 				}, nil
 			},
 			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
-				mu.Lock()
-				hookActive = true
-				mu.Unlock()
 				close(entered)
 				select {
 				case <-release:
@@ -423,39 +374,23 @@ func TestWorkLoop_PreClaimDecompositionPublishesProviderChildMetadata(t *testing
 		t.Fatal("decomposition hook never entered")
 	}
 
-	// While the hook is blocked, sidecar must report candidate + resolving +
-	// only the hook-introduced provider child.
 	require.Eventually(t, func() bool {
 		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
 		if err != nil {
 			return false
 		}
-		if rec.CurrentBead != candidate.ID || rec.Phase != "resolving" {
-			return false
-		}
-		for _, child := range rec.ProviderChildren {
-			if child.PID == hookChildPID {
-				return true
-			}
-		}
-		return false
-	}, 2*time.Second, 5*time.Millisecond, "sidecar must publish candidate provider-child metadata while phase=resolving")
+		return rec.CurrentBead == candidate.ID &&
+			rec.Phase == "resolving" &&
+			!rec.LastActivityAt.IsZero()
+	}, 2*time.Second, 5*time.Millisecond, "sidecar must publish candidate bead, phase=resolving, and last_activity_at")
 
 	rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
 	require.NoError(t, err)
 	assert.Equal(t, candidate.ID, rec.CurrentBead)
 	assert.Equal(t, "resolving", rec.Phase)
 	assert.Empty(t, rec.AttemptID, "preclaim resolving must not assign an implementation attempt_id")
+	assert.Empty(t, rec.ProviderChildren, "preclaim resolving must not attach provider-child metadata")
 
-	var pids []int
-	for _, child := range rec.ProviderChildren {
-		pids = append(pids, child.PID)
-	}
-	assert.Contains(t, pids, hookChildPID, "hook-introduced provider child must appear")
-	assert.NotContains(t, pids, baselinePID, "pre-baseline provider process must be excluded")
-	assert.NotContains(t, pids, foreignPID, "other-worker provider process must be excluded")
-
-	// Prove no implementation attempt / executor activity while resolving.
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
 	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
@@ -548,52 +483,7 @@ func TestWorkLoop_PreClaimDecompositionClearsTransientLiveness(t *testing.T) {
 			}
 			require.NoError(t, store.Create(context.Background(), foreignBead))
 
-			providerDir := t.TempDir()
-			baselinePID := startFakeProviderChild(t, providerDir, "claude")
-			foreignPID := startFakeProviderChild(t, providerDir, "gemini")
-			restoreScanner := providerChildScanner
-			restoreTerminate := terminateProviderChild
-			var terminated []int
-			var mu sync.Mutex
-			var hookChildPID int
-			var hookActive atomic.Bool
-			providerChildScanner = func(_ context.Context, rootPID int, now time.Time) ([]providerChildProcess, error) {
-				if rootPID != os.Getpid() {
-					return []providerChildProcess{{
-						PID:              foreignPID,
-						Provider:         "gemini",
-						Command:          "/usr/local/bin/gemini --sleep",
-						StartedAt:        now.Add(-time.Minute),
-						OwnerProviderPID: foreignPID,
-					}}, nil
-				}
-				procs := []providerChildProcess{{
-					PID:       baselinePID,
-					Provider:  "claude",
-					Command:   "/usr/local/bin/claude --sleep",
-					StartedAt: now.Add(-time.Minute),
-				}}
-				if hookActive.Load() && hookChildPID > 0 {
-					procs = append(procs, providerChildProcess{
-						PID:       hookChildPID,
-						Provider:  "codex",
-						Command:   "/usr/local/bin/codex --sleep",
-						StartedAt: now,
-					})
-				}
-				return procs, nil
-			}
-			terminateProviderChild = func(pid int) {
-				mu.Lock()
-				terminated = append(terminated, pid)
-				mu.Unlock()
-				restoreTerminate(pid)
-			}
-			t.Cleanup(func() {
-				providerChildScanner = restoreScanner
-				terminateProviderChild = restoreTerminate
-			})
-
+			const foreignPID = 22002
 			foreignWorkerID := "worker-foreign-preclaim"
 			require.NoError(t, workerstatus.WriteLiveness(projectRoot, foreignWorkerID, workerstatus.LivenessRecord{
 				WorkerID:       foreignWorkerID,
@@ -618,8 +508,6 @@ func TestWorkLoop_PreClaimDecompositionClearsTransientLiveness(t *testing.T) {
 				ctx,
 				func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
 					assert.Equal(t, "ddx-preclaim-reap", beadID)
-					hookChildPID = startFakeProviderChild(t, providerDir, "codex")
-					hookActive.Store(true)
 					return tc.run(ctx, cancel, decomp)
 				},
 				"ddx-preclaim-reap",
@@ -642,19 +530,6 @@ func TestWorkLoop_PreClaimDecompositionClearsTransientLiveness(t *testing.T) {
 				assert.Nil(t, got)
 			} else if tc.wantErr == nil {
 				assert.Equal(t, decomp, got)
-			}
-
-			hookActive.Store(false)
-
-			assert.Contains(t, terminated, hookChildPID, "hook-created provider child must be selected for cleanup")
-			assert.NotContains(t, terminated, baselinePID, "pre-hook baseline provider child must not be selected for cleanup")
-			assert.NotContains(t, terminated, foreignPID, "foreign worker provider child must not be selected for cleanup")
-			assertProcessGone(t, hookChildPID)
-			if !signalProcessAlive(foreignPID) {
-				t.Fatalf("foreign worker provider child %d was reaped for %s", foreignPID, tc.name)
-			}
-			if !signalProcessAlive(baselinePID) {
-				t.Fatalf("pre-hook baseline provider child %d was reaped for %s", baselinePID, tc.name)
 			}
 
 			require.Eventually(t, func() bool {
@@ -752,19 +627,6 @@ func TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness(t *testing.T) 
 	}
 	require.NoError(t, store.Create(context.Background(), candidate))
 
-	const hookChildPID = 44004
-	var hookActive atomic.Bool
-	restoreScanner := providerChildScanner
-	t.Cleanup(func() { providerChildScanner = restoreScanner })
-	providerChildScanner = func(_ context.Context, rootPID int, now time.Time) ([]providerChildProcess, error) {
-		if rootPID != os.Getpid() || !hookActive.Load() {
-			return nil, nil
-		}
-		return []providerChildProcess{{
-			PID: hookChildPID, Provider: "codex", StartedAt: now,
-		}}, nil
-	}
-
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var execCalls int32
@@ -816,7 +678,6 @@ func TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness(t *testing.T) 
 				}, nil
 			},
 			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
-				hookActive.Store(true)
 				close(entered)
 				select {
 				case <-release:
@@ -839,7 +700,7 @@ func TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness(t *testing.T) 
 		t.Fatal("decomposition hook never entered")
 	}
 
-	// First snapshot: candidate + resolving + provider child.
+	// First snapshot: candidate + resolving + last_activity_at.
 	var first workerstatus.LivenessRecord
 	require.Eventually(t, func() bool {
 		rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
@@ -849,14 +710,9 @@ func TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness(t *testing.T) 
 		if rec.CurrentBead != candidate.ID || rec.Phase != "resolving" || rec.LastActivityAt.IsZero() {
 			return false
 		}
-		for _, child := range rec.ProviderChildren {
-			if child.PID == hookChildPID {
-				first = rec
-				return true
-			}
-		}
-		return false
-	}, 2*time.Second, 5*time.Millisecond, "combined resolving sidecar must include candidate, phase, and provider-child metadata")
+		first = rec
+		return true
+	}, 2*time.Second, 5*time.Millisecond, "combined resolving sidecar must include candidate, phase, and last_activity_at")
 
 	assert.Empty(t, first.AttemptID, "resolving liveness must not invent an implementation attempt_id")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
@@ -876,7 +732,7 @@ func TestWorkLoop_PreClaimDecompositionPublishesResolvingLiveness(t *testing.T) 
 	rec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
 	require.NoError(t, err)
 	assert.Empty(t, rec.AttemptID)
-	assert.NotEmpty(t, rec.ProviderChildren)
+	assert.Empty(t, rec.ProviderChildren)
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
 
 	got, err := store.Get(context.Background(), candidate.ID)
