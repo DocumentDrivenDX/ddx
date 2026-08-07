@@ -105,6 +105,14 @@ func writeExecutionCleanupCandidate(t *testing.T, dir string, meta ExecutionClea
 	}
 }
 
+// ageExecutionCleanupDir moves dir ModTime past the setup-grace window so
+// unmatched attempt trees are reclaim-eligible (grace uses mgr.Now vs mtime).
+func ageExecutionCleanupDir(t *testing.T, dir string, now time.Time) {
+	t.Helper()
+	aged := now.Add(-time.Hour)
+	require.NoError(t, os.Chtimes(dir, aged, aged))
+}
+
 func writeExecutionCleanupCandidateWithoutMetadata(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(dir, 0o755))
@@ -318,7 +326,11 @@ func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(otherPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(otherPath, "ignore.txt"), []byte("keep\n"), 0o644))
 
+	now := time.Now().UTC()
+	ageExecutionCleanupDir(t, stalePath, now)
+	ageExecutionCleanupDir(t, livePath, now)
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.Now = func() time.Time { return now }
 	mgr.Probe = executionCleanupTestProbe{
 		live: map[string]bool{
 			filepath.Clean(livePath): true,
@@ -346,14 +358,18 @@ func TestExecutionCleanup_RemovesMetadataLessUnregisteredDDXTempDirs(t *testing.
 	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-no-meta-20260506T154739-feedface")
 	writeExecutionCleanupCandidateWithoutMetadata(t, stalePath, map[string]string{"scratch.txt": "stale\n"})
 	writeExecutionCleanupCandidateWithoutMetadata(t, activePath, map[string]string{"scratch.txt": "active\n"})
+	now := time.Now().UTC()
+	ageExecutionCleanupDir(t, stalePath, now)
+	ageExecutionCleanupDir(t, activePath, now)
 	require.NoError(t, WriteRunState(projectRoot, RunState{
 		BeadID:       "ddx-active-no-meta",
 		AttemptID:    "20260506T154739-feedface",
-		StartedAt:    time.Now().UTC(),
+		StartedAt:    now,
 		WorktreePath: activePath,
 	}))
 
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -371,11 +387,14 @@ func TestExecutionCleanup_PreservesRegisteredMetadataLessWorktree(t *testing.T) 
 
 	worktreePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-registered-no-meta-20260506T154739-c001d00d")
 	writeExecutionCleanupCandidateWithoutMetadata(t, worktreePath, map[string]string{"scratch.txt": "registered\n"})
+	now := time.Now().UTC()
+	ageExecutionCleanupDir(t, worktreePath, now)
 
 	gitOps := &executionCleanupTestGitOps{
 		worktrees: []string{worktreePath},
 	}
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
+	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -526,20 +545,25 @@ func TestExecutionCleanup_PreservesMultipleRunStateAttempts(t *testing.T) {
 		AttemptID:    "20260506T154739-55556666",
 		WorktreePath: stalePath,
 	}, map[string]string{"scratch.txt": "stale\n"})
+	now := time.Now().UTC()
+	ageExecutionCleanupDir(t, activeOnePath, now)
+	ageExecutionCleanupDir(t, activeTwoPath, now)
+	ageExecutionCleanupDir(t, stalePath, now)
 	require.NoError(t, WriteRunState(projectRoot, RunState{
 		BeadID:       "ddx-active-one",
 		AttemptID:    "20260506T154739-11112222",
-		StartedAt:    time.Now().UTC(),
+		StartedAt:    now,
 		WorktreePath: activeOnePath,
 	}))
 	require.NoError(t, WriteRunState(projectRoot, RunState{
 		BeadID:       "ddx-active-two",
 		AttemptID:    "20260506T154739-33334444",
-		StartedAt:    time.Now().UTC(),
+		StartedAt:    now,
 		WorktreePath: activeTwoPath,
 	}))
 
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -626,6 +650,9 @@ func TestExecutionCleanup_RemovesExpiredAttemptOnlyAfterHeartbeatExpiry(t *testi
 		},
 	}
 	writeExecutionCleanupCandidate(t, worktreePath, meta, map[string]string{"scratch.txt": "active\n"})
+	// Age the tree so reclaim after expiry is not blocked by setup grace
+	// (grace compares mgr.Now to dir ModTime).
+	ageExecutionCleanupDir(t, worktreePath, now)
 
 	gitOps := &executionCleanupTestGitOps{worktrees: []string{worktreePath}}
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
@@ -732,6 +759,7 @@ func TestExecutionCleanup_ReportsPreservedLiveAttempt(t *testing.T) {
 func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
+	now := time.Now().UTC()
 
 	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-summary-20260506T154739-99990000")
 	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
@@ -740,6 +768,7 @@ func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 		AttemptID:    "20260506T154739-99990000",
 		WorktreePath: stalePath,
 	}, map[string]string{"payload.txt": strings.Repeat("x", 64)})
+	ageExecutionCleanupDir(t, stalePath, now)
 
 	executionsDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-summary")
 	require.NoError(t, os.MkdirAll(executionsDir, 0o755))
@@ -748,6 +777,7 @@ func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 
 	gitOps := &executionCleanupTestGitOps{listErr: errors.New("worktree list unavailable")}
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
+	mgr.Now = func() time.Time { return now }
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -765,6 +795,7 @@ func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 func TestExecutionCleanup_DryRunLeavesCandidatesOnDisk(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
+	now := time.Now().UTC()
 
 	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-dryrun-20260506T154739-abcdef01")
 	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
@@ -773,14 +804,16 @@ func TestExecutionCleanup_DryRunLeavesCandidatesOnDisk(t *testing.T) {
 		AttemptID:    "20260506T154739-abcdef01",
 		WorktreePath: stalePath,
 	}, map[string]string{"scratch.txt": "dry-run\n"})
+	ageExecutionCleanupDir(t, stalePath, now)
 	require.NoError(t, WriteRunState(projectRoot, RunState{
 		BeadID:       "ddx-dryrun",
 		AttemptID:    "20260506T154739-live-abcdef01",
-		StartedAt:    time.Now().UTC(),
+		StartedAt:    now,
 		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
 	}))
 
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.Now = func() time.Time { return now }
 	mgr.DryRun = true
 
 	summary, err := mgr.Cleanup(context.Background())
