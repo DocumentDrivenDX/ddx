@@ -201,3 +201,29 @@ func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 		})
 	}
 }
+
+func TestAttemptPolicyRejectsAmbiguousTypedFizeauResult(t *testing.T) {
+	input := AttemptPolicyInput{
+		Final: &agentlib.ServiceFinalData{
+			Status:  "success",
+			Outcome: agentlib.SessionOutcomeSuccess,
+			Cause:   agentlib.TerminalCauseCompleted,
+			Stage:   agentlib.SessionStageHarness,
+		},
+		ImmediateErr: &agentlib.NoViableProviderForNow{
+			RetryAfter: time.Unix(1_700_000_000, 0),
+		},
+		Evidence: AttemptPolicyEvidence{
+			LandReady:              true,
+			NewAttemptRetryAllowed: true,
+		},
+	}
+
+	got := DecideAttemptPolicy(input)
+	if got.Action != AttemptPolicyActionLand {
+		t.Fatalf("DecideAttemptPolicy(ambiguous).Action = %q, want %q", got.Action, AttemptPolicyActionLand)
+	}
+	if got.Reason != "fizeau_outcome_success" {
+		t.Fatalf("DecideAttemptPolicy(ambiguous).Reason = %q, want %q", got.Reason, "fizeau_outcome_success")
+	}
+}
