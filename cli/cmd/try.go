@@ -119,7 +119,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
 	f.warnIfInstalledBinaryBehindSource(cmd)
 
-	if _, err := newStartupHousekeepingRunner(projectRoot).Cleanup(cmd.Context()); err != nil {
+	if _, err := newWorkLoopCleanupRunner(projectRoot).Cleanup(cmd.Context()); err != nil {
 		return err
 	}
 

@@ -286,7 +286,11 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if jsonOutput {
 		cleanupLog = io.Discard
 	}
-	cleanupRunner := newStartupHousekeepingRunner(projectRoot)
+	// Composite runner: lightweight worktree/worker/evidence scan plus the
+	// full ExecutionCleanupManager (fixture-bin, provider shims, land-wts).
+	// Startup-only reclaim never scanned ~/.cache/ddx/fixture-bin, so dead
+	// test binaries piled up to tens of GB while attempt worktrees were reaped.
+	cleanupRunner := newWorkLoopCleanupRunner(projectRoot)
 	if tryTargetBeadID == "" && spec.Mode != executeloop.ModeWatch {
 		if breakdown, bErr := store.ReadyExecutionBreakdown(); bErr != nil {
 			return bErr

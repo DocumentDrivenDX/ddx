@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/scratchowner"
 )
 
 // ExecutionCleanupMetadataFileName is the filename used to describe ownership
@@ -464,7 +465,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		// local-clone isolation. Without a matching run-state yet, do not reap
 		// young trees — that race deleted live attempt clones (worktree_lost).
 		// Proven-dead run-states (matched but not live) skip this grace.
-		if matchedRunState == nil {
+		// Abandoned foreign/test project trees also skip grace: the owning
+		// project is gone, so there is no mid-setup race to protect, and test
+		// suites that share the host exec-wt cache would otherwise pin multi-
+		// GB leftovers for the full grace window on every package-gate run.
+		if matchedRunState == nil && !AbandonedForeignProjectRoot(meta.ProjectRoot, m.ProjectRoot) {
 			const setupGrace = 30 * time.Minute
 			if info, statErr := os.Stat(path); statErr == nil && now().Sub(info.ModTime()) < setupGrace {
 				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
@@ -748,6 +753,42 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 			}
 
 			meta, metaErr := ReadExecutionCleanupMetadata(path)
+			deadScratchOwner := false
+			if metaErr != nil {
+				// Process-lifetime scratch (fixture-bin, fizeau testseam) owns
+				// via scratch-owner.json, not cleanup.json. Honor that marker
+				// before the host-global "missing metadata → preserve" rule so
+				// dead owners under ~/.cache/ddx/fixture-bin are reclaimed.
+				if ownerStatus, _, ownerErr := scratchowner.Evaluate(path); ownerErr == nil {
+					switch ownerStatus {
+					case scratchowner.StatusLive:
+						summary.PreservedActiveScratchDirs++
+						summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+							Path:    path,
+							Class:   "preserved_active_scratch_dir",
+							Message: "scratch-owner process is live",
+						})
+						continue
+					case scratchowner.StatusUncertain:
+						summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+							Path:    path,
+							Class:   executionCleanupUncertainScratchObservationClass,
+							Message: "scratch-owner identity uncertain; preserving",
+						})
+						continue
+					case scratchowner.StatusDead:
+						// Owner process is gone — reclaim without waiting out
+						// ScratchMinAge (that gate protects live test runs, not
+						// crashed producers that left multi-GB binaries behind).
+						deadScratchOwner = true
+						meta = ExecutionCleanupMetadata{
+							ProjectRoot:  m.ProjectRoot,
+							WorktreePath: path,
+						}
+						metaErr = nil
+					}
+				}
+			}
 			if metaErr != nil {
 				if trustReason := m.trustedScratchRootReason(root); trustReason != "" {
 					class := executionCleanupUnownedScratchObservationClass
@@ -815,9 +856,10 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 			// wait out ScratchMinAge: a hung `git worktree add` on a slow FS
 			// leaves locked multi-GB trees that would otherwise sit for hours
 			// while measureTree walks them. Unregistered fresh scratch still
-			// respects minAge so live tests are not reaped mid-run.
+			// respects minAge so live tests are not reaped mid-run. Dead
+			// scratch-owner markers already proved the producer is gone.
 			_, isRegistered := registered[filepath.Clean(path)]
-			if !isRegistered {
+			if !isRegistered && !deadScratchOwner {
 				if age := now.Sub(info.ModTime()); age < minAge {
 					summary.PreservedActiveScratchDirs++
 					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
@@ -996,6 +1038,12 @@ func (m *ExecutionCleanupManager) scratchRoots(tempRoot string) []string {
 		parent := filepath.Dir(filepath.Clean(tempRoot))
 		if parent != "" && parent != "." {
 			roots = append(roots, parent)
+			// testutils.fixtureBinaryScratchDir nests process-lifetime binaries
+			// one level under the cache parent as <parent>/fixture-bin/ddx-fixture-bin-*.
+			// A single-level scan of parent never sees those dirs (the container
+			// name does not match ddx-fixture-bin-), leaving multi-GB dead
+			// binaries unreclaimed. Scan the known container explicitly.
+			roots = append(roots, filepath.Join(parent, "fixture-bin"))
 		}
 	}
 	if m.ProjectRoot != "" {
@@ -1005,6 +1053,21 @@ func (m *ExecutionCleanupManager) scratchRoots(tempRoot string) []string {
 	// executions.temp_worktree_root does not strand older DDx-owned scratch.
 	roots = append(roots, os.TempDir())
 	return cleanUniquePaths(roots)
+}
+
+// AbandonedForeignProjectRoot reports whether metaProject names a foreign
+// project that no longer exists on disk. Those trees cannot be mid-setup for
+// this manager's project and are safe to reclaim without the setup grace.
+func AbandonedForeignProjectRoot(metaProject, managerProject string) bool {
+	metaProject = strings.TrimSpace(metaProject)
+	if metaProject == "" || sameCleanPath(metaProject, managerProject) {
+		return false
+	}
+	info, err := os.Stat(metaProject)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	return !info.IsDir()
 }
 
 func (m *ExecutionCleanupManager) reclaimableTempRoots() []string {

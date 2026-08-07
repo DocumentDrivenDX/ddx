@@ -1014,7 +1014,77 @@ func TestExecutionCleanup_DefaultScratchRootsIncludeConfiguredParentAndLegacyTem
 
 	roots := mgr.scratchRoots(tempRoot)
 	assert.Contains(t, roots, configuredParent)
+	assert.Contains(t, roots, filepath.Join(configuredParent, "fixture-bin"),
+		"nested fixture-bin container must be scanned; single-level parent scan never sees ddx-fixture-bin-*")
 	assert.Contains(t, roots, os.TempDir())
+}
+
+func TestExecutionCleanup_ReclaimsYoungAbandonedForeignWorktreeWithoutGrace(t *testing.T) {
+	// Package-gate tests dump attempt trees into the shared host exec-wt with
+	// cleanup.json pointing at a fleet-tmp project that is deleted when the
+	// test ends. Those must reclaim without waiting out the 30m setup grace.
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	// Foreign project path that does not exist on disk.
+	foreignProject := filepath.Join(t.TempDir(), "gone-fleet-project", "001")
+
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-fleet-20260807T220000-deadbeef")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  foreignProject,
+		BeadID:       "ddx-fleet",
+		AttemptID:    "20260807T220000-deadbeef",
+		WorktreePath: stalePath,
+		Registered:   true,
+	}, map[string]string{"scratch.txt": "fleet leftover\n"})
+	// Young tree: well under the 30m setup grace.
+	young := time.Now().UTC().Add(-2 * time.Minute)
+	require.NoError(t, os.Chtimes(stalePath, young, young))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, &executionCleanupTestGitOps{})
+	mgr.Now = func() time.Time { return time.Now().UTC() }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, stalePath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.False(t, hasObservationClass(summary.Observations, "preserved_setup_grace"),
+		"abandoned foreign project must not be held under setup grace")
+}
+
+func TestExecutionCleanup_ReclaimsDeadScratchOwnerFixtureBinWithoutCleanupJSON(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	projectRoot := filepath.Join(fixtureRoot, "project")
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	// Mimic ~/.cache/ddx layout: parent/fixture-bin/ddx-fixture-bin-*.
+	cacheParent := filepath.Join(fixtureRoot, "cache")
+	fixtureContainer := filepath.Join(cacheParent, "fixture-bin")
+	execWt := filepath.Join(cacheParent, "ddx-exec-wt")
+	require.NoError(t, os.MkdirAll(fixtureContainer, 0o755))
+	require.NoError(t, os.MkdirAll(execWt, 0o755))
+
+	deadDir := filepath.Join(fixtureContainer, "ddx-fixture-bin-deadowner")
+	require.NoError(t, os.MkdirAll(deadDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(deadDir, "ddx"), []byte("fake-bin"), 0o755))
+	// Dead PID with no start identity → StatusDead via scratchowner.Classify.
+	marker := []byte(`{
+  "kind": "fixture-bin",
+  "owner_pid": 999999999,
+  "created_at": "2026-08-01T00:00:00Z"
+}
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(deadDir, "scratch-owner.json"), marker, 0o600))
+
+	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, execWt, &executionCleanupTestGitOps{}, fixtureContainer)
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return time.Now().UTC() }
+	assertExecutionCleanupFixtureRootsUnder(t, fixtureRoot, mgr)
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, deadDir)
+	assert.Equal(t, int64(1), summary.RemovedScratchDirs)
 }
 
 func TestExecutionCleanup_CanReclaimForeignTestOwnedPathUnderConfiguredRoot(t *testing.T) {

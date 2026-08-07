@@ -116,6 +116,92 @@ func (r *startupHousekeepingRunner) Cleanup(ctx context.Context) (agent.Executio
 	return summary, nil
 }
 
+// compositeExecutionCleanupRunner runs lightweight startup housekeeping then
+// the full ExecutionCleanupManager. Workers previously used only the
+// lightweight path, which never scanned ~/.cache/ddx/fixture-bin or other
+// process-lifetime scratch roots — leaving multi-GB dead fixture binaries
+// unreclaimed forever while worktrees were reaped on the 10m cadence.
+type compositeExecutionCleanupRunner struct {
+	startup *startupHousekeepingRunner
+	full    *agent.ExecutionCleanupManager
+}
+
+func newWorkLoopCleanupRunner(projectRoot string) *compositeExecutionCleanupRunner {
+	startup := newStartupHousekeepingRunner(projectRoot)
+	full := agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{})
+	if startup != nil && startup.tempRoot != "" {
+		full.TempRoot = startup.tempRoot
+	}
+	return &compositeExecutionCleanupRunner{startup: startup, full: full}
+}
+
+func (r *compositeExecutionCleanupRunner) Cleanup(ctx context.Context) (agent.ExecutionCleanupSummary, error) {
+	if r == nil {
+		return agent.ExecutionCleanupSummary{}, nil
+	}
+	var summary agent.ExecutionCleanupSummary
+	var firstErr error
+	if r.startup != nil {
+		s, err := r.startup.Cleanup(ctx)
+		summary = s
+		firstErr = err
+	}
+	if r.full != nil {
+		full, err := r.full.Cleanup(ctx)
+		if firstErr == nil {
+			firstErr = err
+		}
+		summary = mergeExecutionCleanupSummaries(summary, full)
+	}
+	return summary, firstErr
+}
+
+// mergeExecutionCleanupSummaries folds a full-manager pass into the lightweight
+// startup scan counts. Overlapping worktree reclaim is idempotent (second pass
+// finds empty slots), so additive counters remain a correct lower bound on
+// total reclaimed work for this composite pass.
+func mergeExecutionCleanupSummaries(base, extra agent.ExecutionCleanupSummary) agent.ExecutionCleanupSummary {
+	out := base
+	if out.ProjectRoot == "" {
+		out.ProjectRoot = extra.ProjectRoot
+	}
+	if out.TempRoot == "" {
+		out.TempRoot = extra.TempRoot
+	}
+	if extra.ScannedTempDirs > out.ScannedTempDirs {
+		out.ScannedTempDirs = extra.ScannedTempDirs
+	}
+	if extra.ScannedEvidenceDirs > out.ScannedEvidenceDirs {
+		out.ScannedEvidenceDirs = extra.ScannedEvidenceDirs
+	}
+	if extra.CompleteEvidenceDirs > out.CompleteEvidenceDirs {
+		out.CompleteEvidenceDirs = extra.CompleteEvidenceDirs
+	}
+	if extra.ScannedScratchDirs > out.ScannedScratchDirs {
+		out.ScannedScratchDirs = extra.ScannedScratchDirs
+	}
+	out.RemovedUnregisteredTempDirs += extra.RemovedUnregisteredTempDirs
+	out.RemovedRegisteredWorktrees += extra.RemovedRegisteredWorktrees
+	out.RemovedRunStateFiles += extra.RemovedRunStateFiles
+	out.RemovedScratchDirs += extra.RemovedScratchDirs
+	out.PreservedActiveScratchDirs += extra.PreservedActiveScratchDirs
+	out.RemovedEvidenceDirs += extra.RemovedEvidenceDirs
+	out.RemovedAgentLogs += extra.RemovedAgentLogs
+	out.RemovedWorkerDirs += extra.RemovedWorkerDirs
+	out.RemovedClaimLivenessTmpFiles += extra.RemovedClaimLivenessTmpFiles
+	out.BytesReclaimed += extra.BytesReclaimed
+	out.InodesReclaimed += extra.InodesReclaimed
+	out.ScratchBytesReclaimed += extra.ScratchBytesReclaimed
+	out.ScratchInodesReclaimed += extra.ScratchInodesReclaimed
+	out.ClaimLivenessBytesReclaimed += extra.ClaimLivenessBytesReclaimed
+	out.ClaimLivenessInodesReclaimed += extra.ClaimLivenessInodesReclaimed
+	out.Warnings = append(out.Warnings, extra.Warnings...)
+	out.Issues = append(out.Issues, extra.Issues...)
+	out.Observations = append(out.Observations, extra.Observations...)
+	out.ProcessFindings = append(out.ProcessFindings, extra.ProcessFindings...)
+	return out
+}
+
 func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (startupHousekeepingReport, error) {
 	if r == nil {
 		return startupHousekeepingReport{}, nil
@@ -229,12 +315,18 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			//     are reaped on the same clock as ExecutionCleanupManager —
 			//     not the multi-day DDX_WORKTREE_REAP_MAX_AGE hangover that
 			//     left multi-GB orphans unreclaimed for 72h.
-			grace := defaultWorktreeReapGraceAge
-			if grace <= 0 || (r.worktreeMaxAge > 0 && r.worktreeMaxAge < grace) {
-				grace = r.worktreeMaxAge
-			}
-			if now.Sub(info.ModTime()) < grace {
-				continue
+			// Abandoned foreign/test project trees skip grace (same rule as
+			// ExecutionCleanupManager): the owning project is gone, so there
+			// is no mid-setup race, and package-gate tests that share the
+			// host exec-wt cache would otherwise pin leftovers for 30m each run.
+			if !agent.AbandonedForeignProjectRoot(meta.ProjectRoot, r.projectRoot) {
+				grace := defaultWorktreeReapGraceAge
+				if grace <= 0 || (r.worktreeMaxAge > 0 && r.worktreeMaxAge < grace) {
+					grace = r.worktreeMaxAge
+				}
+				if now.Sub(info.ModTime()) < grace {
+					continue
+				}
 			}
 		}
 
