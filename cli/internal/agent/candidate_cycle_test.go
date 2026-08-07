@@ -127,6 +127,10 @@ func TestAttemptCycleCoordinator_NoChangesBehaviorUnchanged(t *testing.T) {
 
 func TestAttemptCycleCoordinator_LiveWorktreeProtected(t *testing.T) {
 	dir := t.TempDir()
+	now := time.Now().UTC()
+	// Active-cycle alone is not enough: abandoned trees with a stale flag must
+	// be reclaimable. Protection requires a live process/liveness marker (or
+	// live run-state) in addition to the flag — see defaultExecutionCleanupLivenessProbe.
 	err := WriteExecutionCleanupMetadata(dir, ExecutionCleanupMetadata{
 		ProjectRoot:          "/fake/project",
 		BeadID:               "ddx-test-bead",
@@ -134,7 +138,7 @@ func TestAttemptCycleCoordinator_LiveWorktreeProtected(t *testing.T) {
 		WorktreePath:         dir,
 		Registered:           true,
 		ActiveCandidateCycle: true,
-		CreatedAt:            time.Now().UTC(),
+		CreatedAt:            now,
 	})
 	require.NoError(t, err)
 
@@ -143,11 +147,25 @@ func TestAttemptCycleCoordinator_LiveWorktreeProtected(t *testing.T) {
 	require.True(t, meta.ActiveCandidateCycle)
 
 	probe := defaultExecutionCleanupLivenessProbe{}
-	live, reason := probe.IsLive(meta, nil, time.Now())
-	assert.True(t, live, "active candidate cycle worktree must be preserved by liveness probe")
+	staleLive, staleReason := probe.IsLive(meta, nil, now)
+	assert.False(t, staleLive, "active candidate cycle without liveness must not pin abandoned worktrees")
+	assert.Equal(t, "stale liveness", staleReason)
+
+	// With a fresh liveness marker the flag preserves the tree.
+	meta.Liveness = &ExecutionCleanupLiveness{
+		RefreshedAt: now,
+		ExpiresAt:   now.Add(5 * time.Minute),
+	}
+	require.NoError(t, WriteExecutionCleanupMetadata(dir, meta))
+	meta, err = ReadExecutionCleanupMetadata(dir)
+	require.NoError(t, err)
+
+	live, reason := probe.IsLive(meta, nil, now)
+	assert.True(t, live, "active candidate cycle with live marker must be preserved")
 	assert.Contains(t, reason, "active candidate cycle")
 
-	// Clearing the flag must make the worktree eligible for cleanup.
+	// Clearing the flag must make the worktree eligible for cleanup even with
+	// a still-fresh marker if the cycle is done — clear flag only.
 	err = ClearWorktreeActiveCycle(dir)
 	require.NoError(t, err)
 
@@ -155,8 +173,18 @@ func TestAttemptCycleCoordinator_LiveWorktreeProtected(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, cleared.ActiveCandidateCycle)
 
-	live2, _ := probe.IsLive(cleared, nil, time.Now())
-	assert.False(t, live2, "cleared worktree must no longer be protected by active-cycle flag")
+	// Fresh marker alone still protects via the liveness-marker path.
+	live2, reason2 := probe.IsLive(cleared, nil, now)
+	assert.True(t, live2, "fresh liveness marker alone must still protect")
+	assert.Contains(t, reason2, "liveness")
+
+	// Expired marker + cleared flag is reclaimable.
+	cleared.Liveness = &ExecutionCleanupLiveness{
+		RefreshedAt: now.Add(-10 * time.Minute),
+		ExpiresAt:   now.Add(-5 * time.Minute),
+	}
+	live3, _ := probe.IsLive(cleared, nil, now)
+	assert.False(t, live3, "cleared cycle with expired liveness must be reclaimable")
 }
 
 func TestCandidateCycleState_WritesMetadataAndRunState(t *testing.T) {
