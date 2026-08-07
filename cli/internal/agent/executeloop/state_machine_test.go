@@ -1,6 +1,7 @@
 package executeloop
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -110,4 +111,53 @@ func TestTryLoopStateMachineQuotaInfrastructureStops(t *testing.T) {
 
 	assert.Equal(t, TryLoopActionStop, transition.Action)
 	assert.Equal(t, "infrastructure_no_retry_route", transition.Reason)
+}
+
+func TestAttemptPolicyEscalatesOnlyMinimumPower(t *testing.T) {
+	input := AttemptTransitionInput{
+		Status:                   "execution_failed",
+		Detail:                   "build failed",
+		CurrentMinPower:          5,
+		ActualPower:              8,
+		AllowInfrastructureRetry: true,
+	}
+
+	transition := DecideAttemptTransition(input)
+
+	assert.Equal(t, TryLoopActionRetryPower, transition.Action)
+	assert.Equal(t, 9, transition.NextMinPower)
+	assert.Equal(t, "semantic_retry_with_higher_min_power", transition.Reason)
+
+	// The attempt-policy surface is intentionally route-neutral: it can only
+	// move the abstract minimum-power floor. It has no fields for harness,
+	// provider, model, profile, or other concrete route pins to populate.
+	transitionType := reflect.TypeOf(transition)
+	for _, fieldName := range []string{
+		"Harness",
+		"Provider",
+		"Model",
+		"Profile",
+		"RequestedProfile",
+		"RequestedMinPower",
+		"RequestedMaxPower",
+		"ProviderPin",
+	} {
+		if _, ok := transitionType.FieldByName(fieldName); ok {
+			t.Fatalf("attempt transition unexpectedly exposes route field %q", fieldName)
+		}
+	}
+
+	inputType := reflect.TypeOf(input)
+	for _, fieldName := range []string{
+		"Harness",
+		"Provider",
+		"Model",
+		"Profile",
+		"RequestedProfile",
+		"ProviderPin",
+	} {
+		if _, ok := inputType.FieldByName(fieldName); ok {
+			t.Fatalf("attempt input unexpectedly exposes route field %q", fieldName)
+		}
+	}
 }
