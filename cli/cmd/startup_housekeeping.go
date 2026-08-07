@@ -196,18 +196,28 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			})
 			continue
 		}
-		if now.Sub(info.ModTime()) < r.worktreeMaxAge {
-			continue
-		}
 
 		path := filepath.Join(report.TempRoot, entry.Name())
 		meta, metaErr := agent.ReadExecutionCleanupMetadata(path)
+		missingMetadata := false
 		if metaErr == nil {
 			meta.WorktreePath = firstNonEmpty(meta.WorktreePath, path)
 		} else {
+			missingMetadata = true
 			meta = agent.ExecutionCleanupMetadata{WorktreePath: path}
 		}
+		// Liveness is authoritative (same rules as ExecutionCleanupManager). A
+		// hard age gate used to run first and blocked reclaim for up to 72h
+		// even when cleanup.json + dead run-state proved the attempt was gone —
+		// leaving multi-GB local-clone trees and test pollution unreaped while
+		// `ddx cleanup` (liveness-based) would have removed them immediately.
 		if worktreeStillLive(meta, runStates, now) {
+			continue
+		}
+		// Age gate only for paths without cleanup metadata: no durable
+		// ownership/liveness signal, so wait before reaping (live tests may
+		// still be writing). Metadata + dead liveness is enough to reclaim now.
+		if missingMetadata && now.Sub(info.ModTime()) < r.worktreeMaxAge {
 			continue
 		}
 
