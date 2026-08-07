@@ -56,6 +56,10 @@ const (
 // stage evidence exactly once, returning one DDx attempt decision without any
 // provider-text parsing.
 func DecideAttemptPolicy(input AttemptPolicyInput) AttemptPolicyDecision {
+	if input.Final != nil && input.ImmediateErr != nil {
+		return AttemptPolicyDecision{Action: AttemptPolicyActionPark, Reason: "fizeau_lifecycle_ambiguous"}
+	}
+
 	lifecycle, reason := classifyAttemptLifecycle(input.Final, input.ImmediateErr)
 	switch lifecycle {
 	case attemptLifecycleCompleted:

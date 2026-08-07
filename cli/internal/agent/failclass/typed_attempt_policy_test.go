@@ -213,17 +213,13 @@ func TestAttemptPolicyRejectsAmbiguousTypedFizeauResult(t *testing.T) {
 		ImmediateErr: &agentlib.NoViableProviderForNow{
 			RetryAfter: time.Unix(1_700_000_000, 0),
 		},
-		Evidence: AttemptPolicyEvidence{
-			LandReady:              true,
-			NewAttemptRetryAllowed: true,
-		},
 	}
 
 	got := DecideAttemptPolicy(input)
-	if got.Action != AttemptPolicyActionLand {
-		t.Fatalf("DecideAttemptPolicy(ambiguous).Action = %q, want %q", got.Action, AttemptPolicyActionLand)
+	if got.Action != AttemptPolicyActionPark {
+		t.Fatalf("DecideAttemptPolicy(ambiguous).Action = %q, want %q", got.Action, AttemptPolicyActionPark)
 	}
-	if got.Reason != "fizeau_outcome_success" {
-		t.Fatalf("DecideAttemptPolicy(ambiguous).Reason = %q, want %q", got.Reason, "fizeau_outcome_success")
+	if got.Reason != "fizeau_lifecycle_ambiguous" {
+		t.Fatalf("DecideAttemptPolicy(ambiguous).Reason = %q, want %q", got.Reason, "fizeau_lifecycle_ambiguous")
 	}
 }
