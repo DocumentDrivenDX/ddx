@@ -316,6 +316,59 @@ func TestAttemptPolicyKeepsProviderIdentityAsAuditEvidence(t *testing.T) {
 	}
 }
 
+func TestAttemptPolicyIgnoresRouteAuditFieldsForDecision(t *testing.T) {
+	baseFinal := &agentlib.ServiceFinalData{
+		Status:  "failed",
+		Outcome: agentlib.SessionOutcomeFailed,
+		Cause:   agentlib.TerminalCauseProviderFailed,
+		Stage:   agentlib.SessionStageProvider,
+	}
+
+	first := AttemptPolicyInput{
+		Final: baseFinal,
+		Evidence: AttemptPolicyEvidence{
+			NewAttemptRetryAllowed: true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-a",
+		},
+	}
+	second := AttemptPolicyInput{
+		Final: baseFinal,
+		Evidence: AttemptPolicyEvidence{
+			NewAttemptRetryAllowed: true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-b",
+		},
+	}
+
+	gotFirst := DecideAttemptPolicy(first)
+	gotSecond := DecideAttemptPolicy(second)
+
+	if gotFirst.Action != gotSecond.Action {
+		t.Fatalf("actions differ: first=%q second=%q", gotFirst.Action, gotSecond.Action)
+	}
+	if gotFirst.Reason != gotSecond.Reason {
+		t.Fatalf("reasons differ: first=%q second=%q", gotFirst.Reason, gotSecond.Reason)
+	}
+	if gotFirst.Action != AttemptPolicyActionNewAttemptRetry {
+		t.Fatalf("unexpected action %q", gotFirst.Action)
+	}
+	if gotFirst.Audit != first.Audit {
+		t.Fatalf("first audit = %#v, want %#v", gotFirst.Audit, first.Audit)
+	}
+	if gotSecond.Audit != second.Audit {
+		t.Fatalf("second audit = %#v, want %#v", gotSecond.Audit, second.Audit)
+	}
+}
+
 func TestAttemptPolicyDoesNotReadProviderText(t *testing.T) {
 	first := AttemptPolicyInput{
 		ImmediateErr: fmt.Errorf("provider detail that should be ignored: %w", &agentlib.NoViableProviderForNow{
