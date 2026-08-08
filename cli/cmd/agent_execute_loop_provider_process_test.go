@@ -18,14 +18,15 @@ func TestWorkProviderModelUnavailableFallsBackWhenUnpinned(t *testing.T) {
 	captured := make([]agent.ExecuteBeadReport, 0, 2)
 	reports := []agent.ExecuteBeadReport{
 		{
-			BeadID:      "ddx-model-1",
-			Status:      agent.ExecuteBeadStatusExecutionFailed,
-			Detail:      "model claude-4 not found on this harness",
-			Error:       "model claude-4 not found on this harness",
-			Harness:     "claude",
-			Provider:    "anthropic",
-			Model:       "claude-4",
-			ActualPower: 5,
+			BeadID:        "ddx-model-1",
+			Status:        agent.ExecuteBeadStatusExecutionFailed,
+			Detail:        "model claude-4 not found on this harness",
+			Error:         "model claude-4 not found on this harness",
+			Harness:       "claude",
+			Provider:      "anthropic",
+			Model:         "claude-4",
+			ActualPower:   5,
+			OutcomeReason: agent.FailureModeProviderModelUnavailable,
 		},
 		{
 			BeadID:      "ddx-model-1",
@@ -84,14 +85,15 @@ func TestWorkProviderFailureHonorsHardPins(t *testing.T) {
 	requested := make([]int, 0, 2)
 	reports := []agent.ExecuteBeadReport{
 		{
-			BeadID:      "ddx-pin-1",
-			Status:      agent.ExecuteBeadStatusExecutionFailed,
-			Detail:      "executable file not found in $PATH: claude-code",
-			Error:       "executable file not found in $PATH: claude-code",
-			Harness:     "claude",
-			Provider:    "anthropic",
-			Model:       "claude-opus",
-			ActualPower: 5,
+			BeadID:        "ddx-pin-1",
+			Status:        agent.ExecuteBeadStatusExecutionFailed,
+			Detail:        "executable file not found in $PATH: claude-code",
+			Error:         "executable file not found in $PATH: claude-code",
+			Harness:       "claude",
+			Provider:      "anthropic",
+			Model:         "claude-opus",
+			ActualPower:   5,
+			OutcomeReason: agent.FailureModeProviderHarnessUnavailable,
 		},
 		{
 			// Must never be reached: a pinned worker must not widen/retry.
@@ -154,13 +156,14 @@ func TestWorkStatusAndOperatorAttentionSurfaceTypedProviderFailure(t *testing.T)
 	// Simulate a pinned worker hitting a harness-unavailable failure so we can
 	// verify both the typed OutcomeReason and the operator-attention Detail.
 	failReport := agent.ExecuteBeadReport{
-		BeadID:      "ddx-surface-1",
-		Status:      agent.ExecuteBeadStatusExecutionFailed,
-		Detail:      "executable file not found in $PATH: claude-code",
-		Error:       "executable file not found in $PATH: claude-code",
-		Harness:     "claude",
-		Provider:    "anthropic",
-		ActualPower: 5,
+		BeadID:        "ddx-surface-1",
+		Status:        agent.ExecuteBeadStatusExecutionFailed,
+		Detail:        "executable file not found in $PATH: claude-code",
+		Error:         "executable file not found in $PATH: claude-code",
+		Harness:       "claude",
+		Provider:      "anthropic",
+		ActualPower:   5,
+		OutcomeReason: agent.FailureModeProviderHarnessUnavailable,
 	}
 	pin := agent.ProviderPin{Harness: "claude", Provider: "anthropic"}
 

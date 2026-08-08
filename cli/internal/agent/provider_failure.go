@@ -74,126 +74,62 @@ func (e *ProviderFailureError) Unwrap() error {
 	return e.Err
 }
 
-// ClassifyProviderFailure normalizes a free-text provider/route error into the
-// typed taxonomy. It returns ok=false when the text does not name a recognized
-// provider/route/config cause, so callers can leave non-provider failures
-// (test_failure, merge_conflict, ...) classified by ClassifyFailureMode.
-//
-// The order is significant: config-invalid and auth/quota/rate-limit markers
-// are checked before the broad connectivity bucket so a "429" or "unauthorized"
-// is not swallowed as a generic timeout.
-func ClassifyProviderFailure(errMsg string) (ProviderFailure, bool) {
-	lower := strings.ToLower(strings.TrimSpace(errMsg))
-	if lower == "" {
+// ProviderFailureFromReason converts a typed provider-failure reason into the
+// corresponding retryability verdict. It does not inspect free-text error
+// messages.
+func ProviderFailureFromReason(reason string) (ProviderFailure, bool) {
+	switch strings.TrimSpace(reason) {
+	case FailureModeProviderAuth:
+		return providerFailure(FailureModeProviderAuth, true), true
+	case FailureModeProviderRateLimit:
+		return providerFailure(FailureModeProviderRateLimit, true), true
+	case FailureModeProviderQuota:
+		return providerFailure(FailureModeProviderQuota, true), true
+	case FailureModeProviderModelUnavailable:
+		return providerFailure(FailureModeProviderModelUnavailable, true), true
+	case FailureModeProviderHarnessUnavailable:
+		return providerFailure(FailureModeProviderHarnessUnavailable, true), true
+	case FailureModeProviderConfigInvalid:
+		return providerFailure(FailureModeProviderConfigInvalid, false), true
+	case FailureModeProviderConnectivity:
+		return providerFailure(FailureModeProviderConnectivity, true), true
+	case FailureModeNoViableProvider:
+		return providerFailure(FailureModeNoViableProvider, false), true
+	case FailureModeUnknownProviderFailure:
+		return providerFailure(FailureModeUnknownProviderFailure, false), true
+	default:
 		return ProviderFailure{}, false
 	}
-	switch {
-	case containsAny(lower,
-		"passthrough constraint unsatisfiable",
-		"passthrough constraint:",
-		"invalid configuration",
-		"config invalid",
-		"invalid endpoint",
-		"misconfigured",
-		"unknown provider",
-		"harness model incompatible",
-		"model incompatible with",
-		"incompatible with power bounds"):
-		return providerFailure(FailureModeProviderConfigInvalid, false), true
-	case containsAny(lower,
-		"unauthorized",
-		"401",
-		"invalid api key",
-		"invalid_api_key",
-		"authentication failed",
-		"failed to authenticate",
-		"authentication_error",
-		"oauth session expired",
-		"oauth token has expired",
-		"oauth token expired",
-		"session expired and could not be refreshed",
-		"could not be refreshed",
-		"could not refresh auth token",
-		"no api key",
-		"missing api key",
-		"forbidden",
-		"403"):
-		return providerFailure(FailureModeProviderAuth, true), true
-	case containsAny(lower,
-		"quota exceeded",
-		"insufficient quota",
-		"insufficient_quota",
-		"out of quota",
-		"quota"):
-		return providerFailure(FailureModeProviderQuota, true), true
-	case containsAny(lower,
-		"rate limit",
-		"rate_limit",
-		"ratelimit",
-		"too many requests",
-		"429"):
-		return providerFailure(FailureModeProviderRateLimit, true), true
-	case containsAny(lower, "is not routable", "not routable", "model_not_found"),
-		strings.Contains(lower, "model") && containsAny(lower,
-			"not available",
-			"unavailable",
-			"not found",
-			"no such",
-			"unknown",
-			"incompatible"):
-		return providerFailure(FailureModeProviderModelUnavailable, true), true
-	case containsAny(lower,
-		"harness unavailable",
-		"harness not available",
-		"harness not installed",
-		"unknown harness",
-		"no harness configured",
-		"executable file not found",
-		"command not found"):
-		return providerFailure(FailureModeProviderHarnessUnavailable, true), true
-	case containsAny(lower,
-		"no viable provider",
-		"no viable harness",
-		"no viable routing candidate",
-		"no live provider supports",
-		"no candidate satisfying local endpoint"):
-		return providerFailure(FailureModeNoViableProvider, false), true
-	case containsAny(lower,
-		"connection refused",
-		"connection reset",
-		"no route to host",
-		"network is unreachable",
-		"no such host",
-		"i/o timeout",
-		"dial tcp",
-		"provider_connectivity",
-		"provider request timeout",
-		"provider timeout",
-		"endpoint timeout",
-		"bad gateway",
-		"service unavailable",
-		"gateway timeout",
-		"502", "503", "504"):
-		return providerFailure(FailureModeProviderConnectivity, true), true
-	}
-	return ProviderFailure{}, false
 }
 
 // ClassifyServiceExecuteError classifies a pre-dispatch FizeauService.Execute
-// error. Because a pre-dispatch failure means routing never produced a viable
-// dispatch, every such error is a provider-boundary failure: when no specific
-// marker matches it falls back to unknown_provider_failure (non-retryable) so
-// the outcome is always typed rather than generic execution_failed.
+// error using typed upstream error values only. A pre-dispatch failure means
+// routing never produced a viable dispatch, so typed provider errors are
+// surfaced as provider failures and everything else falls back to
+// unknown_provider_failure without re-parsing free text.
 func ClassifyServiceExecuteError(err error) ProviderFailure {
 	if err == nil {
 		return providerFailure(FailureModeUnknownProviderFailure, false)
+	}
+	var noViableForNow *agentlib.NoViableProviderForNow
+	if errors.As(err, &noViableForNow) {
+		return providerFailure(FailureModeNoViableProvider, false)
 	}
 	var modelErr *agentlib.ErrHarnessModelIncompatible
 	if errors.As(err, &modelErr) {
 		return providerFailure(FailureModeProviderModelUnavailable, true)
 	}
-	if pf, ok := ClassifyProviderFailure(err.Error()); ok {
-		return pf
+	var unsatPin *agentlib.ErrUnsatisfiablePin
+	if errors.As(err, &unsatPin) {
+		return providerFailure(FailureModeProviderConfigInvalid, false)
+	}
+	var rejectedOverride *agentlib.ErrRejectedOverride
+	if errors.As(err, &rejectedOverride) {
+		return providerFailure(FailureModeProviderConfigInvalid, false)
+	}
+	var noLiveProvider *agentlib.ErrNoLiveProvider
+	if errors.As(err, &noLiveProvider) {
+		return providerFailure(FailureModeNoViableProvider, false)
 	}
 	return providerFailure(FailureModeUnknownProviderFailure, false)
 }
@@ -214,20 +150,8 @@ func ApplyProviderFailureToReport(report *ExecuteBeadReport, pf ProviderFailure)
 // provider-failure taxonomy values (including the reused connectivity /
 // no-viable-provider reasons).
 func IsProviderFailureReason(reason string) bool {
-	switch strings.TrimSpace(reason) {
-	case FailureModeProviderAuth,
-		FailureModeProviderRateLimit,
-		FailureModeProviderQuota,
-		FailureModeProviderModelUnavailable,
-		FailureModeProviderHarnessUnavailable,
-		FailureModeProviderConfigInvalid,
-		FailureModeUnknownProviderFailure,
-		FailureModeProviderConnectivity,
-		FailureModeNoViableProvider:
-		return true
-	default:
-		return false
-	}
+	_, ok := ProviderFailureFromReason(reason)
+	return ok
 }
 
 // ProviderPin captures an operator's explicit routing pins. A pinned worker

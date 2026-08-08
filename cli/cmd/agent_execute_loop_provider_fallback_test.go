@@ -25,7 +25,7 @@ func TestUnpinnedWorkerFallsBackAfterTypedProviderFailure(t *testing.T) {
 			Provider:      "openrouter",
 			Model:         "some-model",
 			ActualPower:   5,
-			OutcomeReason: "timeout", // coarse pre-typed bucket, safe to refine
+			OutcomeReason: agent.FailureModeProviderRateLimit,
 		},
 		{
 			BeadID:      "ddx-fallback-1",
@@ -80,14 +80,15 @@ func TestPinnedWorkerReportsHardPinExhaustedWithoutWidening(t *testing.T) {
 	requested := make([]int, 0, 2)
 	reports := []agent.ExecuteBeadReport{
 		{
-			BeadID:      "ddx-pinned-1",
-			Status:      agent.ExecuteBeadStatusExecutionFailed,
-			Detail:      "provider request failed: 429 Too Many Requests: rate limit reached",
-			Error:       "provider request failed: 429 Too Many Requests: rate limit reached",
-			Harness:     "claude",
-			Provider:    "anthropic",
-			Model:       "claude-opus",
-			ActualPower: 5,
+			BeadID:        "ddx-pinned-1",
+			Status:        agent.ExecuteBeadStatusExecutionFailed,
+			Detail:        "provider request failed: 429 Too Many Requests: rate limit reached",
+			Error:         "provider request failed: 429 Too Many Requests: rate limit reached",
+			Harness:       "claude",
+			Provider:      "anthropic",
+			Model:         "claude-opus",
+			ActualPower:   5,
+			OutcomeReason: agent.FailureModeProviderRateLimit,
 		},
 		{
 			// Should never be reached: a pinned worker must not widen/retry.

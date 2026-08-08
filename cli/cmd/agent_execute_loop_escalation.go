@@ -13,16 +13,10 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
 
-// normalizeProviderFailureReport classifies a failed attempt's free-text error
-// into the typed provider-failure taxonomy (ddx-3b721804) and stamps the report
-// with the typed outcome_reason plus worker-disruption markers. It covers both
-// pre-dispatch Execute errors and failed final events, since by the time the
-// report reaches the escalation loop both paths have populated Detail/Error.
-//
-// It only acts on execution_failed reports and only overrides an empty or
-// coarse/provider-ish outcome_reason, so a semantic classification (test_failure,
-// review_block, ...) is never clobbered. Returns the typed ProviderFailure and
-// ok=true when it classified the report.
+// normalizeProviderFailureReport stamps a failed attempt with a typed
+// provider-failure verdict that already exists on the report. It does not read
+// Detail, Error, or Stderr; the only provider-control input is the typed
+// outcome_reason produced upstream.
 func normalizeProviderFailureReport(report *agent.ExecuteBeadReport) (agent.ProviderFailure, bool) {
 	if report == nil || report.Status != agent.ExecuteBeadStatusExecutionFailed {
 		return agent.ProviderFailure{}, false
@@ -30,8 +24,7 @@ func normalizeProviderFailureReport(report *agent.ExecuteBeadReport) (agent.Prov
 	if !isReplaceableProviderOutcomeReason(report.OutcomeReason) {
 		return agent.ProviderFailure{}, false
 	}
-	combined := strings.Join([]string{report.Detail, report.Error, report.Stderr}, "\n")
-	pf, ok := agent.ClassifyProviderFailure(combined)
+	pf, ok := agent.ProviderFailureFromReason(report.OutcomeReason)
 	if !ok {
 		return agent.ProviderFailure{}, false
 	}
@@ -44,20 +37,7 @@ func normalizeProviderFailureReport(report *agent.ExecuteBeadReport) (agent.Prov
 // pre-typed buckets, and the typed provider reasons themselves are replaceable;
 // semantic acceptance/review reasons are not.
 func isReplaceableProviderOutcomeReason(reason string) bool {
-	switch strings.TrimSpace(reason) {
-	case "",
-		"timeout",
-		"transport",
-		"quota",
-		"routing",
-		agent.FailureModeAuthError,
-		agent.FailureModeServerUnavailable,
-		agent.FailureModeHarnessNotInstalled,
-		agent.FailureModeUnknown:
-		return true
-	default:
-		return agent.IsProviderFailureReason(reason)
-	}
+	return reason == "" || agent.IsProviderFailureReason(reason)
 }
 
 // applyProviderFallbackEvidence records the durable route-health evidence for a
@@ -104,12 +84,14 @@ func runEscalatingPowerAttempts(
 	minPower := initialMinPower
 	for {
 		report, err := attempt(ctx, minPower)
+		stopAfterProviderFailure := false
 		if err == nil {
 			// Normalize provider failures and attach route-health evidence
 			// before recording/deciding, so recorders and the fallback decision
 			// see the typed outcome (ddx-3b721804).
 			if pf, classified := normalizeProviderFailureReport(&report); classified {
 				applyProviderFallbackEvidence(&report, pf, pin)
+				stopAfterProviderFailure = pin.Any()
 			}
 		}
 		if recordAttempt != nil && report.BeadID != "" {
@@ -128,6 +110,9 @@ func runEscalatingPowerAttempts(
 				report.CostUSD = perBeadTracker.Spent()
 				return report, nil
 			}
+		}
+		if stopAfterProviderFailure {
+			return report, nil
 		}
 		transition := executeloop.DecideAttemptTransition(executeloop.AttemptTransitionInput{
 			Status:                   report.Status,
