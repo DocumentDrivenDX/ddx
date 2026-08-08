@@ -327,6 +327,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		// reviewer verdict extraction now parses this instead of raw stream
 		// frames (ddx-7bc0c8d5).
 		result.Output = final.FinalText
+		result.FizeauOutcome = string(final.Outcome)
+		result.FizeauCause = string(final.Cause)
+		result.FizeauStage = string(final.Stage)
 		if final.Usage != nil {
 			// v0.9.1: Usage fields became *int (nullable).
 			if final.Usage.InputTokens != nil {

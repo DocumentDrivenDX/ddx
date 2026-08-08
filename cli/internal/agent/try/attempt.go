@@ -63,6 +63,10 @@ type Report struct {
 	ReusableWorkspaceTimeSavedMS int64
 	ReusableWorkspaceBytesSaved  int64
 	DurationMS                   int64
+	FizeauOutcome                string
+	FizeauCause                  string
+	FizeauStage                  string
+	DDxOwnerStage                string
 	RequestedProfile             string
 	RoutingIntentSource          string
 	EstimatedDifficulty          string

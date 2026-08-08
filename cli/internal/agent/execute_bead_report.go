@@ -36,6 +36,7 @@ func MarkResultExecutionError(res *ExecuteBeadResult, err error) {
 	if res.FailureMode == "" {
 		res.FailureMode = FailureModeUnknown
 	}
+	res.DDxOwnerStage = ddxOwnerStageForStatus(res.Status)
 	// A pre-dispatch provider-boundary failure carries its typed classification
 	// on the error (ddx-3b721804). Prefer it so the report's outcome_reason is
 	// the precise provider taxonomy (provider_auth, provider_model_unavailable,
@@ -70,6 +71,7 @@ func MarkResultLandError(projectRoot string, res *ExecuteBeadResult, err error) 
 			res.OrchestratorStatus = res.Status
 			res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 			res.FailureMode = FailureModeLandRetry
+			res.DDxOwnerStage = ddxOwnerStageForStatus(res.Status)
 			return
 		case landCoordinationActionOperatorAttention:
 			reason = "land coordination operator attention: " + err.Error()
@@ -81,6 +83,7 @@ func MarkResultLandError(projectRoot string, res *ExecuteBeadResult, err error) 
 			res.OrchestratorStatus = res.Status
 			res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 			res.FailureMode = FailureModeLandOperatorAttention
+			res.DDxOwnerStage = ddxOwnerStageForStatus(res.Status)
 			return
 		}
 	}
@@ -92,6 +95,7 @@ func MarkResultLandError(projectRoot string, res *ExecuteBeadResult, err error) 
 	res.OrchestratorStatus = res.Status
 	res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 	res.FailureMode = classifyLandingFailureMode(res.Outcome, res.Reason, res.GateResults, res.FailureMode)
+	res.DDxOwnerStage = ddxOwnerStageForStatus(res.Status)
 }
 
 func preserveResultRefForLandError(projectRoot string, res *ExecuteBeadResult, reason *string) {
@@ -139,6 +143,7 @@ func markReconciledAlreadyLanded(projectRoot string, res *ExecuteBeadResult, err
 		res.OrchestratorStatus = res.Status
 		res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 		res.FailureMode = ""
+		res.DDxOwnerStage = ddxOwnerStageForStatus(res.Status)
 		return true
 	}
 	return false
@@ -267,6 +272,10 @@ func ReportFromExecuteBeadResult(res *ExecuteBeadResult, powerClass string) Exec
 		ReusableWorkspaceTimeSavedMS: res.ReusableWorkspaceTimeSavedMS,
 		ReusableWorkspaceBytesSaved:  res.ReusableWorkspaceBytesSaved,
 		DurationMS:                   int64(res.DurationMS),
+		FizeauOutcome:                res.FizeauOutcome,
+		FizeauCause:                  res.FizeauCause,
+		FizeauStage:                  res.FizeauStage,
+		DDxOwnerStage:                res.DDxOwnerStage,
 		ResourceExhausted:            res.ResourceExhausted,
 		OutcomeReason:                res.FailureMode,
 	}

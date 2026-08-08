@@ -78,6 +78,24 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
+func TestAttemptReportDoesNotSynthesizeTypedReasonFromStderr(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:        "ddx-typed",
+		Status:        ExecuteBeadStatusExecutionFailed,
+		FizeauOutcome: "failed",
+		FizeauCause:   "provider_failed",
+		FizeauStage:   "provider",
+		Stderr:        "provider stderr says timeout but typed lifecycle evidence already exists",
+	}
+
+	classifyLoopReportFailure(&report)
+
+	assert.Empty(t, report.OutcomeReason, "typed lifecycle evidence must not be replaced by stderr synthesis")
+	assert.Equal(t, "failed", report.FizeauOutcome)
+	assert.Equal(t, "provider_failed", report.FizeauCause)
+	assert.Equal(t, "provider", report.FizeauStage)
+}
+
 func TestAttemptWorkspaceReuseTelemetryRecordsSavings(t *testing.T) {
 	report := ExecuteBeadReport{
 		BeadID:                       "ddx-reuse-hit",

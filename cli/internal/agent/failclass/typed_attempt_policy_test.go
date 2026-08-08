@@ -141,6 +141,47 @@ func TestAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 	}
 }
 
+func TestAttemptPolicyKeepsFizeauAndDDxStagesSeparate(t *testing.T) {
+	final := &agentlib.ServiceFinalData{
+		Status:  "failed",
+		Outcome: agentlib.SessionOutcomeFailed,
+		Cause:   agentlib.TerminalCauseProviderFailed,
+		Stage:   agentlib.SessionStageProvider,
+	}
+	input := AttemptPolicyInput{
+		Final: final,
+		Evidence: AttemptPolicyEvidence{
+			CurrentAttemptRepairable: true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-separate",
+		},
+	}
+
+	got := DecideAttemptPolicy(input)
+	if got.Action != AttemptPolicyActionCurrentAttemptRepair {
+		t.Fatalf("DecideAttemptPolicy(input).Action = %q, want %q", got.Action, AttemptPolicyActionCurrentAttemptRepair)
+	}
+	if got.Reason != "fizeau_terminal_retryable" {
+		t.Fatalf("DecideAttemptPolicy(input).Reason = %q, want %q", got.Reason, "fizeau_terminal_retryable")
+	}
+	if got.Audit != input.Audit {
+		t.Fatalf("DecideAttemptPolicy(input).Audit = %#v, want %#v", got.Audit, input.Audit)
+	}
+	if final.Cause != agentlib.TerminalCauseProviderFailed {
+		t.Fatalf("final cause mutated: got %q, want %q", final.Cause, agentlib.TerminalCauseProviderFailed)
+	}
+	if final.Stage != agentlib.SessionStageProvider {
+		t.Fatalf("final stage mutated: got %q, want %q", final.Stage, agentlib.SessionStageProvider)
+	}
+	if !input.Evidence.CurrentAttemptRepairable {
+		t.Fatalf("DDx evidence lost current-attempt repairability")
+	}
+}
+
 func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 	cases := []struct {
 		name string

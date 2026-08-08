@@ -883,6 +883,16 @@ type ExecuteBeadReport struct {
 	ReusableWorkspaceBytesSaved  int64 `json:"reusable_workspace_bytes_saved"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
+	// FizeauOutcome, FizeauCause, and FizeauStage preserve the typed public
+	// lifecycle tuple returned by the service. DDx keeps them separate from its
+	// own status/detail/outcome_reason evidence for MET-003 attribution.
+	FizeauOutcome string `json:"fizeau_outcome,omitempty"`
+	FizeauCause   string `json:"fizeau_cause,omitempty"`
+	FizeauStage   string `json:"fizeau_stage,omitempty"`
+	// DDxOwnerStage classifies the DDx-owned stage that selected the final
+	// attempt disposition. It is tracked separately from the Fizeau lifecycle
+	// tuple so the loss table can attribute failures by owner.
+	DDxOwnerStage string `json:"ddx_owner_stage,omitempty"`
 	// Profile routing telemetry. Populated when work uses a profile
 	// ladder rather than an explicit harness/model pin.
 	RequestedProfile    string `json:"requested_profile,omitempty"`
@@ -6566,6 +6576,9 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 	if report.OutcomeReason != "" {
 		return
 	}
+	if hasTypedFizeauLifecycle(report) {
+		return
+	}
 	combined := strings.TrimSpace(strings.Join([]string{
 		report.Detail,
 		report.Error,
@@ -6622,6 +6635,15 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.Disrupted = true
 		report.DisruptionReason = FailureModeLockContention
 	}
+}
+
+func hasTypedFizeauLifecycle(report *ExecuteBeadReport) bool {
+	if report == nil {
+		return false
+	}
+	return strings.TrimSpace(report.FizeauOutcome) != "" ||
+		strings.TrimSpace(report.FizeauCause) != "" ||
+		strings.TrimSpace(report.FizeauStage) != ""
 }
 
 // beadActionableAtDecompositionCap reports whether a bead at the queue-level

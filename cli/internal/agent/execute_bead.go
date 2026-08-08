@@ -131,6 +131,18 @@ type ExecuteBeadResult struct {
 	// "configured", or "unknown"). Distinguishes genuine free calls from
 	// discarded source-less cost. See Result.CostSource.
 	CostSource string `json:"cost_source,omitempty"`
+	// FizeauOutcome, FizeauCause, and FizeauStage preserve the typed public
+	// lifecycle tuple returned by the service. DDx keeps them separate from
+	// its own outcome/reason/status evidence so loss attribution can
+	// distinguish Fizeau-owned lifecycle causes from DDx-owned execution
+	// stages.
+	FizeauOutcome string `json:"fizeau_outcome,omitempty"`
+	FizeauCause   string `json:"fizeau_cause,omitempty"`
+	FizeauStage   string `json:"fizeau_stage,omitempty"`
+	// DDxOwnerStage classifies the DDx-owned stage that selected the final
+	// attempt disposition. It stays separate from the Fizeau lifecycle tuple
+	// so result.json can support owner-by-stage loss attribution.
+	DDxOwnerStage string `json:"ddx_owner_stage,omitempty"`
 	// PreCommitEvidenceFingerprint records the staged-tree + hook-input
 	// identity observed for the implementation commit's authoritative
 	// pre-commit gate.
@@ -532,6 +544,18 @@ func projectCandidateCycleReport(res *ExecuteBeadResult, report ExecuteBeadRepor
 	res.CostUSD = report.CostUSD
 	if report.CostSource != "" {
 		res.CostSource = report.CostSource
+	}
+	if report.FizeauOutcome != "" {
+		res.FizeauOutcome = report.FizeauOutcome
+	}
+	if report.FizeauCause != "" {
+		res.FizeauCause = report.FizeauCause
+	}
+	if report.FizeauStage != "" {
+		res.FizeauStage = report.FizeauStage
+	}
+	if report.DDxOwnerStage != "" {
+		res.DDxOwnerStage = report.DDxOwnerStage
 	}
 	res.ReusableWorkspaceSlotHits = report.ReusableWorkspaceSlotHits
 	res.ReusableWorkspaceSlotMisses = report.ReusableWorkspaceSlotMisses
@@ -1118,6 +1142,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Reason:            resourceErr.Error(),
 				Outcome:           ExecuteBeadOutcomeTaskFailed,
 				Status:            ExecuteBeadStatusResourceExhausted,
+				DDxOwnerStage:     ddxOwnerStageForStatus(ExecuteBeadStatusResourceExhausted),
 				ProjectRoot:       projectRoot,
 				ResourceExhausted: &resourceErr.Result,
 			}
@@ -1193,14 +1218,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		// execution-ineligible until a manual --unclaim (ddx-f677a50b).
 		if classifyReadinessSystemReason(err.Error(), nil) == ReadinessSystemReasonResourceExhausted {
 			res := &ExecuteBeadResult{
-				BeadID:      beadID,
-				WorkerID:    runtime.WorkerID,
-				ExitCode:    1,
-				Error:       err.Error(),
-				Reason:      err.Error(),
-				Outcome:     ExecuteBeadOutcomeTaskFailed,
-				Status:      ExecuteBeadStatusResourceExhausted,
-				ProjectRoot: projectRoot,
+				BeadID:        beadID,
+				WorkerID:      runtime.WorkerID,
+				ExitCode:      1,
+				Error:         err.Error(),
+				Reason:        err.Error(),
+				Outcome:       ExecuteBeadOutcomeTaskFailed,
+				Status:        ExecuteBeadStatusResourceExhausted,
+				DDxOwnerStage: ddxOwnerStageForStatus(ExecuteBeadStatusResourceExhausted),
+				ProjectRoot:   projectRoot,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 			return res, nil
@@ -1209,15 +1235,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		// classify as retryable lock_contention, not execution_failed.
 		if isRetryablePreDispatchStagingError(err.Error()) {
 			res := &ExecuteBeadResult{
-				BeadID:      beadID,
-				WorkerID:    runtime.WorkerID,
-				AttemptID:   attemptID,
-				ExitCode:    1,
-				Error:       err.Error(),
-				Reason:      err.Error(),
-				Outcome:     ExecuteBeadOutcomeTaskFailed,
-				Status:      statusForPreDispatchCheckpointError(err),
-				ProjectRoot: projectRoot,
+				BeadID:        beadID,
+				WorkerID:      runtime.WorkerID,
+				AttemptID:     attemptID,
+				ExitCode:      1,
+				Error:         err.Error(),
+				Reason:        err.Error(),
+				Outcome:       ExecuteBeadOutcomeTaskFailed,
+				Status:        statusForPreDispatchCheckpointError(err),
+				DDxOwnerStage: ddxOwnerStageForStatus(statusForPreDispatchCheckpointError(err)),
+				ProjectRoot:   projectRoot,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 			return res, nil
@@ -1253,14 +1280,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		// execution-ineligible until a manual --unclaim (ddx-f677a50b).
 		if classifyReadinessSystemReason(err.Error(), nil) == ReadinessSystemReasonResourceExhausted {
 			res := &ExecuteBeadResult{
-				BeadID:      beadID,
-				WorkerID:    runtime.WorkerID,
-				ExitCode:    1,
-				Error:       err.Error(),
-				Reason:      err.Error(),
-				Outcome:     ExecuteBeadOutcomeTaskFailed,
-				Status:      ExecuteBeadStatusResourceExhausted,
-				ProjectRoot: projectRoot,
+				BeadID:        beadID,
+				WorkerID:      runtime.WorkerID,
+				ExitCode:      1,
+				Error:         err.Error(),
+				Reason:        err.Error(),
+				Outcome:       ExecuteBeadOutcomeTaskFailed,
+				Status:        ExecuteBeadStatusResourceExhausted,
+				DDxOwnerStage: ddxOwnerStageForStatus(ExecuteBeadStatusResourceExhausted),
+				ProjectRoot:   projectRoot,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 			return res, nil
@@ -1527,6 +1555,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	predictedSpeedTPS := 0.0
 	predictedCostUSDPer1kTokens := 0.0
 	predictedCostSource := ""
+	fizeauOutcome := ""
+	fizeauCause := ""
+	fizeauStage := ""
 	agentErrMsg := ""
 	agentStderr := ""
 	if agentResult != nil {
@@ -1559,6 +1590,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		predictedSpeedTPS = agentResult.PredictedSpeedTPS
 		predictedCostUSDPer1kTokens = agentResult.PredictedCostUSDPer1kTokens
 		predictedCostSource = agentResult.PredictedCostSource
+		fizeauOutcome = agentResult.FizeauOutcome
+		fizeauCause = agentResult.FizeauCause
+		fizeauStage = agentResult.FizeauStage
 	}
 	if agentErr != nil {
 		if exitCode == 0 {
@@ -1600,6 +1634,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			Tokens:                      tokens,
 			CostUSD:                     costUSD,
 			CostSource:                  costSource,
+			FizeauOutcome:               fizeauOutcome,
+			FizeauCause:                 fizeauCause,
+			FizeauStage:                 fizeauStage,
 			ExitCode:                    1,
 			Error:                       strings.TrimSpace(strings.Join([]string{agentErrMsg, headRevErr}, "\n")),
 			Stderr:                      agentStderr,
@@ -1705,6 +1742,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Tokens:                       tokens,
 				CostUSD:                      costUSD,
 				CostSource:                   costSource,
+				FizeauOutcome:                fizeauOutcome,
+				FizeauCause:                  fizeauCause,
+				FizeauStage:                  fizeauStage,
 				ExitCode:                     exitCode,
 				Error:                        agentErrMsg,
 				Stderr:                       agentStderr,
@@ -1758,6 +1798,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Tokens:                       tokens,
 		CostUSD:                      costUSD,
 		CostSource:                   costSource,
+		FizeauOutcome:                fizeauOutcome,
+		FizeauCause:                  fizeauCause,
+		FizeauStage:                  fizeauStage,
 		ExitCode:                     exitCode,
 		Error:                        agentErrMsg,
 		Stderr:                       agentStderr,
@@ -2140,6 +2183,7 @@ func populateWorkerStatus(res *ExecuteBeadResult) {
 		res.Status = ExecuteBeadStatusExecutionFailed
 	}
 	res.Detail = ExecuteBeadStatusDetail(res.Status, "", res.Error)
+	res.DDxOwnerStage = ddxOwnerStageForStatus(res.Status)
 }
 
 // cleanupAttemptWorktree removes the per-attempt execute-bead worktree for
