@@ -57,6 +57,42 @@ func TestServerOutageTracker_DirectTransportFailureIsServerLevel(t *testing.T) {
 	}
 }
 
+func TestServerOutageDoesNotActivateOnPreCommitPackageFailureText(t *testing.T) {
+	tracker := newServerOutageTracker(10*time.Minute, 3, 30*time.Second)
+	report := ExecuteBeadReport{
+		BeadID: "ddx-precommit-package-failure",
+		Status: ExecuteBeadStatusExecutionFailed,
+		Detail: "pre-commit package test failed: unexpected EOF while reading server fixture output",
+	}
+
+	activated, reason := tracker.Record(report, report.BeadID, time.Now().UTC())
+	assert.False(t, activated, "pre-commit/package failure text must not trip server outage mode")
+	assert.Empty(t, reason)
+	assert.False(t, tracker.Active())
+	assert.False(t, isServerTransportFailureReport(report))
+}
+
+func TestServerOutageLogsTriggerDetail(t *testing.T) {
+	tracker := newServerOutageTracker(10*time.Minute, 3, 30*time.Second)
+	report := ExecuteBeadReport{
+		BeadID: "ddx-transport-trigger",
+		Status: ExecuteBeadStatusExecutionFailed,
+		Detail: "http: TLS handshake error from 127.0.0.1:7743: remote error: tls: bad certificate",
+	}
+
+	activated, reason := tracker.Record(report, report.BeadID, time.Now().UTC())
+	require.True(t, activated)
+	require.Equal(t, FailureModeServerUnavailable, reason)
+	require.True(t, tracker.Active())
+	assert.Equal(t, report.BeadID, tracker.TriggerBeadID())
+	assert.Equal(t, report.Detail, tracker.TriggerDetail())
+
+	msg := serverOutageActivationMessage(tracker)
+	assert.Contains(t, msg, "bead_id="+report.BeadID)
+	assert.Contains(t, msg, "TLS handshake error")
+	assert.Contains(t, msg, `detail="http: TLS handshake error from 127.0.0.1:7743: remote error: tls: bad certificate"`)
+}
+
 func TestExecuteBeadWorker_ServerOutagePausesAndResumesWatchQueue(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))

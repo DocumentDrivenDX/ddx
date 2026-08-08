@@ -4329,6 +4329,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		serverOutageActivated := false
 		if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
 			serverOutageActivated = true
+			if runtime.Log != nil {
+				if msg := serverOutageActivationMessage(serverOutage); msg != "" {
+					_, _ = fmt.Fprintln(runtime.Log, msg)
+				}
+			}
 			pausedInfraUntil = time.Time{}
 		}
 		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
@@ -5015,6 +5020,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				serverOutageActivated := false
 				if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
 					serverOutageActivated = true
+					if runtime.Log != nil {
+						if msg := serverOutageActivationMessage(serverOutage); msg != "" {
+							_, _ = fmt.Fprintln(runtime.Log, msg)
+						}
+					}
 					pausedInfraUntil = time.Time{}
 				} else {
 					// Transition the worker to paused-infra: leave every bead
@@ -5032,6 +5042,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				serverOutageActivated := false
 				if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
 					serverOutageActivated = true
+					if runtime.Log != nil {
+						if msg := serverOutageActivationMessage(serverOutage); msg != "" {
+							_, _ = fmt.Fprintln(runtime.Log, msg)
+						}
+					}
 					pausedInfraUntil = time.Time{}
 				}
 				if !serverOutageActivated {

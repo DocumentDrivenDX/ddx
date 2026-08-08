@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -26,6 +27,8 @@ type serverOutageTracker struct {
 
 	active      bool
 	reason      string
+	triggerBead string
+	triggerText string
 	nextProbeAt time.Time
 	samples     []serverOutageSample
 }
@@ -54,12 +57,14 @@ func (t *serverOutageTracker) Active() bool {
 	return t.active
 }
 
-func (t *serverOutageTracker) Activate(now time.Time, reason string) {
+func (t *serverOutageTracker) Activate(now time.Time, reason, beadID, detail string) {
 	if t == nil {
 		return
 	}
 	t.active = true
 	t.reason = reason
+	t.triggerBead = beadID
+	t.triggerText = serverOutageFailureSnippet(detail)
 	t.samples = nil
 	t.nextProbeAt = now.Add(t.probeInterval)
 }
@@ -70,6 +75,8 @@ func (t *serverOutageTracker) Clear() {
 	}
 	t.active = false
 	t.reason = ""
+	t.triggerBead = ""
+	t.triggerText = ""
 	t.nextProbeAt = time.Time{}
 	t.samples = nil
 }
@@ -88,12 +95,26 @@ func (t *serverOutageTracker) Reason() string {
 	return t.reason
 }
 
+func (t *serverOutageTracker) TriggerBeadID() string {
+	if t == nil {
+		return ""
+	}
+	return t.triggerBead
+}
+
+func (t *serverOutageTracker) TriggerDetail() string {
+	if t == nil {
+		return ""
+	}
+	return t.triggerText
+}
+
 func (t *serverOutageTracker) Record(report ExecuteBeadReport, beadID string, now time.Time) (activated bool, reason string) {
 	if t == nil || t.active {
 		return false, ""
 	}
 	if isServerTransportFailureReport(report) {
-		t.Activate(now, FailureModeServerUnavailable)
+		t.Activate(now, FailureModeServerUnavailable, beadID, firstNonEmpty(report.Detail, report.Error, report.Stderr))
 		return true, FailureModeServerUnavailable
 	}
 	if !isNoViableProviderReport(report) {
@@ -118,7 +139,7 @@ func (t *serverOutageTracker) Record(report ExecuteBeadReport, beadID string, no
 	if len(distinct) < t.threshold {
 		return false, ""
 	}
-	t.Activate(now, FailureModeServerUnavailable)
+	t.Activate(now, FailureModeServerUnavailable, beadID, firstNonEmpty(report.Detail, report.Error, report.Stderr))
 	return true, FailureModeServerUnavailable
 }
 
@@ -156,6 +177,52 @@ func isServerTransportFailureText(lower string) bool {
 	) {
 		return true
 	}
-	return containsAny(lower, "unexpected eof") &&
-		containsAny(lower, "server", "api/health", "127.0.0.1", "localhost", "ddx")
+	if strings.Contains(lower, "unexpected eof") {
+		if containsAny(lower,
+			"dial tcp",
+			"connection refused",
+			"connection reset",
+			"connection closed",
+			"connection timed out",
+			"connect: connection",
+			"handshake",
+			"http:",
+			"request",
+			"response",
+			"socket",
+			"network",
+			"api/health",
+			"127.0.0.1",
+			"localhost",
+			"ddx",
+		) {
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+func serverOutageFailureSnippet(detail string) string {
+	snippet := strings.Join(strings.Fields(strings.TrimSpace(detail)), " ")
+	if snippet == "" {
+		return ""
+	}
+	const limit = 160
+	if len(snippet) > limit {
+		snippet = snippet[:limit]
+	}
+	return snippet
+}
+
+func serverOutageActivationMessage(tracker *serverOutageTracker) string {
+	if tracker == nil {
+		return ""
+	}
+	beadID := tracker.TriggerBeadID()
+	detail := tracker.TriggerDetail()
+	if beadID == "" && detail == "" {
+		return ""
+	}
+	return fmt.Sprintf("server outage activated: bead_id=%s detail=%q", beadID, detail)
 }
