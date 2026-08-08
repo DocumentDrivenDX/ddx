@@ -85,6 +85,38 @@ const (
 	FailureModeUnknown               = "unknown"
 )
 
+// ddxOwnerStageForStatus classifies the DDx-owned stage that owns a final
+// attempt disposition. It is intentionally separate from the Fizeau lifecycle
+// tuple so MET-003 can attribute loss by owner without collapsing the public
+// Fizeau cause/stage evidence.
+func ddxOwnerStageForStatus(status string) string {
+	switch status {
+	case ExecuteBeadStatusSuccess,
+		ExecuteBeadStatusAlreadySatisfied,
+		ExecuteBeadStatusNoChanges,
+		ExecuteBeadStatusNoEvidenceProduced:
+		return "verify"
+	case ExecuteBeadStatusLandRetry,
+		ExecuteBeadStatusLandOperatorAttention,
+		ExecuteBeadStatusLandConflict,
+		ExecuteBeadStatusLandConflictUnresolvable:
+		return "land"
+	case ExecuteBeadStatusReviewBlock,
+		ExecuteBeadStatusReviewRequestChanges,
+		ExecuteBeadStatusReviewRequestClarification,
+		ExecuteBeadStatusReviewMalfunction,
+		ExecuteBeadStatusReviewFixableGap,
+		ExecuteBeadStatusRepairCycleExhausted:
+		return "review-policy"
+	case ExecuteBeadStatusDeclinedNeedsDecomposition:
+		return "claim"
+	case ExecuteBeadStatusResourceExhausted:
+		return "workspace"
+	default:
+		return "attempt"
+	}
+}
+
 // ResourceExhaustedStopMessage is the operator-visible message emitted when
 // execution must stop because the host cannot safely continue draining the
 // queue.
