@@ -9,6 +9,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTypedFizeauProviderFailureIngressDoesNotReadStderr(t *testing.T) {
+	first := agent.ExecuteBeadReport{
+		Status:        agent.ExecuteBeadStatusExecutionFailed,
+		OutcomeReason: agent.FailureModeProviderRateLimit,
+		Detail:        "model unavailable: this text must be ignored",
+		Error:         "harness unavailable: this text must be ignored",
+		Stderr:        "connection refused: this text must be ignored",
+	}
+	second := agent.ExecuteBeadReport{
+		Status:        agent.ExecuteBeadStatusExecutionFailed,
+		OutcomeReason: agent.FailureModeProviderRateLimit,
+		Detail:        "different ignored detail",
+		Error:         "different ignored error",
+		Stderr:        "different ignored stderr",
+	}
+
+	pf1, ok1 := normalizeProviderFailureReport(&first)
+	require.True(t, ok1)
+	pf2, ok2 := normalizeProviderFailureReport(&second)
+	require.True(t, ok2)
+
+	assert.Equal(t, agent.FailureModeProviderRateLimit, pf1.Reason)
+	assert.Equal(t, agent.FailureModeProviderRateLimit, pf2.Reason)
+	assert.Equal(t, first.OutcomeReason, second.OutcomeReason)
+	assert.Equal(t, agent.FailureModeProviderRateLimit, first.OutcomeReason)
+	assert.Equal(t, agent.FailureModeProviderRateLimit, second.OutcomeReason)
+	assert.Equal(t, first.DisruptionReason, second.DisruptionReason)
+	assert.Equal(t, first.Disrupted, second.Disrupted)
+}
+
 func TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -139,7 +169,7 @@ func TestWorkRetryEscalation_ProviderConnectivityRetriesAtExactHigherFloor(t *te
 			Provider:      "vidar",
 			Model:         "qwen-local",
 			ActualPower:   5,
-			OutcomeReason: "timeout",
+			OutcomeReason: agent.FailureModeProviderConnectivity,
 		},
 		{
 			Status:        agent.ExecuteBeadStatusSuccess,

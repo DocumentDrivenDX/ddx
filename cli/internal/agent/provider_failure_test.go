@@ -3,8 +3,11 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -12,10 +15,9 @@ import (
 )
 
 // TestServiceExecuteErrorClassifiesProviderConfigFailures (AC1, ddx-3b721804):
-// a fake Fizeau service returning representative pre-dispatch Execute errors —
-// auth missing, model unavailable, provider unavailable, endpoint timeout —
-// must yield a typed ExecuteBeadReport outcome_reason/disruption_reason rather
-// than the generic execution_failed bucket.
+// a fake Fizeau service returning typed pre-dispatch Execute errors must yield
+// a typed ExecuteBeadReport outcome_reason/disruption_reason rather than the
+// generic execution_failed bucket.
 func TestServiceExecuteErrorClassifiesProviderConfigFailures(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -24,34 +26,36 @@ func TestServiceExecuteErrorClassifiesProviderConfigFailures(t *testing.T) {
 		wantRetryable bool
 	}{
 		{
-			name:          "auth_missing",
-			execErr:       errors.New("missing api key for provider openai"),
-			wantReason:    FailureModeProviderAuth,
-			wantRetryable: true,
-		},
-		{
-			name:          "model_unavailable",
-			execErr:       errors.New("model claude-x is not available on this harness"),
-			wantReason:    FailureModeProviderModelUnavailable,
-			wantRetryable: true,
-		},
-		{
 			name:          "model_unavailable_typed_fizeau_error",
 			execErr:       &agentlib.ErrHarnessModelIncompatible{Harness: "claude", Model: "gpt-foo"},
 			wantReason:    FailureModeProviderModelUnavailable,
 			wantRetryable: true,
 		},
 		{
-			name:          "provider_unavailable",
-			execErr:       errors.New("provider request failed: dial tcp 100.64.0.1:1234: connect: connection refused"),
-			wantReason:    FailureModeProviderConnectivity,
-			wantRetryable: true,
+			name:          "no_viable_provider_for_now",
+			execErr:       &agentlib.NoViableProviderForNow{RetryAfter: time.Unix(1_700_000_000, 0)},
+			wantReason:    FailureModeNoViableProvider,
+			wantRetryable: false,
 		},
 		{
-			name:          "endpoint_timeout",
-			execErr:       errors.New("provider request timeout exceeded"),
-			wantReason:    FailureModeProviderConnectivity,
-			wantRetryable: true,
+			name:          "unsatisfiable_pin",
+			execErr:       &agentlib.ErrUnsatisfiablePin{Pin: "--harness claude --provider anthropic"},
+			wantReason:    FailureModeProviderConfigInvalid,
+			wantRetryable: false,
+		},
+		{
+			name: "rejected_override",
+			execErr: &agentlib.ErrRejectedOverride{
+				Inner: &agentlib.ErrUnsatisfiablePin{Pin: "--model claude-opus"},
+			},
+			wantReason:    FailureModeProviderConfigInvalid,
+			wantRetryable: false,
+		},
+		{
+			name:          "no_live_provider",
+			execErr:       &agentlib.ErrNoLiveProvider{PromptTokens: 1024, RequiresTools: true, StartingPolicy: "smart"},
+			wantReason:    FailureModeNoViableProvider,
+			wantRetryable: false,
 		},
 	}
 
@@ -147,8 +151,8 @@ func TestServiceFinalFailureClassifiesProviderRouteHealth(t *testing.T) {
 			require.NotNil(t, result)
 			require.NotEqual(t, 0, result.ExitCode)
 
-			pf, ok := ClassifyProviderFailure(result.Error)
-			require.True(t, ok, "failed final event %q must classify as a provider failure", result.Error)
+			pf, ok := ProviderFailureFromReason(tc.wantReason)
+			require.True(t, ok, "typed reason %q must map to a provider failure", tc.wantReason)
 			assert.Equal(t, tc.wantReason, pf.Reason)
 			assert.Equal(t, tc.wantRetryable, pf.Retryable)
 
@@ -233,21 +237,48 @@ func TestProviderFailureEvidenceNamesFallbackDecision(t *testing.T) {
 	})
 }
 
-// TestClassifyProviderFailure_OAuthSessionExpired (ddx-4f4d5a65): live Claude
-// Code OAuth phrasing must classify as provider_auth, not generic failure.
-func TestClassifyProviderFailure_OAuthSessionExpired(t *testing.T) {
-	pf, ok := ClassifyProviderFailure("Failed to authenticate: OAuth session expired and could not be refreshed")
+// TestProviderFailureFromReason_TypedReasonsOnly (ddx-4f4d5a65): typed provider
+// reasons must map to the retryability verdict without inspecting free text.
+func TestProviderFailureFromReason_TypedReasonsOnly(t *testing.T) {
+	for _, reason := range []string{
+		FailureModeProviderAuth,
+		FailureModeProviderRateLimit,
+		FailureModeProviderQuota,
+		FailureModeProviderModelUnavailable,
+		FailureModeProviderHarnessUnavailable,
+		FailureModeProviderConfigInvalid,
+		FailureModeProviderConnectivity,
+		FailureModeNoViableProvider,
+		FailureModeUnknownProviderFailure,
+	} {
+		pf, ok := ProviderFailureFromReason(reason)
+		require.Truef(t, ok, "typed reason %q must map to a provider failure", reason)
+		assert.Equal(t, reason, pf.Reason)
+		assert.Equal(t, reason, pf.Disruption)
+	}
+	pf, ok := ProviderFailureFromReason(FailureModeProviderAuth)
 	require.True(t, ok)
-	assert.Equal(t, FailureModeProviderAuth, pf.Reason)
 	assert.True(t, pf.Retryable)
+	pf, ok = ProviderFailureFromReason(FailureModeProviderConfigInvalid)
+	require.True(t, ok)
+	assert.False(t, pf.Retryable)
 }
 
-// TestClassifyProviderFailure_BareSessionExpired (ddx-4f4d5a65): bare session-
-// expired string without the "Failed to authenticate" prefix must still map
-// to provider_auth (aligns with Fizeau ClassifyClaudeRouteFailure markers).
-func TestClassifyProviderFailure_BareSessionExpired(t *testing.T) {
-	pf, ok := ClassifyProviderFailure("OAuth session expired and could not be refreshed")
+func TestProviderFailureTextClassifierRemovedOrAuditOnly(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	assert.Equal(t, FailureModeProviderAuth, pf.Reason)
-	assert.True(t, pf.Retryable)
+	path := filepath.Join(filepath.Dir(file), "provider_failure.go")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	for _, needle := range []string{
+		"containsAny(lower,",
+		"oauth session expired",
+		"429 Too Many Requests",
+		"connection refused",
+		"provider request timeout",
+		"ClassifyProviderFailure(err.Error())",
+	} {
+		assert.NotContains(t, content, needle, "provider_failure.go must not scrape free-text provider errors")
+	}
 }
