@@ -131,43 +131,6 @@ func ClassifyServiceExecuteError(err error) ProviderFailure {
 	if errors.As(err, &noLiveProvider) {
 		return providerFailure(FailureModeNoViableProvider, false)
 	}
-	lower := strings.ToLower(err.Error())
-	switch {
-	case containsAny(lower,
-		"executable file not found in $path",
-		"executable file not found",
-		"no such file or directory"):
-		return providerFailure(FailureModeProviderHarnessUnavailable, true)
-	case containsAny(lower,
-		"connection refused",
-		"connection reset by peer",
-		"broken pipe",
-		"i/o timeout",
-		"no route to host",
-		"network is unreachable",
-		"bad gateway",
-		"service unavailable",
-		"gateway timeout",
-		"tls handshake error",
-		"unexpected eof"):
-		return providerFailure(FailureModeProviderConnectivity, true)
-	}
-	mode := ClassifyFailureMode(ExecuteBeadOutcomeTaskFailed, 1, err.Error())
-	switch mode {
-	case FailureModeHarnessNotInstalled:
-		return providerFailure(FailureModeProviderHarnessUnavailable, true)
-	case FailureModeNoViableProvider:
-		return providerFailure(FailureModeNoViableProvider, false)
-	case FailureModeServerUnavailable:
-		return providerFailure(FailureModeProviderConnectivity, true)
-	case FailureModeAuthError:
-		if strings.Contains(lower, "quota") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "insufficient quota") {
-			return providerFailure(FailureModeProviderQuota, true)
-		}
-		return providerFailure(FailureModeProviderAuth, true)
-	case FailureModeTimeout:
-		return providerFailure(FailureModeProviderConnectivity, true)
-	}
 	return providerFailure(FailureModeUnknownProviderFailure, false)
 }
 
