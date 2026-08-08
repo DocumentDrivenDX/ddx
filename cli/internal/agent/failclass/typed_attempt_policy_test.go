@@ -182,6 +182,70 @@ func TestAttemptPolicyKeepsFizeauAndDDxStagesSeparate(t *testing.T) {
 	}
 }
 
+func TestAttemptPolicyMET003AttributionUsesTypedEvidence(t *testing.T) {
+	baseFinal := &agentlib.ServiceFinalData{
+		Status:  "failed",
+		Outcome: agentlib.SessionOutcomeFailed,
+		Cause:   agentlib.TerminalCauseProviderFailed,
+		Stage:   agentlib.SessionStageProvider,
+	}
+
+	first := AttemptPolicyInput{
+		Final: baseFinal,
+		Evidence: AttemptPolicyEvidence{
+			CurrentAttemptRepairable: true,
+			NewAttemptRetryAllowed:   true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "codex",
+			Provider: "openai",
+			Model:    "gpt-5",
+			Route:    "route-a",
+		},
+	}
+	second := AttemptPolicyInput{
+		Final: baseFinal,
+		Evidence: AttemptPolicyEvidence{
+			CurrentAttemptRepairable: true,
+			NewAttemptRetryAllowed:   true,
+		},
+		Audit: AttemptPolicyAudit{
+			Harness:  "claude",
+			Provider: "anthropic",
+			Model:    "claude-sonnet-4-5",
+			Route:    "route-b",
+		},
+	}
+
+	gotFirst := DecideAttemptPolicy(first)
+	gotSecond := DecideAttemptPolicy(second)
+
+	if gotFirst.Action != AttemptPolicyActionCurrentAttemptRepair {
+		t.Fatalf("DecideAttemptPolicy(first).Action = %q, want %q", gotFirst.Action, AttemptPolicyActionCurrentAttemptRepair)
+	}
+	if gotSecond.Action != AttemptPolicyActionCurrentAttemptRepair {
+		t.Fatalf("DecideAttemptPolicy(second).Action = %q, want %q", gotSecond.Action, AttemptPolicyActionCurrentAttemptRepair)
+	}
+	if gotFirst.Reason != gotSecond.Reason {
+		t.Fatalf("reasons differ: first=%q second=%q", gotFirst.Reason, gotSecond.Reason)
+	}
+	if gotFirst.Reason != "fizeau_terminal_retryable" {
+		t.Fatalf("DecideAttemptPolicy(first).Reason = %q, want %q", gotFirst.Reason, "fizeau_terminal_retryable")
+	}
+	if gotFirst.Audit != first.Audit {
+		t.Fatalf("DecideAttemptPolicy(first).Audit = %#v, want %#v", gotFirst.Audit, first.Audit)
+	}
+	if gotSecond.Audit != second.Audit {
+		t.Fatalf("DecideAttemptPolicy(second).Audit = %#v, want %#v", gotSecond.Audit, second.Audit)
+	}
+	if baseFinal.Cause != agentlib.TerminalCauseProviderFailed {
+		t.Fatalf("baseFinal cause mutated: got %q, want %q", baseFinal.Cause, agentlib.TerminalCauseProviderFailed)
+	}
+	if baseFinal.Stage != agentlib.SessionStageProvider {
+		t.Fatalf("baseFinal stage mutated: got %q, want %q", baseFinal.Stage, agentlib.SessionStageProvider)
+	}
+}
+
 func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 	cases := []struct {
 		name string
