@@ -2784,17 +2784,21 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	if claimErr != nil {
 		// Another worker won the race for this bead. Emit a structured
 		// claim_race event so concurrent-worker losses are observable
-		// (ddx-9d55601f AC #4). The bead remains in `attempted` for this
-		// run; on the next iteration it will be filtered out of
-		// ReadyExecution naturally because the winner now holds the fresh
-		// claim lease sidecar, so the loser keeps moving down priority
-		// order.
+		// (ddx-9d55601f AC #4). Skip this bead for the rest of the drain
+		// run so the loser does not re-select the same claimed top
+		// candidate forever (load-pressure backoff + claim_race spin)
+		// while Ready still has other work. Relying only on ReadyExecution
+		// to drop it is insufficient: long post-attempt pre-commit on the
+		// winner can leave the bead visible and re-selected for minutes.
 		emit("picker.claim_race", map[string]any{
 			"bead_id":    candidate.ID,
 			"priority":   candidate.Priority,
 			"queue_rank": queueRankValue(candidate.Extra),
 			"reason":     claimErr.Error(),
 		})
+		if transientCandidateSkips != nil {
+			transientCandidateSkips[candidate.ID] = "claim_race"
+		}
 		recordClaimAttempt(false, candidate.ID)
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
