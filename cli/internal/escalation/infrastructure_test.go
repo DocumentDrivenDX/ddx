@@ -16,16 +16,15 @@ func TestIsInfrastructureFailure(t *testing.T) {
 		{"structural validation is not infrastructure", "structural_validation_failed", "anything 502", false},
 		{"escalatable + empty detail returns false", "execution_failed", "", false},
 		{"escalatable + plain test failure is not infrastructure", "execution_failed", "TestFoo failed: assertion error", false},
-		{"escalatable + 502 from provider is infrastructure", "execution_failed", `provider error: POST "http://bragi:1234/v1/chat/completions": 502 Bad Gateway`, true},
-		{"escalatable + 503 service unavailable is infrastructure", "execution_failed", "503 Service Unavailable", true},
-		{"escalatable + connection refused is infrastructure", "execution_failed", "dial tcp 127.0.0.1:1234: connect: connection refused", true},
-		{"escalatable + no such host is infrastructure", "execution_failed", "dial tcp: lookup vidar: no such host", true},
-		{"escalatable + context deadline is infrastructure", "execution_failed", "context deadline exceeded", true},
-		{"escalatable + rate limit is infrastructure (operator-fixable)", "execution_failed", "429 Too Many Requests: rate limit reached", true},
-		{"escalatable + auth failure is infrastructure", "execution_failed", "401 Unauthorized: invalid api key", true},
-		{"escalatable + binary missing is infrastructure", "execution_failed", `exec: "claude": executable file not found in $PATH`, true},
-		{"escalatable + fizeau routing failure is infrastructure", "execution_failed", "ResolveRoute: no viable routing candidate: 3 candidates rejected", true},
-		{"case-insensitive match", "execution_failed", "BAD GATEWAY", true},
+		{"escalatable + provider outage detail is still audit-only", "execution_failed", `provider error: POST "http://bragi:1234/v1/chat/completions": 502 Bad Gateway`, false},
+		{"escalatable + connection refused is audit-only", "execution_failed", "dial tcp 127.0.0.1:1234: connect: connection refused", false},
+		{"escalatable + no such host is audit-only", "execution_failed", "dial tcp: lookup vidar: no such host", false},
+		{"escalatable + context deadline is audit-only", "execution_failed", "context deadline exceeded", false},
+		{"escalatable + rate limit is audit-only", "execution_failed", "429 Too Many Requests: rate limit reached", false},
+		{"escalatable + auth failure is audit-only", "execution_failed", "401 Unauthorized: invalid api key", false},
+		{"escalatable + binary missing is audit-only", "execution_failed", `exec: "claude": executable file not found in $PATH`, false},
+		{"escalatable + fizeau routing failure is audit-only", "execution_failed", "ResolveRoute: no viable routing candidate: 3 candidates rejected", false},
+		{"case-insensitive list is ignored for policy", "execution_failed", "BAD GATEWAY", false},
 		{"no_changes never infrastructure regardless of detail", "no_changes", "agent ran fine, no edits", false},
 		{"post_run_check_failed: gate failure is not infrastructure", "post_run_check_failed", "gate verify-tests exited with status 1", false},
 	}
@@ -40,14 +39,20 @@ func TestIsInfrastructureFailure(t *testing.T) {
 }
 
 func TestEscalationInfrastructurePatternsRemovedOrAuditOnly(t *testing.T) {
-	if got := IsInfrastructureFailure("execution_failed", "dial tcp 127.0.0.1:1234: connect: connection refused"); !got {
-		t.Fatal("typed infrastructure audit pattern should still classify execution_failed connectivity failures")
+	if got := AuditInfrastructureFailureDetail("dial tcp 127.0.0.1:1234: connect: connection refused"); !got {
+		t.Fatal("audit helper should still surface legacy infrastructure detail")
 	}
-	if got := IsInfrastructureFailure("execution_failed", "ResolveRoute: no viable routing candidate: 3 candidates rejected"); !got {
-		t.Fatal("typed infrastructure audit pattern should still classify execution_failed route failures")
+	if got := AuditInfrastructureFailureDetail("ResolveRoute: no viable routing candidate: 3 candidates rejected"); !got {
+		t.Fatal("audit helper should still surface legacy routing detail")
+	}
+	if got := IsInfrastructureFailure("execution_failed", "dial tcp 127.0.0.1:1234: connect: connection refused"); got {
+		t.Fatal("policy helper must ignore legacy infrastructure substrings")
 	}
 	if got := IsInfrastructureFailure("no_changes", "dial tcp 127.0.0.1:1234: connect: connection refused"); got {
-		t.Fatal("audit patterns must not classify non-execution failures")
+		t.Fatal("policy helper must ignore non-execution failures too")
+	}
+	if got := AuditInfrastructureFailureDetail("unrelated detail"); got {
+		t.Fatal("audit helper must not match unrelated text")
 	}
 }
 

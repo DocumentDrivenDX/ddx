@@ -7,32 +7,25 @@ import (
 	"sync"
 )
 
-// InfrastructureFailurePatterns are detail substrings that indicate a
-// transient infrastructure-level failure (provider 502, network unreachable,
-// command not found, auth/quota exhausted) rather than a model-capability
-// failure (test failed, build failed, no changes after attempt).
+// InfrastructureFailurePatterns is retained as audit-only evidence for
+// provider and routing failures that used to steer escalation budget
+// consumption via substring matching. The typed attempt-policy adapter now
+// owns that decision, so this list must not be consulted for retry, cooldown,
+// park, no-viable-provider, or escalation-budget behavior.
 //
-// Infrastructure failures should not consume escalation budget — the bead
-// should be deferred with a retry-after, not retried at the next powerClass with
-// a more expensive model. The model wasn't given a fair chance.
-//
-// Patterns are matched case-insensitively as substrings of the failure
-// detail string. Any new pattern added here is automatically picked up by
-// IsInfrastructureFailure callers.
+// Any reporting code that wants to preserve the old signal can read this list,
+// but the decision surface must stay route-neutral and typed.
 var InfrastructureFailurePatterns = []string{
-	// HTTP-level provider unavailability
 	"502", "503", "504",
 	"bad gateway",
 	"service unavailable",
 	"gateway timeout",
-	// Network-level unreachability
 	"connection refused",
 	"no such host",
 	"no route to host",
 	"network is unreachable",
 	"i/o timeout",
 	"context deadline exceeded",
-	// Auth/quota exhaustion (operator-fixable, not a model fault)
 	"401", "429",
 	"unauthorized",
 	"rate limit",
@@ -40,31 +33,20 @@ var InfrastructureFailurePatterns = []string{
 	"quota exceeded",
 	"insufficient quota",
 	"insufficient_quota",
-	// Subprocess harness binary missing or unstartable
 	"command not found",
 	"executable file not found",
 	"no such file or directory",
-	// Upstream routing/service selection failures
 	"resolveroute:",
 	"no viable routing candidate",
 	"no live provider supports",
 	"no candidate satisfying local endpoint",
 }
 
-// IsInfrastructureFailure reports whether the given failure status + detail
-// indicates a transient infrastructure problem the model could not have
-// fixed. Only execution_failed can be infrastructure; other escalatable
-// statuses are semantic outcomes that should proceed through the powerClass ladder.
-// Returns false for statuses whose detail does not match any known
-// infrastructure pattern.
-//
-// Used by the work to decide whether to (a) defer the bead with a
-// retry-after and try the same powerClass later, or (b) burn through to the next
-// powerClass as the standard escalation policy.
-func IsInfrastructureFailure(status, detail string) bool {
-	if status != "execution_failed" {
-		return false
-	}
+// AuditInfrastructureFailureDetail reports whether the detail string contains
+// one of the legacy infrastructure signals. This is for reporting and audit
+// trails only; it must not be used to decide retry, cooldown, park, or
+// escalation-budget behavior.
+func AuditInfrastructureFailureDetail(detail string) bool {
 	if detail == "" {
 		return false
 	}
@@ -74,6 +56,14 @@ func IsInfrastructureFailure(status, detail string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// IsInfrastructureFailure is deprecated audit-only compatibility. The
+// typed attempt-policy adapter now owns escalation-budget and retry
+// decisions, so this function must not make any substring-based policy
+// calls.
+func IsInfrastructureFailure(status, detail string) bool {
 	return false
 }
 
