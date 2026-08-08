@@ -84,12 +84,14 @@ func runEscalatingPowerAttempts(
 	minPower := initialMinPower
 	for {
 		report, err := attempt(ctx, minPower)
+		stopAfterProviderFailure := false
 		if err == nil {
 			// Normalize provider failures and attach route-health evidence
 			// before recording/deciding, so recorders and the fallback decision
 			// see the typed outcome (ddx-3b721804).
 			if pf, classified := normalizeProviderFailureReport(&report); classified {
 				applyProviderFallbackEvidence(&report, pf, pin)
+				stopAfterProviderFailure = pin.Any()
 			}
 		}
 		if recordAttempt != nil && report.BeadID != "" {
@@ -108,6 +110,9 @@ func runEscalatingPowerAttempts(
 				report.CostUSD = perBeadTracker.Spent()
 				return report, nil
 			}
+		}
+		if stopAfterProviderFailure {
+			return report, nil
 		}
 		transition := executeloop.DecideAttemptTransition(executeloop.AttemptTransitionInput{
 			Status:                   report.Status,

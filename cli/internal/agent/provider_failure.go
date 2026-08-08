@@ -74,13 +74,6 @@ func (e *ProviderFailureError) Unwrap() error {
 	return e.Err
 }
 
-// ClassifyProviderFailure is retained for compatibility, but it is now
-// audit-only: it recognizes only already-typed provider reasons instead of
-// scraping free-text error messages.
-func ClassifyProviderFailure(reason string) (ProviderFailure, bool) {
-	return ProviderFailureFromReason(reason)
-}
-
 // ProviderFailureFromReason converts a typed provider-failure reason into the
 // corresponding retryability verdict. It does not inspect free-text error
 // messages.
