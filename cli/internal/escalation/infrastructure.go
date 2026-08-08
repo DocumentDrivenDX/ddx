@@ -64,6 +64,8 @@ func AuditInfrastructureFailureDetail(detail string) bool {
 // decisions, so this function must not make any substring-based policy
 // calls.
 func IsInfrastructureFailure(status, detail string) bool {
+	_ = status
+	_ = AuditInfrastructureFailureDetail(detail)
 	return false
 }
 
