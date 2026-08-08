@@ -8489,8 +8489,7 @@ func isRoutingInfrastructureReport(report ExecuteBeadReport) bool {
 	return containsAny(lower,
 		"resolveroute:",
 		"no viable routing candidate",
-		"no live provider supports",
-		"no candidate satisfying local endpoint")
+		"missing-harness")
 }
 
 // classifyDisruption examines the loop ctx and the executor's error to decide

@@ -255,14 +255,9 @@ func classifyReadinessSystemReason(detail string, reasons []string) string {
 	case containsAny(combined,
 		"resolveroute:",
 		"no viable routing candidate",
-		"no viable provider",
-		"no live provider",
-		"no candidate satisfying local endpoint",
-		"no harness configured",
-		"missing harness",
-		"harness not installed",
-		"unknown harness",
-		"executable file not found"):
+		"missing-harness"):
+		return ReadinessSystemReasonRouting
+	case containsAny(combined, "no viable provider"):
 		return ReadinessSystemReasonRouting
 	default:
 		return ""
