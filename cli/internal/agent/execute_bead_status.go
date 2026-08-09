@@ -191,17 +191,12 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 	case containsAny(lower,
 		"executable file not found in $path",
 		"executable file not found",
-		"no such file or directory") &&
-		containsAny(lower, "exec:", "harness", "claude", "agent", "codex", "gemini"):
+		"no such file or directory"):
 		return FailureModeHarnessNotInstalled
 	case containsAny(lower,
-		"no viable harness",
-		"no harness configured",
 		"failed to initialize routing service",
 		"resolveroute:",
 		"no viable routing candidate",
-		"no live provider supports",
-		"no candidate satisfying local endpoint",
 		"no viable provider"):
 		return FailureModeNoViableProvider
 	case isServerTransportFailureText(lower):
