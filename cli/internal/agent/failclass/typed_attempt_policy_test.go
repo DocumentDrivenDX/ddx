@@ -182,6 +182,149 @@ func TestAttemptPolicyKeepsFizeauAndDDxStagesSeparate(t *testing.T) {
 	}
 }
 
+func TestAttemptPolicyStageEvidenceSurvivesReportConstruction(t *testing.T) {
+	cases := []struct {
+		name       string
+		input      AttemptPolicyInput
+		wantAct    AttemptPolicyAction
+		wantReason string
+	}{
+		{
+			name: "completed",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "success",
+					Outcome: agentlib.SessionOutcomeSuccess,
+					Cause:   agentlib.TerminalCauseCompleted,
+					Stage:   agentlib.SessionStageHarness,
+				},
+				Evidence: AttemptPolicyEvidence{
+					LandReady: true,
+				},
+				Audit: AttemptPolicyAudit{
+					Harness:  "codex",
+					Provider: "openai",
+					Model:    "gpt-5",
+					Route:    "route-completed",
+				},
+			},
+			wantAct:    AttemptPolicyActionLand,
+			wantReason: "fizeau_outcome_success",
+		},
+		{
+			name: "retryable",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeFailed,
+					Cause:   agentlib.TerminalCauseProviderFailed,
+					Stage:   agentlib.SessionStageProvider,
+				},
+				Evidence: AttemptPolicyEvidence{
+					CurrentAttemptRepairable: true,
+				},
+				Audit: AttemptPolicyAudit{
+					Harness:  "codex",
+					Provider: "openai",
+					Model:    "gpt-5",
+					Route:    "route-retryable",
+				},
+			},
+			wantAct:    AttemptPolicyActionCurrentAttemptRepair,
+			wantReason: "fizeau_terminal_retryable",
+		},
+		{
+			name: "unavailable-now",
+			input: AttemptPolicyInput{
+				ImmediateErr: &agentlib.NoViableProviderForNow{},
+				Audit: AttemptPolicyAudit{
+					Harness:  "claude",
+					Provider: "anthropic",
+					Model:    "claude-sonnet-4-5",
+					Route:    "route-unavailable",
+				},
+			},
+			wantAct:    AttemptPolicyActionPark,
+			wantReason: "fizeau_immediate_unavailable_now",
+		},
+		{
+			name: "cancelled",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeCancelled,
+					Cause:   agentlib.TerminalCauseContextCancelled,
+					Stage:   agentlib.SessionStageCleanup,
+				},
+				Audit: AttemptPolicyAudit{
+					Harness:  "codex",
+					Provider: "openai",
+					Model:    "gpt-5",
+					Route:    "route-cancelled",
+				},
+			},
+			wantAct:    AttemptPolicyActionPark,
+			wantReason: "fizeau_outcome_cancelled",
+		},
+		{
+			name: "permanent_failure",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeFailed,
+					Cause:   agentlib.TerminalCauseInternalError,
+					Stage:   agentlib.SessionStageCleanup,
+				},
+				Evidence: AttemptPolicyEvidence{
+					RequestMinimumStrength: true,
+				},
+				Audit: AttemptPolicyAudit{
+					Harness:  "claude",
+					Provider: "anthropic",
+					Model:    "claude-sonnet-4-5",
+					Route:    "route-permanent",
+				},
+			},
+			wantAct:    AttemptPolicyActionMinimumStrengthEscalation,
+			wantReason: "fizeau_terminal_permanent_failure",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var finalSnapshot *agentlib.ServiceFinalData
+			if tc.input.Final != nil {
+				snapshot := *tc.input.Final
+				finalSnapshot = &snapshot
+			}
+			evidence := tc.input.Evidence
+
+			got := DecideAttemptPolicy(tc.input)
+
+			if got.Action != tc.wantAct {
+				t.Fatalf("DecideAttemptPolicy(%s).Action = %q, want %q", tc.name, got.Action, tc.wantAct)
+			}
+			if got.Reason != tc.wantReason {
+				t.Fatalf("DecideAttemptPolicy(%s).Reason = %q, want %q", tc.name, got.Reason, tc.wantReason)
+			}
+			if got.Audit != tc.input.Audit {
+				t.Fatalf("DecideAttemptPolicy(%s).Audit = %#v, want %#v", tc.name, got.Audit, tc.input.Audit)
+			}
+			if finalSnapshot != nil {
+				if tc.input.Final == nil {
+					t.Fatalf("DecideAttemptPolicy(%s) cleared Final", tc.name)
+				}
+				if tc.input.Final.Status != finalSnapshot.Status || tc.input.Final.Outcome != finalSnapshot.Outcome || tc.input.Final.Cause != finalSnapshot.Cause || tc.input.Final.Stage != finalSnapshot.Stage {
+					t.Fatalf("DecideAttemptPolicy(%s) mutated Final: got %#v, want %#v", tc.name, tc.input.Final, finalSnapshot)
+				}
+			}
+			if tc.input.Evidence != evidence {
+				t.Fatalf("DecideAttemptPolicy(%s) mutated Evidence: got %#v, want %#v", tc.name, tc.input.Evidence, evidence)
+			}
+		})
+	}
+}
+
 func TestAttemptPolicyMET003AttributionUsesTypedEvidence(t *testing.T) {
 	baseFinal := &agentlib.ServiceFinalData{
 		Status:  "failed",
