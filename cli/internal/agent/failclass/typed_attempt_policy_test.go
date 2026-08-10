@@ -182,7 +182,7 @@ func TestAttemptPolicyKeepsFizeauAndDDxStagesSeparate(t *testing.T) {
 	}
 }
 
-func TestAttemptPolicyStageEvidenceSurvivesReportConstruction(t *testing.T) {
+func TestAttemptPolicyStageEvidenceSurvivesDecisionSelection(t *testing.T) {
 	cases := []struct {
 		name       string
 		input      AttemptPolicyInput

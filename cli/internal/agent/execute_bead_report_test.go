@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,6 +96,95 @@ func TestMarkResultLandErrorClassifiesStagedImplementationWorkAsOperatorAttentio
 	assert.Equal(t, ExecuteBeadStatusLandOperatorAttention, res.Status)
 	assert.Equal(t, FailureModeLandOperatorAttention, res.FailureMode)
 	assert.Contains(t, res.Detail, "land coordination operator attention")
+}
+
+func TestAttemptPolicyStageEvidenceSurvivesReportConstruction(t *testing.T) {
+	cases := []struct {
+		name   string
+		result ExecuteBeadResult
+	}{
+		{
+			name: "completed",
+			result: ExecuteBeadResult{
+				BeadID:        "ddx-completed",
+				AttemptID:     "attempt-completed",
+				BaseRev:       "base",
+				ResultRev:     "result-completed",
+				Outcome:       ExecuteBeadOutcomeTaskSucceeded,
+				FizeauOutcome: string(agentlib.SessionOutcomeSuccess),
+				FizeauCause:   string(agentlib.TerminalCauseCompleted),
+				FizeauStage:   string(agentlib.SessionStageHarness),
+			},
+		},
+		{
+			name: "retryable",
+			result: ExecuteBeadResult{
+				BeadID:        "ddx-retryable",
+				AttemptID:     "attempt-retryable",
+				BaseRev:       "base",
+				ResultRev:     "result-retryable",
+				Outcome:       ExecuteBeadOutcomeTaskFailed,
+				FizeauOutcome: string(agentlib.SessionOutcomeFailed),
+				FizeauCause:   string(agentlib.TerminalCauseProviderFailed),
+				FizeauStage:   string(agentlib.SessionStageProvider),
+			},
+		},
+		{
+			name: "unavailable-now",
+			result: ExecuteBeadResult{
+				BeadID:        "ddx-unavailable-now",
+				AttemptID:     "attempt-unavailable-now",
+				BaseRev:       "base",
+				ResultRev:     "result-unavailable-now",
+				Outcome:       ExecuteBeadOutcomeTaskNoChanges,
+				FizeauOutcome: string(agentlib.SessionOutcomeFailed),
+				FizeauCause:   string(agentlib.TerminalCauseRouteUnavailable),
+				FizeauStage:   string(agentlib.SessionStageRouting),
+			},
+		},
+		{
+			name: "cancelled",
+			result: ExecuteBeadResult{
+				BeadID:        "ddx-cancelled",
+				AttemptID:     "attempt-cancelled",
+				BaseRev:       "base",
+				ResultRev:     "result-cancelled",
+				Outcome:       ExecuteBeadOutcomeTaskNoEvidence,
+				FizeauOutcome: string(agentlib.SessionOutcomeCancelled),
+				FizeauCause:   string(agentlib.TerminalCauseContextCancelled),
+				FizeauStage:   string(agentlib.SessionStageCleanup),
+			},
+		},
+		{
+			name: "permanent_failure",
+			result: ExecuteBeadResult{
+				BeadID:        "ddx-permanent",
+				AttemptID:     "attempt-permanent",
+				BaseRev:       "base",
+				ResultRev:     "result-permanent",
+				Outcome:       ExecuteBeadOutcomeTaskFailed,
+				FizeauOutcome: string(agentlib.SessionOutcomeFailed),
+				FizeauCause:   string(agentlib.TerminalCauseInternalError),
+				FizeauStage:   string(agentlib.SessionStageCleanup),
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.result
+			populateWorkerStatus(&result)
+			before := result
+
+			report := ReportFromExecuteBeadResult(&result, "standard")
+
+			assert.Equal(t, before, result, "report construction must not mutate the source result")
+			assert.Equal(t, before.FizeauOutcome, report.FizeauOutcome)
+			assert.Equal(t, before.FizeauCause, report.FizeauCause)
+			assert.Equal(t, before.FizeauStage, report.FizeauStage)
+			assert.Equal(t, before.DDxOwnerStage, report.DDxOwnerStage)
+		})
+	}
 }
 
 func initReportTestRepo(t *testing.T) string {
