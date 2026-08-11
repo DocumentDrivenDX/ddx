@@ -151,7 +151,8 @@ type Result struct {
 	// ("reported", "configured", or "unknown"). Zero CostUSD with
 	// CostSource "unknown" means provenance was absent and the amount was
 	// discarded; zero with "reported"/"configured" is a genuine free call.
-	CostSource string `json:"cost_source,omitempty"`
+	CostSource        string `json:"cost_source,omitempty"`
+	FizeauCostPresent *bool  `json:"fizeau_cost_present,omitempty"`
 	// FizeauOutcome, FizeauCause, and FizeauStage preserve the typed public
 	// lifecycle tuple returned by the service. DDx keeps this separate from its
 	// own outcome/reason/status evidence so loss attribution can distinguish

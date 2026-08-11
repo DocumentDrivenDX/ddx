@@ -1057,7 +1057,10 @@ func providerFromModel(model string) string {
 }
 
 func efficacyCost(entry agent.SessionIndexEntry) *float64 {
-	if !entry.CostPresent && entry.CostUSD == 0 {
+	if entry.FizeauCostPresent == nil {
+		return nil
+	}
+	if entry.CostUSD < 0 {
 		return nil
 	}
 	cost := entry.CostUSD

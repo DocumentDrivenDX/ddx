@@ -355,6 +355,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if final.CostUSD != nil && *final.CostUSD > 0 {
 			result.CostUSD = *final.CostUSD
 		}
+		result.FizeauCostPresent = fizeauCostPresentFromFinal(final.CostUSD)
 		result.ExitCode = final.ExitCode
 		result.Error = final.Error
 		if final.RoutingActual != nil {
@@ -401,6 +402,14 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func fizeauCostPresentFromFinal(costUSD *float64) *bool {
+	if costUSD == nil {
+		return nil
+	}
+	present := *costUSD > 0
+	return &present
 }
 
 func estimatePromptTokens(prompt string) int {

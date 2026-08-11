@@ -123,7 +123,14 @@ func writeConfig(t *testing.T, workDir, content string) {
 
 func appendSummarySession(t *testing.T, workDir string, entry agent.SessionIndexEntry, ts time.Time) {
 	t.Helper()
+	if entry.FizeauCostPresent == nil && entry.CostPresent {
+		entry.FizeauCostPresent = boolPtr(true)
+	}
 	if err := agent.AppendSessionIndex(agent.SessionLogDirForWorkDir(workDir), entry, ts); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }

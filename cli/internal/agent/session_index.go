@@ -22,38 +22,39 @@ const (
 // SessionIndexEntry is the pointer-only session index row. Heavy prompt,
 // response, and stderr bodies stay in execution bundles or native logs.
 type SessionIndexEntry struct {
-	ID              string    `json:"id"`
-	ProjectID       string    `json:"projectID,omitempty"`
-	BeadID          string    `json:"beadID,omitempty"`
-	WorkerID        string    `json:"workerID,omitempty"`
-	Harness         string    `json:"harness"`
-	Provider        string    `json:"provider,omitempty"`
-	Surface         string    `json:"surface,omitempty"`
-	BaseURL         string    `json:"baseURL,omitempty"`
-	Billing         string    `json:"billing,omitempty"`
-	BillingMode     string    `json:"billingMode"`
-	Model           string    `json:"model,omitempty"`
-	PromptSHA       string    `json:"promptSHA,omitempty"`
-	StartedAt       time.Time `json:"startedAt"`
-	EndedAt         time.Time `json:"endedAt,omitempty"`
-	DurationMS      int       `json:"durationMs,omitempty"`
-	CostUSD         float64   `json:"cost,omitempty"`
-	CostPresent     bool      `json:"costPresent,omitempty"`
-	Tokens          int       `json:"tokens,omitempty"`
-	InputTokens     int       `json:"inputTokens,omitempty"`
-	CachedTokens    int       `json:"cachedTokens,omitempty"`
-	OutputTokens    int       `json:"outputTokens,omitempty"`
-	Outcome         string    `json:"outcome,omitempty"`
-	ExitCode        int       `json:"exitCode"`
-	NativeSessionID string    `json:"nativeSessionID,omitempty"`
-	TraceID         string    `json:"traceID,omitempty"`
-	SpanID          string    `json:"spanID,omitempty"`
-	BundlePath      string    `json:"bundlePath,omitempty"`
-	NativeLogRef    string    `json:"nativeLogRef,omitempty"`
-	Effort          string    `json:"effort,omitempty"`
-	Detail          string    `json:"detail,omitempty"`
-	BaseRev         string    `json:"baseRev,omitempty"`
-	ResultRev       string    `json:"resultRev,omitempty"`
+	ID                string    `json:"id"`
+	ProjectID         string    `json:"projectID,omitempty"`
+	BeadID            string    `json:"beadID,omitempty"`
+	WorkerID          string    `json:"workerID,omitempty"`
+	Harness           string    `json:"harness"`
+	Provider          string    `json:"provider,omitempty"`
+	Surface           string    `json:"surface,omitempty"`
+	BaseURL           string    `json:"baseURL,omitempty"`
+	Billing           string    `json:"billing,omitempty"`
+	BillingMode       string    `json:"billingMode"`
+	Model             string    `json:"model,omitempty"`
+	PromptSHA         string    `json:"promptSHA,omitempty"`
+	StartedAt         time.Time `json:"startedAt"`
+	EndedAt           time.Time `json:"endedAt,omitempty"`
+	DurationMS        int       `json:"durationMs,omitempty"`
+	CostUSD           float64   `json:"cost,omitempty"`
+	CostPresent       bool      `json:"costPresent,omitempty"`
+	FizeauCostPresent *bool     `json:"fizeau_cost_present,omitempty"`
+	Tokens            int       `json:"tokens,omitempty"`
+	InputTokens       int       `json:"inputTokens,omitempty"`
+	CachedTokens      int       `json:"cachedTokens,omitempty"`
+	OutputTokens      int       `json:"outputTokens,omitempty"`
+	Outcome           string    `json:"outcome,omitempty"`
+	ExitCode          int       `json:"exitCode"`
+	NativeSessionID   string    `json:"nativeSessionID,omitempty"`
+	TraceID           string    `json:"traceID,omitempty"`
+	SpanID            string    `json:"spanID,omitempty"`
+	BundlePath        string    `json:"bundlePath,omitempty"`
+	NativeLogRef      string    `json:"nativeLogRef,omitempty"`
+	Effort            string    `json:"effort,omitempty"`
+	Detail            string    `json:"detail,omitempty"`
+	BaseRev           string    `json:"baseRev,omitempty"`
+	ResultRev         string    `json:"resultRev,omitempty"`
 	// ToolCalls is the normalized stream of tool_call/tool_result pairs
 	// captured at drain time (Story 16). Persisting here means resolver-time
 	// reads do not have to parse raw native logs.
@@ -203,37 +204,38 @@ func SessionIndexEntryFromResult(projectRoot string, inputs SessionIndexInputs, 
 		outcome = "failure"
 	}
 	return SessionIndexEntry{
-		ID:              id,
-		ProjectID:       ProjectIDForPath(projectRoot),
-		BeadID:          beadID,
-		WorkerID:        workerID,
-		Harness:         harness,
-		Provider:        firstNonEmpty(result.Provider, inputs.Provider),
-		BaseURL:         result.ResolvedBaseURL,
-		Billing:         result.Billing,
-		BillingMode:     BillingPresentationMode(result.Billing),
-		Model:           model,
-		PromptSHA:       corr["prompt_sha"],
-		StartedAt:       startedAt.UTC(),
-		EndedAt:         endedAt.UTC(),
-		DurationMS:      int(endedAt.Sub(startedAt).Milliseconds()),
-		CostUSD:         result.CostUSD,
-		CostPresent:     result.CostUSD != 0,
-		Tokens:          result.Tokens,
-		InputTokens:     result.InputTokens,
-		CachedTokens:    result.CachedTokens,
-		OutputTokens:    result.OutputTokens,
-		Outcome:         outcome,
-		ExitCode:        result.ExitCode,
-		NativeSessionID: nativeSessionID,
-		TraceID:         traceID,
-		SpanID:          spanID,
-		BundlePath:      filepath.ToSlash(bundlePath),
-		NativeLogRef:    filepath.ToSlash(nativeLogRef),
-		Effort:          inputs.Effort,
-		Detail:          result.Error,
-		BaseRev:         baseRev,
-		ToolCalls:       append([]ToolCallEntry(nil), result.ToolCalls...),
+		ID:                id,
+		ProjectID:         ProjectIDForPath(projectRoot),
+		BeadID:            beadID,
+		WorkerID:          workerID,
+		Harness:           harness,
+		Provider:          firstNonEmpty(result.Provider, inputs.Provider),
+		BaseURL:           result.ResolvedBaseURL,
+		Billing:           result.Billing,
+		BillingMode:       BillingPresentationMode(result.Billing),
+		Model:             model,
+		PromptSHA:         corr["prompt_sha"],
+		StartedAt:         startedAt.UTC(),
+		EndedAt:           endedAt.UTC(),
+		DurationMS:        int(endedAt.Sub(startedAt).Milliseconds()),
+		CostUSD:           result.CostUSD,
+		CostPresent:       fizeauCostPresentValue(result.FizeauCostPresent),
+		FizeauCostPresent: cloneBoolPtr(result.FizeauCostPresent),
+		Tokens:            result.Tokens,
+		InputTokens:       result.InputTokens,
+		CachedTokens:      result.CachedTokens,
+		OutputTokens:      result.OutputTokens,
+		Outcome:           outcome,
+		ExitCode:          result.ExitCode,
+		NativeSessionID:   nativeSessionID,
+		TraceID:           traceID,
+		SpanID:            spanID,
+		BundlePath:        filepath.ToSlash(bundlePath),
+		NativeLogRef:      filepath.ToSlash(nativeLogRef),
+		Effort:            inputs.Effort,
+		Detail:            result.Error,
+		BaseRev:           baseRev,
+		ToolCalls:         append([]ToolCallEntry(nil), result.ToolCalls...),
 	}
 }
 
@@ -271,40 +273,65 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		totalTokens = e.Tokens
 	}
 	return SessionIndexEntry{
-		ID:              e.ID,
-		ProjectID:       ProjectIDForPath(projectRoot),
-		BeadID:          beadID,
-		WorkerID:        workerID,
-		Harness:         e.Harness,
-		Provider:        provider,
-		Surface:         e.Surface,
-		BaseURL:         baseURL,
-		Billing:         e.Billing,
-		BillingMode:     BillingPresentationMode(e.Billing),
-		Model:           e.Model,
-		PromptSHA:       e.Correlation["prompt_sha"],
-		StartedAt:       e.Timestamp.UTC(),
-		EndedAt:         endedAt,
-		DurationMS:      e.Duration,
-		CostUSD:         e.CostUSD,
-		CostPresent:     e.CostUSD != 0,
-		Tokens:          totalTokens,
-		InputTokens:     e.InputTokens,
-		CachedTokens:    e.CachedTokens,
-		OutputTokens:    e.OutputTokens,
-		Outcome:         outcome,
-		ExitCode:        e.ExitCode,
-		NativeSessionID: e.NativeSessionID,
-		TraceID:         e.TraceID,
-		SpanID:          e.SpanID,
-		BundlePath:      filepath.ToSlash(bundlePath),
-		NativeLogRef:    filepath.ToSlash(e.NativeLogRef),
-		Effort:          effort,
-		Detail:          e.Error,
-		BaseRev:         baseRev,
-		ResultRev:       e.ResultRev,
-		ToolCalls:       append([]ToolCallEntry(nil), e.ToolCalls...),
+		ID:                e.ID,
+		ProjectID:         ProjectIDForPath(projectRoot),
+		BeadID:            beadID,
+		WorkerID:          workerID,
+		Harness:           e.Harness,
+		Provider:          provider,
+		Surface:           e.Surface,
+		BaseURL:           baseURL,
+		Billing:           e.Billing,
+		BillingMode:       BillingPresentationMode(e.Billing),
+		Model:             e.Model,
+		PromptSHA:         e.Correlation["prompt_sha"],
+		StartedAt:         e.Timestamp.UTC(),
+		EndedAt:           endedAt,
+		DurationMS:        e.Duration,
+		CostUSD:           e.CostUSD,
+		CostPresent:       e.CostUSD != 0,
+		FizeauCostPresent: costPresentPtrFromLegacyCost(e.CostUSD, rawCostPresentFromLegacyEntry(e)),
+		Tokens:            totalTokens,
+		InputTokens:       e.InputTokens,
+		CachedTokens:      e.CachedTokens,
+		OutputTokens:      e.OutputTokens,
+		Outcome:           outcome,
+		ExitCode:          e.ExitCode,
+		NativeSessionID:   e.NativeSessionID,
+		TraceID:           e.TraceID,
+		SpanID:            e.SpanID,
+		BundlePath:        filepath.ToSlash(bundlePath),
+		NativeLogRef:      filepath.ToSlash(e.NativeLogRef),
+		Effort:            effort,
+		Detail:            e.Error,
+		BaseRev:           baseRev,
+		ResultRev:         e.ResultRev,
+		ToolCalls:         append([]ToolCallEntry(nil), e.ToolCalls...),
 	}
+}
+
+func cloneBoolPtr(v *bool) *bool {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func fizeauCostPresentValue(v *bool) bool {
+	return v != nil && *v
+}
+
+func costPresentPtrFromLegacyCost(costUSD float64, present bool) *bool {
+	if !present {
+		return nil
+	}
+	known := costUSD > 0
+	return &known
+}
+
+func rawCostPresentFromLegacyEntry(e SessionEntry) bool {
+	return e.CostUSD != 0
 }
 
 func ReadSessionIndex(logDir string, q SessionIndexQuery) ([]SessionIndexEntry, error) {

@@ -182,7 +182,9 @@ func writeSessionIndexLines(t *testing.T, workDir string, lines ...string) {
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			t.Fatal(err)
 		}
-		_, idx.CostPresent = raw["cost_usd"]
+		if _, ok := raw["cost_usd"]; ok {
+			idx.FizeauCostPresent = boolPtr(true)
+		}
 		if err := agent.AppendSessionIndex(logDir, idx, entry.Timestamp); err != nil {
 			t.Fatal(err)
 		}

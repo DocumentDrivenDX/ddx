@@ -122,3 +122,95 @@ func TestReviewCostDeferredEventBody_RecordsCostSource(t *testing.T) {
 	empty := ReviewCostDeferredEventBody("rev-abc", 0.0, 1.0, 2.0, "")
 	assert.Contains(t, empty, "cost_source=unknown", "empty provenance normalizes to unknown")
 }
+
+func TestServiceResultPreservesFizeauCostPresence(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		finalPayload []byte
+		wantCostUSD  float64
+		wantPresence *bool
+	}{
+		{
+			name:         "absent",
+			finalPayload: []byte(`{"status":"success","exit_code":0,"final_text":"ok"}`),
+			wantCostUSD:  0,
+			wantPresence: nil,
+		},
+		{
+			name: "explicit_zero",
+			finalPayload: mustJSON(t, agentlib.ServiceFinalData{
+				Status:     "success",
+				ExitCode:   0,
+				FinalText:  "free",
+				CostUSD:    floatPtr(0),
+				CostSource: agentlib.CostSourceReported,
+			}),
+			wantCostUSD:  0,
+			wantPresence: boolPtr(false),
+		},
+		{
+			name: "positive",
+			finalPayload: mustJSON(t, agentlib.ServiceFinalData{
+				Status:     "success",
+				ExitCode:   0,
+				FinalText:  "paid",
+				CostUSD:    floatPtr(1.5),
+				CostSource: agentlib.CostSourceReported,
+			}),
+			wantCostUSD:  1.5,
+			wantPresence: boolPtr(true),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			svc := &passthroughTestService{
+				executeEvents: []agentlib.ServiceEvent{
+					{
+						Type: "final",
+						Data: tc.finalPayload,
+					},
+				},
+			}
+			rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
+			result, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{
+				Prompt: "hello",
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tc.wantCostUSD, result.CostUSD)
+			assertBoolPtrEqual(t, tc.wantPresence, result.FizeauCostPresent)
+
+			entries, err := ReadSessionIndex(SessionLogDirForWorkDir(workDir), SessionIndexQuery{})
+			require.NoError(t, err)
+			require.Len(t, entries, 1)
+			assertBoolPtrEqual(t, tc.wantPresence, entries[0].FizeauCostPresent)
+		})
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	out, err := json.Marshal(v)
+	require.NoError(t, err)
+	return out
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func assertBoolPtrEqual(t *testing.T, want, got *bool) {
+	t.Helper()
+	switch {
+	case want == nil && got == nil:
+		return
+	case want == nil || got == nil:
+		t.Fatalf("presence = %v, want %v", got, want)
+	case *want != *got:
+		t.Fatalf("presence = %v, want %v", *got, *want)
+	}
+}
