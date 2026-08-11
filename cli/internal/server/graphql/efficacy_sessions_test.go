@@ -370,9 +370,16 @@ func appendSessionForTest(t *testing.T, workDir string, entry agent.SessionIndex
 	if entry.ProjectID == "" {
 		entry.ProjectID = agent.ProjectIDForPath(workDir)
 	}
+	if entry.FizeauCostPresent == nil && entry.CostPresent {
+		entry.FizeauCostPresent = boolPtr(true)
+	}
 	if err := agent.AppendSessionIndex(agent.SessionLogDirForWorkDir(workDir), entry, ts); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func seedEfficacySessionFixture(t *testing.T, workDir string, count, shards int, now time.Time) {

@@ -105,21 +105,22 @@ install:
 	}
 	started := time.Date(2026, 4, 22, 14, 0, 0, 0, time.UTC)
 	if err := agent.AppendSessionIndex(agent.SessionLogDirForWorkDir(workDir), agent.SessionIndexEntry{
-		ID:           "session-closed",
-		ProjectID:    agent.ProjectIDForPath(workDir),
-		BeadID:       closed.ID,
-		Harness:      "codex",
-		Provider:     "openai",
-		Model:        "gpt-5",
-		StartedAt:    started,
-		EndedAt:      started.Add(34 * time.Second),
-		DurationMS:   34000,
-		CostUSD:      0.0123,
-		CostPresent:  true,
-		InputTokens:  1200,
-		OutputTokens: 450,
-		Outcome:      "success",
-		BundlePath:   filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", "attempt-001")),
+		ID:                "session-closed",
+		ProjectID:         agent.ProjectIDForPath(workDir),
+		BeadID:            closed.ID,
+		Harness:           "codex",
+		Provider:          "openai",
+		Model:             "gpt-5",
+		StartedAt:         started,
+		EndedAt:           started.Add(34 * time.Second),
+		DurationMS:        34000,
+		CostUSD:           0.0123,
+		CostPresent:       true,
+		FizeauCostPresent: boolPtr(true),
+		InputTokens:       1200,
+		OutputTokens:      450,
+		Outcome:           "success",
+		BundlePath:        filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", "attempt-001")),
 	}, started); err != nil {
 		t.Fatal(err)
 	}
@@ -345,4 +346,8 @@ func TestGraphQLQueueSummaryInProgressCountsFreshActiveWorkers(t *testing.T) {
 	if data.QueueSummary.InProgress != 1 {
 		t.Fatalf("queueSummary.inProgress: want 1 fresh active worker, got %d", data.QueueSummary.InProgress)
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }

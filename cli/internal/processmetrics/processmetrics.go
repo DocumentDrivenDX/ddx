@@ -674,7 +674,7 @@ func (s *Service) sessionIndexPath() string {
 	return filepath.Join(agent.ResolveLogDir(s.WorkingDir, agent.DefaultLogDir), "sessions.jsonl")
 }
 
-func (s *Service) loadInputs() ([]bead.Bead, []agent.SessionEntry, map[string]agent.SessionEntry, map[string]bool, error) {
+func (s *Service) loadInputs() ([]bead.Bead, []agent.SessionEntry, map[string]agent.SessionEntry, map[string]*bool, error) {
 	beads, err := s.beadStore().ReadAll(context.Background())
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -712,7 +712,7 @@ func (r *sessionLoadRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func readSessions(path string) ([]agent.SessionEntry, map[string]bool, error) {
+func readSessions(path string) ([]agent.SessionEntry, map[string]*bool, error) {
 	if filepath.Base(path) == "sessions.jsonl" {
 		logDir := filepath.Dir(path)
 		indexEntries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{})
@@ -720,11 +720,11 @@ func readSessions(path string) ([]agent.SessionEntry, map[string]bool, error) {
 			return nil, nil, err
 		}
 		sessions := make([]agent.SessionEntry, 0, len(indexEntries))
-		costPresent := make(map[string]bool, len(indexEntries))
+		costPresent := make(map[string]*bool, len(indexEntries))
 		for _, idx := range indexEntries {
 			entry := agent.SessionIndexEntryToLegacy(idx)
 			sessions = append(sessions, entry)
-			costPresent[entry.ID] = idx.CostPresent
+			costPresent[entry.ID] = idx.FizeauCostPresent
 		}
 		return sessions, costPresent, nil
 	}
@@ -734,10 +734,12 @@ func readSessions(path string) ([]agent.SessionEntry, map[string]bool, error) {
 	}
 
 	sessions := make([]agent.SessionEntry, 0, len(records))
-	costPresent := make(map[string]bool, len(records))
+	costPresent := make(map[string]*bool, len(records))
 	for _, rec := range records {
 		sessions = append(sessions, rec.Entry)
-		costPresent[rec.Entry.ID] = rec.CostUSDPresent
+		if rec.CostUSDPresent {
+			costPresent[rec.Entry.ID] = boolPtr(true)
+		}
 	}
 	return sessions, costPresent, nil
 }
@@ -795,7 +797,7 @@ func selectBeads(beads []bead.Bead, beadID, featureID string) []bead.Bead {
 	return out
 }
 
-func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID map[string]agent.SessionEntry, sessionCostPresent map[string]bool, query Query) BeadCostRow {
+func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID map[string]agent.SessionEntry, sessionCostPresent map[string]*bool, query Query) BeadCostRow {
 	matches := matchedSessionsForBead(b, sessions, sessionByID)
 	if query.HasSince {
 		filtered := matches[:0]
@@ -1267,8 +1269,8 @@ func sessionTotalTokens(sess agent.SessionEntry) int {
 	return sess.InputTokens + sess.OutputTokens
 }
 
-func sessionCostState(sess agent.SessionEntry, explicitCost bool) State {
-	if !explicitCost {
+func sessionCostState(sess agent.SessionEntry, explicitCost *bool) State {
+	if explicitCost == nil {
 		return stateUnknown
 	}
 	if sess.CostUSD < 0 {
@@ -1277,11 +1279,15 @@ func sessionCostState(sess agent.SessionEntry, explicitCost bool) State {
 	return stateKnown
 }
 
-func sessionDerivedCost(sess agent.SessionEntry, explicitCost bool) *float64 {
-	if !explicitCost || sess.CostUSD < 0 {
+func sessionDerivedCost(sess agent.SessionEntry, explicitCost *bool) *float64 {
+	if explicitCost == nil || sess.CostUSD < 0 {
 		return nil
 	}
 	return float64Ptr(sess.CostUSD)
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func extraString(b bead.Bead, keys ...string) string {

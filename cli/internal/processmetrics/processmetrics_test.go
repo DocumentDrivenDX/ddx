@@ -26,7 +26,9 @@ func writeSessionIndexFixture(t *testing.T, projectRoot string, lines []string) 
 		idx := agent.SessionIndexEntryFromLegacy(projectRoot, entry)
 		var raw map[string]json.RawMessage
 		require.NoError(t, json.Unmarshal([]byte(line), &raw))
-		_, idx.CostPresent = raw["cost_usd"]
+		if _, ok := raw["cost_usd"]; ok {
+			idx.FizeauCostPresent = boolPtr(true)
+		}
 		require.NoError(t, agent.AppendSessionIndex(logDir, idx, entry.Timestamp))
 	}
 }
