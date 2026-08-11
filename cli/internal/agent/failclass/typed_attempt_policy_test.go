@@ -491,6 +491,139 @@ func testAttemptPolicyDecisionIsExhaustive(t *testing.T) {
 	}
 }
 
+func TestAttemptPolicyDecisionIsExhaustive(t *testing.T) {
+	cases := []struct {
+		name       string
+		input      AttemptPolicyInput
+		wantAction AttemptPolicyAction
+		wantReason string
+	}{
+		{
+			name: "completed_close",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "success",
+					Outcome: agentlib.SessionOutcomeSuccess,
+					Cause:   agentlib.TerminalCauseCompleted,
+					Stage:   agentlib.SessionStageHarness,
+				},
+			},
+			wantAction: AttemptPolicyActionClose,
+			wantReason: "fizeau_outcome_success",
+		},
+		{
+			name: "completed_land",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "success",
+					Outcome: agentlib.SessionOutcomeSuccess,
+					Cause:   agentlib.TerminalCauseCompleted,
+					Stage:   agentlib.SessionStageHarness,
+				},
+				Evidence: AttemptPolicyEvidence{LandReady: true},
+			},
+			wantAction: AttemptPolicyActionLand,
+			wantReason: "fizeau_outcome_success",
+		},
+		{
+			name: "retryable_current_attempt_repair",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeFailed,
+					Cause:   agentlib.TerminalCauseProviderFailed,
+					Stage:   agentlib.SessionStageProvider,
+				},
+				Evidence: AttemptPolicyEvidence{CurrentAttemptRepairable: true},
+			},
+			wantAction: AttemptPolicyActionCurrentAttemptRepair,
+			wantReason: "fizeau_terminal_retryable",
+		},
+		{
+			name: "retryable_new_attempt_retry",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeFailed,
+					Cause:   agentlib.TerminalCauseProviderFailed,
+					Stage:   agentlib.SessionStageProvider,
+				},
+				Evidence: AttemptPolicyEvidence{NewAttemptRetryAllowed: true},
+			},
+			wantAction: AttemptPolicyActionNewAttemptRetry,
+			wantReason: "fizeau_terminal_retryable",
+		},
+		{
+			name: "unavailable_now_parks",
+			input: AttemptPolicyInput{
+				ImmediateErr: &agentlib.NoViableProviderForNow{
+					RetryAfter: time.Unix(1_700_000_000, 0),
+				},
+			},
+			wantAction: AttemptPolicyActionPark,
+			wantReason: "fizeau_immediate_unavailable_now",
+		},
+		{
+			name: "cancelled_parks",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeCancelled,
+					Cause:   agentlib.TerminalCauseContextCancelled,
+					Stage:   agentlib.SessionStageCleanup,
+				},
+			},
+			wantAction: AttemptPolicyActionPark,
+			wantReason: "fizeau_outcome_cancelled",
+		},
+		{
+			name: "permanent_failure_requests_minimum_strength",
+			input: AttemptPolicyInput{
+				Final: &agentlib.ServiceFinalData{
+					Status:  "failed",
+					Outcome: agentlib.SessionOutcomeFailed,
+					Cause:   agentlib.TerminalCauseInternalError,
+					Stage:   agentlib.SessionStageCleanup,
+				},
+				Evidence: AttemptPolicyEvidence{RequestMinimumStrength: true},
+			},
+			wantAction: AttemptPolicyActionMinimumStrengthEscalation,
+			wantReason: "fizeau_terminal_permanent_failure",
+		},
+	}
+
+	seenActions := map[AttemptPolicyAction]bool{}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DecideAttemptPolicy(tc.input)
+			if got.Action != tc.wantAction {
+				t.Fatalf("DecideAttemptPolicy(%s).Action = %q, want %q", tc.name, got.Action, tc.wantAction)
+			}
+			if got.Reason != tc.wantReason {
+				t.Fatalf("DecideAttemptPolicy(%s).Reason = %q, want %q", tc.name, got.Reason, tc.wantReason)
+			}
+			if got.Audit != tc.input.Audit {
+				t.Fatalf("DecideAttemptPolicy(%s).Audit = %#v, want %#v", tc.name, got.Audit, tc.input.Audit)
+			}
+			seenActions[got.Action] = true
+		})
+	}
+
+	wantActions := []AttemptPolicyAction{
+		AttemptPolicyActionCurrentAttemptRepair,
+		AttemptPolicyActionNewAttemptRetry,
+		AttemptPolicyActionMinimumStrengthEscalation,
+		AttemptPolicyActionPark,
+		AttemptPolicyActionLand,
+		AttemptPolicyActionClose,
+	}
+	for _, want := range wantActions {
+		if !seenActions[want] {
+			t.Fatalf("exhaustiveness gap: decision %q was not observed", want)
+		}
+	}
+}
+
 func TestProviderIdentityDoesNotAffectPolicy(t *testing.T) {
 	baseFinal := &agentlib.ServiceFinalData{
 		Status:  "failed",
