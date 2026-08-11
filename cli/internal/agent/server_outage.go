@@ -187,14 +187,10 @@ func isServerTransportFailureText(lower string) bool {
 			"connect: connection",
 			"handshake",
 			"http:",
-			"request",
-			"response",
-			"socket",
-			"network",
 			"api/health",
 			"127.0.0.1",
 			"localhost",
-			"ddx",
+			"tls",
 		) {
 			return true
 		}

@@ -37,6 +37,29 @@ func TestServerOutageTracker_DistinctNoViableProviderTripsAfterThreshold(t *test
 	}
 }
 
+func TestServerOutageActivateStillFiresOnTLSHandshakeError(t *testing.T) {
+	tracker := newServerOutageTracker(10*time.Minute, 3, 30*time.Second)
+	report := ExecuteBeadReport{
+		BeadID:   "ddx-transport",
+		Status:   ExecuteBeadStatusExecutionFailed,
+		Detail:   "http: TLS handshake error from 127.0.0.1:7743: remote error: tls: bad certificate",
+		Provider: "opaque-provider-a",
+	}
+
+	assert.Equal(t, FailureModeServerUnavailable, ClassifyFailureMode(report.Status, 1, report.Detail))
+	activated, reason := tracker.Record(report, report.BeadID, time.Now().UTC())
+	require.True(t, activated, "TLS handshake failures must still activate server outage mode")
+	require.Equal(t, FailureModeServerUnavailable, reason)
+	require.True(t, tracker.Active())
+	assert.Equal(t, report.BeadID, tracker.TriggerBeadID())
+	assert.Equal(t, report.Detail, tracker.TriggerDetail())
+
+	msg := serverOutageActivationMessage(tracker)
+	assert.Contains(t, msg, "bead_id="+report.BeadID)
+	assert.Contains(t, msg, "TLS handshake error")
+	assert.Contains(t, msg, `detail="http: TLS handshake error from 127.0.0.1:7743: remote error: tls: bad certificate"`)
+}
+
 func TestServerOutageTracker_DirectTransportFailureIsServerLevel(t *testing.T) {
 	for _, provider := range []string{"", "opaque-provider-a", "opaque-provider-b"} {
 		t.Run(provider, func(t *testing.T) {
