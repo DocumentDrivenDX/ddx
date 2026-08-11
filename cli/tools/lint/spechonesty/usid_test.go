@@ -83,6 +83,48 @@ func TestDuplicateUserStoryIDFails(t *testing.T) {
 	}
 }
 
+// TestSpecHonestyRejectsDuplicateUSID is the acceptance-named proof that
+// US-id collisions across feature documents fail in the scoped tree.
+func TestSpecHonestyRejectsDuplicateUSID(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "01-frame", "features", "FEAT-008-web-ui.md")
+	b := filepath.Join(root, "01-frame", "features", "FEAT-020-server-node-state.md")
+	writeDoc(t, a, fixtureFeatureWithStories("FEAT-008", "Proposed", []string{"US-087", "US-088"}, ""))
+	writeDoc(t, b, fixtureFeatureWithStories("FEAT-020", "Proposed", []string{"US-087", "US-088"}, ""))
+
+	findings, err := FindDuplicateUserStoryIDs(root)
+	if err != nil {
+		t.Fatalf("FindDuplicateUserStoryIDs: %v", err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("len(findings) = %d, want 2; findings=%v", len(findings), findings)
+	}
+	seen := map[string]bool{}
+	for _, f := range findings {
+		if f.Kind != FindingDuplicateUSID {
+			t.Fatalf("Kind = %q, want %q", f.Kind, FindingDuplicateUSID)
+		}
+		if f.Severity != SeverityError {
+			t.Fatalf("Severity = %q, want %q", f.Severity, SeverityError)
+		}
+		if !strings.Contains(f.Message, a) {
+			t.Fatalf("message should name first feature %s, got %q", a, f.Message)
+		}
+		if !strings.Contains(f.Message, b) {
+			t.Fatalf("message should name second feature %s, got %q", b, f.Message)
+		}
+		if strings.Contains(f.Message, "US-087") {
+			seen["US-087"] = true
+		}
+		if strings.Contains(f.Message, "US-088") {
+			seen["US-088"] = true
+		}
+	}
+	if !seen["US-087"] || !seen["US-088"] {
+		t.Fatalf("expected findings for both US-087 and US-088, seen=%v findings=%v", seen, findings)
+	}
+}
+
 // TestDuplicateUserStoryIDIgnoresWaiver: a duplicate US-id failure remains
 // SeverityError even when a fixture includes a syntactically valid reasoned
 // waiver on a non-Complete status.

@@ -78,6 +78,40 @@ func TestDuplicateDocumentIDFails(t *testing.T) {
 	}
 }
 
+// TestSpecHonestyRejectsDuplicateDocumentID is the acceptance-named proof
+// that duplicate document ids across the scoped design directories fail.
+func TestSpecHonestyRejectsDuplicateDocumentID(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "02-design", "technical-designs", "TD-040-leftover.md")
+	b := filepath.Join(root, "02-design", "technical-designs", "TD-040-cross-repo.md")
+	writeDoc(t, a, fixtureDoc("TD-040", "Proposed", ""))
+	writeDoc(t, b, fixtureDoc("TD-040-cross-repo-blocker-recheck", "Proposed", ""))
+
+	findings, err := FindDuplicateDocumentIDs(root)
+	if err != nil {
+		t.Fatalf("FindDuplicateDocumentIDs: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("len(findings) = %d, want 1; findings=%v", len(findings), findings)
+	}
+	f := findings[0]
+	if f.Kind != FindingDuplicateID {
+		t.Fatalf("Kind = %q, want %q", f.Kind, FindingDuplicateID)
+	}
+	if f.Severity != SeverityError {
+		t.Fatalf("Severity = %q, want %q", f.Severity, SeverityError)
+	}
+	if !strings.Contains(f.Message, "TD-040") {
+		t.Fatalf("message should name id TD-040, got %q", f.Message)
+	}
+	if !strings.Contains(f.Message, a) {
+		t.Fatalf("message should name first document %s, got %q", a, f.Message)
+	}
+	if !strings.Contains(f.Message, b) {
+		t.Fatalf("message should name second document %s, got %q", b, f.Message)
+	}
+}
+
 // TestDuplicateDocumentIDIgnoresWaiver: a duplicate document-id failure
 // remains SeverityError even when a syntactically valid reasoned waiver
 // is present and the status is non-Complete.

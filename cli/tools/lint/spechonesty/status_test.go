@@ -112,3 +112,30 @@ func TestStatusParserFlagsMissingDesignStatus(t *testing.T) {
 		}
 	})
 }
+
+// TestSpecHonestyRejectsMissingStatus is the acceptance-named proof that
+// SD/TD/ADR documents without a stamp fail the missing-status rule.
+func TestSpecHonestyRejectsMissingStatus(t *testing.T) {
+	for _, name := range []string{
+		"SD-013-unstamped.md",
+		"TD-027-unstamped.md",
+	} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			path := statusFixture(t, name)
+			res, err := ParseDocumentStatus(path)
+			if err != nil {
+				t.Fatalf("ParseDocumentStatus: %v", err)
+			}
+			if !res.IsDesign {
+				t.Fatalf("IsDesign = false for design fixture %s", name)
+			}
+			if !res.MissingDesignStatus {
+				t.Fatalf("MissingDesignStatus = false, want true for unstamped design %s", name)
+			}
+			if res.Source != StatusSourceNone {
+				t.Fatalf("Source = %q, want %q", res.Source, StatusSourceNone)
+			}
+		})
+	}
+}
