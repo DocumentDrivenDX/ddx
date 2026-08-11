@@ -11,7 +11,7 @@ import (
 )
 
 // TestFizeauV015ModuleContract proves a helper binary that imports only the
-// public github.com/easel/fizeau surface resolves that module at v0.15.0 with
+// public github.com/easel/fizeau surface resolves that module at v0.15.2 with
 // no replacement or pseudo-version.
 func TestFizeauV015ModuleContract(t *testing.T) {
 	t.Parallel()
@@ -33,8 +33,8 @@ func TestFizeauV015ModuleContract(t *testing.T) {
 	}
 	if version, ok := moduleVersion(line, "github.com/easel/fizeau"); !ok {
 		t.Fatalf("github.com/easel/fizeau version field missing: %q\nfull output:\n%s", line, output)
-	} else if version != "v0.15.0" {
-		t.Fatalf("github.com/easel/fizeau version = %q, want v0.15.0\nfull output:\n%s", version, output)
+	} else if version != "v0.15.2" {
+		t.Fatalf("github.com/easel/fizeau version = %q, want v0.15.2\nfull output:\n%s", version, output)
 	} else if strings.HasPrefix(version, "v0.0.0-") {
 		t.Fatalf("github.com/easel/fizeau resolved to pseudo-version: %s", line)
 	}
