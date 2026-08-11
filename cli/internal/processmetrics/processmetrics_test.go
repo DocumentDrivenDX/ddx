@@ -169,10 +169,9 @@ func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 
 	second := cost.Beads[1]
 	require.Equal(t, "bx-002", second.BeadID)
-	require.Equal(t, State(stateEstimated), second.CostState)
-	require.NotNil(t, second.CostUSD)
-	require.InDelta(t, 0.018, *second.CostUSD, 1e-9)
-	require.InDelta(t, 2.518, cost.Features[0].CostUSDValue(), 1e-9)
+	require.Equal(t, State(stateUnknown), second.CostState)
+	require.Nil(t, second.CostUSD)
+	require.InDelta(t, 2.5, cost.Features[0].CostUSDValue(), 1e-9)
 
 	cycle, err := svc.CycleTime(Query{})
 	require.NoError(t, err)
@@ -198,9 +197,47 @@ func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 	require.Equal(t, 3, summary.Sessions.Total)
 	require.Equal(t, 2, summary.Sessions.Correlated)
 	require.Equal(t, 1, summary.Sessions.Uncorrelated)
-	require.InDelta(t, 2.518, summary.Cost.KnownCostUSD+summary.Cost.EstimatedCostUSD, 1e-9)
+	require.InDelta(t, 2.5, summary.Cost.KnownCostUSD, 1e-9)
+	require.InDelta(t, 0, summary.Cost.EstimatedCostUSD, 1e-9)
 	require.Equal(t, 2, summary.CycleTime.KnownCount)
 	require.Equal(t, 2, summary.Rework.KnownClosed)
+}
+
+func TestProcessMetricsNeverEstimatesCostFromModelIdentity(t *testing.T) {
+	dir := writeMetricsFixture(t)
+	svc := New(dir)
+
+	cost, err := svc.Cost(Query{})
+	require.NoError(t, err)
+	require.Len(t, cost.Beads, 2)
+	require.Len(t, cost.Features, 1)
+
+	known := cost.Beads[0]
+	require.Equal(t, "bx-001", known.BeadID)
+	require.Equal(t, State(stateKnown), known.CostState)
+	require.NotNil(t, known.CostUSD)
+	require.InDelta(t, 2.5, *known.CostUSD, 1e-9)
+
+	unknown := cost.Beads[1]
+	require.Equal(t, "bx-002", unknown.BeadID)
+	require.Equal(t, State(stateUnknown), unknown.CostState)
+	require.Nil(t, unknown.CostUSD)
+	require.Equal(t, 1, unknown.UnknownSessions)
+
+	require.InDelta(t, 2.5, cost.Features[0].CostUSDValue(), 1e-9)
+
+	summary, err := svc.Summary(Query{})
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Beads.KnownCost)
+	require.Equal(t, 1, summary.Beads.UnknownCost)
+	require.Equal(t, 0, summary.Beads.EstimatedCost)
+	require.Equal(t, 1, summary.Sessions.KnownCost)
+	require.Equal(t, 0, summary.Sessions.EstimatedCost)
+	require.Equal(t, 2, summary.Sessions.UnknownCost)
+	require.InDelta(t, 2.5, summary.Sessions.CostUSD, 1e-9)
+	require.InDelta(t, 2.5, summary.Cost.KnownCostUSD, 1e-9)
+	require.InDelta(t, 0, summary.Cost.EstimatedCostUSD, 1e-9)
+	require.Equal(t, 1, summary.Cost.UnknownBeads)
 }
 
 func writeLifecycleStatusMetricsFixture(t *testing.T) string {

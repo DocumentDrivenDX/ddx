@@ -724,7 +724,7 @@ func readSessions(path string) ([]agent.SessionEntry, map[string]bool, error) {
 		for _, idx := range indexEntries {
 			entry := agent.SessionIndexEntryToLegacy(idx)
 			sessions = append(sessions, entry)
-			costPresent[entry.ID] = idx.CostPresent || idx.CostUSD != 0
+			costPresent[entry.ID] = idx.CostPresent
 		}
 		return sessions, costPresent, nil
 	}
@@ -818,7 +818,7 @@ func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID ma
 	}
 
 	var costTotal float64
-	var knownCount, estimatedCount, unknownCount int
+	var knownCount, unknownCount int
 	for _, sess := range matches {
 		explicitCost := sessionCostPresent[sess.ID]
 		row.SessionIDs = append(row.SessionIDs, sess.ID)
@@ -830,8 +830,6 @@ func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID ma
 			costTotal += *cost
 			if sessionCostState(sess, explicitCost) == stateKnown {
 				knownCount++
-			} else {
-				estimatedCount++
 			}
 		} else {
 			unknownCount++
@@ -843,10 +841,8 @@ func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID ma
 	switch {
 	case len(matches) == 0:
 		row.CostState = stateUnknown
-	case unknownCount > 0 && knownCount == 0 && estimatedCount == 0:
+	case unknownCount > 0 && knownCount == 0:
 		row.CostState = stateUnknown
-	case estimatedCount > 0:
-		row.CostState = stateEstimated
 	default:
 		row.CostState = stateKnown
 	}
@@ -1272,55 +1268,20 @@ func sessionTotalTokens(sess agent.SessionEntry) int {
 }
 
 func sessionCostState(sess agent.SessionEntry, explicitCost bool) State {
-	if explicitCost {
-		if sess.CostUSD < 0 {
-			return stateUnknown
-		}
-		return stateKnown
-	}
-	if sess.CostUSD > 0 {
-		return stateKnown
-	}
-	if sess.CostUSD == -1 {
+	if !explicitCost {
 		return stateUnknown
 	}
-	if est, ok := sessionEstimatedCost(sess); ok {
-		if est == 0 {
-			return stateKnown
-		}
-		return stateEstimated
+	if sess.CostUSD < 0 {
+		return stateUnknown
 	}
-	return stateUnknown
+	return stateKnown
 }
 
 func sessionDerivedCost(sess agent.SessionEntry, explicitCost bool) *float64 {
-	if explicitCost {
-		if sess.CostUSD < 0 {
-			return nil
-		}
-		return float64Ptr(sess.CostUSD)
-	}
-	if sess.CostUSD > 0 {
-		return float64Ptr(sess.CostUSD)
-	}
-	if sess.CostUSD == -1 {
+	if !explicitCost || sess.CostUSD < 0 {
 		return nil
 	}
-	if est, ok := sessionEstimatedCost(sess); ok {
-		return float64Ptr(est)
-	}
-	return nil
-}
-
-func sessionEstimatedCost(sess agent.SessionEntry) (float64, bool) {
-	if sess.Model == "" {
-		return 0, false
-	}
-	est := agent.EstimateCost(sess.Model, sess.InputTokens, sess.OutputTokens)
-	if est < 0 {
-		return 0, false
-	}
-	return est, true
+	return float64Ptr(sess.CostUSD)
 }
 
 func extraString(b bead.Bead, keys ...string) string {
