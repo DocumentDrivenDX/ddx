@@ -754,11 +754,11 @@ func TestAttemptPolicyIgnoresRouteAuditFieldsForDecision(t *testing.T) {
 	}
 }
 
-func TestAttemptPolicyDoesNotReadProviderText(t *testing.T) {
-	first := AttemptPolicyInput{
-		ImmediateErr: fmt.Errorf("provider detail that should be ignored: %w", &agentlib.NoViableProviderForNow{
+func TestImmediateFizeauFailureDoesNotParseProviderText(t *testing.T) {
+	baseInput := AttemptPolicyInput{
+		ImmediateErr: &agentlib.NoViableProviderForNow{
 			RetryAfter: time.Unix(1_700_000_000, 0),
-		}),
+		},
 		Audit: AttemptPolicyAudit{
 			Harness:  "codex",
 			Provider: "openai",
@@ -766,41 +766,70 @@ func TestAttemptPolicyDoesNotReadProviderText(t *testing.T) {
 			Route:    "route-a",
 		},
 	}
-	second := AttemptPolicyInput{
-		ImmediateErr: fmt.Errorf("stderr/detail text changed but the typed error is the same: %w", &agentlib.NoViableProviderForNow{
-			RetryAfter: time.Unix(1_700_000_000, 0),
-		}),
-		Audit: AttemptPolicyAudit{
-			Harness:  "codex",
-			Provider: "openai",
-			Model:    "gpt-5",
-			Route:    "route-a",
+	want := DecideAttemptPolicy(baseInput)
+	if want.Action != AttemptPolicyActionPark {
+		t.Fatalf("DecideAttemptPolicy(baseInput).Action = %q, want %q", want.Action, AttemptPolicyActionPark)
+	}
+	if want.Reason != "fizeau_immediate_unavailable_now" {
+		t.Fatalf("DecideAttemptPolicy(baseInput).Reason = %q, want %q", want.Reason, "fizeau_immediate_unavailable_now")
+	}
+
+	cases := []struct {
+		name                string
+		stderrText          string
+		providerMessageText string
+	}{
+		{
+			name:                "empty_text",
+			stderrText:          "",
+			providerMessageText: "",
+		},
+		{
+			name:                "stderr_text_varied",
+			stderrText:          "stderr: quota exhausted; retry later",
+			providerMessageText: "",
+		},
+		{
+			name:                "provider_message_text_varied",
+			stderrText:          "",
+			providerMessageText: "provider-message: route timed out after a successful connect",
+		},
+		{
+			name:                "misleading_text",
+			stderrText:          "stderr: this looks permanent, but it is not",
+			providerMessageText: "provider-message: do not trust this human-readable explanation",
 		},
 	}
 
-	gotFirst := DecideAttemptPolicy(first)
-	gotSecond := DecideAttemptPolicy(second)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error = &agentlib.NoViableProviderForNow{
+				RetryAfter: time.Unix(1_700_000_000, 0),
+			}
+			if tc.stderrText != "" || tc.providerMessageText != "" {
+				err = fmt.Errorf("%s | %s | %w", tc.stderrText, tc.providerMessageText, err)
+			}
 
-	if gotFirst.Action != AttemptPolicyActionPark {
-		t.Fatalf("DecideAttemptPolicy(first).Action = %q, want %q", gotFirst.Action, AttemptPolicyActionPark)
-	}
-	if gotSecond.Action != AttemptPolicyActionPark {
-		t.Fatalf("DecideAttemptPolicy(second).Action = %q, want %q", gotSecond.Action, AttemptPolicyActionPark)
-	}
-	if gotFirst.Action != gotSecond.Action {
-		t.Fatalf("actions differ: first=%q second=%q", gotFirst.Action, gotSecond.Action)
-	}
-	if gotFirst.Reason != gotSecond.Reason {
-		t.Fatalf("reasons differ: first=%q second=%q", gotFirst.Reason, gotSecond.Reason)
-	}
-	if gotFirst.Reason != "fizeau_immediate_unavailable_now" {
-		t.Fatalf("DecideAttemptPolicy(first).Reason = %q, want %q", gotFirst.Reason, "fizeau_immediate_unavailable_now")
-	}
-	if gotFirst.Audit != first.Audit {
-		t.Fatalf("DecideAttemptPolicy(first).Audit = %#v, want %#v", gotFirst.Audit, first.Audit)
-	}
-	if gotSecond.Audit != second.Audit {
-		t.Fatalf("DecideAttemptPolicy(second).Audit = %#v, want %#v", gotSecond.Audit, second.Audit)
+			got := DecideAttemptPolicy(AttemptPolicyInput{
+				ImmediateErr: err,
+				Audit: AttemptPolicyAudit{
+					Harness:  "codex",
+					Provider: "openai",
+					Model:    "gpt-5",
+					Route:    "route-a",
+				},
+			})
+
+			if got.Action != want.Action {
+				t.Fatalf("DecideAttemptPolicy(%s).Action = %q, want %q", tc.name, got.Action, want.Action)
+			}
+			if got.Reason != want.Reason {
+				t.Fatalf("DecideAttemptPolicy(%s).Reason = %q, want %q", tc.name, got.Reason, want.Reason)
+			}
+			if got.Audit != baseInput.Audit {
+				t.Fatalf("DecideAttemptPolicy(%s).Audit = %#v, want %#v", tc.name, got.Audit, baseInput.Audit)
+			}
+		})
 	}
 }
 
