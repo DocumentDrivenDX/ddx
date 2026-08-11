@@ -803,12 +803,7 @@ func TestImmediateFizeauFailureDoesNotParseProviderText(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var err error = &agentlib.NoViableProviderForNow{
-				RetryAfter: time.Unix(1_700_000_000, 0),
-			}
-			if tc.stderrText != "" || tc.providerMessageText != "" {
-				err = fmt.Errorf("%s | %s | %w", tc.stderrText, tc.providerMessageText, err)
-			}
+			err := noViableProviderForNowErr(tc.stderrText, tc.providerMessageText)
 
 			got := DecideAttemptPolicy(AttemptPolicyInput{
 				ImmediateErr: err,
@@ -831,6 +826,19 @@ func TestImmediateFizeauFailureDoesNotParseProviderText(t *testing.T) {
 			}
 		})
 	}
+}
+
+func noViableProviderForNowErr(stderrText, providerMessageText string) error {
+	var err error = &agentlib.NoViableProviderForNow{
+		RetryAfter: time.Unix(1_700_000_000, 0),
+	}
+	if providerMessageText != "" {
+		err = fmt.Errorf("provider-message: %s: %w", providerMessageText, err)
+	}
+	if stderrText != "" {
+		err = fmt.Errorf("stderr: %s: %w", stderrText, err)
+	}
+	return err
 }
 
 func TestAttemptPolicyRejectsAmbiguousTypedFizeauResult(t *testing.T) {
