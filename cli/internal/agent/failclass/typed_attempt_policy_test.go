@@ -393,10 +393,6 @@ func TestAttemptPolicyDecisionIsExhaustive(t *testing.T) {
 	testAttemptPolicyDecisionIsExhaustive(t)
 }
 
-func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
-	testAttemptPolicyDecisionIsExhaustive(t)
-}
-
 func testAttemptPolicyDecisionIsExhaustive(t *testing.T) {
 	cases := []struct {
 		name string
@@ -491,7 +487,7 @@ func testAttemptPolicyDecisionIsExhaustive(t *testing.T) {
 	}
 }
 
-func TestAttemptPolicyDecisionIsExhaustive(t *testing.T) {
+func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
 	cases := []struct {
 		name       string
 		input      AttemptPolicyInput
