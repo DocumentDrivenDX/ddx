@@ -329,6 +329,34 @@ func TestSpechonestyCommandExitsNonZeroOnDuplicateUserStoryID(t *testing.T) {
 	}
 }
 
+// TestSpechonestyCommandReportsCorpusWB1Diagnostics exercises the real
+// docs/helix corpus and checks the WB-1 diagnostics that motivated this bead.
+func TestSpechonestyCommandReportsCorpusWB1Diagnostics(t *testing.T) {
+	root := moduleRoot(t)
+	docsDir := filepath.Join(root, "..", "docs", "helix")
+
+	code, stdout, stderr := runSpechonesty(t, docsDir)
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for current docs/helix corpus; stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+
+	expectations := []string{
+		filepath.Join("docs", "helix", "02-design", "solution-designs", "SD-013-multi-agent-coordination.md") + ":1: missing_status:",
+		filepath.Join("docs", "helix", "02-design", "technical-designs", "TD-027-bead-collection-abstraction.md") + ":1: missing_status:",
+		filepath.Join("docs", "helix", "02-design", "technical-designs", "TD-040-cross-repo-blocker-recheck.md") + ":3: duplicate_id:",
+		filepath.Join("docs", "helix", "01-frame", "features", "FEAT-008-web-ui.md") + ":739: duplicate_us_id:",
+		filepath.Join("docs", "helix", "01-frame", "features", "FEAT-020-server-node-state.md"),
+		"US-087",
+		"US-088",
+	}
+	for _, want := range expectations {
+		if !strings.Contains(combined, want) {
+			t.Fatalf("expected corpus diagnostic containing %q, got exit=%d\nstdout:\n%s\nstderr:\n%s", want, code, stdout, stderr)
+		}
+	}
+}
+
 // TestSpechonestyCommandIsReadOnly asserts fixture file contents are
 // byte-identical before and after command execution.
 func TestSpechonestyCommandIsReadOnly(t *testing.T) {
