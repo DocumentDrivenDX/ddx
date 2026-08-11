@@ -783,6 +783,8 @@ type SessionsCostSummary {
   subscriptionEquivUsd: Float!
   """Count of sessions served locally"""
   localSessionCount: Int!
+  """Count of sessions whose cost was not present in the Fizeau record"""
+  unknownCost: Int!
   """Optional local compute estimate, present only when configured"""
   localEstimatedUsd: Float
 }

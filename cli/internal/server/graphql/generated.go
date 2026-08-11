@@ -1322,6 +1322,7 @@ type ComplexityRoot struct {
 		LocalEstimatedUsd    func(childComplexity int) int
 		LocalSessionCount    func(childComplexity int) int
 		SubscriptionEquivUsd func(childComplexity int) int
+		UnknownCost          func(childComplexity int) int
 	}
 
 	SourceRef struct {
@@ -7479,6 +7480,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionsCostSummary.SubscriptionEquivUsd(childComplexity), true
+	case "SessionsCostSummary.unknownCost":
+		if e.ComplexityRoot.SessionsCostSummary.UnknownCost == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionsCostSummary.UnknownCost(childComplexity), true
 
 	case "SourceRef.beadId":
 		if e.ComplexityRoot.SourceRef.BeadID == nil {
@@ -33233,6 +33240,8 @@ func (ec *executionContext) fieldContext_Query_sessionsCostSummary(ctx context.C
 				return ec.fieldContext_SessionsCostSummary_subscriptionEquivUsd(ctx, field)
 			case "localSessionCount":
 				return ec.fieldContext_SessionsCostSummary_localSessionCount(ctx, field)
+			case "unknownCost":
+				return ec.fieldContext_SessionsCostSummary_unknownCost(ctx, field)
 			case "localEstimatedUsd":
 				return ec.fieldContext_SessionsCostSummary_localEstimatedUsd(ctx, field)
 			}
@@ -40237,6 +40246,35 @@ func (ec *executionContext) _SessionsCostSummary_localSessionCount(ctx context.C
 }
 
 func (ec *executionContext) fieldContext_SessionsCostSummary_localSessionCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionsCostSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionsCostSummary_unknownCost(ctx context.Context, field graphql.CollectedField, obj *SessionsCostSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionsCostSummary_unknownCost,
+		func(ctx context.Context) (any, error) {
+			return obj.UnknownCost, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionsCostSummary_unknownCost(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionsCostSummary",
 		Field:      field,
@@ -54913,6 +54951,11 @@ func (ec *executionContext) _SessionsCostSummary(ctx context.Context, sel ast.Se
 			}
 		case "localSessionCount":
 			out.Values[i] = ec._SessionsCostSummary_localSessionCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unknownCost":
+			out.Values[i] = ec._SessionsCostSummary_unknownCost(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

@@ -722,11 +722,18 @@ func (s *ServerState) GetSessionsCostSummaryGraphQL(projectID string, since, unt
 	var localTokens int
 	for _, e := range entries {
 		mode := agent.BillingPresentationMode(e.Billing)
+		if !e.CostPresent {
+			summary.UnknownCost++
+		}
 		switch mode {
 		case agent.BillingModePaid:
-			summary.CashUsd += e.CostUSD
+			if e.CostPresent {
+				summary.CashUsd += e.CostUSD
+			}
 		case agent.BillingModeSubscription:
-			summary.SubscriptionEquivUsd += e.CostUSD
+			if e.CostPresent {
+				summary.SubscriptionEquivUsd += e.CostUSD
+			}
 		case agent.BillingModeLocal:
 			summary.LocalSessionCount++
 			tokens := e.Tokens
@@ -808,7 +815,7 @@ func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgrap
 		sess.EndedAt = &endedAt
 	}
 
-	if e.CostUSD > 0 {
+	if e.CostPresent {
 		sess.Cost = &e.CostUSD
 	}
 
