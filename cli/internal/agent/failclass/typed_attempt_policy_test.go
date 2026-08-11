@@ -390,6 +390,14 @@ func TestAttemptPolicyMET003AttributionUsesTypedEvidence(t *testing.T) {
 }
 
 func TestAttemptPolicyDecisionIsExhaustive(t *testing.T) {
+	testAttemptPolicyDecisionIsExhaustive(t)
+}
+
+func TestDDXAttemptPolicyConsumesTypedFizeauResult(t *testing.T) {
+	testAttemptPolicyDecisionIsExhaustive(t)
+}
+
+func testAttemptPolicyDecisionIsExhaustive(t *testing.T) {
 	cases := []struct {
 		name string
 		in   AttemptPolicyInput
