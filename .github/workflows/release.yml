@@ -152,7 +152,7 @@ jobs:
       run: make frontend-verify
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
@@ -209,7 +209,7 @@ jobs:
       run: make frontend-verify
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
