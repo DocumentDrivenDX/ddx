@@ -80,7 +80,11 @@ func DecideAttemptTransition(input AttemptTransitionInput) AttemptTransition {
 		return stopTransition("terminal_status")
 	}
 
-	if escalation.IsInfrastructureFailure(input.Status, input.Detail) {
+	// Typed provider-connectivity (and the legacy connection-refused detail
+	// shape) still retry with a higher MinPower. escalation.IsInfrastructureFailure
+	// is audit-only and always false; do not consult it for this decision.
+	connectivity := retryableProvider || isProviderConnectivityDetail(input.Detail)
+	if connectivity {
 		if !input.AllowInfrastructureRetry || input.ActualPower <= 0 || (!isProviderConnectivityDetail(input.Detail) && !retryableProvider) {
 			return stopTransition("infrastructure_no_retry_route")
 		}

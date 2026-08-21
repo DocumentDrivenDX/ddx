@@ -403,7 +403,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 
 	entries, err := os.ReadDir(summary.TempRoot)
 	if err != nil {
-		return summary, fmt.Errorf("execution cleanup: read temp root: %w", err)
+		if os.IsNotExist(err) {
+			entries = nil
+		} else {
+			return summary, fmt.Errorf("execution cleanup: read temp root: %w", err)
+		}
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() {

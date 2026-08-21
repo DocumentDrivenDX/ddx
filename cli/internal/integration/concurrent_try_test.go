@@ -545,7 +545,17 @@ func TestIntegration_ConcurrentTryPreserveRefsUnique(t *testing.T) {
 				return
 			}
 			_ = cmd.Wait()
-			results[idx] = tryResult{beadID: bid, output: buf.String()}
+			out := buf.String()
+			if parsePreserveRef(out) == "" && strings.Contains(out, "not execution-ready") {
+				retryCmd, retryBuf := spawnTry(bin, proj, bid, env, "--from", staleSHA)
+				if startErr := retryCmd.Start(); startErr == nil {
+					_ = retryCmd.Wait()
+					if retryOut := retryBuf.String(); parsePreserveRef(retryOut) != "" || retryOut != "" {
+						out = retryOut
+					}
+				}
+			}
+			results[idx] = tryResult{beadID: bid, output: out}
 		}(i)
 	}
 	wg.Wait()

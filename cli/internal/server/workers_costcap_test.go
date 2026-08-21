@@ -176,9 +176,9 @@ func TestWorkerInfrastructureFailureDoesNotEscalate(t *testing.T) {
 		detail    string
 		wantInfra bool
 	}{
-		{"503 from provider triggers defer", agent.ExecuteBeadStatusExecutionFailed, "503 service unavailable", true},
-		{"i/o timeout triggers defer", agent.ExecuteBeadStatusExecutionFailed, "Get http://x: i/o timeout", true},
-		{"missing binary triggers defer", agent.ExecuteBeadStatusExecutionFailed, `exec: "claude": executable file not found in $PATH`, true},
+		{"503 from provider is audit-only", agent.ExecuteBeadStatusExecutionFailed, "503 service unavailable", false},
+		{"i/o timeout is audit-only", agent.ExecuteBeadStatusExecutionFailed, "Get http://x: i/o timeout", false},
+		{"missing binary is audit-only", agent.ExecuteBeadStatusExecutionFailed, `exec: "claude": executable file not found in $PATH`, false},
 		{"build failure does NOT defer (escalates)", agent.ExecuteBeadStatusExecutionFailed, "build error: missing import", false},
 		{"structural validation escalates but is not infra", "structural_validation_failed", "503 service unavailable", false},
 	}

@@ -268,11 +268,14 @@ func (s *Server) EnableManagedWorkers() {
 	if s == nil {
 		return
 	}
+	enabled := true
 	if s.workers != nil {
 		s.workers.enableManagedLaunch()
+		s.workers.SetManageWorkers(&enabled)
 	}
 	if s.supervisorRegistry != nil {
 		s.supervisorRegistry.EnableManagedLaunch()
+		s.supervisorRegistry.EnableManageWorkers()
 	}
 }
 

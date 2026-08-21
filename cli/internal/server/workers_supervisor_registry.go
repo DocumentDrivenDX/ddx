@@ -26,6 +26,7 @@ type SupervisorRegistry struct {
 	managerFor func(projectRoot string) *WorkerManager
 
 	managedLaunch bool
+	manageWorkers *bool
 }
 
 func newSupervisorRegistry(state *ServerState, managerFor func(projectRoot string) *WorkerManager) *SupervisorRegistry {
@@ -64,6 +65,29 @@ func (r *SupervisorRegistry) EnableManagedLaunch() {
 	}
 }
 
+// EnableManageWorkers opts existing and future registry managers into the
+// server.manage_workers spawn gate. Tests call this via Server.EnableManagedWorkers.
+func (r *SupervisorRegistry) EnableManageWorkers() {
+	if r == nil {
+		return
+	}
+	enabled := true
+	r.mu.Lock()
+	r.manageWorkers = &enabled
+	supervisors := make([]*WorkerSupervisor, 0, len(r.supervisors))
+	for _, sup := range r.supervisors {
+		supervisors = append(supervisors, sup)
+	}
+	r.mu.Unlock()
+
+	for _, sup := range supervisors {
+		if sup == nil || sup.manager == nil {
+			continue
+		}
+		sup.manager.SetManageWorkers(&enabled)
+	}
+}
+
 func (r *SupervisorRegistry) getOrCreate(projectRoot string) *WorkerSupervisor {
 	if r == nil {
 		return nil
@@ -80,6 +104,7 @@ func (r *SupervisorRegistry) getOrCreate(projectRoot string) *WorkerSupervisor {
 		return sup
 	}
 	managedLaunch := r.managedLaunch
+	manageWorkers := r.manageWorkers
 	managerFor := r.managerFor
 	r.mu.Unlock()
 
@@ -89,6 +114,9 @@ func (r *SupervisorRegistry) getOrCreate(projectRoot string) *WorkerSupervisor {
 	}
 	if managedLaunch {
 		manager.enableManagedLaunch()
+	}
+	if manageWorkers != nil {
+		manager.SetManageWorkers(manageWorkers)
 	}
 
 	sup := NewWorkerSupervisor(manager)

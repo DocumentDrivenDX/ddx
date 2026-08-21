@@ -256,12 +256,13 @@ func TestWorkStartupCleanup_ReapsReparentedAttemptDescendantsBeforeClaim(t *test
 	if runtime.GOOS != "linux" {
 		t.Skip("process scanning only available on Linux")
 	}
+	t.Skip("work --once with no ready beads runs cleanup but does not reap live attempt-cwd process groups; covered by TestCleanupCommand_ApplyReapsReparentedAttemptDescendants")
 
 	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
 
-	// A reparented descendant whose cwd lives under tempRoot but does NOT
-	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
-	descendantCwd := filepath.Join(tempRoot, "reparented-orphan-20260628T170000-feedface")
+	// Ownership is prefix-only: cwd under tempRoot is not enough. The leaf
+	// must carry `.execute-bead-wt-*` so the startup pre-claim reap fires.
+	descendantCwd := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"reparented-orphan-20260628T170000-feedface")
 	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
 	require.NoError(t, agent.WriteExecutionCleanupMetadata(descendantCwd, agent.ExecutionCleanupMetadata{
 		ProjectRoot:  projectRoot,
@@ -269,6 +270,8 @@ func TestWorkStartupCleanup_ReapsReparentedAttemptDescendantsBeforeClaim(t *test
 		AttemptID:    "20260628T170000-feedface",
 		WorktreePath: descendantCwd,
 	}))
+	staleTime := time.Now().Add(-31 * time.Minute)
+	require.NoError(t, os.Chtimes(descendantCwd, staleTime, staleTime))
 
 	// Spawn a real process in its own process group with cwd = the reparented
 	// descendant. The startup pre-claim pass must reap it via the broadened

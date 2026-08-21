@@ -65,6 +65,8 @@ func writeCleanupCommandCandidate(t *testing.T, root, name, projectRoot, attempt
 		WorktreePath: path,
 	}))
 	require.NoError(t, os.WriteFile(filepath.Join(path, "scratch.txt"), []byte("stale\n"), 0o644))
+	staleTime := time.Now().Add(-31 * time.Minute)
+	require.NoError(t, os.Chtimes(path, staleTime, staleTime))
 	return path
 }
 
@@ -285,6 +287,8 @@ func TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees(t *te
 		Registered:   true,
 		Preserved:    true,
 	}))
+	staleTime := time.Now().Add(-31 * time.Minute)
+	require.NoError(t, os.Chtimes(staleRegistered, staleTime, staleTime))
 
 	root := NewCommandFactory(projectRoot).NewRootCommand()
 	out, err := executeCommand(root, "cleanup", "--apply")
@@ -376,6 +380,8 @@ func TestCleanupCommand_JSONIncludesProcessFindings(t *testing.T) {
 		AttemptID:    "20260628T120000-deadbeef",
 		WorktreePath: stalePath,
 	}))
+	staleTime := time.Now().Add(-31 * time.Minute)
+	require.NoError(t, os.Chtimes(stalePath, staleTime, staleTime))
 
 	// Start a real process with cwd = stalePath so the Linux /proc scanner picks it up.
 	sleepCmd := exec.Command("sleep", "3600")
@@ -438,6 +444,8 @@ func TestCleanupCommand_DryRunTextIncludesProcessFindingsAndCounts(t *testing.T)
 		AttemptID:    "20260628T130000-deadbeef",
 		WorktreePath: stalePath,
 	}))
+	staleTime := time.Now().Add(-31 * time.Minute)
+	require.NoError(t, os.Chtimes(stalePath, staleTime, staleTime))
 
 	sleepCmd := exec.Command("sleep", "3600")
 	sleepCmd.Dir = stalePath
@@ -478,9 +486,9 @@ func TestCleanupCommand_ApplyReapsReparentedAttemptDescendants(t *testing.T) {
 
 	projectRoot, tempRoot := setupCleanupCommandProject(t)
 
-	// A reparented descendant whose cwd lives under tempRoot but does NOT
-	// contain the explicit `.execute-bead-wt-*` segment in its leaf.
-	descendantCwd := filepath.Join(tempRoot, "reparented-orphan-20260628T160000-cafe1234")
+	// Ownership is prefix-only: cwd under tempRoot is not enough. The leaf
+	// must carry `.execute-bead-wt-*` so the /proc scanner classifies it.
+	descendantCwd := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"reparented-orphan-20260628T160000-cafe1234")
 	require.NoError(t, os.MkdirAll(descendantCwd, 0o755))
 	require.NoError(t, agent.WriteExecutionCleanupMetadata(descendantCwd, agent.ExecutionCleanupMetadata{
 		ProjectRoot:  projectRoot,
@@ -488,6 +496,8 @@ func TestCleanupCommand_ApplyReapsReparentedAttemptDescendants(t *testing.T) {
 		AttemptID:    "20260628T160000-cafe1234",
 		WorktreePath: descendantCwd,
 	}))
+	staleTime := time.Now().Add(-31 * time.Minute)
+	require.NoError(t, os.Chtimes(descendantCwd, staleTime, staleTime))
 
 	// Spawn a real process in its own process group with cwd = the reparented
 	// descendant. The /proc scanner will pick this up via the broadened cwd

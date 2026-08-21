@@ -205,6 +205,17 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		"no viable routing candidate",
 		"no viable provider"):
 		return FailureModeNoViableProvider
+	case containsAny(lower,
+		"connection refused",
+		"service unavailable",
+		"dial tcp",
+		"no route to host",
+		"network is unreachable",
+		"i/o timeout",
+		"connection reset",
+		"bad gateway",
+		"gateway timeout"):
+		return FailureModeProviderConnectivity
 	case isServerTransportFailureText(lower):
 		return FailureModeServerUnavailable
 	case containsAny(lower,

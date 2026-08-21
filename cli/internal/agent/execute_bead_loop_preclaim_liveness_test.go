@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -483,7 +484,7 @@ func TestWorkLoop_PreClaimDecompositionClearsTransientLiveness(t *testing.T) {
 			}
 			require.NoError(t, store.Create(context.Background(), foreignBead))
 
-			const foreignPID = 22002
+			foreignPID := os.Getpid()
 			foreignWorkerID := "worker-foreign-preclaim"
 			require.NoError(t, workerstatus.WriteLiveness(projectRoot, foreignWorkerID, workerstatus.LivenessRecord{
 				WorkerID:       foreignWorkerID,

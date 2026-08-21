@@ -46,7 +46,7 @@ func TestOrphanHarnessReaperDoesNotTouchFizeauOwnedTrees(t *testing.T) {
 }
 
 func TestExecutionLoop_DefaultFixturesUseHermeticOrphanScanner(t *testing.T) {
-	scanner := defaultOrphanHarnessProcessScanner()
+	scanner := newHermeticOrphanHarnessProcessScanner()
 	require.IsType(t, hermeticOrphanHarnessScanner{}, scanner)
 
 	processes, err := scanner.Scan(context.Background())

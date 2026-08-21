@@ -695,7 +695,8 @@ func TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold(t *testing.T) {
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		Mode:                      executeloop.ModeDrain,
+		Mode:                      executeloop.ModeWatch,
+		IdleInterval:              time.Millisecond,
 		Log:                       &logBuf,
 		EventSink:                 &eventSink,
 		WorkerID:                  "worker-claim-rate",

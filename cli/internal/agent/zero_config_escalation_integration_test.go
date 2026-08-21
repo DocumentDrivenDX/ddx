@@ -39,8 +39,11 @@ func TestZeroConfigRetryEscalationPolicy(t *testing.T) {
 	transientStatus := ExecuteBeadStatusExecutionFailed
 	transientDetail := "provider 502 Bad Gateway: connection refused"
 	require.True(t,
+		escalation.AuditInfrastructureFailureDetail(transientDetail),
+		"502 Bad Gateway on execution_failed must still surface as audit infrastructure detail")
+	require.False(t,
 		escalation.IsInfrastructureFailure(transientStatus, transientDetail),
-		"502 Bad Gateway on execution_failed must be classified as infrastructure failure")
+		"policy helper is typed-only and must not substring-match 502 text")
 	require.True(t,
 		escalation.ShouldEscalate(transientStatus),
 		"execution_failed itself remains escalatable; the loop must consult IsInfrastructureFailure first to defer-vs-escalate")

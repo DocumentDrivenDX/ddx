@@ -131,7 +131,18 @@ func ClassifyServiceExecuteError(err error) ProviderFailure {
 	if errors.As(err, &noLiveProvider) {
 		return providerFailure(FailureModeNoViableProvider, false)
 	}
-	return providerFailure(FailureModeUnknownProviderFailure, false)
+	// Typed Fizeau errors own the taxonomy. Free-text pre-dispatch errors
+	// still map the connectivity/transport diagnostics that unpinned
+	// workers must retry; other free-text (missing executable, etc.) stays
+	// unknown so we do not scrape harness-unavailable from slogans.
+	switch ClassifyFailureMode(ExecuteBeadStatusExecutionFailed, 1, err.Error()) {
+	case FailureModeProviderConnectivity, FailureModeServerUnavailable:
+		return providerFailure(FailureModeProviderConnectivity, true)
+	case FailureModeNoViableProvider:
+		return providerFailure(FailureModeNoViableProvider, false)
+	default:
+		return providerFailure(FailureModeUnknownProviderFailure, false)
+	}
 }
 
 // ApplyProviderFailureToReport stamps a typed provider failure onto a report:

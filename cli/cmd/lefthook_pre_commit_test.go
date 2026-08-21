@@ -31,7 +31,7 @@ func TestLefthookPreCommitIncludesDDxRootAudit(t *testing.T) {
 	assert.Contains(t, section, `filepath\.Join\([^)]*"\.ddx"`)
 	assert.Contains(t, section, `filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)`)
 	assert.Contains(t, section, `(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")`)
-	assert.Contains(t, section, `grep -Ev '(^cli/internal/ddxroot/)|(_test\.go$)'`)
+	assert.Contains(t, section, `grep -Ev '(^cli/internal/ddxroot/)|(_test\.go:)'`)
 	assert.Contains(t, section, "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/ and approved test fixtures")
 }
 

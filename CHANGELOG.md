@@ -4,6 +4,13 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: CI Validation and Test Release gates
+
+Typed provider-connectivity classification, managed-worker test enablement,
+and cleanup/setup-grace fixtures now match the current contracts so CI
+Validation can get past `go test`. Missing execution temp roots are treated as
+empty instead of failing cleanup.
+
 ### Fixed: transcript-incomplete harness failures fall back instead of parking
 
 `ddx work` now classifies Fizeau claude-tui transcript-incomplete failures

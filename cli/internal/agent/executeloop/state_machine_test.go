@@ -93,11 +93,12 @@ func TestTryLoopStateMachineNoRouteEvidenceStopsInfrastructure(t *testing.T) {
 		Status:                   "execution_failed",
 		Detail:                   "ResolveRoute: no viable routing candidate",
 		CurrentMinPower:          0,
+		OutcomeReason:            "no_viable_provider",
 		AllowInfrastructureRetry: true,
 	})
 
 	assert.Equal(t, TryLoopActionStop, transition.Action)
-	assert.Equal(t, "infrastructure_no_retry_route", transition.Reason)
+	assert.Equal(t, "non_semantic_outcome_reason", transition.Reason)
 }
 
 func TestTryLoopStateMachineQuotaInfrastructureStops(t *testing.T) {
@@ -106,11 +107,12 @@ func TestTryLoopStateMachineQuotaInfrastructureStops(t *testing.T) {
 		Detail:                   "429 rate limit exceeded",
 		CurrentMinPower:          0,
 		ActualPower:              5,
+		OutcomeReason:            "provider_rate_limit",
 		AllowInfrastructureRetry: true,
 	})
 
-	assert.Equal(t, TryLoopActionStop, transition.Action)
-	assert.Equal(t, "infrastructure_no_retry_route", transition.Reason)
+	assert.Equal(t, TryLoopActionRetryPower, transition.Action)
+	assert.Equal(t, "infrastructure_retry_with_higher_min_power", transition.Reason)
 }
 
 func TestAttemptPolicyEscalatesOnlyMinimumPower(t *testing.T) {

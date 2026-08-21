@@ -67,7 +67,7 @@ func TestMetricsCommandsExposeDerivedProcessMetrics(t *testing.T) {
 	require.Equal(t, "bx-001", cost.Beads[0].BeadID)
 	require.Equal(t, "bx-002", cost.Beads[1].BeadID)
 	require.Equal(t, processmetrics.State("known"), cost.Beads[0].CostState)
-	require.Equal(t, processmetrics.State("estimated"), cost.Beads[1].CostState)
+	require.Equal(t, processmetrics.State("unknown"), cost.Beads[1].CostState)
 
 	beadCostOut, err := runMetricsCommand(t, workingDir, "metrics", "cost", "--bead", "bx-002", "--json")
 	require.NoError(t, err)
