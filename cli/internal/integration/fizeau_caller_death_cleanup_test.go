@@ -271,12 +271,12 @@ func TestIntegration_FizeauCallerDeathOwnsProviderCleanup(t *testing.T) {
 		t.Logf("Fizeau test-seam log (pre/post bead_execution):\n%s", seamRaw)
 	}
 
-	// Shut down the managed topology cleanly. Provider tripwires must still
-	// remain unsignaled after server stop.
+	// Shut down the managed topology cleanly. Close the TLS surface first so
+	// in-flight HTTP handlers cannot race WorkerManager.Stop under -race.
+	ts.Close()
 	if shutErr := srv.Shutdown(); shutErr != nil {
 		t.Logf("srv.Shutdown returned: %v", shutErr)
 	}
-	ts.Close()
 	if integrationProcessAlive(managedPID) {
 		waitIntegrationProcessGone(t, managedPID, 30*time.Second)
 	}

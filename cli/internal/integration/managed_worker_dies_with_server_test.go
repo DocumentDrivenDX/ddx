@@ -235,11 +235,12 @@ func TestIntegration_ManagedWorkerDiesWithServer(t *testing.T) {
 	}
 
 	// Managing server exits: WorkerManager.Shutdown reaps the server-owned
-	// managed process tree. Close the TLS surface as well so discovery dies.
+	// managed process tree. Close the TLS surface first so in-flight HTTP
+	// handlers cannot race WorkerManager.Stop under -race.
+	ts.Close()
 	if shutErr := srv.Shutdown(); shutErr != nil {
 		t.Logf("srv.Shutdown returned: %v (continuing; worker cleanup still expected)", shutErr)
 	}
-	ts.Close()
 
 	// --- AC2: managed DDx worker exits with the managing server ---
 	waitIntegrationProcessGone(t, managedPID, 30*time.Second)
@@ -290,10 +291,10 @@ func TestIntegration_ManagedWorkerDiesWithServer(t *testing.T) {
 		t.Fatal("worker status.json empty after server death")
 	}
 	var full struct {
-		ID            string `json:"id"`
-		State         string `json:"state"`
-		ServerManaged bool   `json:"server_managed"`
-		CurrentBead   string `json:"current_bead,omitempty"`
+		ID             string `json:"id"`
+		State          string `json:"state"`
+		ServerManaged  bool   `json:"server_managed"`
+		CurrentBead    string `json:"current_bead,omitempty"`
 		CurrentAttempt *struct {
 			AttemptID string `json:"attempt_id"`
 			BeadID    string `json:"bead_id"`
@@ -527,10 +528,10 @@ func TestServerNeverSignalsProviderProcess(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
+	ts.Close()
 	if shutErr := srv.Shutdown(); shutErr != nil {
 		t.Logf("srv.Shutdown returned: %v", shutErr)
 	}
-	ts.Close()
 	if integrationProcessAlive(managedPID) {
 		waitIntegrationProcessGone(t, managedPID, 30*time.Second)
 	}

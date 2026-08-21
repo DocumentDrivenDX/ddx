@@ -1809,9 +1809,10 @@ func (m *WorkerManager) Stop(id string) error {
 	// persistence for those can call writeRecord directly.
 	m.mu.Lock()
 	if cleanupSummary := cleanupReport.String(); cleanupSummary != "" {
-		if len(handle.record.Lifecycle) > 0 {
-			handle.record.Lifecycle[len(handle.record.Lifecycle)-1].Detail =
-				fmt.Sprintf("reason=stop pid=%d cleanup=%s", pid, cleanupSummary)
+		if n := len(handle.record.Lifecycle); n > 0 {
+			lc := append([]WorkerLifecycleEvent(nil), handle.record.Lifecycle...)
+			lc[n-1].Detail = fmt.Sprintf("reason=stop pid=%d cleanup=%s", pid, cleanupSummary)
+			handle.record.Lifecycle = lc
 		}
 	}
 	handle.record.State = "stopped"
@@ -2433,6 +2434,12 @@ func (m *WorkerManager) writeRecord(dir string, record WorkerRecord) error {
 		record.Status = record.State
 	}
 	record.PIDAlive = nil // computed field; never persisted
+	if len(record.Lifecycle) > 0 {
+		record.Lifecycle = append([]WorkerLifecycleEvent(nil), record.Lifecycle...)
+	}
+	if len(record.RecentPhases) > 0 {
+		record.RecentPhases = append([]PhaseTransition(nil), record.RecentPhases...)
+	}
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return err
