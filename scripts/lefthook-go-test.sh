@@ -78,13 +78,16 @@ for pkg in $expanded; do
   if ls "$module_root/$pkg"/*_test.go >/dev/null 2>&1; then
     # cmd is huge; when pulled in only as a bead-dependent, run the acceptance
     # tests that hit exec/metric collection locks rather than the full package.
+    # Pre-commit stays fast and non-race: concurrent execute-bead workers each
+    # run this gate on commit, and dual -race suites starve the host. CI owns
+    # go test -race -cover ./... (see lefthook.yml go-test-all / CI Validation).
     if [ "$pkg" = "cmd" ] && ! has_pkg "cmd"; then
-      if ! (cd "$module_root" && go test -short -race -timeout 10m "./$pkg" -run 'TestExec|TestMetricCommands'); then
+      if ! (cd "$module_root" && go test -short -timeout 10m "./$pkg" -run 'TestExec|TestMetricCommands'); then
         status=1
       fi
       continue
     fi
-    if ! (cd "$module_root" && go test -short -race -timeout 30m "./$pkg"); then
+    if ! (cd "$module_root" && go test -short -timeout 30m "./$pkg"); then
       status=1
     fi
   fi

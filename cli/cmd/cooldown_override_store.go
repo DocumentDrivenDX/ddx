@@ -24,11 +24,12 @@ func newIgnoreCooldownStore(store cooldownLoopStore) *ignoreCooldownStore {
 }
 
 func (s *ignoreCooldownStore) ReadyExecution() ([]bead.Bead, error) {
-	standard, err := s.cooldownLoopStore.ReadyExecution()
+	inner := s.cooldownLoopStore
+	standard, err := inner.ReadyExecution()
 	if err != nil {
 		return nil, err
 	}
-	withCooldown, err := s.cooldownLoopStore.ReadyExecutionIgnoringCooldown()
+	withCooldown, err := inner.ReadyExecutionIgnoringCooldown()
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +66,8 @@ type singleBeadStore struct {
 }
 
 func (s *singleBeadStore) ReadyExecution() ([]bead.Bead, error) {
-	standard, err := s.cooldownLoopStore.ReadyExecution()
+	inner := s.cooldownLoopStore
+	standard, err := inner.ReadyExecution()
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func (s *singleBeadStore) ReadyExecution() ([]bead.Bead, error) {
 		s.overrideRetryAfter = nil
 		return nil, nil
 	}
-	withCooldown, err := s.cooldownLoopStore.ReadyExecutionIgnoringCooldown()
+	withCooldown, err := inner.ReadyExecutionIgnoringCooldown()
 	if err != nil {
 		return nil, err
 	}

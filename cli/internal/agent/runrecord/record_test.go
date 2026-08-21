@@ -526,7 +526,7 @@ func collectJSONTags(t reflect.Type) map[string]struct{} {
 	out := make(map[string]struct{})
 	var walk func(reflect.Type)
 	walk = func(typ reflect.Type) {
-		for typ.Kind() == reflect.Ptr {
+		for typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
 		}
 		if typ.Kind() != reflect.Struct {
@@ -546,7 +546,7 @@ func collectJSONTags(t reflect.Type) map[string]struct{} {
 				out[name] = struct{}{}
 			}
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr || ft.Kind() == reflect.Slice {
+			for ft.Kind() == reflect.Pointer || ft.Kind() == reflect.Slice {
 				ft = ft.Elem()
 			}
 			if ft.Kind() == reflect.Struct && ft.Name() != "Time" {

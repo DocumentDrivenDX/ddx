@@ -4,6 +4,21 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: transcript-incomplete harness failures fall back instead of parking
+
+`ddx work` now classifies Fizeau claude-tui transcript-incomplete failures
+(`no assistant final event` and sibling harness-stream diagnostics) as
+`provider_harness_unavailable`. Unpinned workers fall back to another route
+instead of parking the bead as unknown. Pin `--harness claude` or
+`--harness codex`, or set `FIZEAU_DISABLE_CLAUDE_TUI_DEFAULT=1`, when a host
+cannot use claude-tui.
+
+### Fixed: golangci-lint staticcheck failures on main
+
+Compile-time Fizeau contract assertions, cooldown-store inner calls, cost-status
+normalization, and a few test constants now satisfy staticcheck QF1011/QF1008/
+QF1001/S1008/SA9004 and ineffassign so CI Validation can get past lint.
+
 ### Added: Fizeau v0.16.1 point release
 
 DDx now consumes `github.com/easel/fizeau v0.16.1`.

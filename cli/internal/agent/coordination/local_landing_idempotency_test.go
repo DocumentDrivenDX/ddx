@@ -45,7 +45,6 @@ func TestCoordinationContract_LocalLandingIdempotency(t *testing.T) {
 	writeFile(t, projectRoot, "README.md", "# coordination land fixture\n")
 	runGit(t, projectRoot, "add", "-A")
 	runGit(t, projectRoot, "commit", "-m", "init land fixture")
-	baseSHA := strings.TrimSpace(runGitOutput(t, projectRoot, "rev-parse", "HEAD"))
 
 	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
@@ -59,8 +58,8 @@ func TestCoordinationContract_LocalLandingIdempotency(t *testing.T) {
 	// Seed tracker into git history so the worktree matches a real project.
 	runGit(t, projectRoot, "add", "-A")
 	runGit(t, projectRoot, "commit", "-m", "seed bead store for land fixture")
-	// Re-resolve base after seed commit — worker branches from current tip.
-	baseSHA = strings.TrimSpace(runGitOutput(t, projectRoot, "rev-parse", "HEAD"))
+	// Resolve base after seed commit — worker branches from current tip.
+	baseSHA := strings.TrimSpace(runGitOutput(t, projectRoot, "rev-parse", "HEAD"))
 
 	// Worker contribution: commit on base in a throwaway worktree (same
 	// pattern as agent land unit tests) so ResultRev is in the object store

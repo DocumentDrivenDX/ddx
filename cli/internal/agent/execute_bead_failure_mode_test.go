@@ -75,6 +75,15 @@ func TestFailureModeClassifyWorker(t *testing.T) {
 		{"resolveroute_zero_exit_error", ExecuteBeadOutcomeTaskFailed, 0,
 			"ResolveRoute: no viable routing candidate: 3 candidates rejected", FailureModeNoViableProvider},
 
+		// Harness stream / claude-tui transcript incomplete → harness unavailable
+		// so unpinned workers fall back instead of parking as unknown.
+		{"transcript_no_assistant_final", ExecuteBeadOutcomeTaskFailed, 1,
+			"Claude transcript contained no assistant final event", FailureModeProviderHarnessUnavailable},
+		{"provider_exited_without_final", ExecuteBeadOutcomeTaskFailed, 1,
+			"agent: provider process exited without emitting a final event", FailureModeProviderHarnessUnavailable},
+		{"tui_turn_ended_without_final", ExecuteBeadOutcomeTaskFailed, 1,
+			"claude-tui turn ended without a final event", FailureModeProviderHarnessUnavailable},
+
 		// Ordering: timeout wins over test/build keywords when both appear.
 		{"timeout_beats_test_failure", ExecuteBeadOutcomeTaskFailed, 1,
 			"test timed out after 5m", FailureModeTimeout},

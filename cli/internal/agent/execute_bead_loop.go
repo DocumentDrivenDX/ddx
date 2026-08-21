@@ -6591,6 +6591,15 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 	if report.OutcomeReason != "" {
 		return
 	}
+	// Harness-stream failures (claude-tui transcript incomplete, missing final
+	// event) must become provider_harness_unavailable even when Fizeau stamped
+	// Outcome/Cause=harness_failed without a richer Cause. Do not override
+	// other typed causes such as provider_failed (see
+	// TestAttemptReportDoesNotSynthesizeTypedReasonFromStderr).
+	if shouldClassifyHarnessUnavailable(report) {
+		ApplyProviderFailureToReport(report, providerFailure(FailureModeProviderHarnessUnavailable, true))
+		return
+	}
 	if hasTypedFizeauLifecycle(report) {
 		return
 	}
@@ -6659,6 +6668,26 @@ func hasTypedFizeauLifecycle(report *ExecuteBeadReport) bool {
 	return strings.TrimSpace(report.FizeauOutcome) != "" ||
 		strings.TrimSpace(report.FizeauCause) != "" ||
 		strings.TrimSpace(report.FizeauStage) != ""
+}
+
+// shouldClassifyHarnessUnavailable reports whether a failed report's evidence
+// is a known harness-stream failure that unpinned workers should fall back
+// from. Empty Cause or Cause=harness_failed may be refined; other typed Causes
+// are left alone so stderr synthesis cannot override them.
+func shouldClassifyHarnessUnavailable(report *ExecuteBeadReport) bool {
+	if report == nil {
+		return false
+	}
+	cause := strings.TrimSpace(report.FizeauCause)
+	if cause != "" && cause != "harness_failed" {
+		return false
+	}
+	combined := strings.TrimSpace(strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n"))
+	return isHarnessUnavailableDiagnostic(combined)
 }
 
 // beadActionableAtDecompositionCap reports whether a bead at the queue-level

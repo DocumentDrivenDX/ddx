@@ -464,7 +464,7 @@ func TestWorkerEvents_LogRotationKeepsActiveFileBounded(t *testing.T) {
 
 	const (
 		maxActive      int64 = 800
-		maxGenerations       = 2
+		maxGenerations int   = 2
 	)
 	srv.workerIngest.maxActiveBytes = maxActive
 	srv.workerIngest.maxGenerations = maxGenerations

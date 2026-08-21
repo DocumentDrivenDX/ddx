@@ -448,6 +448,7 @@ cli/internal/agent/.ddx/
 # commit it in a ~1/s loop. Per-machine, untracked. attempts.jsonl stays durable.
 .ddx/metrics/locks.jsonl
 .ddx/metrics/locks.jsonl.lock
+.ddx/metrics/locks.jsonl.*
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/

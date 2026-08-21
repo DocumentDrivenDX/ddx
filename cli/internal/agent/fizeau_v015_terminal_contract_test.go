@@ -16,26 +16,32 @@ func TestFizeauV015PublicContractCompiles(t *testing.T) {
 	t.Parallel()
 
 	// Typed terminal classification surface (CONTRACT-003 / v0.15).
-	var (
-		_ agentlib.SessionOutcome = agentlib.SessionOutcomeSuccess
-		_ agentlib.SessionOutcome = agentlib.SessionOutcomeFailed
-		_ agentlib.SessionOutcome = agentlib.SessionOutcomeCancelled
-		_ agentlib.SessionOutcome = agentlib.SessionOutcomeTimedOut
-
-		_ agentlib.TerminalCause = agentlib.TerminalCauseCompleted
-		_ agentlib.TerminalCause = agentlib.TerminalCauseRouteUnavailable
-		_ agentlib.TerminalCause = agentlib.TerminalCauseProviderFailed
-		_ agentlib.TerminalCause = agentlib.TerminalCauseContextCancelled
-
-		_ agentlib.SessionStage = agentlib.SessionStageRouting
-		_ agentlib.SessionStage = agentlib.SessionStageHarness
-		_ agentlib.SessionStage = agentlib.SessionStageProvider
-		_ agentlib.SessionStage = agentlib.SessionStageCleanup
-
-		_ agentlib.CostSource = agentlib.CostSourceReported
-		_ agentlib.CostSource = agentlib.CostSourceConfigured
-		_ agentlib.CostSource = agentlib.CostSourceUnknown
-	)
+	outcomes := []agentlib.SessionOutcome{
+		agentlib.SessionOutcomeSuccess,
+		agentlib.SessionOutcomeFailed,
+		agentlib.SessionOutcomeCancelled,
+		agentlib.SessionOutcomeTimedOut,
+	}
+	causes := []agentlib.TerminalCause{
+		agentlib.TerminalCauseCompleted,
+		agentlib.TerminalCauseRouteUnavailable,
+		agentlib.TerminalCauseProviderFailed,
+		agentlib.TerminalCauseContextCancelled,
+	}
+	stages := []agentlib.SessionStage{
+		agentlib.SessionStageRouting,
+		agentlib.SessionStageHarness,
+		agentlib.SessionStageProvider,
+		agentlib.SessionStageCleanup,
+	}
+	sources := []agentlib.CostSource{
+		agentlib.CostSourceReported,
+		agentlib.CostSourceConfigured,
+		agentlib.CostSourceUnknown,
+	}
+	if outcomes[0] == "" || causes[0] == "" || stages[0] == "" || sources[0] == "" {
+		t.Fatal("typed terminal constants must be assignable")
+	}
 
 	cost := 0.0
 	final := agentlib.ServiceFinalData{
@@ -74,11 +80,18 @@ func TestFizeauV015PublicContractCompiles(t *testing.T) {
 		_ agentlib.PortableRuntimeRequest
 		_ *agentlib.PortableRuntimeBundle
 		_ agentlib.PortableRuntimeMount
-		_ error = agentlib.ErrPortableRuntimeRequestInvalid
-		_ error = agentlib.ErrPortableRuntimeClosureIncomplete
-		_ error = agentlib.ErrPortableRuntimeActivationInvalid
-		_ error = agentlib.ErrPortableRuntimeCleanupIncomplete
 	)
+	portableErrs := []error{
+		agentlib.ErrPortableRuntimeRequestInvalid,
+		agentlib.ErrPortableRuntimeClosureIncomplete,
+		agentlib.ErrPortableRuntimeActivationInvalid,
+		agentlib.ErrPortableRuntimeCleanupIncomplete,
+	}
+	for i, perr := range portableErrs {
+		if perr == nil {
+			t.Fatalf("portable runtime sentinel %d is nil", i)
+		}
+	}
 	_ = agentlib.PortableRuntimeGuestRoot()
 	_ = agentlib.NewFromPortableRuntime
 

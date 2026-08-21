@@ -84,7 +84,7 @@ func waitForLifecycleEvent(t *testing.T, ch <-chan LifecycleEvent) LifecycleEven
 // public non-test API in package bead exposes *lifecycle.WatcherHub.
 func TestNewLifecycleSubscriberReturnsInterface(t *testing.T) {
 	// Compile-time + runtime: factory returns the public interface only.
-	var sub LifecycleSubscriber = NewLifecycleSubscriber(func(string) (BeadReader, error) {
+	sub := NewLifecycleSubscriber(func(string) (BeadReader, error) {
 		return &scriptedBeadReader{}, nil
 	}, time.Hour)
 	require.NotNil(t, sub)

@@ -412,9 +412,8 @@ func writeSlotQuarantineMarker(slot *AttemptWorkspaceSlot, backendName, projectR
 }
 
 func (p *AttemptWorkspaceSlotPool) allocateEphemeral(key AttemptWorkspaceSlotKey) (*AttemptWorkspaceSlot, error) {
-	base := p.poolRoot(key)
 	// Place ephemeral dirs beside the pool, not inside numbered slots.
-	parent := filepath.Dir(base)
+	var parent string
 	if p != nil && strings.TrimSpace(p.root) != "" {
 		parent = p.root
 	} else {

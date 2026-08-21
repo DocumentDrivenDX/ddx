@@ -96,6 +96,60 @@ func TestAttemptReportDoesNotSynthesizeTypedReasonFromStderr(t *testing.T) {
 	assert.Equal(t, "provider", report.FizeauStage)
 }
 
+func TestClassifyLoopReportFailure_TranscriptIncompleteIsHarnessUnavailable(t *testing.T) {
+	cases := []struct {
+		name   string
+		report ExecuteBeadReport
+	}{
+		{
+			name: "error_only_no_typed_lifecycle",
+			report: ExecuteBeadReport{
+				Status: ExecuteBeadStatusExecutionFailed,
+				Error:  "Claude transcript contained no assistant final event",
+			},
+		},
+		{
+			name: "harness_failed_cause_with_diagnostic",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				FizeauOutcome: "failed",
+				FizeauCause:   "harness_failed",
+				FizeauStage:   "harness",
+				Error:         "Claude transcript contained no assistant final event",
+			},
+		},
+		{
+			name: "detail_carries_diagnostic",
+			report: ExecuteBeadReport{
+				Status: ExecuteBeadStatusExecutionFailed,
+				Detail: "Claude transcript contained no assistant final event",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			report := tc.report
+			classifyLoopReportFailure(&report)
+			assert.Equal(t, FailureModeProviderHarnessUnavailable, report.OutcomeReason)
+			assert.True(t, report.Disrupted)
+			assert.Equal(t, FailureModeProviderHarnessUnavailable, report.DisruptionReason)
+		})
+	}
+}
+
+func TestClassifyLoopReportFailure_HarnessFailedWithoutDiagnosticDoesNotInventReason(t *testing.T) {
+	report := ExecuteBeadReport{
+		Status:        ExecuteBeadStatusExecutionFailed,
+		FizeauOutcome: "failed",
+		FizeauCause:   "harness_failed",
+		FizeauStage:   "harness",
+		Error:         "some other harness failure without final-event diagnostic",
+	}
+	classifyLoopReportFailure(&report)
+	assert.Empty(t, report.OutcomeReason,
+		"harness_failed without a known diagnostic must not invent provider_harness_unavailable")
+}
+
 func TestAttemptWorkspaceReuseTelemetryRecordsSavings(t *testing.T) {
 	report := ExecuteBeadReport{
 		BeadID:                       "ddx-reuse-hit",

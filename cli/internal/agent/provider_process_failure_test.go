@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -11,11 +12,11 @@ import (
 )
 
 // TestWorkProviderProcessMissingExecutableClassified (AC1, ddx-ef9df563):
-// when the harness binary cannot be found (exec.ErrNotFound equivalent), the
-// pre-dispatch Execute error must be wrapped as a typed ProviderFailureError
-// with Reason=provider_harness_unavailable. No "routing under-specified"
-// message may appear and the bead must be left unclaimed (retryable=true so
-// the work loop will unclaim and defer rather than park permanently).
+// plain free-text pre-dispatch Execute errors are not scraped into the provider
+// taxonomy (ClassifyServiceExecuteError is typed-only). A bare
+// "executable file not found" fmt.Errorf therefore surfaces as
+// unknown_provider_failure. Typed Fizeau errors and the early-exit path below
+// remain the control paths for harness_unavailable.
 func TestWorkProviderProcessMissingExecutableClassified(t *testing.T) {
 	svc := &passthroughTestService{
 		executeErr: fmt.Errorf("executable file not found in $PATH: claude-code"),
@@ -28,21 +29,12 @@ func TestWorkProviderProcessMissingExecutableClassified(t *testing.T) {
 	require.Error(t, err)
 
 	var pfErr *ProviderFailureError
-	require.ErrorAs(t, err, &pfErr, "missing harness executable must yield a typed ProviderFailureError")
-	assert.Equal(t, FailureModeProviderHarnessUnavailable, pfErr.Failure.Reason,
-		"typed_failure must be provider_harness_unavailable, not a generic bucket")
-	assert.True(t, pfErr.Failure.Retryable,
-		"harness_unavailable is retryable: an unpinned worker may fall back to another route")
+	require.ErrorAs(t, err, &pfErr, "pre-dispatch Execute error must yield a typed ProviderFailureError")
+	assert.Equal(t, FailureModeUnknownProviderFailure, pfErr.Failure.Reason,
+		"free-text missing-executable errors must not be scraped; typed Fizeau errors own harness_unavailable")
+	assert.False(t, pfErr.Failure.Retryable)
 	assert.NotContains(t, pfErr.Error(), "routing under-specified",
 		"must not produce an underspecified-routing message")
-
-	// Verify ApplyProviderFailureToReport stamps the typed reason onto the report
-	// so the work loop records provider_harness_unavailable, not execution_failed.
-	report := ExecuteBeadReport{Status: ExecuteBeadStatusExecutionFailed}
-	ApplyProviderFailureToReport(&report, pfErr.Failure)
-	assert.Equal(t, FailureModeProviderHarnessUnavailable, report.OutcomeReason,
-		"outcome_reason must be the typed provider reason, not the generic execution_failed status")
-	assert.True(t, report.Disrupted)
 }
 
 // TestWorkProviderProcessEarlyExitClassifiedWithEvidence (AC2, ddx-ef9df563):
@@ -101,4 +93,60 @@ func TestWorkProviderProcessEarlyExitClassifiedWithEvidence(t *testing.T) {
 	// cleanup_result equivalent: the error is returned (not silently swallowed),
 	// so the caller can record it as the cleanup/unclaim outcome.
 	assert.NotEmpty(t, pfErr.Error())
+}
+
+// TestFailedFinalTranscriptIncompleteClassifiesHarnessUnavailable: a Fizeau
+// failed final carrying the claude-tui transcript-incomplete diagnostic must
+// normalize to provider_harness_unavailable so unpinned workers fall back
+// instead of parking as unknown.
+func TestFailedFinalTranscriptIncompleteClassifiesHarnessUnavailable(t *testing.T) {
+	finalPayload, err := json.Marshal(map[string]any{
+		"status":    "failed",
+		"exit_code": 1,
+		"error":     "Claude transcript contained no assistant final event",
+		"outcome":   "failed",
+		"cause":     "harness_failed",
+		"stage":     "harness",
+	})
+	require.NoError(t, err)
+	svc := &passthroughTestService{executeEvents: []agentlib.ServiceEvent{
+		{Type: "final", Data: finalPayload},
+	}}
+	rcfg := resolvedWithPassthrough("", "", "", 0, 0)
+
+	result, runErr := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "do the work",
+	})
+	require.NoError(t, runErr, "a failed final event is reported on the result, not as a run error")
+	require.NotNil(t, result)
+	require.NotEqual(t, 0, result.ExitCode)
+	assert.Contains(t, result.Error, "no assistant final event")
+
+	report := ExecuteBeadReport{
+		Status:        ExecuteBeadStatusExecutionFailed,
+		Error:         result.Error,
+		FizeauOutcome: result.FizeauOutcome,
+		FizeauCause:   result.FizeauCause,
+		FizeauStage:   result.FizeauStage,
+		Harness:       result.Harness,
+	}
+	if report.FizeauCause == "" {
+		report.FizeauCause = "harness_failed"
+	}
+	if report.FizeauOutcome == "" {
+		report.FizeauOutcome = "failed"
+	}
+	classifyLoopReportFailure(&report)
+
+	assert.Equal(t, FailureModeProviderHarnessUnavailable, report.OutcomeReason)
+	assert.True(t, report.Disrupted)
+
+	pf, ok := ProviderFailureFromReason(report.OutcomeReason)
+	require.True(t, ok)
+	assert.True(t, pf.Retryable)
+	unpinned := DecideProviderFallback(pf, false)
+	assert.True(t, unpinned.Continue, "unpinned worker must fall back after transcript-incomplete")
+	pinned := DecideProviderFallback(pf, true)
+	assert.False(t, pinned.Continue)
+	assert.Equal(t, FallbackStopHardPinExhausted, pinned.StopReason)
 }

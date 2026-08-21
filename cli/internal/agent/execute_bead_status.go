@@ -193,6 +193,12 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		"executable file not found",
 		"no such file or directory"):
 		return FailureModeHarnessNotInstalled
+	case isHarnessUnavailableDiagnostic(lower):
+		// Fizeau claude-tui (and sibling) harness-stream failures where the
+		// process ran but produced no usable final assistant event. Treat as
+		// harness unavailable so unpinned workers fall back instead of parking
+		// as unknown (cayce free-route TUI burn).
+		return FailureModeProviderHarnessUnavailable
 	case containsAny(lower,
 		"failed to initialize routing service",
 		"resolveroute:",
@@ -266,6 +272,21 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		return FailureModeUnknown
 	}
 	return ""
+}
+
+// isHarnessUnavailableDiagnostic reports whether errMsg is a known harness-
+// stream failure where the provider process did not emit a usable final
+// assistant event. These are Fizeau harness diagnostics (especially
+// claude-tui transcript incomplete), not model give-ups.
+func isHarnessUnavailableDiagnostic(errMsg string) bool {
+	lower := strings.ToLower(errMsg)
+	return containsAny(lower,
+		"no assistant final event",
+		"exited without emitting a final event",
+		"turn ended without a final event",
+		"transcript path could not be resolved",
+		"transcript could not be read",
+	)
 }
 
 // IsWorktreeLostError reports whether errMsg describes the execute-bead

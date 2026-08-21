@@ -178,7 +178,7 @@ func isServerTransportFailureText(lower string) bool {
 		return true
 	}
 	if strings.Contains(lower, "unexpected eof") {
-		if containsAny(lower,
+		return containsAny(lower,
 			"dial tcp",
 			"connection refused",
 			"connection reset",
@@ -191,10 +191,7 @@ func isServerTransportFailureText(lower string) bool {
 			"127.0.0.1",
 			"localhost",
 			"tls",
-		) {
-			return true
-		}
-		return false
+		)
 	}
 	return false
 }
