@@ -26,8 +26,8 @@ const MarkerFileName = "scratch-owner.json"
 // may use other kind strings; cleanup treats kind as opaque evidence, not a
 // trust decision.
 const (
-	KindFixtureBinary         = "fixture-bin"
-	KindFizeauTestSeamBinary  = "fizeau-testseam-bin"
+	KindFixtureBinary        = "fixture-bin"
+	KindFizeauTestSeamBinary = "fizeau-testseam-bin"
 )
 
 // OwnerStatus classifies ownership evidence for a scratch directory.

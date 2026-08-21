@@ -304,9 +304,9 @@ func TestCompleteVerificationCoverageCardinality_FileOnlyRowsFilteredBeforeJoin(
 	// None name a covering target, so both inventory members stay uncovered.
 	rawRows := []VerificationRow{
 		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 10},
-		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 11}, // duplicate file-only
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 11},                          // duplicate file-only
 		{RequirementRef: "REQ-001", EvidenceTarget: "cli/internal/bead/store_test.go", Command: "go test ./cli/internal/bead", Line: 12}, // unrelated file-only
-		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/other_test.go", Command: "go test ./pkg", Line: 13}, // another file-only
+		{RequirementRef: "REQ-001", EvidenceTarget: "pkg/other_test.go", Command: "go test ./pkg", Line: 13},                             // another file-only
 		{RequirementRef: "REQ-002", EvidenceTarget: "pkg/list_test.go", Command: "go test ./pkg", Line: 14},
 	}
 	for _, row := range rawRows {
@@ -487,8 +487,8 @@ func TestCompleteVerificationCoverageCardinality_IgnoresFileOnlyCitations(t *tes
 	// Constructed multi-req case: only file-only rows → all uncovered;
 	// no false "covered" from non-covering citations.
 	multi := CheckCoverageCardinality(CoverageCardinalityInput{
-		Path:   path,
-		Status: StatusComplete,
+		Path:      path,
+		Status:    StatusComplete,
 		Inventory: []string{"REQ-A", "REQ-B"},
 		Rows: []VerificationRow{
 			{RequirementRef: "REQ-A", EvidenceTarget: "pkg/existing_test.go", Command: "go test ./pkg", Line: 10},
