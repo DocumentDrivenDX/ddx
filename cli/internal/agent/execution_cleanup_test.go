@@ -161,6 +161,19 @@ func assertExecutionCleanupFixtureRootsUnder(t *testing.T, fixtureRoot string, m
 	}
 }
 
+func TestExecutionCleanup_MissingTempRootIsNoOp(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := filepath.Join(t.TempDir(), "exec-wt-does-not-exist")
+	scratchRoot := t.TempDir()
+	mgr := newHermeticExecutionCleanupTestManager(
+		t, projectRoot, tempRoot, &executionCleanupTestGitOps{}, scratchRoot,
+	)
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, tempRoot, summary.TempRoot)
+	assert.Zero(t, summary.ScannedTempDirs)
+}
+
 func TestExecutionCleanupFixtures_UseHermeticRoots(t *testing.T) {
 	fixtureRoot := t.TempDir()
 	projectRoot := filepath.Join(fixtureRoot, "project")

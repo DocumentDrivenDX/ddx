@@ -290,10 +290,10 @@ func TestIntegration_ManagedWorkerDiesWithServer(t *testing.T) {
 		t.Fatal("worker status.json empty after server death")
 	}
 	var full struct {
-		ID            string `json:"id"`
-		State         string `json:"state"`
-		ServerManaged bool   `json:"server_managed"`
-		CurrentBead   string `json:"current_bead,omitempty"`
+		ID             string `json:"id"`
+		State          string `json:"state"`
+		ServerManaged  bool   `json:"server_managed"`
+		CurrentBead    string `json:"current_bead,omitempty"`
 		CurrentAttempt *struct {
 			AttemptID string `json:"attempt_id"`
 			BeadID    string `json:"bead_id"`

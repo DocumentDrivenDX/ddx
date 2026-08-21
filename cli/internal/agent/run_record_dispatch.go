@@ -78,4 +78,3 @@ func dispatchingEvidenceLinks(corr map[string]string) []runrecord.EvidenceLink {
 	}
 	return out
 }
-

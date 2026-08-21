@@ -471,4 +471,3 @@ func mustBreakStaleTrackerLock(t *testing.T, lockDir string) bool {
 	require.NoError(t, err)
 	return broke
 }
-
