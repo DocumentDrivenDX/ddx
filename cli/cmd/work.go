@@ -34,10 +34,10 @@ passthrough constraints forwarded to Fizeau unchanged. DDx does not validate
 these values or branch on them; Fizeau owns routing within the requested power
 bounds.
 
-Unpinned Claude routing may prefer Fizeau's claude-tui surface by default. If
-claude-tui is unreliable on a host (missing final events), pin with
---harness claude or --harness codex, or set FIZEAU_DISABLE_CLAUDE_TUI_DEFAULT=1
-so Fizeau does not bias toward claude-tui over headless claude.
+Unpinned Claude routing may prefer Fizeau's claude-tui surface by default.
+Fizeau v0.17.2+ waits for a late transcript end_turn after the Stop hook so
+completed turns are not failed as "no assistant final event". Pin --harness
+only as an explicit operator constraint; do not disable claude-tui by default.
 
 Review is on by default. --no-review is a break-glass override and
 requires --no-review-i-know-what-im-doing. A bead label of review:skip

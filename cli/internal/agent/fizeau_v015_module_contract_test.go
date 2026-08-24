@@ -10,9 +10,13 @@ import (
 	agentlib "github.com/easel/fizeau"
 )
 
+const pinnedFizeauModuleVersion = "v0.17.3"
+
 // TestFizeauV015ModuleContract proves a helper binary that imports only the
-// public github.com/easel/fizeau surface resolves that module at v0.15.2 with
-// no replacement or pseudo-version.
+// public github.com/easel/fizeau surface resolves that module at v0.17.3 with
+// no replacement or pseudo-version. v0.17.2+ includes the claude-tui Stop-hook
+// flush-race wait (waitForAuthoritativeTranscript); workers on v0.15.2 fail
+// completed turns with "no assistant final event".
 func TestFizeauV015ModuleContract(t *testing.T) {
 	t.Parallel()
 
@@ -33,8 +37,8 @@ func TestFizeauV015ModuleContract(t *testing.T) {
 	}
 	if version, ok := moduleVersion(line, "github.com/easel/fizeau"); !ok {
 		t.Fatalf("github.com/easel/fizeau version field missing: %q\nfull output:\n%s", line, output)
-	} else if version != "v0.15.2" {
-		t.Fatalf("github.com/easel/fizeau version = %q, want v0.15.2\nfull output:\n%s", version, output)
+	} else if version != pinnedFizeauModuleVersion {
+		t.Fatalf("github.com/easel/fizeau version = %q, want %s\nfull output:\n%s", version, pinnedFizeauModuleVersion, output)
 	} else if strings.HasPrefix(version, "v0.0.0-") {
 		t.Fatalf("github.com/easel/fizeau resolved to pseudo-version: %s", line)
 	}
@@ -43,7 +47,15 @@ func TestFizeauV015ModuleContract(t *testing.T) {
 func buildFizeauModuleContractHelper(t *testing.T) string {
 	t.Helper()
 
+	modRoot := cliModuleRoot(t)
 	dir := t.TempDir()
+	if _, err := copyFile(filepath.Join(modRoot, "go.mod"), filepath.Join(dir, "go.mod")); err != nil {
+		t.Fatalf("copy go.mod: %v", err)
+	}
+	if _, err := copyFile(filepath.Join(modRoot, "go.sum"), filepath.Join(dir, "go.sum")); err != nil {
+		t.Fatalf("copy go.sum: %v", err)
+	}
+
 	src := filepath.Join(dir, "main.go")
 	const helperSource = `package main
 
@@ -56,12 +68,33 @@ func main() {}
 	}
 
 	bin := filepath.Join(dir, "helper")
-	cmd := exec.Command("go", "build", "-o", bin, src)
+	cmd := exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-o", bin, ".")
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS=")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build helper: %v\n%s", err, out)
 	}
 	return bin
+}
+
+func cliModuleRoot(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	dir := wd
+	for {
+		b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && strings.Contains(string(b), "module github.com/DocumentDrivenDX/ddx") {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("cli module root not found")
+		}
+		dir = parent
+	}
 }
 
 func goVersionM(t *testing.T, bin string) string {

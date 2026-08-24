@@ -4,6 +4,13 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: pin Fizeau v0.17.3 for claude-tui Stop-hook flush-race wait
+
+DDx now consumes `github.com/easel/fizeau v0.17.3`. That release waits briefly
+for Claude Code's final `stop_reason=end_turn` after the Stop hook so a
+completed claude-tui turn is not failed closed with "no assistant final
+event". Incomplete transcripts still fail closed after the grace window.
+
 ### Fixed: CI Validation and Test Release gates
 
 Typed provider-connectivity classification, managed-worker test enablement,
@@ -16,9 +23,9 @@ empty instead of failing cleanup.
 `ddx work` now classifies Fizeau claude-tui transcript-incomplete failures
 (`no assistant final event` and sibling harness-stream diagnostics) as
 `provider_harness_unavailable`. Unpinned workers fall back to another route
-instead of parking the bead as unknown. Pin `--harness claude` or
-`--harness codex`, or set `FIZEAU_DISABLE_CLAUDE_TUI_DEFAULT=1`, when a host
-cannot use claude-tui.
+instead of parking the bead as unknown. Fizeau v0.17.2+ (this pin: v0.17.3)
+waits for a late `end_turn` after Stop so completed turns should not hit
+that diagnostic.
 
 ### Fixed: golangci-lint staticcheck failures on main
 
