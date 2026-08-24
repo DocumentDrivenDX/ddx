@@ -158,7 +158,7 @@ func classifyAttemptLifecycle(final *agentlib.ServiceFinalData, immediateErr err
 		return attemptLifecyclePermanent, "fizeau_immediate_rejected_override"
 	}
 
-	var noLive agentlib.ErrNoLiveProvider
+	var noLive *agentlib.ErrNoLiveProvider
 	if errors.As(immediateErr, &noLive) {
 		return attemptLifecycleRetryable, "fizeau_immediate_no_live_provider"
 	}
