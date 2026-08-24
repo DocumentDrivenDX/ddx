@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -262,6 +263,178 @@ func TestProviderFailureFromReason_TypedReasonsOnly(t *testing.T) {
 	pf, ok = ProviderFailureFromReason(FailureModeProviderConfigInvalid)
 	require.True(t, ok)
 	assert.False(t, pf.Retryable)
+}
+
+// TestLegacyProviderFailureClassificationPreserved (ddx-45f80b2f) proves that
+// non-Fizeau legacy provider failure strings — plain errors carrying no typed
+// Fizeau error value — still fall through ClassifyServiceExecuteError's
+// free-text compatibility switch (which reuses ClassifyFailureMode) and drive
+// the same DDx attempt decisions (retryability, fallback continuation, and
+// hard-pin-exhausted stop reason) as before the typed Fizeau adapter existed.
+// This guards against the typed-outcome refactor accidentally deleting or
+// altering the legacy text tables that non-Fizeau callers still depend on.
+func TestLegacyProviderFailureClassificationPreserved(t *testing.T) {
+	cases := []struct {
+		name          string
+		errMsg        string
+		wantReason    string
+		wantRetryable bool
+	}{
+		{
+			name:          "connection_refused_text",
+			errMsg:        "dial tcp 10.0.0.1:443: connection refused",
+			wantReason:    FailureModeProviderConnectivity,
+			wantRetryable: true,
+		},
+		{
+			name:          "gateway_timeout_text",
+			errMsg:        "502 bad gateway",
+			wantReason:    FailureModeProviderConnectivity,
+			wantRetryable: true,
+		},
+		{
+			name:          "no_viable_routing_candidate_text",
+			errMsg:        "resolveRoute: no viable routing candidate in catalog",
+			wantReason:    FailureModeNoViableProvider,
+			wantRetryable: false,
+		},
+		{
+			name:          "unrecognized_text_falls_back_to_unknown",
+			errMsg:        "a completely novel provider hiccup no table recognizes",
+			wantReason:    FailureModeUnknownProviderFailure,
+			wantRetryable: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pf := ClassifyServiceExecuteError(errors.New(tc.errMsg))
+			assert.Equal(t, tc.wantReason, pf.Reason)
+			assert.Equal(t, tc.wantRetryable, pf.Retryable)
+
+			unpinned := DecideProviderFallback(pf, false)
+			assert.Equal(t, tc.wantRetryable, unpinned.Continue,
+				"unpinned fallback must still mirror legacy retryability")
+
+			pinned := DecideProviderFallback(pf, true)
+			assert.False(t, pinned.Continue, "pinned worker must never widen its pin")
+			assert.Equal(t, FallbackStopHardPinExhausted, pinned.StopReason)
+
+			report := ExecuteBeadReport{Status: ExecuteBeadStatusExecutionFailed}
+			ApplyProviderFailureToReport(&report, pf)
+			assert.Equal(t, tc.wantReason, report.OutcomeReason)
+			assert.True(t, report.Disrupted)
+		})
+	}
+}
+
+// TestTypedFizeauFailureBypassesLegacyTextTables (ddx-45f80b2f) proves that
+// completed, retryable, unavailable-now, cancelled, and permanent typed
+// Fizeau immediate outcomes drive AttemptPolicyDecisionForResult's Action and
+// Reason solely from the typed FizeauOutcome/FizeauCause/FizeauStage tuple.
+// Each case is re-run under several legacy Status/Error text variants that
+// would classify to a different (or no) failure mode under
+// ClassifyFailureMode if the typed decision ever fell back to scanning free
+// text; the decision must stay identical across every variant.
+func TestTypedFizeauFailureBypassesLegacyTextTables(t *testing.T) {
+	cases := []struct {
+		name       string
+		outcome    agentlib.SessionOutcome
+		cause      agentlib.TerminalCause
+		stage      agentlib.SessionStage
+		wantAction string
+		wantReason string
+	}{
+		{
+			name:       "completed",
+			outcome:    agentlib.SessionOutcomeSuccess,
+			cause:      agentlib.TerminalCauseCompleted,
+			stage:      agentlib.SessionStageHarness,
+			wantAction: "close",
+			wantReason: "fizeau_outcome_success",
+		},
+		{
+			name:       "retryable",
+			outcome:    agentlib.SessionOutcomeFailed,
+			cause:      agentlib.TerminalCauseProviderFailed,
+			stage:      agentlib.SessionStageProvider,
+			wantAction: "park",
+			wantReason: "fizeau_terminal_retryable",
+		},
+		{
+			name:       "unavailable_now",
+			outcome:    agentlib.SessionOutcomeFailed,
+			cause:      agentlib.TerminalCauseRouteUnavailable,
+			stage:      agentlib.SessionStageProvider,
+			wantAction: "park",
+			wantReason: "fizeau_terminal_unavailable_now",
+		},
+		{
+			name:       "cancelled",
+			outcome:    agentlib.SessionOutcomeCancelled,
+			cause:      agentlib.TerminalCauseCallerDied,
+			stage:      agentlib.SessionStageHarness,
+			wantAction: "park",
+			wantReason: "fizeau_outcome_cancelled",
+		},
+		{
+			name:       "permanent",
+			outcome:    agentlib.SessionOutcomeFailed,
+			cause:      agentlib.TerminalCauseInternalError,
+			stage:      agentlib.SessionStageCleanup,
+			wantAction: "park",
+			wantReason: "fizeau_terminal_permanent_failure",
+		},
+	}
+
+	// Status/Error variants that would classify to different (or no) failure
+	// modes under ClassifyFailureMode if AttemptPolicyDecisionForResult ever
+	// fell back to scanning them instead of the typed lifecycle tuple.
+	legacyTextVariants := []struct {
+		name   string
+		status string
+		errMsg string
+	}{
+		{name: "empty", status: "", errMsg: ""},
+		{name: "success_status_no_error", status: ExecuteBeadStatusSuccess, errMsg: ""},
+		{name: "timeout_text", status: ExecuteBeadStatusExecutionFailed, errMsg: "context deadline exceeded"},
+		{name: "auth_error_text", status: ExecuteBeadStatusExecutionFailed, errMsg: "401 unauthorized: invalid api key"},
+		{name: "merge_conflict_text", status: ExecuteBeadStatusLandConflict, errMsg: "merge conflict"},
+		{name: "no_changes_status", status: ExecuteBeadStatusNoChanges, errMsg: "unrelated diagnostic"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotAction, gotReason string
+			for i, variant := range legacyTextVariants {
+				t.Run(variant.name, func(t *testing.T) {
+					res := ExecuteBeadResult{
+						FizeauOutcome: string(tc.outcome),
+						FizeauCause:   string(tc.cause),
+						FizeauStage:   string(tc.stage),
+						Status:        variant.status,
+						Error:         variant.errMsg,
+					}
+
+					decision := AttemptPolicyDecisionForResult(&res)
+					if string(decision.Action) != tc.wantAction {
+						t.Fatalf("AttemptPolicyDecisionForResult(%s/%s).Action = %q, want %q", tc.name, variant.name, decision.Action, tc.wantAction)
+					}
+					if decision.Reason != tc.wantReason {
+						t.Fatalf("AttemptPolicyDecisionForResult(%s/%s).Reason = %q, want %q", tc.name, variant.name, decision.Reason, tc.wantReason)
+					}
+					if i == 0 {
+						gotAction, gotReason = string(decision.Action), decision.Reason
+						return
+					}
+					if string(decision.Action) != gotAction || decision.Reason != gotReason {
+						t.Fatalf("AttemptPolicyDecisionForResult(%s/%s) diverged across legacy text variants: got %s/%s, want %s/%s",
+							tc.name, variant.name, decision.Action, decision.Reason, gotAction, gotReason)
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestProviderFailureTextClassifierRemovedOrAuditOnly(t *testing.T) {
