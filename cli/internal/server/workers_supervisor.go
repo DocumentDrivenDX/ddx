@@ -386,6 +386,85 @@ func (s *WorkerSupervisor) DiagnoseDesiredWorkerPresence(state WorkerDesiredStat
 	return out, nil
 }
 
+// WorkerLivenessMismatch describes a worker recorded as running/stopping on
+// disk whose liveness evidence (PGID, sidecar heartbeat, run-state) disagrees
+// with its recorded PID, surfaced for read-only status/doctor reporting.
+// Reconcile would treat this record as stale and either preserve or stop it;
+// doctor surfaces it so operators can see the discrepancy without a
+// supervisor process running.
+type WorkerLivenessMismatch struct {
+	WorkerID string `json:"worker_id"`
+	State    string `json:"state"`
+	PID      int    `json:"pid"`
+}
+
+// StaleRestartBlock describes a restart-blocked terminal worker (see
+// isRestartBlockedWorker) whose block age exceeds DefaultTerminalBlockTTL,
+// surfaced for read-only status/doctor reporting. A running supervisor would
+// auto-expire this block on its next reconcile tick; doctor surfaces it so
+// operators know a stale block exists between ticks or while no supervisor
+// process is running to clear it.
+type StaleRestartBlock struct {
+	WorkerID   string        `json:"worker_id"`
+	Reason     string        `json:"reason"`
+	TerminalAt time.Time     `json:"terminal_at"`
+	Age        time.Duration `json:"age"`
+}
+
+// DiagnoseWorkerSelfHealing is a read-only, Reconcile-free snapshot of worker
+// self-healing risks for doctor/status callers: it never starts, stops, or
+// otherwise mutates worker state or desired state. It reuses the same
+// filesystem snapshot and classification logic Reconcile uses so the risks it
+// reports match what a running supervisor would act on.
+func (s *WorkerSupervisor) DiagnoseWorkerSelfHealing(now time.Time) (livenessMismatches []WorkerLivenessMismatch, staleBlocks []StaleRestartBlock, err error) {
+	if s == nil || s.manager == nil {
+		return nil, nil, fmt.Errorf("worker supervisor is not configured")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	_, _, terminals, staleIDs, err := s.snapshotWorkers(s.manager.projectRoot, now)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+
+	for _, id := range staleIDs {
+		rec, readErr := s.manager.readRecord(filepath.Join(s.manager.rootDir, id))
+		if readErr != nil {
+			continue
+		}
+		livenessMismatches = append(livenessMismatches, WorkerLivenessMismatch{
+			WorkerID: id,
+			State:    rec.State,
+			PID:      rec.PID,
+		})
+	}
+
+	for _, rec := range terminals {
+		if isExpectedTerminalWorker(rec) || !isRestartBlockedWorker(rec) {
+			continue
+		}
+		terminalAt := workerTerminalTime(rec, now)
+		age := now.Sub(terminalAt)
+		if age < DefaultTerminalBlockTTL {
+			continue
+		}
+		reason, _, _ := terminalDiagnosticFields(s.manager, rec)
+		staleBlocks = append(staleBlocks, StaleRestartBlock{
+			WorkerID:   rec.ID,
+			Reason:     reason,
+			TerminalAt: terminalAt,
+			Age:        age,
+		})
+	}
+
+	return livenessMismatches, staleBlocks, nil
+}
+
 // fdExhaustionDiagnosisForTerminal returns agent.ResourceExhaustionDiagnosisFD
 // when the terminal worker's structured managed result or record fields show
 // fd exhaustion. Equality against known constants is intentional: the bead
