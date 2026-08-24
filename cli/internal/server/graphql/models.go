@@ -2263,6 +2263,8 @@ type SessionsCostSummary struct {
 	SubscriptionEquivUsd float64 `json:"subscriptionEquivUsd"`
 	// Count of sessions served locally
 	LocalSessionCount int `json:"localSessionCount"`
+	// Count of sessions whose cost was not present in the Fizeau record
+	UnknownCost int `json:"unknownCost"`
 	// Optional local compute estimate, present only when configured
 	LocalEstimatedUsd *float64 `json:"localEstimatedUsd,omitempty"`
 }

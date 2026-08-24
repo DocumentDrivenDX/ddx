@@ -75,12 +75,12 @@ func TestGraphQLBillingSummaryUsesOnlyFizeauReportedBilling(t *testing.T) {
 	appendSummarySession(t, workDir, agent.SessionIndexEntry{
 		ID: "paid-evidence-subscription-identity", Harness: "codex", Provider: "openai",
 		Billing: "per_token", BillingMode: agent.BillingModeSubscription,
-		StartedAt: now, CostUSD: 0.25,
+		StartedAt: now, CostUSD: 0.25, CostPresent: true,
 	}, now)
 	appendSummarySession(t, workDir, agent.SessionIndexEntry{
 		ID: "subscription-evidence-paid-identity", Harness: "openrouter", Provider: "openai",
 		Billing: "subscription", BillingMode: agent.BillingModePaid,
-		StartedAt: now.Add(time.Minute), CostUSD: 0.50,
+		StartedAt: now.Add(time.Minute), CostUSD: 0.50, CostPresent: true,
 	}, now.Add(time.Minute))
 	appendSummarySession(t, workDir, agent.SessionIndexEntry{
 		ID: "missing-evidence", Harness: "openrouter", Provider: "openai",
@@ -97,6 +97,53 @@ func TestGraphQLBillingSummaryUsesOnlyFizeauReportedBilling(t *testing.T) {
 	})
 	if unknownSession.BillingMode != agent.BillingModeUnknown {
 		t.Fatalf("billingMode=%q, want unknown without raw Fizeau evidence", unknownSession.BillingMode)
+	}
+}
+
+func TestGraphQLCostSummaryPreservesUnknownFizeauCost(t *testing.T) {
+	workDir := t.TempDir()
+	writeConfig(t, workDir, `version: "1.0"`+"\n")
+	state := stateWithProject(workDir)
+	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
+
+	appendSummarySession(t, workDir, agent.SessionIndexEntry{
+		ID: "explicit-zero", Harness: "openrouter", Billing: "per_token", StartedAt: now,
+		CostUSD: 0, CostPresent: true,
+	}, now)
+	appendSummarySession(t, workDir, agent.SessionIndexEntry{
+		ID: "absent-cost", Harness: "openrouter", Billing: "per_token", StartedAt: now.Add(time.Minute),
+		CostUSD: 0,
+	}, now.Add(time.Minute))
+	appendSummarySession(t, workDir, agent.SessionIndexEntry{
+		ID: "subscription-cost", Harness: "codex", Billing: "subscription", StartedAt: now.Add(2 * time.Minute),
+		CostUSD: 0.50, CostPresent: true,
+	}, now.Add(2*time.Minute))
+
+	explicitZero := agentSessionFromIndex("proj-test", agent.SessionIndexEntry{
+		ID: "explicit-zero", Harness: "openrouter", Billing: "per_token",
+		StartedAt: now, CostUSD: 0, CostPresent: true,
+	})
+	if explicitZero.Cost == nil || *explicitZero.Cost != 0 {
+		t.Fatalf("explicit zero cost = %v, want present 0", explicitZero.Cost)
+	}
+
+	absent := agentSessionFromIndex("proj-test", agent.SessionIndexEntry{
+		ID: "absent-cost", Harness: "openrouter", Billing: "per_token",
+		StartedAt: now.Add(time.Minute), CostUSD: 0,
+	})
+	if absent.Cost != nil {
+		t.Fatalf("absent cost = %v, want nil", absent.Cost)
+	}
+
+	summary := state.GetSessionsCostSummaryGraphQL("proj-test", nil, nil)
+	if summary.CashUsd != 0 || summary.SubscriptionEquivUsd != 0.50 || summary.UnknownCost != 1 {
+		t.Fatalf("summary=%+v, want zero cash, 0.50 subscription, and one unknown-cost session", summary)
+	}
+	if summary.LocalSessionCount != 0 {
+		t.Fatalf("localSessionCount=%d, want 0", summary.LocalSessionCount)
+	}
+	if summary.LocalEstimatedUsd != nil {
+		t.Fatalf("localEstimatedUsd=%v, want nil when config unset", *summary.LocalEstimatedUsd)
 	}
 }
 
