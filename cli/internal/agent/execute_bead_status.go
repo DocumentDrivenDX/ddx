@@ -1,6 +1,48 @@
 package agent
 
-import "strings"
+import (
+	"strings"
+
+	agentlib "github.com/easel/fizeau"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent/failclass"
+)
+
+// BuildAttemptPolicyInput assembles the typed DDx attempt-policy adapter
+// input (cli/internal/agent/failclass.DecideAttemptPolicy) from Fizeau's
+// public lifecycle tuple recorded on the result (FizeauOutcome/FizeauCause/
+// FizeauStage) plus explicit DDx-owned stage evidence and route audit
+// identity supplied by the caller. This is the single typed boundary between
+// the final-status path and the adapter: evidence and audit are threaded
+// through unchanged and are never re-derived here from res.Status or
+// res.Error text — that remains ClassifyFailureMode's legacy compatibility
+// path, kept outside this typed route per
+// docs/helix/06-iterate/phase1-lower-the-altitude-plan-2026-07-13.md WB-1.
+func BuildAttemptPolicyInput(res *ExecuteBeadResult, evidence failclass.AttemptPolicyEvidence, audit failclass.AttemptPolicyAudit) failclass.AttemptPolicyInput {
+	return failclass.AttemptPolicyInput{
+		Final:    fizeauFinalDataFromResult(res),
+		Evidence: evidence,
+		Audit:    audit,
+	}
+}
+
+// fizeauFinalDataFromResult reconstructs the typed Fizeau public final-event
+// tuple from the string fields DDx already preserves verbatim on the result.
+// Returns nil when no lifecycle tuple was recorded (e.g. an immediate error
+// path that never reached a Fizeau final event).
+func fizeauFinalDataFromResult(res *ExecuteBeadResult) *agentlib.ServiceFinalData {
+	if res == nil {
+		return nil
+	}
+	if res.FizeauOutcome == "" && res.FizeauCause == "" && res.FizeauStage == "" {
+		return nil
+	}
+	return &agentlib.ServiceFinalData{
+		Outcome: agentlib.SessionOutcome(res.FizeauOutcome),
+		Cause:   agentlib.TerminalCause(res.FizeauCause),
+		Stage:   agentlib.SessionStage(res.FizeauStage),
+	}
+}
 
 // OperatorCancelReason marks a landing preserved because the operator
 // cancelled the attempt mid-flight via /api/beads/<id>/cancel. ADR-022
