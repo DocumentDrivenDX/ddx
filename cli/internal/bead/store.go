@@ -2595,6 +2595,26 @@ func (s *Store) NeedsHuman() ([]Bead, error) {
 	return s.ProposedOperatorAttention()
 }
 
+// PreservedReviewBlocked returns beads carrying an unresolved
+// preserved-needs-review block marker (see preservedReviewBlocked),
+// sorted by queue order. Ready beads with an active block are excluded from
+// worker readiness until an operator stamps a matching unblock marker
+// (ddx-ec1c1f89); this surfaces those beads for doctor/status reporting.
+func (s *Store) PreservedReviewBlocked() ([]Bead, error) {
+	beads, err := s.ReadAll(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	var result []Bead
+	for _, b := range beads {
+		if preservedReviewBlocked(b) {
+			result = append(result, b)
+		}
+	}
+	sortBeadsForQueue(result)
+	return result, nil
+}
+
 // ReadyExecutionBreakdown is the lifecycle-derived queue snapshot used by the
 // worker when explaining an empty execution queue.
 type ReadyExecutionBreakdown struct {

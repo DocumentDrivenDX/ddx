@@ -415,6 +415,27 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check 12b: worker self-healing invariants — surfaces the final risks
+	// from the self-healing-workers plan (stale terminal suppression,
+	// PID/PGID liveness evidence mismatch, runtime JSONL merge/lock
+	// coverage, unresolved preserved-review gate, resource pressure) on the
+	// one doctor/status surface. Read-only in both dry-run and --apply: it
+	// never starts, stops, or reclaims workers or beads.
+	fmt.Print("✓ Checking Worker Self-Healing Invariants... ")
+	selfHealingIssues := checkWorkerSelfHealing(housekeepingProjectRoot)
+	if len(selfHealingIssues) == 0 {
+		fmt.Println("✅ No worker self-healing risks detected")
+	} else {
+		fmt.Printf("⚠️  %d risk(s) detected\n", len(selfHealingIssues))
+		for _, issue := range selfHealingIssues {
+			fmt.Printf("   ⚠️  %s\n", issue.Description)
+			for _, r := range issue.Remediation {
+				fmt.Printf("   💡 %s\n", r)
+			}
+		}
+		issues = append(issues, selfHealingIssues...)
+	}
+
 	// Check 13: package.json locations — detect missing/stale node_modules.
 	fmt.Print("✓ Checking package.json locations... ")
 	pkgIssues := checkPackageJSONLocations(f.WorkingDir)
