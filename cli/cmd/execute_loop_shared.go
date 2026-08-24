@@ -35,6 +35,15 @@ const defaultWorktreeReapMaxAge = 72 * time.Hour
 // multi-day DDX_WORKTREE_REAP_MAX_AGE default.
 const defaultWorktreeReapGraceAge = 30 * time.Minute
 
+// workLoopStore is the narrowest store surface the drain-loop path needs
+// beyond cooldownLoopStore: ReadyExecutionBreakdown backs the idle-path
+// diagnostic breakdown (empty-queue explanation), which is not part of
+// bead.Backend's mutable-operation composite.
+type workLoopStore interface {
+	cooldownLoopStore
+	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
+}
+
 func hostnameOrEmpty() string {
 	h, err := os.Hostname()
 	if err != nil {
@@ -276,7 +285,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
 	}
-	store := bead.NewStore(beadStoreRoot)
+	var store workLoopStore = bead.NewStore(beadStoreRoot)
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {
 		workerStore = newIgnoreCooldownStore(store)
@@ -528,7 +537,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				if store == nil {
 					return nil
 				}
-				return bead.NewStoreWithCollection(store.Dir, store.Collection)
+				return bead.NewStoreWithCollection(beadStoreRoot, bead.DefaultCollection)
 			}, nil)
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
@@ -561,7 +570,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				if store == nil {
 					return nil
 				}
-				return bead.NewStoreWithCollection(store.Dir, store.Collection)
+				return bead.NewStoreWithCollection(beadStoreRoot, bead.DefaultCollection)
 			}, nil)
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err

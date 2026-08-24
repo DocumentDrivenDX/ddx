@@ -169,7 +169,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if forceClaim && forceReason == "" {
 		return fmt.Errorf("--force-claim requires --reason \"<text>\"")
 	}
-	store := bead.NewStore(beadStoreRoot)
+	var store cooldownLoopStore = bead.NewStore(beadStoreRoot)
 
 	// Pre-flight: look up the bead.
 	target, err := store.Get(context.Background(), beadID)
@@ -389,7 +389,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 						if store == nil {
 							return nil
 						}
-						return bead.NewStoreWithCollection(store.Dir, store.Collection)
+						return bead.NewStoreWithCollection(beadStoreRoot, bead.DefaultCollection)
 					}, target); loadErr == nil {
 						targetBead = loaded
 					}
@@ -625,7 +625,7 @@ func tryExitCodeForStatus(status string) error {
 
 // unmetDeps returns the IDs of deps that are not yet closed, in the order
 // they appear in the bead's dependency list.
-func unmetDeps(store bead.Backend, b *bead.Bead) []string {
+func unmetDeps(store attemptBeadReader, b *bead.Bead) []string {
 	depIDs := b.DepIDs()
 	if len(depIDs) == 0 {
 		return nil
