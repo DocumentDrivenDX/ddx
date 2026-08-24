@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	agentlib "github.com/easel/fizeau"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent/failclass"
 )
 
 // Provider-failure taxonomy. provider_connectivity and no_viable_provider reuse
@@ -111,9 +113,14 @@ func ClassifyServiceExecuteError(err error) ProviderFailure {
 	if err == nil {
 		return providerFailure(FailureModeUnknownProviderFailure, false)
 	}
-	var noViableForNow *agentlib.NoViableProviderForNow
-	if errors.As(err, &noViableForNow) {
-		return providerFailure(FailureModeNoViableProvider, false)
+	// The typed attempt-policy adapter (internal/agent/failclass) is the
+	// single decision source for the transient (unavailable-now / retryable)
+	// typed Fizeau immediate lifecycle classes, so provider_failure.go never
+	// re-derives their retryability itself (ddx-47e99eb6, WB-1). Completed,
+	// cancelled, and permanent typed immediate errors are unaffected and stay
+	// on the local classification below.
+	if pf, ok := providerFailureForTransientImmediateError(err); ok {
+		return pf
 	}
 	var modelErr *agentlib.ErrHarnessModelIncompatible
 	if errors.As(err, &modelErr) {
@@ -127,10 +134,6 @@ func ClassifyServiceExecuteError(err error) ProviderFailure {
 	if errors.As(err, &rejectedOverride) {
 		return providerFailure(FailureModeProviderConfigInvalid, false)
 	}
-	var noLiveProvider *agentlib.ErrNoLiveProvider
-	if errors.As(err, &noLiveProvider) {
-		return providerFailure(FailureModeNoViableProvider, false)
-	}
 	// Typed Fizeau errors own the taxonomy. Free-text pre-dispatch errors
 	// still map the connectivity/transport diagnostics that unpinned
 	// workers must retry; other free-text (missing executable, etc.) stays
@@ -143,6 +146,33 @@ func ClassifyServiceExecuteError(err error) ProviderFailure {
 	default:
 		return providerFailure(FailureModeUnknownProviderFailure, false)
 	}
+}
+
+// providerFailureForTransientImmediateError recognizes the two typed Fizeau
+// immediate errors the attempt-policy adapter classifies into a transient
+// lifecycle — *agentlib.NoViableProviderForNow (unavailable-now) and
+// *agentlib.ErrNoLiveProvider (retryable) — and returns the ProviderFailure
+// derived exactly from the adapter's decision. The DDx-owned evidence passed
+// in is NewAttemptRetryAllowed: a pre-dispatch failure never reached a
+// workspace, so "retry a new attempt at a different eligible route" is the
+// only DDx-owned evidence this boundary can supply; current-attempt repair,
+// land-readiness, and minimum-strength evidence belong to later stages. The
+// reused FailureModeNoViableProvider reason is preserved for both so existing
+// report/evidence/MET-003 consumers keep recognizing the taxonomy value;
+// only Retryable is sourced from the adapter, and it is read once, directly
+// off the returned Action, with no secondary policy remapping.
+func providerFailureForTransientImmediateError(err error) (ProviderFailure, bool) {
+	var noViableForNow *agentlib.NoViableProviderForNow
+	var noLiveProvider *agentlib.ErrNoLiveProvider
+	if !errors.As(err, &noViableForNow) && !errors.As(err, &noLiveProvider) {
+		return ProviderFailure{}, false
+	}
+	decision := failclass.DecideAttemptPolicy(failclass.AttemptPolicyInput{
+		ImmediateErr: err,
+		Evidence:     failclass.AttemptPolicyEvidence{NewAttemptRetryAllowed: true},
+	})
+	retryable := decision.Action != failclass.AttemptPolicyActionPark
+	return providerFailure(FailureModeNoViableProvider, retryable), true
 }
 
 // ApplyProviderFailureToReport stamps a typed provider failure onto a report:

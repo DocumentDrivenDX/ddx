@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,8 @@ import (
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent/failclass"
 )
 
 // TestServiceExecuteErrorClassifiesProviderConfigFailures (AC1, ddx-3b721804):
@@ -53,10 +56,16 @@ func TestServiceExecuteErrorClassifiesProviderConfigFailures(t *testing.T) {
 			wantRetryable: false,
 		},
 		{
+			// ddx-47e99eb6: retryability is now sourced from the typed
+			// attempt-policy adapter (failclass.DecideAttemptPolicy), which
+			// classifies ErrNoLiveProvider as a retryable lifecycle (a DDx
+			// new-attempt retry at a different eligible route may still
+			// succeed even though this dispatch's ladder was exhausted) —
+			// not the non-retryable verdict the old local table used.
 			name:          "no_live_provider",
 			execErr:       &agentlib.ErrNoLiveProvider{PromptTokens: 1024, RequiresTools: true, StartingPolicy: "smart"},
 			wantReason:    FailureModeNoViableProvider,
-			wantRetryable: false,
+			wantRetryable: true,
 		},
 	}
 
@@ -453,5 +462,75 @@ func TestProviderFailureTextClassifierRemovedOrAuditOnly(t *testing.T) {
 		"ClassifyProviderFailure(err.Error())",
 	} {
 		assert.NotContains(t, content, needle, "provider_failure.go must not scrape free-text provider errors")
+	}
+}
+
+// TestImmediateFizeauFailureUsesAttemptPolicyAdapter_TransientOutcomes
+// (ddx-47e99eb6) proves that the two typed Fizeau immediate errors the
+// attempt-policy adapter classifies into a transient lifecycle —
+// *agentlib.NoViableProviderForNow (unavailable-now) and
+// *agentlib.ErrNoLiveProvider (retryable) — flow through
+// failclass.DecideAttemptPolicy rather than a local, independently-maintained
+// retryability table, that ClassifyServiceExecuteError's Retryable verdict is
+// sourced exactly from that one adapter decision, and that no free-text
+// wrapping around the typed error (which would classify differently under
+// ClassifyFailureMode) changes the verdict — proving no secondary policy
+// remapping runs after the adapter decides.
+func TestImmediateFizeauFailureUsesAttemptPolicyAdapter_TransientOutcomes(t *testing.T) {
+	cases := []struct {
+		name     string
+		typedErr func() error
+	}{
+		{
+			name: "unavailable_now",
+			typedErr: func() error {
+				return &agentlib.NoViableProviderForNow{RetryAfter: time.Unix(1_700_000_000, 0)}
+			},
+		},
+		{
+			name: "retryable_no_live_provider",
+			typedErr: func() error {
+				return &agentlib.ErrNoLiveProvider{PromptTokens: 1024, RequiresTools: true, StartingPolicy: "smart"}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			typedErr := tc.typedErr()
+
+			// The single DDx attempt decision, computed directly from the
+			// typed attempt-policy adapter the same way provider_failure.go
+			// must: this is the one decision source, not a parallel table.
+			wantDecision := failclass.DecideAttemptPolicy(failclass.AttemptPolicyInput{
+				ImmediateErr: typedErr,
+				Evidence:     failclass.AttemptPolicyEvidence{NewAttemptRetryAllowed: true},
+			})
+			wantRetryable := wantDecision.Action != failclass.AttemptPolicyActionPark
+
+			pf := ClassifyServiceExecuteError(typedErr)
+			assert.Equal(t, wantRetryable, pf.Retryable,
+				"ClassifyServiceExecuteError must return exactly the adapter's decision, not a local remapping")
+
+			// Wrapping the typed error with free text that ClassifyFailureMode
+			// would classify to an unrelated (or no) failure mode must not
+			// change the verdict: the adapter decision is sourced from the
+			// typed error alone, never from re-parsed text.
+			legacyTextVariants := []string{
+				"",
+				"401 unauthorized: invalid api key",
+				"context deadline exceeded",
+				"a completely novel provider hiccup no table recognizes",
+			}
+			for _, text := range legacyTextVariants {
+				wrapped := typedErr
+				if text != "" {
+					wrapped = fmt.Errorf("%s: %w", text, typedErr)
+				}
+				got := ClassifyServiceExecuteError(wrapped)
+				assert.Equal(t, pf.Reason, got.Reason, "reason must not change with free-text variant %q", text)
+				assert.Equal(t, pf.Retryable, got.Retryable, "retryable must not change with free-text variant %q", text)
+			}
+		})
 	}
 }
