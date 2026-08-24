@@ -99,6 +99,27 @@ func keepAgentSupportReachability() {
 	// production API ahead of scrub/orchestrator wiring; keep prepare,
 	// invalidate, allowlist, and env surfaces on the static graph.
 	keepAttemptBuildCacheReachability(root)
+	// Typed DDx attempt-policy adapter (ddx-0b916242, phase1 WB-1) is
+	// package-level production API ahead of the final decision-mapping
+	// child wiring it into the worker's final-status boundary; keep the
+	// adapter input builder and decision entry point on the static graph.
+	keepAttemptPolicyAdapterReachability()
+}
+
+// keepAttemptPolicyAdapterReachability exercises BuildAttemptPolicyInput and
+// AttemptPolicyDecisionForResult so deadcode RTA sees the typed attempt-policy
+// adapter boundary as reachable from main() before the final decision-mapping
+// child consumes non-zero DDx-owned evidence.
+func keepAttemptPolicyAdapterReachability() {
+	res := &ExecuteBeadResult{
+		Harness:       "keepalive",
+		Provider:      "keepalive",
+		Model:         "keepalive",
+		FizeauOutcome: "success",
+		FizeauCause:   "completed",
+		FizeauStage:   "harness",
+	}
+	_ = AttemptPolicyDecisionForResult(res)
 }
 
 // keepAttemptWorkspaceSlotReachability exercises AttemptWorkspaceSlotKey and

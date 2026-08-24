@@ -44,6 +44,26 @@ func fizeauFinalDataFromResult(res *ExecuteBeadResult) *agentlib.ServiceFinalDat
 	}
 }
 
+// AttemptPolicyDecisionForResult is the single production entry point that
+// feeds a worker result through the typed DDx attempt-policy adapter
+// (BuildAttemptPolicyInput -> failclass.DecideAttemptPolicy) using route
+// identity already carried on the result as audit-only evidence. It is
+// package-level production API ahead of the final decision-mapping child
+// wiring it into the worker's final-status boundary; see
+// KeepReachabilityForDeadcode in reachability.go, which keeps it (and the
+// adapter input builder it calls) on the static production reachability
+// graph per
+// docs/helix/06-iterate/phase1-lower-the-altitude-plan-2026-07-13.md WB-1.
+func AttemptPolicyDecisionForResult(res *ExecuteBeadResult) failclass.AttemptPolicyDecision {
+	audit := failclass.AttemptPolicyAudit{}
+	if res != nil {
+		audit.Harness = res.Harness
+		audit.Provider = res.Provider
+		audit.Model = res.Model
+	}
+	return failclass.DecideAttemptPolicy(BuildAttemptPolicyInput(res, failclass.AttemptPolicyEvidence{}, audit))
+}
+
 // OperatorCancelReason marks a landing preserved because the operator
 // cancelled the attempt mid-flight via /api/beads/<id>/cancel. ADR-022
 // §Cancel SLA: the worker aborts at the next safe point (between LLM turns /
