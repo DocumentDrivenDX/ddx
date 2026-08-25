@@ -1,11 +1,26 @@
 // Regression tests for the Phase 2 WB-2 restamp part 1 bead
 // (phase2-doc-truth-plan-2026-07-13.md WB-2). This bead owns FEAT-011,
 // FEAT-022, FEAT-023, and FEAT-027 — the four Complete/Implemented docs
-// that sibling restamp beads (part 2, part 3) do not cover. Both tests
-// guard the restamp itself: neither test may pass by construction if a
+// that sibling restamp beads (part 2, part 3) do not cover. All three
+// tests guard the restamp itself: none may pass by construction if a
 // future edit re-stamps one of these documents Complete/Implemented
 // without also building the WB-1 Verification evidence that status
 // requires.
+//
+// The bead's own AC2 text ("`go run ./tools/lint/spechonesty
+// ../docs/helix/` passes ... without waivers") reads as a whole-corpus
+// requirement, but this bead's NON-SCOPE forbids touching sibling-owned
+// documents (parts 2/3 own the rest of WB-2's list; contradiction/
+// duplicate-id fixes belong to the WB-3 ledger bead). The whole-corpus
+// invocation stays red on this tree for reasons entirely outside these
+// four documents — dozens of pre-existing missing_status, zero_evidence,
+// duplicate_id, and duplicate_us_id findings on docs this bead does not
+// own — and TestSpechonestyCommandReportsCorpusWB1Diagnostics in this
+// package asserts that whole-corpus non-zero exit is the current expected
+// state. TestSpechonestyPassesScopedToRestampedPart1Docs below is this
+// bead's real, in-scope proof: it runs the production ScanDocsDirectory
+// entrypoint (the same one AC2's command drives) against exactly the four
+// documents this bead governs and requires zero diagnostics.
 package spechonesty
 
 import (
@@ -141,6 +156,33 @@ func TestRestampedCompleteDocsRequireObservedVerification(t *testing.T) {
 			// this is the sanctioned downgrade path this bead used.
 			if len(findings) != 0 {
 				t.Fatalf("%s: stamped %s (non-Complete) but observation-freshness findings present: %+v", path, statusRes.Status, findings)
+			}
+		})
+	}
+}
+
+// TestSpechonestyPassesScopedToRestampedPart1Docs runs the same production
+// entrypoint AC2's command drives (ScanDocsDirectory, wired to
+// cmd/spechonesty's per-argument scan loop) against exactly the four
+// documents this bead restamped, and requires zero diagnostics from any of
+// spechonesty's checks — missing_status, zero_evidence, duplicate_id, and
+// duplicate_us_id included. This is the AC2 proof available within this
+// bead's scope: the whole-corpus invocation additionally depends on
+// sibling-owned documents this bead is forbidden to touch (see the package
+// doc comment above).
+func TestSpechonestyPassesScopedToRestampedPart1Docs(t *testing.T) {
+	docsRoot := helixDocsRoot(t)
+
+	for _, rel := range restampPart1Docs {
+		rel := rel
+		t.Run(rel, func(t *testing.T) {
+			path := filepath.Join(docsRoot, rel)
+			diags, err := ScanDocsDirectory(path)
+			if err != nil {
+				t.Fatalf("ScanDocsDirectory(%s): %v", path, err)
+			}
+			if len(diags) != 0 {
+				t.Fatalf("%s: expected zero spechonesty diagnostics, got %+v", path, diags)
 			}
 		})
 	}
