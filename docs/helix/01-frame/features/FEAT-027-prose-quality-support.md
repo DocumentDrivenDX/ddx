@@ -7,9 +7,17 @@ ddx:
 # Feature: Prose Quality Support
 
 **ID:** FEAT-027
-**Status:** Implemented
+**Status:** In Progress (downgraded from Implemented for missing WB-1 verification evidence, not a code regression)
 **Priority:** P2
 **Owner:** DDx Team
+
+**Restamp rationale (2026-08-24):** `cli/internal/docprose` (checker, vale
+runner, corpus and fixture tests) is real and tested. This document
+declares no `REQ-*` identifiers, though, so spec-honesty's Complete-status
+coverage requirement falls back to one Verification row per section
+heading — a mapping this document does not carry. Downgraded per
+`docs/helix/06-iterate/phase2-doc-truth-plan-2026-07-13.md` WB-2 rather than
+left Complete without mechanical evidence.
 
 ## Overview
 
@@ -189,3 +197,16 @@ catalog.
 - Blocking docs operations by default
 - Automatic semantic rewrites
 - Treating prose findings as correctness failures by default
+
+## Verification
+
+Real evidence exists but is not yet mapped per WB-1: `cd cli && go test
+./internal/docprose/...` covers the checker, rule model, and corpus/fixture
+behavior (`corpus_test.go`, `docprose_test.go`, `stylepack_test.go`,
+`vale_runner_test.go`). Evidence gap: with no `REQ-*` identifiers declared,
+the spec-honesty analyzer's fallback section-anchor inventory (Overview,
+Problem Statement, Users and Content Modes, Product Surfaces, Requirements,
+Non-Goals, Rule Model, Command and Skill Boundaries, Out of Scope — 17
+anchors) has no per-anchor Verification row. Building that full mapping is
+out of this bead's scope (WB-2 restamp, not WB-1 lint-tool work, and not a
+requirement-body rewrite).
