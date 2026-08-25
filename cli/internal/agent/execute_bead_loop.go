@@ -7856,6 +7856,14 @@ func isNoViableProviderReport(report ExecuteBeadReport) bool {
 	if report.OutcomeReason == FailureModeNoViableProvider {
 		return true
 	}
+	// A report carrying typed Fizeau lifecycle data (FizeauOutcome/Cause/Stage)
+	// already went through the typed attempt-policy adapter, which is the sole
+	// owner of no_viable_provider classification for that report; stderr/detail
+	// text is audit evidence only and must not relitigate a typed decision
+	// (ddx-32b0c5b3, WB-1).
+	if hasTypedFizeauLifecycle(&report) {
+		return false
+	}
 	combined := strings.TrimSpace(strings.Join([]string{
 		report.Detail,
 		report.Error,
@@ -7890,6 +7898,12 @@ func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
 		return false
 	}
 	if isNoViableProviderReport(report) || isRoutingInfrastructureReport(report) {
+		return false
+	}
+	// Typed Fizeau lifecycle data owns connectivity classification for this
+	// report; stderr/detail transport substrings are audit evidence only once
+	// a typed outcome/cause/stage is present (ddx-32b0c5b3, WB-1).
+	if hasTypedFizeauLifecycle(&report) {
 		return false
 	}
 	combined := strings.ToLower(strings.Join([]string{
@@ -8548,6 +8562,12 @@ func beadIDs(beads []bead.Bead) []string {
 
 func isRoutingInfrastructureReport(report ExecuteBeadReport) bool {
 	if report.Status != ExecuteBeadStatusExecutionFailed {
+		return false
+	}
+	// Typed Fizeau lifecycle data owns routing-infrastructure classification
+	// for this report; stderr/detail routing substrings are audit evidence
+	// only once a typed outcome/cause/stage is present (ddx-32b0c5b3, WB-1).
+	if hasTypedFizeauLifecycle(&report) {
 		return false
 	}
 	combined := strings.TrimSpace(strings.Join([]string{
