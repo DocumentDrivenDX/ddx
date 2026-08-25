@@ -179,6 +179,76 @@ func ddxOwnerStageForStatus(status string) string {
 	}
 }
 
+// TypedAttemptFailureEvidence is the DDx failure classification derived
+// directly from Fizeau's public lifecycle tuple (FizeauOutcome/FizeauCause/
+// FizeauStage) recorded on a result, plus the DDx-owned stage that owns the
+// disposition. It never inspects Detail/Error/Stderr text.
+type TypedAttemptFailureEvidence struct {
+	// FailureMode is one of the FailureMode* taxonomy constants, or "" when
+	// the typed lifecycle tuple reports success.
+	FailureMode string
+	// Retryable reports whether a different attempt/route could plausibly
+	// succeed, per the typed Fizeau cause alone.
+	Retryable bool
+	// OutcomeReason mirrors FailureMode; callers stamp it onto
+	// ExecuteBeadReport.OutcomeReason so downstream report backfill
+	// (classifyLoopReportFailure) sees a non-empty, typed-derived reason and
+	// never falls through to stderr scanning.
+	OutcomeReason string
+	// OwnerStage is the DDx-owned stage that owns the disposition
+	// (ddxOwnerStageForStatus), carried alongside the typed failure so
+	// callers get stage and owner evidence from one typed call.
+	OwnerStage string
+}
+
+// ClassifyTypedAttemptFailure maps a result's typed Fizeau lifecycle tuple to
+// a DDx failure mode, retryability, outcome reason, and DDx-owned stage
+// without parsing Detail/Error/Stderr text. ok is false when no typed
+// lifecycle tuple was recorded, signalling callers to fall back to the
+// legacy text/status-driven ClassifyFailureMode path — the fallback stays
+// non-authoritative for lifecycle ownership evidence whenever a typed tuple
+// is present (WB-1, docs/helix/06-iterate/phase1-lower-the-altitude-plan-2026-07-13.md).
+func ClassifyTypedAttemptFailure(res *ExecuteBeadResult) (TypedAttemptFailureEvidence, bool) {
+	if res == nil {
+		return TypedAttemptFailureEvidence{}, false
+	}
+	if res.FizeauOutcome == "" && res.FizeauCause == "" && res.FizeauStage == "" {
+		return TypedAttemptFailureEvidence{}, false
+	}
+
+	ownerStage := ddxOwnerStageForStatus(res.Status)
+	outcome := agentlib.SessionOutcome(res.FizeauOutcome)
+	cause := agentlib.TerminalCause(res.FizeauCause)
+
+	if outcome == agentlib.SessionOutcomeSuccess || cause == agentlib.TerminalCauseCompleted {
+		return TypedAttemptFailureEvidence{OwnerStage: ownerStage}, true
+	}
+
+	typed := func(mode string, retryable bool) TypedAttemptFailureEvidence {
+		return TypedAttemptFailureEvidence{
+			FailureMode:   mode,
+			Retryable:     retryable,
+			OutcomeReason: mode,
+			OwnerStage:    ownerStage,
+		}
+	}
+
+	switch cause {
+	case agentlib.TerminalCauseProviderFailed:
+		return typed(FailureModeProviderConnectivity, true), true
+	case agentlib.TerminalCauseHarnessFailed:
+		return typed(FailureModeProviderHarnessUnavailable, true), true
+	case agentlib.TerminalCauseRouteUnavailable:
+		return typed(FailureModeNoViableProvider, false), true
+	case agentlib.TerminalCauseContextCapacityExceeded:
+		return typed(FailureModeContextOverflow, false), true
+	case agentlib.TerminalCauseDeadlineExceeded:
+		return typed(FailureModeTimeout, true), true
+	default:
+		return typed(FailureModeUnknown, false), true
+	}
+}
+
 // ResourceExhaustedStopMessage is the operator-visible message emitted when
 // execution must stop because the host cannot safely continue draining the
 // queue.

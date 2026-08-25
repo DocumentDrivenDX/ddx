@@ -32,7 +32,16 @@ func MarkResultExecutionError(res *ExecuteBeadResult, err error) {
 		res.Status = ClassifyExecuteBeadStatus("error", res.ExitCode, res.Reason)
 	}
 	res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
-	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+	// Typed Fizeau lifecycle evidence (FizeauOutcome/FizeauCause/FizeauStage),
+	// when recorded, is authoritative for the failure mode: it is never
+	// re-derived from Detail/Error/Stderr text. The legacy
+	// ClassifyFailureMode text/status path stays the fallback only for
+	// records with no typed tuple (WB-1).
+	if typed, ok := ClassifyTypedAttemptFailure(res); ok {
+		res.FailureMode = typed.FailureMode
+	} else {
+		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+	}
 	if res.FailureMode == "" {
 		res.FailureMode = FailureModeUnknown
 	}
