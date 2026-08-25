@@ -174,6 +174,7 @@ func ExecuteVerificationRows(in ExecuteVerificationRowsInput) ExecuteVerificatio
 			Revision:        in.Revision,
 			ExitCode:        exitCode,
 			ExitCodePresent: true,
+			Evidence:        evidence,
 			Path:            in.Path,
 			Line:            line,
 		})
