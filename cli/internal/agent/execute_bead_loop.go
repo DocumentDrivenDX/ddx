@@ -1200,6 +1200,11 @@ type ExecuteBeadWorker struct {
 	// in tests so checkpoint dirt fallback behavior can be exercised without a
 	// real git repo.
 	preDispatchDirtyPreserver func(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error)
+	// preClaimDirtRemediator replaces the pre-claim dirty-root unjam
+	// classification/remediation step in tests so checkpoint/stash
+	// remediation of safe dirt can be exercised without a real git repo.
+	// Defaults to remediateUnjamSafeDirt when nil.
+	preClaimDirtRemediator func(ctx context.Context, projectRoot string, dirtyPaths []string) ([]string, error)
 	// preDispatchGitRepairer replaces the project-root git config repair
 	// preflight in tests so failed/unresolved repairs can be exercised without
 	// corrupting a real repository in unsupported ways.
@@ -2348,7 +2353,31 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 	}
 	if runtime.ProjectRootDirtyCheck != nil && runtime.ProjectRoot != "" {
-		if dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot); len(dirtyPaths) > 0 {
+		dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot)
+		if len(dirtyPaths) > 0 {
+			remediator := w.preClaimDirtRemediator
+			if remediator == nil {
+				remediator = remediateUnjamSafeDirt
+			}
+			if remaining, remErr := remediator(ctx, runtime.ProjectRoot, dirtyPaths); remErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "dirty-root unjam remediation failed: %v\n", remErr)
+				}
+			} else {
+				if len(remaining) < len(dirtyPaths) {
+					emit("loop.dirty_root_remediated", map[string]any{
+						"project_root":    runtime.ProjectRoot,
+						"dirty_paths":     dirtyPaths,
+						"remaining_paths": remaining,
+					})
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "unjam remediated %d dirty path(s) at project root before claim\n", len(dirtyPaths)-len(remaining))
+					}
+				}
+				dirtyPaths = remaining
+			}
+		}
+		if len(dirtyPaths) > 0 {
 			if loopMode == executeloop.ModeWatch && attemptStarted {
 				preserveDirty := w.preDispatchDirtyPreserver
 				if preserveDirty == nil {
