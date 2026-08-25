@@ -114,25 +114,17 @@ func ClassifyServiceExecuteError(err error) ProviderFailure {
 		return providerFailure(FailureModeUnknownProviderFailure, false)
 	}
 	// The typed attempt-policy adapter (internal/agent/failclass) is the
-	// single decision source for the transient (unavailable-now / retryable)
-	// typed Fizeau immediate lifecycle classes, so provider_failure.go never
-	// re-derives their retryability itself (ddx-47e99eb6, WB-1). Completed,
-	// cancelled, and permanent typed immediate errors are unaffected and stay
-	// on the local classification below.
+	// single decision source for both the transient (unavailable-now /
+	// retryable) and permanent typed Fizeau immediate lifecycle classes, so
+	// provider_failure.go never re-derives their retryability itself
+	// (ddx-47e99eb6, ddx-0ba6eb69, WB-1). Completed and cancelled typed
+	// immediate errors are unaffected and stay on the local classification
+	// below.
 	if pf, ok := providerFailureForTransientImmediateError(err); ok {
 		return pf
 	}
-	var modelErr *agentlib.ErrHarnessModelIncompatible
-	if errors.As(err, &modelErr) {
-		return providerFailure(FailureModeProviderModelUnavailable, true)
-	}
-	var unsatPin *agentlib.ErrUnsatisfiablePin
-	if errors.As(err, &unsatPin) {
-		return providerFailure(FailureModeProviderConfigInvalid, false)
-	}
-	var rejectedOverride *agentlib.ErrRejectedOverride
-	if errors.As(err, &rejectedOverride) {
-		return providerFailure(FailureModeProviderConfigInvalid, false)
+	if pf, ok := providerFailureForPermanentImmediateError(err); ok {
+		return pf
 	}
 	// Typed Fizeau errors own the taxonomy. Free-text pre-dispatch errors
 	// still map the connectivity/transport diagnostics that unpinned
@@ -173,6 +165,40 @@ func providerFailureForTransientImmediateError(err error) (ProviderFailure, bool
 	})
 	retryable := decision.Action != failclass.AttemptPolicyActionPark
 	return providerFailure(FailureModeNoViableProvider, retryable), true
+}
+
+// providerFailureForPermanentImmediateError recognizes the three typed
+// Fizeau immediate errors the attempt-policy adapter classifies into the
+// permanent lifecycle — *agentlib.ErrHarnessModelIncompatible,
+// *agentlib.ErrUnsatisfiablePin, and *agentlib.ErrRejectedOverride — and
+// returns the ProviderFailure derived exactly from the adapter's decision. A
+// pre-dispatch permanent immediate error carries no DDx-owned
+// minimum-strength-escalation evidence (that evidence belongs to a later,
+// in-workspace stage), so the adapter's permanent branch always parks;
+// Retryable is read once, directly off the returned Action, with no
+// secondary policy remapping. The existing typed reasons
+// (FailureModeProviderModelUnavailable / FailureModeProviderConfigInvalid)
+// are preserved so existing report/evidence/MET-003 consumers keep
+// recognizing the taxonomy value; only Retryable is sourced from the
+// adapter.
+func providerFailureForPermanentImmediateError(err error) (ProviderFailure, bool) {
+	var modelErr *agentlib.ErrHarnessModelIncompatible
+	var unsatPin *agentlib.ErrUnsatisfiablePin
+	var rejectedOverride *agentlib.ErrRejectedOverride
+	var reason string
+	switch {
+	case errors.As(err, &modelErr):
+		reason = FailureModeProviderModelUnavailable
+	case errors.As(err, &unsatPin):
+		reason = FailureModeProviderConfigInvalid
+	case errors.As(err, &rejectedOverride):
+		reason = FailureModeProviderConfigInvalid
+	default:
+		return ProviderFailure{}, false
+	}
+	decision := failclass.DecideAttemptPolicy(failclass.AttemptPolicyInput{ImmediateErr: err})
+	retryable := decision.Action != failclass.AttemptPolicyActionPark
+	return providerFailure(reason, retryable), true
 }
 
 // ApplyProviderFailureToReport stamps a typed provider failure onto a report:

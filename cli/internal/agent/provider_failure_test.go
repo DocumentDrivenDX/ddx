@@ -30,10 +30,16 @@ func TestServiceExecuteErrorClassifiesProviderConfigFailures(t *testing.T) {
 		wantRetryable bool
 	}{
 		{
+			// ddx-0ba6eb69: retryability is now sourced from the typed
+			// attempt-policy adapter (failclass.DecideAttemptPolicy), which
+			// classifies ErrHarnessModelIncompatible as a permanent
+			// lifecycle (fizeau_immediate_model_incompatible) and parks
+			// absent minimum-strength-escalation evidence — not the
+			// retryable=true verdict the old local table used.
 			name:          "model_unavailable_typed_fizeau_error",
 			execErr:       &agentlib.ErrHarnessModelIncompatible{Harness: "claude", Model: "gpt-foo"},
 			wantReason:    FailureModeProviderModelUnavailable,
-			wantRetryable: true,
+			wantRetryable: false,
 		},
 		{
 			name:          "no_viable_provider_for_now",
@@ -505,6 +511,86 @@ func TestImmediateFizeauFailureUsesAttemptPolicyAdapter_TransientOutcomes(t *tes
 			wantDecision := failclass.DecideAttemptPolicy(failclass.AttemptPolicyInput{
 				ImmediateErr: typedErr,
 				Evidence:     failclass.AttemptPolicyEvidence{NewAttemptRetryAllowed: true},
+			})
+			wantRetryable := wantDecision.Action != failclass.AttemptPolicyActionPark
+
+			pf := ClassifyServiceExecuteError(typedErr)
+			assert.Equal(t, wantRetryable, pf.Retryable,
+				"ClassifyServiceExecuteError must return exactly the adapter's decision, not a local remapping")
+
+			// Wrapping the typed error with free text that ClassifyFailureMode
+			// would classify to an unrelated (or no) failure mode must not
+			// change the verdict: the adapter decision is sourced from the
+			// typed error alone, never from re-parsed text.
+			legacyTextVariants := []string{
+				"",
+				"401 unauthorized: invalid api key",
+				"context deadline exceeded",
+				"a completely novel provider hiccup no table recognizes",
+			}
+			for _, text := range legacyTextVariants {
+				wrapped := typedErr
+				if text != "" {
+					wrapped = fmt.Errorf("%s: %w", text, typedErr)
+				}
+				got := ClassifyServiceExecuteError(wrapped)
+				assert.Equal(t, pf.Reason, got.Reason, "reason must not change with free-text variant %q", text)
+				assert.Equal(t, pf.Retryable, got.Retryable, "retryable must not change with free-text variant %q", text)
+			}
+		})
+	}
+}
+
+// TestImmediateFizeauFailureUsesAttemptPolicyAdapter_PermanentOutcomes
+// (ddx-0ba6eb69) proves that the three typed Fizeau immediate errors the
+// attempt-policy adapter classifies into the permanent lifecycle —
+// *agentlib.ErrHarnessModelIncompatible, *agentlib.ErrUnsatisfiablePin, and
+// *agentlib.ErrRejectedOverride — flow through failclass.DecideAttemptPolicy
+// rather than a local, independently-maintained retryability table, that
+// ClassifyServiceExecuteError's Retryable verdict is sourced exactly from
+// that one adapter decision, and that no free-text wrapping around the typed
+// error (which would classify differently under ClassifyFailureMode) changes
+// the verdict — proving no secondary policy remapping runs after the adapter
+// decides.
+func TestImmediateFizeauFailureUsesAttemptPolicyAdapter_PermanentOutcomes(t *testing.T) {
+	cases := []struct {
+		name     string
+		typedErr func() error
+	}{
+		{
+			name: "model_incompatible",
+			typedErr: func() error {
+				return &agentlib.ErrHarnessModelIncompatible{Harness: "claude", Model: "gpt-foo"}
+			},
+		},
+		{
+			name: "unsatisfiable_pin",
+			typedErr: func() error {
+				return &agentlib.ErrUnsatisfiablePin{Pin: "--harness claude --provider anthropic"}
+			},
+		},
+		{
+			name: "rejected_override",
+			typedErr: func() error {
+				return &agentlib.ErrRejectedOverride{
+					Inner: &agentlib.ErrUnsatisfiablePin{Pin: "--model claude-opus"},
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			typedErr := tc.typedErr()
+
+			// The single DDx attempt decision, computed directly from the
+			// typed attempt-policy adapter the same way provider_failure.go
+			// must: this is the one decision source, not a parallel table.
+			// A pre-dispatch permanent immediate error carries no
+			// DDx-owned minimum-strength-escalation evidence, matching what
+			// provider_failure.go supplies.
+			wantDecision := failclass.DecideAttemptPolicy(failclass.AttemptPolicyInput{
+				ImmediateErr: typedErr,
 			})
 			wantRetryable := wantDecision.Action != failclass.AttemptPolicyActionPark
 
