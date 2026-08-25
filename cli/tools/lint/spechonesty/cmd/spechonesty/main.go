@@ -6,20 +6,25 @@
 // to the docs tree.
 //
 // Sibling parser symbols (verification inventory, waiver policy,
-// observation freshness, zero-evidence, test-symbol resolution,
-// citation-granularity, runtime-artifact resolution, command allowlist)
-// remain reachable from main for production RTA without changing the
-// status-gate exit contract.
+// zero-evidence, test-symbol resolution, citation-granularity,
+// runtime-artifact resolution, command allowlist) remain reachable from
+// main for production RTA without changing the status-gate exit contract.
+// Observation freshness is wired into the exit-code path for real (see
+// runScan below), not merely kept reachable.
 //
 // A separate `observe` subcommand actually executes allowlisted
 // Verification mapping-row commands for Complete/Implemented documents and
-// writes a consolidated observation report (WB-1 step 4). It is opt-in and
-// distinct from the default scan: wiring it into CI/lefthook is left to a
-// follow-on integration bead.
+// writes a consolidated observation report (WB-1 step 4). The default scan
+// below optionally reads a report produced by `observe` (--report) and
+// validates it against an asserted current revision (--revision), via
+// spechonesty.ScanDocsDirectoryWithReport; omitting both flags is
+// equivalent to no persisted observations existing, so any Complete/
+// Implemented Verification row still fails as unobserved. Wiring these
+// flags into CI/lefthook is left to a follow-on integration bead.
 //
 // Usage:
 //
-//	go run ./tools/lint/spechonesty/cmd/spechonesty <docs-dir>
+//	go run ./tools/lint/spechonesty/cmd/spechonesty [--report=<path> --revision=<rev>] <docs-dir>
 //	go run ./tools/lint/spechonesty/cmd/spechonesty observe --revision=<rev> --report=<path> [--workdir=<dir>] <docs-dir>...
 //
 // With no arguments, the go/analysis singlechecker entry used by analysistest
@@ -49,10 +54,37 @@ func main() {
 	if os.Args[1] == "observe" {
 		os.Exit(runObserve(os.Args[2:]))
 	}
+	os.Exit(runScan(os.Args[1:]))
+}
+
+// runScan implements the default docs-directory scan. --report and
+// --revision are optional: when supplied, --report is read via
+// spechonesty.ReadObservationReport and correlated against every
+// Complete/Implemented document's Verification rows for --revision (WB-1
+// step 4); when omitted, no persisted observations are available and every
+// Complete/Implemented Verification row fails as unobserved. Never writes.
+func runScan(args []string) int {
+	flagSet := flag.NewFlagSet("scan", flag.ContinueOnError)
+	flagSet.SetOutput(os.Stderr)
+	report := flagSet.String("report", "", "optional path to a JSON observation report from `spechonesty observe`")
+	revision := flagSet.String("revision", "", "repository revision under evaluation for the current-revision observation check")
+	if err := flagSet.Parse(args); err != nil {
+		return 2
+	}
+
+	var reportRows []spechonesty.ObservationReportRow
+	if *report != "" {
+		rows, err := spechonesty.ReadObservationReport(*report)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		reportRows = rows
+	}
 
 	exitCode := 0
-	for _, root := range os.Args[1:] {
-		diags, err := spechonesty.ScanDocsDirectory(root)
+	for _, root := range flagSet.Args() {
+		diags, err := spechonesty.ScanDocsDirectoryWithReport(root, reportRows, *revision)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			exitCode = 1
@@ -66,14 +98,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", d.Path, line, d.Kind, d.Message)
 			exitCode = 1
 		}
-		// Keep verification / waiver / observation-freshness /
-		// zero-evidence / test-symbol / citation-granularity /
-		// runtime-artifact / static-check / command-allowlist symbols
-		// production-reachable (read-only). These probes must not
-		// change the status-gate exit contract.
+		// Keep verification / waiver / zero-evidence / test-symbol /
+		// citation-granularity / runtime-artifact / static-check /
+		// command-allowlist symbols production-reachable (read-only).
+		// Observation-freshness is wired for real above, not probed here.
+		// These probes must not change the status-gate exit contract.
 		_ = touchSiblingParsers(root)
 	}
-	os.Exit(exitCode)
+	return exitCode
 }
 
 // runObserve implements the `observe` subcommand: it walks one or more
@@ -198,11 +230,12 @@ func observationRowKey(row spechonesty.ObservationReportRow) observationKey {
 	return observationKey{documentID: row.DocumentID, requirement: row.RequirementRef, command: row.Command}
 }
 
-// touchSiblingParsers exercises verification, waiver, observation-
-// freshness, zero-evidence, test-symbol, citation-granularity,
-// runtime-artifact, static-check, and command-allowlist passes on markdown under
-// root so those package symbols remain reachable from main. Read-only;
-// never changes the status-gate exit path.
+// touchSiblingParsers exercises verification, waiver, zero-evidence,
+// test-symbol, citation-granularity, runtime-artifact, static-check, and
+// command-allowlist passes on markdown under root so those package symbols
+// remain reachable from main. Read-only; never changes the status-gate
+// exit path. Observation freshness is not probed here — runScan wires it
+// into the real exit-code path via CheckDocumentObservationReport.
 func touchSiblingParsers(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -293,27 +326,4 @@ func probeFile(path, repoRoot string) {
 	_ = spechonesty.ApplyWaiverPolicy(spechonesty.StatusComplete, waiver, findings)
 	_ = spechonesty.IsNonCompleteWaiverEligible(spechonesty.StatusProposed)
 	_ = spechonesty.ApplyWaiverPolicy(spechonesty.StatusProposed, waiver, findings)
-
-	// Observation freshness (WB-1 step 4): inject a probe revision so unit
-	// tests stay hermetic and production RTA sees CheckObservationFreshness
-	// (and Observation.IsStructured via its body). No network/git fetch.
-	statusRes, statusErr := spechonesty.ParseDocumentStatus(path)
-	status := spechonesty.StatusComplete
-	if statusErr == nil && statusRes != nil {
-		status = statusRes.Status
-	}
-	obs := spechonesty.Observation{
-		RequirementRef:  "probe",
-		Revision:        "probe-rev",
-		ExitCode:        0,
-		ExitCodePresent: true,
-	}
-	_ = obs.IsStructured()
-	_ = spechonesty.CheckObservationFreshness(spechonesty.FreshnessInput{
-		CurrentRevision: "probe-rev",
-		Status:          status,
-		Path:            path,
-		Rows:            model.Rows,
-		Observations:    []spechonesty.Observation{obs},
-	})
 }

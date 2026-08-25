@@ -32,6 +32,11 @@ const (
 	// FindingMissingObservation is emitted when no observation is supplied
 	// for a Complete/Implemented Verification row.
 	FindingMissingObservation ObservationFindingKind = "missing_observation"
+	// FindingMissingObservedEvidence is emitted when a current-revision,
+	// exit-zero observation carries no observed-evidence text. WB-1 step 4
+	// requires the machine-readable report to record observed evidence,
+	// not just a revision and exit code.
+	FindingMissingObservedEvidence ObservationFindingKind = "missing_observed_evidence"
 )
 
 // ObservationFinding is one freshness-stage diagnostic for a Verification row.
@@ -73,6 +78,12 @@ type Observation struct {
 	// Prose is an optional free-text claim (e.g. "go test passed"). Alone it
 	// does not satisfy the current-revision observation requirement.
 	Prose string
+	// Evidence is the observed-evidence text captured alongside a structured
+	// observation (WB-1 step 4's report "observed evidence" column, e.g.
+	// captured stdout/stderr). A structured, current-revision, exit-zero
+	// observation with no Evidence still fails: the report must record what
+	// was observed, not just that the command exited 0.
+	Evidence string
 	// Path and Line are optional source locations for diagnostics.
 	Path string
 	Line int
@@ -150,64 +161,96 @@ func CheckObservationFreshness(in FreshnessInput) []ObservationFinding {
 			continue
 		}
 
-		// Prefer a structured observation if any is present for the row.
-		var structured *Observation
+		// A row can carry more than one candidate observation (e.g. a stale
+		// rerun alongside a fresh one); scan every candidate for one that
+		// actually satisfies current-revision + exit-zero rather than
+		// judging only the first structured entry, so a genuinely passing
+		// observation is never shadowed by an earlier failing one and a
+		// row is never passed on the strength of a non-matching candidate.
+		var passing *Observation
+		var currentButNonZero *Observation
+		var staleStructured *Observation
 		var proseOnly *Observation
 		for i := range obsList {
 			o := &obsList[i]
 			if o.IsStructured() {
-				structured = o
-				break
+				obsRev := strings.TrimSpace(o.Revision)
+				if current != "" && obsRev == current {
+					if o.ExitCode == 0 {
+						if passing == nil {
+							passing = o
+						}
+					} else if currentButNonZero == nil {
+						currentButNonZero = o
+					}
+				} else if staleStructured == nil {
+					staleStructured = o
+				}
+				continue
 			}
 			if proseOnly == nil && strings.TrimSpace(o.Prose) != "" {
 				proseOnly = o
 			}
 		}
 
-		if structured == nil {
-			// Prose assertion or other non-structured claim.
+		if passing != nil {
 			line := row.Line
+			if passing.Line > 0 {
+				line = passing.Line
+			}
 			path := in.Path
-			if proseOnly != nil {
-				if proseOnly.Line > 0 {
-					line = proseOnly.Line
-				}
-				if proseOnly.Path != "" {
-					path = proseOnly.Path
-				}
-			} else if len(obsList) > 0 {
-				if obsList[0].Line > 0 {
-					line = obsList[0].Line
-				}
-				if obsList[0].Path != "" {
-					path = obsList[0].Path
-				}
+			if passing.Path != "" {
+				path = passing.Path
+			}
+			if strings.TrimSpace(passing.Evidence) == "" {
+				findings = append(findings, ObservationFinding{
+					Path:           path,
+					Line:           line,
+					RequirementRef: ref,
+					Kind:           FindingMissingObservedEvidence,
+					Severity:       SeverityError,
+					Message: fmt.Sprintf(
+						"requirement %q observation at current revision %q exited 0 but recorded no observed evidence",
+						ref, current,
+					),
+				})
+			}
+			continue
+		}
+
+		if currentButNonZero != nil {
+			line := row.Line
+			if currentButNonZero.Line > 0 {
+				line = currentButNonZero.Line
+			}
+			path := in.Path
+			if currentButNonZero.Path != "" {
+				path = currentButNonZero.Path
 			}
 			findings = append(findings, ObservationFinding{
 				Path:           path,
 				Line:           line,
 				RequirementRef: ref,
-				Kind:           FindingUnstructuredObservation,
+				Kind:           FindingNonZeroObservation,
 				Severity:       SeverityError,
 				Message: fmt.Sprintf(
-					"requirement %q has no structured observation (revision + exit code); prose assertion that a command passed is not sufficient",
-					ref,
+					"requirement %q observation at current revision %q has non-zero exit code %d",
+					ref, current, currentButNonZero.ExitCode,
 				),
 			})
 			continue
 		}
 
-		obsRev := strings.TrimSpace(structured.Revision)
-		line := row.Line
-		if structured.Line > 0 {
-			line = structured.Line
-		}
-		path := in.Path
-		if structured.Path != "" {
-			path = structured.Path
-		}
-
-		if current == "" || obsRev != current {
+		if staleStructured != nil {
+			obsRev := strings.TrimSpace(staleStructured.Revision)
+			line := row.Line
+			if staleStructured.Line > 0 {
+				line = staleStructured.Line
+			}
+			path := in.Path
+			if staleStructured.Path != "" {
+				path = staleStructured.Path
+			}
 			findings = append(findings, ObservationFinding{
 				Path:           path,
 				Line:           line,
@@ -222,21 +265,35 @@ func CheckObservationFreshness(in FreshnessInput) []ObservationFinding {
 			continue
 		}
 
-		if structured.ExitCode != 0 {
-			findings = append(findings, ObservationFinding{
-				Path:           path,
-				Line:           line,
-				RequirementRef: ref,
-				Kind:           FindingNonZeroObservation,
-				Severity:       SeverityError,
-				Message: fmt.Sprintf(
-					"requirement %q observation at current revision %q has non-zero exit code %d",
-					ref, current, structured.ExitCode,
-				),
-			})
-			continue
+		// Prose assertion or other non-structured claim.
+		line := row.Line
+		path := in.Path
+		if proseOnly != nil {
+			if proseOnly.Line > 0 {
+				line = proseOnly.Line
+			}
+			if proseOnly.Path != "" {
+				path = proseOnly.Path
+			}
+		} else if len(obsList) > 0 {
+			if obsList[0].Line > 0 {
+				line = obsList[0].Line
+			}
+			if obsList[0].Path != "" {
+				path = obsList[0].Path
+			}
 		}
-		// Current revision + exit 0: pass for this row.
+		findings = append(findings, ObservationFinding{
+			Path:           path,
+			Line:           line,
+			RequirementRef: ref,
+			Kind:           FindingUnstructuredObservation,
+			Severity:       SeverityError,
+			Message: fmt.Sprintf(
+				"requirement %q has no structured observation (revision + exit code); prose assertion that a command passed is not sufficient",
+				ref,
+			),
+		})
 	}
 	return findings
 }

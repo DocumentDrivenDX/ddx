@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/tools/lint/spechonesty"
 )
 
 // moduleRoot resolves the cli/ module root from this test package location.
@@ -24,8 +26,17 @@ func moduleRoot(t *testing.T) string {
 // runSpechonesty executes the spechonesty CLI against docsDir via go run.
 func runSpechonesty(t *testing.T, docsDir string) (exitCode int, stdout, stderr string) {
 	t.Helper()
+	return runSpechonestyArgs(t, docsDir)
+}
+
+// runSpechonestyArgs executes the spechonesty CLI via go run with args
+// passed through verbatim (flags before the docs-dir positional argument,
+// matching Go's flag-parsing stop-at-first-non-flag behavior).
+func runSpechonestyArgs(t *testing.T, args ...string) (exitCode int, stdout, stderr string) {
+	t.Helper()
 	root := moduleRoot(t)
-	cmd := exec.Command("go", "run", "-buildvcs=false", "./tools/lint/spechonesty/cmd/spechonesty", docsDir)
+	cmdArgs := append([]string{"run", "-buildvcs=false", "./tools/lint/spechonesty/cmd/spechonesty"}, args...)
+	cmd := exec.Command("go", cmdArgs...)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "GOFLAGS=-buildvcs=false")
 	var outBuf, errBuf bytes.Buffer
@@ -105,7 +116,14 @@ func TestSpechonestyCommandExitsNonZeroOnMissingStatus(t *testing.T) {
 
 // TestSpechonestyCommandExitsZeroForStampedDocs runs the command against
 // fixture docs with body and frontmatter statuses and expects exit zero.
+// TD-998 and ADR-998 are Complete/Implemented with Verification rows, so
+// this also exercises the WB-1 step 4 current-revision observation-report
+// gate: a passing --report/--revision pair is supplied for both documents'
+// canonical ids, matching what a real `spechonesty observe` run would
+// produce, so the checked-in Verification table alone is not what makes
+// the command pass.
 func TestSpechonestyCommandExitsZeroForStampedDocs(t *testing.T) {
+	const fixtureRevision = "fixture-rev-998"
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "solution-designs", "SD-998-body-status.md"),
 		"# Solution Design: Body Status\n\n"+
@@ -134,9 +152,38 @@ func TestSpechonestyCommandExitsZeroForStampedDocs(t *testing.T) {
 			"|-------------|----------|---------|\n"+
 			"| REQ-998 | TestBothEncodings | go test ./tools/lint/spechonesty/... |\n")
 
-	code, stdout, stderr := runSpechonesty(t, dir)
+	reportPath := filepath.Join(dir, "observations.json")
+	writeObservationReportFixture(t, reportPath, []spechonesty.ObservationReportRow{
+		{
+			DocumentID:     "TD-998",
+			RequirementRef: "REQ-998",
+			Command:        "go test ./tools/lint/spechonesty/...",
+			Revision:       fixtureRevision,
+			ExitCode:       0,
+			Evidence:       "PASS",
+		},
+		{
+			DocumentID:     "ADR-998",
+			RequirementRef: "REQ-998",
+			Command:        "go test ./tools/lint/spechonesty/...",
+			Revision:       fixtureRevision,
+			ExitCode:       0,
+			Evidence:       "PASS",
+		},
+	})
+
+	code, stdout, stderr := runSpechonestyArgs(t, "--report="+reportPath, "--revision="+fixtureRevision, dir)
 	if code != 0 {
-		t.Fatalf("expected exit 0 for stamped docs; exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+		t.Fatalf("expected exit 0 for stamped docs with passing observations; exit=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+}
+
+// writeObservationReportFixture writes rows as a JSON observation report,
+// matching the format spechonesty observe produces via WriteObservationReport.
+func writeObservationReportFixture(t *testing.T, path string, rows []spechonesty.ObservationReportRow) {
+	t.Helper()
+	if err := spechonesty.WriteObservationReport(path, rows); err != nil {
+		t.Fatalf("write observation report fixture %s: %v", path, err)
 	}
 }
 
