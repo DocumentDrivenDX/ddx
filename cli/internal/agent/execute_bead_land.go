@@ -792,6 +792,18 @@ func recoverLandingIndexLocked(dir string, repairedCorruptIndex *bool) (landingI
 		}
 	}
 
+	// Staged content that overlaps a preserved iteration ref
+	// (refs/ddx/iterations/...) is a leaked checkout fragment, not new local
+	// work: stash it back under its own preserve ref before the generic
+	// checkpoint below would otherwise fold it into this land's substantive
+	// commit. No-op when there are no preserve refs.
+	if progressed, err := recoverLandingIndexPreserveRefBackedDirt(dir); err != nil {
+		return landingIndexRecovery{}, err
+	} else if progressed {
+		clean := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run() == nil
+		return landingIndexRecovery{clean: clean, progressed: true}, nil
+	}
+
 	// An all-evidence staged set is local state: remove it only from the index
 	// and preserve the bytes. Mixed/code sets fall through to the real-work
 	// checkpoint, which explicitly excludes execution evidence.
@@ -804,6 +816,33 @@ func recoverLandingIndexLocked(dir string, repairedCorruptIndex *bool) (landingI
 		return landingIndexRecovery{}, err
 	}
 	return landingIndexRecovery{progressed: committed}, nil
+}
+
+// recoverLandingIndexPreserveRefBackedDirt stashes any currently staged paths
+// that match the tree of a preserved iteration ref (refs/ddx/iterations/...)
+// back under that ref via the ddx doctor --unjam preserve-ref classification
+// (unjam_classify.go), so a leaked checkout fragment is recovered under its
+// own history instead of being folded into this land's substantive commit.
+// Returns false, nil when there are no preserve refs or nothing staged
+// overlaps one.
+func recoverLandingIndexPreserveRefBackedDirt(dir string) (bool, error) {
+	ctx := context.Background()
+	stagedOut, err := internalgit.Command(ctx, dir, "diff", "--cached", "--name-only").Output()
+	if err != nil {
+		return false, nil
+	}
+	staged := splitUnjamGateLines(string(stagedOut))
+	if len(staged) == 0 {
+		return false, nil
+	}
+	if err := stashUnjamGatePreserveRefBackedPaths(ctx, dir, staged); err != nil {
+		return false, err
+	}
+	remaining, err := unjamGateDirtyPathsForPaths(ctx, dir, staged)
+	if err != nil {
+		return false, err
+	}
+	return len(remaining) < len(staged), nil
 }
 
 func hardStopLandPaths(paths []string) []string {
