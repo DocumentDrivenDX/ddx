@@ -67,6 +67,8 @@ type Report struct {
 	FizeauCause                  string
 	FizeauStage                  string
 	DDxOwnerStage                string
+	AttemptPolicyAction          string
+	AttemptPolicyReason          string
 	RequestedProfile             string
 	RoutingIntentSource          string
 	EstimatedDifficulty          string

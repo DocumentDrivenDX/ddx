@@ -240,6 +240,13 @@ func ReportFromExecuteBeadResult(res *ExecuteBeadResult, powerClass string) Exec
 	if res == nil {
 		return ExecuteBeadReport{}
 	}
+	// The typed attempt-policy adapter (failclass.DecideAttemptPolicy, reached
+	// via AttemptPolicyDecisionForResult) is consulted here as the report's
+	// single construction boundary so its advisory Action/Reason ride along
+	// as audit evidence on every report — completed, retryable,
+	// unavailable-now, cancelled, and permanent-failure alike — without
+	// participating in status/landing/review control flow (WB-1 non-scope).
+	policyDecision := AttemptPolicyDecisionForResult(res)
 	return ExecuteBeadReport{
 		BeadID:                       res.BeadID,
 		AttemptID:                    res.AttemptID,
@@ -285,6 +292,8 @@ func ReportFromExecuteBeadResult(res *ExecuteBeadResult, powerClass string) Exec
 		FizeauCause:                  res.FizeauCause,
 		FizeauStage:                  res.FizeauStage,
 		DDxOwnerStage:                res.DDxOwnerStage,
+		AttemptPolicyAction:          string(policyDecision.Action),
+		AttemptPolicyReason:          policyDecision.Reason,
 		ResourceExhausted:            res.ResourceExhausted,
 		OutcomeReason:                res.FailureMode,
 	}

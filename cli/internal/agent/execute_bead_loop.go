@@ -893,6 +893,16 @@ type ExecuteBeadReport struct {
 	// attempt disposition. It is tracked separately from the Fizeau lifecycle
 	// tuple so the loss table can attribute failures by owner.
 	DDxOwnerStage string `json:"ddx_owner_stage,omitempty"`
+	// AttemptPolicyAction and AttemptPolicyReason carry the single advisory
+	// decision the typed attempt-policy adapter
+	// (failclass.DecideAttemptPolicy, reached via AttemptPolicyDecisionForResult)
+	// selected from this report's Fizeau lifecycle tuple: one of
+	// current_attempt_repair, new_attempt_retry,
+	// minimum_strength_escalation_request, park, land, or close. They are
+	// audit evidence only — the existing status/landing/review machinery
+	// keeps owning bead disposition (WB-1 non-scope).
+	AttemptPolicyAction string `json:"attempt_policy_action,omitempty"`
+	AttemptPolicyReason string `json:"attempt_policy_reason,omitempty"`
 	// Profile routing telemetry. Populated when work uses a profile
 	// ladder rather than an explicit harness/model pin.
 	RequestedProfile    string `json:"requested_profile,omitempty"`
