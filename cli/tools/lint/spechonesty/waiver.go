@@ -74,6 +74,11 @@ const (
 	// spechonesty verification model. Non-waivable; emitted by the
 	// static-check resolver.
 	FindingMissingStaticCheck CoverageFindingKind = "missing_static_check"
+	// FindingVerificationCommandFailed is a Complete/Implemented
+	// Verification mapping row whose allowlisted command executed at the
+	// current revision with a non-zero exit code. Non-waivable; emitted
+	// by ExecuteVerificationRows.
+	FindingVerificationCommandFailed CoverageFindingKind = "verification_command_failed"
 	// FindingMissingStatus is non-waivable (WB-1 step 5).
 	FindingMissingStatus CoverageFindingKind = "missing_status"
 	// FindingDuplicateID is non-waivable (WB-1 step 5).

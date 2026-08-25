@@ -11,19 +11,28 @@
 // remain reachable from main for production RTA without changing the
 // status-gate exit contract.
 //
+// A separate `observe` subcommand actually executes allowlisted
+// Verification mapping-row commands for Complete/Implemented documents and
+// writes a consolidated observation report (WB-1 step 4). It is opt-in and
+// distinct from the default scan: wiring it into CI/lefthook is left to a
+// follow-on integration bead.
+//
 // Usage:
 //
 //	go run ./tools/lint/spechonesty/cmd/spechonesty <docs-dir>
+//	go run ./tools/lint/spechonesty/cmd/spechonesty observe --revision=<rev> --report=<path> [--workdir=<dir>] <docs-dir>...
 //
 // With no arguments, the go/analysis singlechecker entry used by analysistest
 // and sibling linters is preserved.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/tools/lint/spechonesty"
@@ -36,6 +45,9 @@ func main() {
 	if len(os.Args) == 1 {
 		singlechecker.Main(spechonesty.Analyzer)
 		return
+	}
+	if os.Args[1] == "observe" {
+		os.Exit(runObserve(os.Args[2:]))
 	}
 
 	exitCode := 0
@@ -62,6 +74,128 @@ func main() {
 		_ = touchSiblingParsers(root)
 	}
 	os.Exit(exitCode)
+}
+
+// runObserve implements the `observe` subcommand: it walks one or more
+// docs directories, and for every Complete/Implemented document, executes
+// that document's allowlisted Verification mapping-row commands via
+// spechonesty.ExecuteVerificationRows and accumulates the resulting
+// observation-report rows. The consolidated report is written to
+// --report. A rejected (non-allowlisted) or failing (non-zero exit)
+// command is printed as a diagnostic and makes the process exit non-zero,
+// mirroring the default scan's diagnostic format.
+//
+// Unlike the default docs-directory scan above, observe executes
+// commands and writes a file; it is reached only when the first argument
+// is literally "observe", so the default `spechonesty <docs-dir>` gate
+// remains read-only.
+func runObserve(args []string) int {
+	flagSet := flag.NewFlagSet("observe", flag.ContinueOnError)
+	flagSet.SetOutput(os.Stderr)
+	revision := flagSet.String("revision", "", "repository revision under evaluation (required)")
+	report := flagSet.String("report", "", "path to write the JSON observation report (required)")
+	workDir := flagSet.String("workdir", ".", "directory verification commands execute in")
+	if err := flagSet.Parse(args); err != nil {
+		return 2
+	}
+	if *revision == "" || *report == "" || flagSet.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "usage: spechonesty observe --revision=<rev> --report=<path> [--workdir=<dir>] <docs-dir>...")
+		return 2
+	}
+
+	// Merge onto any existing report at --report rather than overwrite it
+	// outright, so separate observe invocations against different docs
+	// roots (e.g. one CI job per docs subtree) accumulate into a single
+	// consolidated report instead of clobbering each other's rows.
+	merged := map[observationKey]spechonesty.ObservationReportRow{}
+	if existing, readErr := spechonesty.ReadObservationReport(*report); readErr == nil {
+		for _, row := range existing {
+			merged[observationRowKey(row)] = row
+		}
+	}
+
+	exitCode := 0
+	for _, root := range flagSet.Args() {
+		walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			content := string(data)
+			statusRes := spechonesty.ParseDocumentStatusMarkdown(path, content)
+			if !spechonesty.IsCompleteStatus(statusRes.Status) {
+				return nil
+			}
+			model := spechonesty.ParseVerificationMarkdown(path, content)
+			docID, _, ok := spechonesty.ExtractDocumentID(path, content)
+			if !ok {
+				docID = path
+			}
+			result := spechonesty.ExecuteVerificationRows(spechonesty.ExecuteVerificationRowsInput{
+				DocumentID: docID,
+				Path:       path,
+				Status:     statusRes.Status,
+				Rows:       model.Rows,
+				Revision:   *revision,
+				WorkDir:    *workDir,
+			})
+			for _, row := range result.Rows {
+				merged[observationRowKey(row)] = row
+			}
+			for _, f := range result.Findings {
+				line := f.Line
+				if line <= 0 {
+					line = 1
+				}
+				fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", f.Path, line, f.Kind, f.Message)
+				exitCode = 1
+			}
+			return nil
+		})
+		if walkErr != nil {
+			fmt.Fprintln(os.Stderr, walkErr)
+			exitCode = 1
+		}
+	}
+
+	rows := make([]spechonesty.ObservationReportRow, 0, len(merged))
+	for _, row := range merged {
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].DocumentID != rows[j].DocumentID {
+			return rows[i].DocumentID < rows[j].DocumentID
+		}
+		if rows[i].RequirementRef != rows[j].RequirementRef {
+			return rows[i].RequirementRef < rows[j].RequirementRef
+		}
+		return rows[i].Command < rows[j].Command
+	})
+
+	if err := spechonesty.WriteObservationReport(*report, rows); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return exitCode
+}
+
+// observationKey identifies one observation-report row for merge purposes:
+// a fresh execution of the same document/requirement/command combination
+// replaces the prior row rather than duplicating it.
+type observationKey struct {
+	documentID  string
+	requirement string
+	command     string
+}
+
+func observationRowKey(row spechonesty.ObservationReportRow) observationKey {
+	return observationKey{documentID: row.DocumentID, requirement: row.RequirementRef, command: row.Command}
 }
 
 // touchSiblingParsers exercises verification, waiver, observation-
