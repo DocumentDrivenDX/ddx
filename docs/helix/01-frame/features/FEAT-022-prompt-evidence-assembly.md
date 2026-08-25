@@ -11,9 +11,19 @@ ddx:
 # Feature: Prompt Evidence Assembly and Size Invariants
 
 **ID:** FEAT-022
-**Status:** Implemented
+**Status:** In Progress (downgraded from Implemented for missing WB-1 verification evidence, not a code regression — see AR-2026-07-13-vision-vs-reality.md §"the one fully honored invariant")
 **Priority:** P1
 **Owner:** DDx Team
+
+**Restamp rationale (2026-08-24):** `cli/internal/evidence` and the
+`cli/tools/lint/evidencelint` structural-sink lint are real and CI-enforced
+— the AR names this the one fully-honored invariant in the corpus. This
+document declares no `REQ-*` identifiers, though, so spec-honesty's
+Complete-status coverage requirement falls back to one Verification row per
+section heading (22 anchors including prose sections like Overview and
+Delivery Sequencing) — a mapping this document does not carry. Downgraded
+per `docs/helix/06-iterate/phase2-doc-truth-plan-2026-07-13.md` WB-2 rather
+than left Complete without mechanical evidence.
 
 ## Overview
 
@@ -452,6 +462,22 @@ work review path
 - Given the collapse is complete, when the repository is grepped for
   the duplicate assembler's function name and its helper symbols,
   then zero matches remain
+
+## Verification
+
+Real evidence exists but is not yet mapped per WB-1: `cli/internal/evidence`
+(`caps_test.go`, `clamp_test.go`, `diff_test.go`, `read_test.go`,
+`sections_test.go`, `strategy_test.go`) covers the shared primitives from
+§1-§3, `cli/tools/lint/evidencelint` enforces the structural sink rule from
+Non-Functional §Lint in CI, and `execute_bead_review_failure_modes_test.go`
+covers §14. Evidence gap: with no `REQ-*` identifiers declared, the
+spec-honesty analyzer's fallback section-anchor inventory (Overview,
+Problem Statement, Requirements, User Stories, Dependencies, Delivery
+Sequencing, Stage A-G, Out of Scope — 22 anchors) has no per-anchor
+Verification row, and several of those anchors are prose framing rather
+than testable claims. Building that full mapping is out of this bead's
+scope (WB-2 restamp, not WB-1 lint-tool work, and not a requirement-body
+rewrite).
 
 ## Dependencies
 

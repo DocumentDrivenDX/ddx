@@ -10,9 +10,17 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Implemented (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`)
+**Status:** In Progress (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`; downgraded from Implemented for missing WB-1 verification evidence, not a code regression)
 **Priority:** P1
 **Owner:** DDx Team
+
+**Restamp rationale (2026-08-24):** The skill tree, routing eval harness, and
+install path are real and tested (`make eval-skill`, `cli/internal/skills`
+install/refresh tests), but this document declares no `REQ-*` identifiers,
+so spec-honesty's Complete-status coverage requirement falls back to one
+Verification row per section heading — a mapping this document does not
+carry. Downgraded per `docs/helix/06-iterate/phase2-doc-truth-plan-2026-07-13.md`
+WB-2 rather than left Complete without mechanical evidence.
 
 ## Overview
 
@@ -399,6 +407,19 @@ current shipped content
 - After `ddx init --force`, `.claude/skills/ddx/` bytes match the embedded
   skill content.
 - Stale `ddx-*` dirs are removed as in US-112.
+
+## Verification
+
+Real evidence exists but is not yet mapped per WB-1: `make eval-skill` runs
+`library/skills/ddx/evals/routing.jsonl` (25 rows) against both `claude` and
+`codex` harnesses, and `cli/internal/skills` carries install/refresh tests
+for the stale-`ddx-*`-directory removal behavior. Evidence gap: with no
+`REQ-*` identifiers declared, the spec-honesty analyzer's fallback
+section-anchor inventory (Overview, Architecture, Portability contract,
+Intent-router directive, Installation, `AGENTS.md` merge, Requirements,
+User Stories, ... — 20 anchors) has no per-anchor Verification row.
+Building that full mapping is out of this bead's scope (WB-2 restamp, not
+WB-1 lint-tool work, and not a requirement-body rewrite).
 
 ## Dependencies
 

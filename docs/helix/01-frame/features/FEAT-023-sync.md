@@ -10,9 +10,19 @@ ddx:
 # Feature: Multi-Machine Sync
 
 **ID:** FEAT-023
-**Status:** Implemented
+**Status:** In Progress (downgraded from Implemented for missing WB-1 verification evidence, not a code regression)
 **Priority:** P1
 **Owner:** DDx Team
+
+**Restamp rationale (2026-08-24):** `cli/cmd/sync.go` and `cli/cmd/sync_test.go`
+are real and cover every numbered acceptance criterion below (allowlist
+enforcement, no destructive flags, stash-pop/double-push abort, doctor
+surfacing). This document declares no `REQ-*` identifiers, though, so
+spec-honesty's Complete-status coverage requirement falls back to one
+Verification row per section heading — a mapping this document does not
+carry. Downgraded per
+`docs/helix/06-iterate/phase2-doc-truth-plan-2026-07-13.md` WB-2 rather than
+left Complete without mechanical evidence.
 
 ## Overview
 
@@ -124,6 +134,23 @@ to remember to look.
 6. `ddx doctor` surfaces a recent sync failure as a `sync_aborted`
    diagnostic when `.ddx/sync-failure.json` is present.
 7. Tests run green on macOS and Linux.
+
+## Verification
+
+Real evidence exists but is not yet mapped per WB-1: `cd cli && go test
+./cmd/... -run TestSync` and `-run TestDoctor_SyncFailure` exercise every
+acceptance criterion above (`TestSync_UnrelatedDirtyFilesUntouched`,
+`TestSyncNeverStagesOrCommitsExecutionEvidence`,
+`TestSync_NoForceOrNoVerifyFlags`, `TestSync_StashPopConflictAborts`,
+`TestSync_DoublePushFailAborts`, `TestDoctor_SyncFailureSurfaced`,
+`TestSync_WatchExitsOnContextCancel`). Evidence gap: with no `REQ-*`
+identifiers declared, the spec-honesty analyzer's fallback section-anchor
+inventory (Overview, Problem Statement, Scope, In Scope, Out of Scope,
+Acceptance Criteria, Implementation Notes) has no per-anchor Verification
+row, and AC7's cross-platform claim ("green on macOS and Linux") has no
+single deterministic command evidence beyond the CI matrix. Building that
+full mapping is out of this bead's scope (WB-2 restamp, not WB-1 lint-tool
+work, and not a requirement-body rewrite).
 
 ## Implementation Notes
 
