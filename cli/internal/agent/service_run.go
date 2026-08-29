@@ -200,6 +200,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		EstimatedPromptTokens: firstPositiveInt(runtime.EstimatedPromptTokens, estimatePromptTokens(promptText)),
 		RequiresTools:         runtime.RequiresTools,
 	}
+	if err := ValidateHarnessTerminal(req.Harness, InteractiveTerminalAvailable()); err != nil {
+		return nil, err
+	}
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

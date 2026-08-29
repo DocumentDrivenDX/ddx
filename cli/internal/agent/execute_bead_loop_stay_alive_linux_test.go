@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -22,31 +23,96 @@ import (
 
 type agentRunnerFunc func(opts RunArgs) (*Result, error)
 
+const (
+	providerChildFixtureEnv       = "DDX_TEST_PROVIDER_CHILD_FIXTURE"
+	providerChildFixtureClaude    = "DDX_TEST_PROVIDER_CHILD_CLAUDE"
+	providerChildFixtureCodex     = "DDX_TEST_PROVIDER_CHILD_CODEX"
+	providerChildFixtureClaudePID = "DDX_TEST_PROVIDER_CHILD_CLAUDE_PID"
+	providerChildFixtureCodexPID  = "DDX_TEST_PROVIDER_CHILD_CODEX_PID"
+)
+
 func (f agentRunnerFunc) Run(opts RunArgs) (*Result, error) {
 	return f(opts)
 }
 
-func startFakeProviderChildNoWait(t *testing.T, dir, provider string) int {
+func startIsolatedProviderChildFixture(t *testing.T, dir string) (int, int, int) {
 	t.Helper()
 	sleepPath, err := exec.LookPath("sleep")
 	if err != nil {
 		t.Skipf("sleep not available: %v", err)
 	}
-	bin := filepath.Join(dir, provider)
-	if err := os.Symlink(sleepPath, bin); err != nil {
-		t.Fatalf("symlink fake %s: %v", provider, err)
+	claudePath := filepath.Join(dir, "claude")
+	if err := os.Symlink(sleepPath, claudePath); err != nil {
+		t.Fatalf("symlink fake claude: %v", err)
 	}
-	cmd := exec.Command(bin, "120")
+	codexPath := filepath.Join(dir, "codex")
+	if err := os.Symlink(sleepPath, codexPath); err != nil {
+		t.Fatalf("symlink fake codex: %v", err)
+	}
+	claudePIDFile := filepath.Join(dir, "claude.pid")
+	codexPIDFile := filepath.Join(dir, "codex.pid")
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkProviderChildFixtureProcess$")
+	cmd.Env = append(os.Environ(),
+		providerChildFixtureEnv+"=1",
+		providerChildFixtureClaude+"="+claudePath,
+		providerChildFixtureCodex+"="+codexPath,
+		providerChildFixtureClaudePID+"="+claudePIDFile,
+		providerChildFixtureCodexPID+"="+codexPIDFile,
+	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("start fake %s: %v", provider, err)
+		t.Fatalf("start isolated provider-child fixture: %v", err)
 	}
-	pid := cmd.Process.Pid
-	t.Cleanup(func() {
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
+	rootPID := cmd.Process.Pid
+	done := make(chan struct{})
+	go func() {
 		_, _ = cmd.Process.Wait()
+		close(done)
+	}()
+
+	claudePID := waitForPIDFile(t, claudePIDFile)
+	codexPID := waitForPIDFile(t, codexPIDFile)
+	t.Cleanup(func() {
+		_ = syscall.Kill(-claudePID, syscall.SIGKILL)
+		_ = syscall.Kill(-codexPID, syscall.SIGKILL)
+		_ = syscall.Kill(-rootPID, syscall.SIGKILL)
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Errorf("provider-child fixture process %d did not exit", rootPID)
+		}
 	})
-	return pid
+	return rootPID, claudePID, codexPID
+}
+
+// TestWorkProviderChildFixtureProcess is a subprocess-only fixture. Keeping
+// its provider children below a dedicated root prevents package-level tests or
+// a harness process started elsewhere in the package runner from entering the
+// reaper's test scope.
+func TestWorkProviderChildFixtureProcess(t *testing.T) {
+	if os.Getenv(providerChildFixtureEnv) != "1" {
+		t.Skip("provider-child subprocess fixture")
+	}
+
+	start := func(path, pidFile string) *exec.Cmd {
+		t.Helper()
+		cmd := exec.Command(path, "120")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		require.NoError(t, cmd.Start())
+		require.NoError(t, os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o600))
+		return cmd
+	}
+
+	claude := start(os.Getenv(providerChildFixtureClaude), os.Getenv(providerChildFixtureClaudePID))
+	codex := start(os.Getenv(providerChildFixtureCodex), os.Getenv(providerChildFixtureCodexPID))
+	codexDone := make(chan struct{})
+	go func() {
+		_, _ = codex.Process.Wait()
+		close(codexDone)
+	}()
+	_, _ = claude.Process.Wait()
+	<-codexDone
 }
 
 func writeFakeClaudeHarness(t *testing.T, dir string) string {
@@ -69,12 +135,20 @@ func writeFakeClaudeHarness(t *testing.T, dir string) string {
 // and reaps the child, and the process does not reappear after the guard runs.
 func TestWork_NonRouteProviderIsActuallyReaped(t *testing.T) {
 	dir := t.TempDir()
-	claudePID := startFakeProviderChildNoWait(t, dir, "claude")
-	codexPID := startFakeProviderChildNoWait(t, dir, "codex")
-	waitForProviderChildren(t, os.Getpid(), claudePID, codexPID)
+	rootPID, claudePID, codexPID := startIsolatedProviderChildFixture(t, dir)
+	require.NotEqual(t, os.Getpid(), rootPID, "fixture scan root must not be the package test runner")
+	waitForProviderChildren(t, rootPID, claudePID, codexPID)
+	procs, err := providerChildScanner(context.Background(), rootPID, time.Now().UTC())
+	require.NoError(t, err)
+	observedPIDs := make([]int, 0, len(procs))
+	for _, proc := range procs {
+		observedPIDs = append(observedPIDs, proc.PID)
+	}
+	require.ElementsMatch(t, []int{claudePID, codexPID}, observedPIDs,
+		"dedicated fixture root must exclude unrelated provider processes in the package-runner tree")
 
 	start := time.Now()
-	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/opus", "", "running", time.Now().UTC())
+	children, reaped := runningProviderChildGuard(context.Background(), rootPID, "claude/opus", "", "running", time.Now().UTC())
 	require.Less(t, time.Since(start), 10*time.Second, "running guard must complete within the bounded reap window")
 
 	assertProcessGone(t, codexPID)
@@ -82,7 +156,7 @@ func TestWork_NonRouteProviderIsActuallyReaped(t *testing.T) {
 		t.Fatalf("route-owned claude child %d was reaped by the running guard", claudePID)
 	}
 	require.Eventually(t, func() bool {
-		procs, err := providerChildScanner(context.Background(), os.Getpid(), time.Now().UTC())
+		procs, err := providerChildScanner(context.Background(), rootPID, time.Now().UTC())
 		if err != nil {
 			return false
 		}

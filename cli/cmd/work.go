@@ -34,10 +34,10 @@ passthrough constraints forwarded to Fizeau unchanged. DDx does not validate
 these values or branch on them; Fizeau owns routing within the requested power
 bounds.
 
-Unpinned Claude routing may prefer Fizeau's claude-tui surface by default.
-Fizeau v0.17.2+ waits for a late transcript end_turn after the Stop hook so
-completed turns are not failed as "no assistant final event". Pin --harness
-only as an explicit operator constraint; do not disable claude-tui by default.
+Unpinned Claude routing may prefer Fizeau's claude-tui surface when an
+interactive terminal is attached. Headless workers disable that preference so
+Fizeau selects a non-TUI route. An explicit --harness claude-tui pin requires a
+PTY-capable interactive terminal and fails before dispatch when none is attached.
 
 Review is on by default. --no-review is a break-glass override and
 requires --no-review-i-know-what-im-doing. A bead label of review:skip
@@ -145,6 +145,23 @@ work runs inline in the current process; per ADR-022 there is no separate
 // branch on those values. Retry-power policy (min-power / max-power) is owned
 // by this layer.
 func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
+	terminalAvailable := agent.InteractiveTerminalAvailable()
+	if f.workInteractiveTerminalOverride != nil {
+		terminalAvailable = f.workInteractiveTerminalOverride()
+	}
+	restoreRoutingEnv, err := agent.ConfigureHeadlessFizeauRouting(terminalAvailable)
+	if err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+		return err
+	}
+	defer restoreRoutingEnv()
+
+	harness, _ := cmd.Flags().GetString("harness")
+	if err := agent.ValidateHarnessTerminal(harness, terminalAvailable); err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+		return err
+	}
+
 	if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 		return err
 	}

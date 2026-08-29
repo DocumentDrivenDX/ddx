@@ -110,6 +110,11 @@ type CommandFactory struct {
 	// replacing the process image.
 	workBinaryReexecOverride func(exe string, argv []string, env []string, dir string) error
 
+	// workInteractiveTerminalOverride, when non-nil, replaces the process
+	// terminal probe used by ddx work's headless routing guard. Tests use it to
+	// exercise the no-controlling-terminal path deterministically.
+	workInteractiveTerminalOverride func() bool
+
 	// workerScannerOverride, when non-nil, replaces the live-process worker
 	// scanner used by "ddx work status". Tests inject a fixed snapshot so
 	// the command can be exercised without spawning real worker processes.
