@@ -11,14 +11,49 @@ import (
 
 // DocFrontmatter holds the parsed ddx: (or legacy dun:) frontmatter block.
 type DocFrontmatter struct {
-	ID         string      `yaml:"id"`
-	Status     string      `yaml:"status"`
-	DependsOn  []string    `yaml:"depends_on"`
-	Prompt     string      `yaml:"prompt"`
-	Inputs     []string    `yaml:"inputs"`
-	Review     DocReview   `yaml:"review"`
-	ParkingLot bool        `yaml:"parking_lot"`
-	Exec       *DocExecDef `yaml:"execution"`
+	ID         string       `yaml:"id"`
+	Status     string       `yaml:"status"`
+	DependsOn  []string     `yaml:"depends_on"`
+	Prompt     string       `yaml:"prompt"`
+	Inputs     []string     `yaml:"inputs"`
+	Review     DocReview    `yaml:"review"`
+	ParkingLot bool         `yaml:"parking_lot"`
+	Exec       *DocExecDef  `yaml:"execution"`
+	Authoring  DocAuthoring `yaml:"authoring"`
+}
+
+// Authoring home and state vocabulary from the HELIX artifact schema
+// (workflows/artifact-schema.md, "Authoring home").
+const (
+	// AuthoringHomeRepo means the Markdown file is the document.
+	AuthoringHomeRepo = "repo"
+	// AuthoringHomeExternalTool means the document is authored in an external
+	// collaboration tool; the Markdown file carries its identity and, once
+	// content has landed, a copy of it.
+	AuthoringHomeExternalTool = "external-tool"
+
+	// AuthoringStateCheckedIn means the body matches the external document as
+	// of the check-in. It is the read surface for every consumer.
+	AuthoringStateCheckedIn = "checked-in"
+	// AuthoringStateCheckedOut means the document is being authored in the
+	// external tool and the body is not dependable.
+	AuthoringStateCheckedOut = "checked-out"
+)
+
+// DocAuthoring holds the ddx.authoring block: where an artifact is authored
+// and, for an external-tool artifact, the state and provenance of its last
+// check-in.
+//
+// ExportSHA256 is a DDx addition to the schema. It records the digest of the
+// export file the body was extracted from, so "the body matches the external
+// document as of the check-in" is verifiable rather than asserted.
+type DocAuthoring struct {
+	Home         string `yaml:"home"`
+	State        string `yaml:"state"`
+	Tool         string `yaml:"tool"`
+	Origin       string `yaml:"origin"`
+	Export       string `yaml:"export"`
+	ExportSHA256 string `yaml:"export_sha256"`
 }
 
 // DocExecDef describes an execution definition embedded in a graph document.
@@ -232,21 +267,7 @@ func SetReview(root *yaml.Node, review DocReview) error {
 		return fmt.Errorf("frontmatter root must be mapping")
 	}
 
-	// Ensure ddx: namespace exists; if only dun: exists, create ddx:
-	ddxNode := findMappingValue(root, "ddx")
-	if ddxNode == nil {
-		// Copy from dun: if it exists, then write as ddx:
-		dunNode := findMappingValue(root, "dun")
-		if dunNode != nil {
-			ddxNode = ensureMappingNode(root, "ddx")
-			// Copy content from dun to ddx
-			ddxNode.Content = append(ddxNode.Content[:0], dunNode.Content...)
-			// Remove dun: namespace
-			removeMappingKey(root, "dun")
-		} else {
-			ddxNode = ensureMappingNode(root, "ddx")
-		}
-	}
+	ddxNode := ensureDDXNamespace(root)
 
 	reviewNode := ensureMappingNode(ddxNode, "review")
 	setScalarNode(reviewNode, "self_hash", review.SelfHash)
@@ -255,6 +276,51 @@ func SetReview(root *yaml.Node, review DocReview) error {
 		setScalarNode(reviewNode, "reviewed_at", review.ReviewedAt)
 	}
 	return nil
+}
+
+// SetAuthoringFields writes the named keys into the ddx.authoring block,
+// leaving every key it is not given in place. Always writes under the ddx:
+// namespace.
+//
+// Keys added for the first time are appended in sorted order so a check-in is
+// reproducible: the same file checked in twice yields the same bytes.
+func SetAuthoringFields(root *yaml.Node, fields map[string]string) error {
+	if root == nil {
+		return fmt.Errorf("frontmatter missing")
+	}
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("frontmatter root must be mapping")
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+
+	authoringNode := ensureMappingNode(ensureDDXNamespace(root), "authoring")
+
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		setScalarNode(authoringNode, key, fields[key])
+	}
+	return nil
+}
+
+// ensureDDXNamespace returns the ddx: mapping, creating it — and migrating a
+// legacy dun: block into it — when absent.
+func ensureDDXNamespace(root *yaml.Node) *yaml.Node {
+	if ddxNode := findMappingValue(root, "ddx"); ddxNode != nil {
+		return ddxNode
+	}
+	dunNode := findMappingValue(root, "dun")
+	ddxNode := ensureMappingNode(root, "ddx")
+	if dunNode != nil {
+		ddxNode.Content = append(ddxNode.Content[:0], dunNode.Content...)
+		removeMappingKey(root, "dun")
+	}
+	return ddxNode
 }
 
 // EncodeFrontmatter encodes a YAML node back to string.
