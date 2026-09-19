@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# Go 1.27+ defaults goexperiment.jsonv2 on, breaking the pinned
+# github.com/go-json-experiment/json shim (via tailscale.com/tsnet).
+# See cli/Makefile for the same workaround applied to `make` targets.
+env:
+  GOEXPERIMENT: nojsonv2
+
 jobs:
   demos:
     name: Record and Render Demos
