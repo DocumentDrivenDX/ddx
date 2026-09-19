@@ -7,6 +7,14 @@ colors: true
 no_tty: false
 assertion: false
 
+# Go 1.27+ defaults goexperiment.jsonv2 on, which breaks the pinned
+# github.com/go-json-experiment/json shim (pulled in via tailscale.com/tsnet)
+# built against the pre-1.27 experimental API — see cli/Makefile for the
+# same workaround applied to `make` targets. Global so every hook command
+# that shells out to `go` is covered, not just the go_checks group.
+env:
+  GOEXPERIMENT: nojsonv2
+
 # Reusable command groups
 command_groups:
   go_checks: &go_checks

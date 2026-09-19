@@ -1,5 +1,12 @@
 # DDx CLI Makefile
 
+# Go 1.27+ defaults goexperiment.jsonv2 to on, which breaks the pinned
+# github.com/go-json-experiment/json shim (pulled in via tailscale.com/tsnet)
+# built against the pre-1.27 experimental API. go.mod's `go 1.26.5` can't pin
+# this back down on newer local toolchains (GOTOOLCHAIN=auto never downgrades),
+# so disable the experiment explicitly until the dependency catches up.
+export GOEXPERIMENT ?= nojsonv2
+
 # Build variables
 VERSION ?= $(shell git describe --tags --always --dirty)
 COMMIT ?= $(shell git rev-parse --short HEAD)
