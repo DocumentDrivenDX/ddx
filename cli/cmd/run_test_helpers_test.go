@@ -252,15 +252,15 @@ func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
 
 func canonicalFizeauPolicyFixture() ([]agentlib.PolicyInfo, []agentlib.ModelInfo) {
 	return []agentlib.PolicyInfo{
-			{Name: "cheap", MinPower: 5, MaxPower: 5, AllowLocal: true},
-			{Name: "default", MinPower: 7, MaxPower: 8, AllowLocal: true},
-			{Name: "smart", MinPower: 9, MaxPower: 10},
-			{Name: "air-gapped", MinPower: 5, MaxPower: 5, AllowLocal: true, Require: []string{"no_remote"}},
-		}, []agentlib.ModelInfo{
-			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
-			{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
-			{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
-		}
+		{Name: "cheap", MinPower: 5, MaxPower: 5, AllowLocal: true},
+		{Name: "default", MinPower: 7, MaxPower: 8, AllowLocal: true},
+		{Name: "smart", MinPower: 9, MaxPower: 10},
+		{Name: "air-gapped", MinPower: 5, MaxPower: 5, AllowLocal: true, Require: []string{"no_remote"}},
+	}, []agentlib.ModelInfo{
+		{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+		{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
+		{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+	}
 }
 
 func capturedImplementationRequests(stub *executeCapturingStub) []agentlib.ServiceExecuteRequest {

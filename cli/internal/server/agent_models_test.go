@@ -9,7 +9,7 @@ import (
 )
 
 func TestHandleAgentModelsNoProviders(t *testing.T) {
-	dir := setupTestDir(t)
+	dir := canonicalizePath(setupTestDir(t))
 	srv := New(":0", dir)
 	ctx := inventoryTestContext(t, dir, &inventoryServiceStub{})
 
@@ -59,7 +59,7 @@ func TestHandleAgentCapabilitiesNoHarness(t *testing.T) {
 }
 
 func TestMCPAgentModels(t *testing.T) {
-	dir := setupTestDir(t)
+	dir := canonicalizePath(setupTestDir(t))
 	srv := New(":0", dir)
 	ctx := inventoryTestContext(t, dir, &inventoryServiceStub{})
 
@@ -119,7 +119,7 @@ func TestMCPAgentCapabilitiesNoHarness(t *testing.T) {
 }
 
 func TestMCPAgentModelsMissingProviderDoesNotSynthesizeRow(t *testing.T) {
-	dir := setupTestDir(t)
+	dir := canonicalizePath(setupTestDir(t))
 	srv := New(":0", dir)
 	ctx := inventoryTestContext(t, dir, &inventoryServiceStub{})
 

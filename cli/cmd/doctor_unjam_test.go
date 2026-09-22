@@ -624,6 +624,13 @@ func seedStaleExecuteBeadWorktree(t *testing.T, projectRoot string) string {
 	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
 	runGit(t, projectRoot, "worktree", "add", "--detach", worktreePath, "HEAD")
 	require.NoError(t, os.RemoveAll(worktreePath))
+	// git canonicalizes worktree paths (resolving symlinks such as macOS's
+	// /var -> /private/var) when it registers and reports them, so callers
+	// comparing against `git worktree list` output (via doctor --unjam's
+	// report) must compare canonical forms too.
+	if resolved, err := filepath.EvalSymlinks(filepath.Dir(worktreePath)); err == nil {
+		worktreePath = filepath.Join(resolved, filepath.Base(worktreePath))
+	}
 	return worktreePath
 }
 

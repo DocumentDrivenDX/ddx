@@ -264,8 +264,16 @@ func TestLockCap_TrackerLockPathUsesSharedMainGitRoot(t *testing.T) {
 
 	trk := resolveCapConfig("tracker.lock")
 	wantRoot := SharedMainGitLockRoot(linked)
-	assert.Equal(t, root, wantRoot, "linked worktrees must resolve tracker caps through the primary workspace")
-	assert.Equal(t, filepath.Join(root, ddxroot.DirName, ".git-tracker.lock"), trk.LockPath)
+	// SharedMainGitLockRoot now canonicalizes its output (so it converges
+	// regardless of which entry point resolved it — see its own doc
+	// comment), so compare against root's canonical form too rather than
+	// its raw t.TempDir() spelling (e.g. macOS's /var -> /private/var).
+	canonicalRoot := root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		canonicalRoot = resolved
+	}
+	assert.Equal(t, canonicalRoot, wantRoot, "linked worktrees must resolve tracker caps through the primary workspace")
+	assert.Equal(t, filepath.Join(canonicalRoot, ddxroot.DirName, ".git-tracker.lock"), trk.LockPath)
 	assert.Equal(t, filepath.Join(wantRoot, ddxroot.DirName, ".git-tracker.lock"), trk.LockPath)
 	assert.Greater(t, trk.Cap, time.Duration(0))
 }

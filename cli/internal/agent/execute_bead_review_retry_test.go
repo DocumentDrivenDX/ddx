@@ -21,11 +21,11 @@ import (
 func failingReviewer(class string) beadReviewerFunc {
 	return beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 		return &ReviewResult{
-				Verdict:   VerdictBlock,
-				Error:     class,
-				ResultRev: resultRev,
-			}, fmt.Errorf("reviewer: %s: %w", class,
-				errors.New("simulated failure"))
+			Verdict:   VerdictBlock,
+			Error:     class,
+			ResultRev: resultRev,
+		}, fmt.Errorf("reviewer: %s: %w", class,
+			errors.New("simulated failure"))
 	})
 }
 

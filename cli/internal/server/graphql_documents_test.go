@@ -261,7 +261,10 @@ func TestGraphQLDocumentByPath_ResolvesLegacyAbsoluteDocgraphPath(t *testing.T) 
 	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
 
-	workDir := setupTestDir(t)
+	// New() canonicalizes s.WorkingDir; the documentByPath resolver checks
+	// the requested absolute path against that canonical root, so build
+	// docPath from the same canonical form (e.g. macOS's /var -> /private/var).
+	workDir := canonicalizePath(setupTestDir(t))
 	docPath := filepath.Join(workDir, "docs", "helix", "00-discover", "research", "AC-AGENT-001-agent-harness-ac.md")
 	if err := os.MkdirAll(filepath.Dir(docPath), 0o755); err != nil {
 		t.Fatal(err)

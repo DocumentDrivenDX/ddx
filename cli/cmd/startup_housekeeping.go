@@ -235,6 +235,22 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 	return report, nil
 }
 
+// canonicalWorktreePathForLookup normalizes a worktree path for use as a map
+// key when cross-referencing filesystem-scanned paths against `git worktree
+// list` output. Git resolves symlinks when it reports registered worktree
+// paths (e.g. macOS's /var -> /private/var), while paths built by walking
+// report.TempRoot preserve whatever form the caller's project root was given
+// in. Without canonicalizing both sides the same way, a genuinely registered
+// worktree fails the lookup and gets force-removed as "unregistered". Falls
+// back to filepath.Clean when the path can't be resolved (e.g. it no longer
+// exists on disk).
+func canonicalWorktreePathForLookup(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
+}
+
 func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.Time, runStates []agent.RunState, apply bool, report *startupHousekeepingReport) error {
 	if report.TempRoot == "" {
 		return nil
@@ -255,7 +271,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 	registered := map[string]struct{}{}
 	if paths, listErr := (&agent.RealGitOps{}).WorktreeList(r.projectRoot); listErr == nil {
 		for _, path := range paths {
-			registered[filepath.Clean(path)] = struct{}{}
+			registered[canonicalWorktreePathForLookup(path)] = struct{}{}
 		}
 	}
 	report.registered = registered
@@ -334,7 +350,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 		// rule as ExecutionCleanupManager — so we never force-remove a linked
 		// worktree we cannot attribute.
 		if missingMetadata {
-			if _, ok := registered[filepath.Clean(path)]; ok {
+			if _, ok := registered[canonicalWorktreePathForLookup(path)]; ok {
 				continue
 			}
 		}
@@ -344,7 +360,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			continue
 		}
 
-		if _, ok := registered[filepath.Clean(path)]; ok {
+		if _, ok := registered[canonicalWorktreePathForLookup(path)]; ok {
 			if err := (&agent.RealGitOps{}).WorktreeRemove(r.projectRoot, path); err != nil {
 				report.Warnings = append(report.Warnings, agent.ExecutionCleanupWarning{
 					Path:    path,

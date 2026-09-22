@@ -123,9 +123,17 @@ func TestDDxRoot_BootstrapInitsGitRepoInXDG(t *testing.T) {
 	if !headExistsForTest(t, root) {
 		t.Fatalf("bootstrap root %q has no HEAD commit", root)
 	}
+	// git rev-parse --path-format=absolute always symlink-resolves its
+	// output, regardless of whether root itself (built from XDG_DATA_HOME,
+	// e.g. a raw t.TempDir() on macOS under /var -> /private/var) is
+	// resolved — canonicalize root the same way before comparing.
+	wantRoot := root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		wantRoot = resolved
+	}
 	out := runGitOutput(t, root, "rev-parse", "--path-format=absolute", "--git-dir")
-	if filepath.Clean(strings.TrimSpace(string(out))) != filepath.Join(root, ".git") {
-		t.Fatalf("git dir = %q, want %q", strings.TrimSpace(string(out)), filepath.Join(root, ".git"))
+	if filepath.Clean(strings.TrimSpace(string(out))) != filepath.Join(wantRoot, ".git") {
+		t.Fatalf("git dir = %q, want %q", strings.TrimSpace(string(out)), filepath.Join(wantRoot, ".git"))
 	}
 }
 
@@ -355,6 +363,12 @@ func expectedLocalIdentity(projectRoot string) string {
 	absRoot, err := filepath.Abs(projectRoot)
 	if err != nil {
 		absRoot = filepath.Clean(projectRoot)
+	}
+	// Mirror localProjectIdentity's own symlink resolution (added so its
+	// hash converges with internal/workerstatus's canonicalPath) or this
+	// helper's expectation silently drifts from what production computes.
+	if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRoot = resolved
 	}
 	sum := sha1.Sum([]byte(absRoot))
 	return filepath.Join("local", filepath.Base(absRoot)+"-"+hex.EncodeToString(sum[:])[:8])

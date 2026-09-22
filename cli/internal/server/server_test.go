@@ -3830,8 +3830,8 @@ func TestListProjects(t *testing.T) {
 	if len(projects) != 1 {
 		t.Fatalf("expected 1 project (the startup project), got %d", len(projects))
 	}
-	if projects[0].Path != workDir {
-		t.Errorf("expected path=%s, got %s", workDir, projects[0].Path)
+	if want := canonicalizePath(workDir); projects[0].Path != want {
+		t.Errorf("expected path=%s, got %s", want, projects[0].Path)
 	}
 	if !strings.HasPrefix(projects[0].ID, "proj-") {
 		t.Errorf("expected id to start with 'proj-', got %q", projects[0].ID)
@@ -3862,8 +3862,8 @@ func TestCurrentProject(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &project); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if project.Path != workDir {
-		t.Fatalf("expected current project path=%s, got %s", workDir, project.Path)
+	if want := canonicalizePath(workDir); project.Path != want {
+		t.Fatalf("expected current project path=%s, got %s", want, project.Path)
 	}
 	if project.Name != filepath.Base(workDir) {
 		t.Errorf("expected current project name=%s, got %s", filepath.Base(workDir), project.Name)
@@ -3898,8 +3898,9 @@ func TestRegisterProject(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &entry); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if entry.Path != otherProject {
-		t.Errorf("expected path=%s, got %s", otherProject, entry.Path)
+	wantOtherProject := canonicalizePath(otherProject)
+	if entry.Path != wantOtherProject {
+		t.Errorf("expected path=%s, got %s", wantOtherProject, entry.Path)
 	}
 	if !strings.HasPrefix(entry.ID, "proj-") {
 		t.Errorf("expected id prefix 'proj-', got %q", entry.ID)
@@ -3919,7 +3920,7 @@ func TestRegisterProject(t *testing.T) {
 	}
 	found := false
 	for _, p := range projects {
-		if p.Path == otherProject {
+		if p.Path == wantOtherProject {
 			found = true
 		}
 	}
@@ -4003,7 +4004,7 @@ func setupCommitsTestDir(t *testing.T, subjects []string) (string, *Server, stri
 	}
 
 	srv := New(":0", dir)
-	return dir, srv, projectID(dir)
+	return dir, srv, projectID(canonicalizePath(dir))
 }
 
 func TestListCommits(t *testing.T) {
@@ -4099,7 +4100,7 @@ func TestListCommitsBeadRefs(t *testing.T) {
 	runGit(t, "-C", dir, "commit", "-m", "feat: add thing", "-m", "Closes ddx-abc12345")
 
 	srv := New(":0", dir)
-	projID := projectID(dir)
+	projID := projectID(canonicalizePath(dir))
 
 	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -4166,8 +4167,9 @@ func TestMCPListProjects(t *testing.T) {
 		t.Fatal("expected content array")
 	}
 	text, _ := content[0].(map[string]any)["text"].(string)
-	if !strings.Contains(text, projectID(dir)) {
-		t.Errorf("expected tool output to contain project ID %s, got %s", projectID(dir), text)
+	wantProjID := projectID(canonicalizePath(dir))
+	if !strings.Contains(text, wantProjID) {
+		t.Errorf("expected tool output to contain project ID %s, got %s", wantProjID, text)
 	}
 }
 
@@ -4177,7 +4179,7 @@ func TestMCPShowProject(t *testing.T) {
 
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	projID := projectID(dir)
+	projID := projectID(canonicalizePath(dir))
 
 	// Show by ID.
 	body := fmt.Sprintf(`{"name":"ddx_show_project","arguments":{"id":%q}}`, projID)
@@ -4623,6 +4625,12 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 		t.Fatalf("register: expected 200, got %d", w.Code)
 	}
 
+	// Canonicalize before deleting: EvalSymlinks can't resolve a path that
+	// no longer exists, so canonicalizing after RemoveAll would silently
+	// fall back to a non-symlink-resolved form that no longer matches the
+	// entry registered (and canonicalized) while the directory was present.
+	wantProjPath := canonicalizePath(projDir)
+
 	// Delete the project directory.
 	if err := os.RemoveAll(projDir); err != nil {
 		t.Fatal(err)
@@ -4634,7 +4642,7 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 	// Find the swept entry for projDir — path has been canonicalized.
 	var found *ProjectEntry
 	for i := range swept {
-		if swept[i].Path == canonicalizePath(projDir) {
+		if swept[i].Path == wantProjPath {
 			found = &swept[i]
 			break
 		}
@@ -4661,7 +4669,7 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	for _, p := range defaultList {
-		if p.Path == canonicalizePath(projDir) {
+		if p.Path == wantProjPath {
 			t.Error("unreachable project should be hidden from default listing")
 		}
 	}
@@ -4680,7 +4688,7 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 	}
 	found2 := false
 	for _, p := range fullList {
-		if p.Path == canonicalizePath(projDir) {
+		if p.Path == wantProjPath {
 			found2 = true
 			if !p.Unreachable {
 				t.Error("expected unreachable=true in full listing")
@@ -4766,9 +4774,12 @@ func TestMigrateDeduplicatesDuplicateEntries(t *testing.T) {
 	}
 
 	// Count entries for dupPath — must be exactly 1 after migration.
+	// migrate() canonicalizes every stored path on load, so the surviving
+	// entry's Path is dupPath's canonical (symlink-resolved) form.
+	wantDupPath := canonicalizePath(dupPath)
 	count := 0
 	for _, p := range projects {
-		if p.Path == dupPath {
+		if p.Path == wantDupPath {
 			count++
 		}
 	}

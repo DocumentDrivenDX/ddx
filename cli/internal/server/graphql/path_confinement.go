@@ -23,6 +23,19 @@ func ResolveDocumentPath(libraryRoot, path string) (string, error) {
 	if path == "" {
 		return "", ErrDocumentOutsideLibrary
 	}
+	// Canonicalize libraryRoot itself before comparing: the symlink-escape
+	// check below compares an EvalSymlinks'd candidate path against
+	// libraryRoot, so if libraryRoot sits behind a symlink (e.g. macOS's
+	// /var -> /private/var) but isn't resolved here too, filepath.Rel
+	// produces a nonsense cross-tree relative path and every legitimate
+	// document looks like an escape.
+	if abs, err := filepath.Abs(libraryRoot); err == nil {
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+			libraryRoot = resolved
+		} else {
+			libraryRoot = abs
+		}
+	}
 	if filepath.IsAbs(path) || strings.HasPrefix(path, "/") {
 		return "", ErrDocumentOutsideLibrary
 	}

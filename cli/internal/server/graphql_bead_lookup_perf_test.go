@@ -100,8 +100,9 @@ func setupBeadLookupFixture(tb testing.TB) *beadLookupFixture {
 	}
 
 	var targetProject ProjectEntry
+	wantTargetPath := canonicalizePath(projectPaths[len(projectPaths)-1])
 	for _, proj := range projects {
-		if proj.Path == projectPaths[len(projectPaths)-1] {
+		if proj.Path == wantTargetPath {
 			targetProject = proj
 			break
 		}

@@ -97,11 +97,22 @@ func TestVersionWarnsStaleSourceBinary(t *testing.T) {
 
 	out, err := executeCommand(factory.NewRootCommand(), "version")
 	require.NoError(t, err)
+
+	// warnIfInstalledBinaryBehindSource resolves the project root via
+	// gitpkg.FindProjectRoot, which is analogous to `git rev-parse
+	// --show-toplevel` and so reports the canonical (symlink-resolved) path
+	// (e.g. macOS's /var -> /private/var). Canonicalize the test's own
+	// projectRoot the same way before comparing.
+	wantProjectRoot := projectRoot
+	if resolved, err := filepath.EvalSymlinks(projectRoot); err == nil {
+		wantProjectRoot = resolved
+	}
+
 	assert.Contains(t, out, "installed ddx binary is behind this DDx source checkout.")
-	assert.Contains(t, out, "project root: "+projectRoot)
+	assert.Contains(t, out, "project root: "+wantProjectRoot)
 	assert.Contains(t, out, "binary commit: "+buildSHA)
 	assert.Contains(t, out, "source HEAD: "+headSHA)
-	assert.Contains(t, out, "recovery: cd "+projectRoot+" && make install")
+	assert.Contains(t, out, "recovery: cd "+wantProjectRoot+" && make install")
 }
 
 func TestDetectInstalledBinaryBehindSourceIgnoresTrackerOnlyAheadCommit(t *testing.T) {

@@ -1248,7 +1248,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 
 		var rec WorkerRecord
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rec))
-		assert.Equal(t, projectB, rec.ProjectRoot,
+		assert.Equal(t, canonicalizePath(projectB), rec.ProjectRoot,
 			"worker must run in the requested project root, not the server's primary project")
 		assert.NotEmpty(t, rec.ID)
 
@@ -1326,7 +1326,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		_ = srv.workers.Stop(record.ID)
 		_ = waitForWorkerExit(t, srv.workers, record.ID, 5*time.Second)
 	})
-	assert.Equal(t, projectB, record.ProjectRoot)
+	assert.Equal(t, canonicalizePath(projectB), record.ProjectRoot)
 	assert.Equal(t, "fiz", record.Harness)
 	assert.Equal(t, "qwen/qwen3.6", record.Model)
 	assert.Equal(t, "default", record.Profile)
@@ -1337,7 +1337,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	require.NoError(t, err)
 	var persisted ExecuteLoopWorkerSpec
 	require.NoError(t, json.Unmarshal(data, &persisted))
-	assert.Equal(t, projectB, persisted.ProjectRoot)
+	assert.Equal(t, canonicalizePath(projectB), persisted.ProjectRoot)
 	assert.Equal(t, "fiz", persisted.Harness)
 	assert.Equal(t, "qwen/qwen3.6", persisted.Model)
 	assert.Equal(t, "default", persisted.Profile)

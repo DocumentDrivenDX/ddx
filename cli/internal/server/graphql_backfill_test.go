@@ -113,7 +113,7 @@ func TestGraphQLWorkers(t *testing.T) {
 		ID:          "wk-test-001",
 		Kind:        "work",
 		State:       "exited",
-		ProjectRoot: workDir,
+		ProjectRoot: canonicalizePath(workDir),
 		Harness:     "claude",
 		StartedAt:   startedAt,
 	})
@@ -161,8 +161,8 @@ func TestGraphQLWorkers(t *testing.T) {
 	if node.State != "exited" {
 		t.Errorf("expected state=exited, got %q", node.State)
 	}
-	if node.ProjectRoot != workDir {
-		t.Errorf("expected projectRoot=%q, got %q", workDir, node.ProjectRoot)
+	if want := canonicalizePath(workDir); node.ProjectRoot != want {
+		t.Errorf("expected projectRoot=%q, got %q", want, node.ProjectRoot)
 	}
 	if resp.Data.Workers.Edges[0].Cursor == "" {
 		t.Error("expected non-empty cursor on worker edge")
@@ -232,11 +232,15 @@ func TestGraphQLWorkersByProjectScopedByID(t *testing.T) {
 	workDirB := t.TempDir()
 
 	startedAt := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
+	// ProjectRoot mirrors what a real execute-loop worker persists: the
+	// canonicalized form GetProjectByPath/RegisterProject store and match
+	// against, not whatever raw path (possibly symlinked, e.g. macOS's
+	// /var/folders/...) the test's t.TempDir() happened to hand back.
 	writeWorkerRecord(t, workDirA, WorkerRecord{
 		ID:          "wk-scope-A",
 		Kind:        "work",
 		State:       "running",
-		ProjectRoot: workDirA,
+		ProjectRoot: canonicalizePath(workDirA),
 		Harness:     "claude",
 		StartedAt:   startedAt,
 	})
@@ -248,7 +252,7 @@ func TestGraphQLWorkersByProjectScopedByID(t *testing.T) {
 		ID:          "wk-scope-B",
 		Kind:        "work",
 		State:       "running",
-		ProjectRoot: workDirB,
+		ProjectRoot: canonicalizePath(workDirB),
 		Harness:     "claude",
 		StartedAt:   startedAt.Add(time.Minute),
 	})

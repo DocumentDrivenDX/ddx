@@ -19,10 +19,6 @@ permissions:
 
 env:
   RELEASE_TAG: "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-  # Go 1.27+ defaults goexperiment.jsonv2 on, breaking the pinned
-  # github.com/go-json-experiment/json shim (via tailscale.com/tsnet).
-  # See cli/Makefile for the same workaround applied to `make` targets.
-  GOEXPERIMENT: nojsonv2
 
 jobs:
   # Validate and prepare release
