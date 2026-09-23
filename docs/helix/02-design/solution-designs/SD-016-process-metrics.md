@@ -10,6 +10,8 @@ ddx:
 ---
 # Solution Design: Process Metrics
 
+**Status:** Accepted
+
 ## Overview
 
 Process metrics are a read model over existing DDx stores, not a new capture

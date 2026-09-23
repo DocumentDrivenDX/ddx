@@ -11,16 +11,18 @@
 // ../docs/helix/` passes ... without waivers") reads as a whole-corpus
 // requirement, but this bead's NON-SCOPE forbids touching sibling-owned
 // documents (parts 2/3 own the rest of WB-2's list; contradiction/
-// duplicate-id fixes belong to the WB-3 ledger bead). The whole-corpus
-// invocation stays red on this tree for reasons entirely outside these
-// four documents — dozens of pre-existing missing_status, zero_evidence,
-// duplicate_id, and duplicate_us_id findings on docs this bead does not
-// own — and TestSpechonestyCommandReportsCorpusWB1Diagnostics in this
-// package asserts that whole-corpus non-zero exit is the current expected
-// state. TestSpechonestyPassesScopedToRestampedPart1Docs below is this
-// bead's real, in-scope proof: it runs the production ScanDocsDirectory
-// entrypoint (the same one AC2's command drives) against exactly the four
-// documents this bead governs and requires zero diagnostics.
+// duplicate-id fixes belong to the WB-3 ledger bead). At the time this
+// bead was written the whole-corpus invocation was red for reasons
+// entirely outside these four documents — dozens of pre-existing
+// missing_status, zero_evidence, duplicate_id, and duplicate_us_id
+// findings on docs this bead does not own. Those have since been fixed
+// (see TestSpechonestyCommandCorpusIsClean, which now asserts the
+// whole-corpus invocation is clean) but this bead's own in-scope proof
+// stays the narrower one: TestSpechonestyPassesScopedToRestampedPart1Docs
+// below runs the production ScanDocsDirectory entrypoint (the same one
+// AC2's command drives) against exactly the four documents this bead
+// governs and requires zero diagnostics, independent of the rest of the
+// corpus's state.
 package spechonesty
 
 import (

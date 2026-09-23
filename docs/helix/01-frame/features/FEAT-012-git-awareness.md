@@ -9,7 +9,7 @@ ddx:
 # Feature: Git Awareness and Revision Control Integration
 
 **ID:** FEAT-012
-**Status:** Complete
+**Status:** In Progress — auto-commit, doc history/diff, checkpoints, agent guidance injection, and bead-tracker auto-commit are implemented and unit-tested; downgraded from Complete because the epic-branch requirements (`ddx/epics` naming, `git merge --no-ff` epic landing, epic merge gates) have zero implementation (`grep -rn "ddx/epics" cli/` returns no hits). Already flagged in `docs/helix/06-iterate/alignment-reviews/AR-2026-07-13-vision-vs-reality.md:99`.
 **Priority:** P1
 **Owner:** DDx Team
 

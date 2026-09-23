@@ -7,6 +7,8 @@ ddx:
 ---
 # Solution Design: Metric Runtime and History
 
+**Status:** Accepted
+
 ## Purpose
 
 This design defines how metrics specialize the generic DDx execution model.

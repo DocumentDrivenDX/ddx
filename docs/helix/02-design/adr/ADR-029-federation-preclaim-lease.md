@@ -1,6 +1,7 @@
 # ADR-029: Federation hub-arbitrated pre-claim lease
 
-- Status: Accepted
+**Status:** Accepted
+
 - Date: 2026-07-06
 - Related: ADR-006 (ts-net authentication), ADR-007 (federation topology), FEAT-026 (federation)
 

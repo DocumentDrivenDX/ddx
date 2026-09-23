@@ -11,6 +11,8 @@ ddx:
 ---
 # Technical Design: Bead Storage System and Lifecycle
 
+**Status:** Accepted
+
 ## Purpose
 
 This is the canonical technical design for the bead storage system and lifecycle. It specifies:

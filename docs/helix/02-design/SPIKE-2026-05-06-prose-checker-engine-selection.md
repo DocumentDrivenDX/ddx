@@ -3,7 +3,7 @@ ddx:
   id: SPIKE-2026-05-06-prose-checker-engine-selection
   depends_on:
     - FEAT-027
-  status: complete
+  status: proposed # provisional recommendation; see doc body
 ---
 # Spike: Prose Checker Engine Selection
 

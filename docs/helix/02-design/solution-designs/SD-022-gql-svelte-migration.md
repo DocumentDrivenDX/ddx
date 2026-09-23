@@ -8,6 +8,8 @@ ddx:
 ---
 # Solution Design: SD-022 GraphQL + Svelte Migration
 
+**Status:** Accepted
+
 ## Overview
 
 This design documents the four-stage migration from the React+REST frontend stack

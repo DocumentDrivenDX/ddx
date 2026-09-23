@@ -6,6 +6,8 @@ ddx:
 ---
 # Solution Design: Agent Session Capture and Inspection
 
+**Status:** Accepted
+
 ## Purpose
 
 This design makes agent sessions inspectable end-to-end. The existing agent

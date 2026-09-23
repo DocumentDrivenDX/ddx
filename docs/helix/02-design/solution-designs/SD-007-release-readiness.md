@@ -9,6 +9,8 @@ ddx:
 ---
 # Solution Design: Release Readiness — CI/CD, Demos, and Onboarding
 
+**Status:** Accepted
+
 ## Overview
 
 This design covers the infrastructure needed to make DDx release-ready:

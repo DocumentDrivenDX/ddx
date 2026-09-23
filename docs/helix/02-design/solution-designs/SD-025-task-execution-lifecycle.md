@@ -8,6 +8,8 @@ ddx:
 ---
 # Solution Design: Task Execution Lifecycle
 
+**Status:** Accepted
+
 ## Purpose
 
 This design turns FEAT-010's task execution lifecycle into an implementation

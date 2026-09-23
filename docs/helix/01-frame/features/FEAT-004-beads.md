@@ -7,7 +7,7 @@ ddx:
 # Feature: Beads (Work Item Tracker)
 
 **ID:** FEAT-004
-**Status:** Complete
+**Status:** In Progress — implementation and unit-test coverage verified against the current codebase (CRUD, dependencies, JSONL backend, validation hooks, queue ordering, evidence, claim semantics, import/export); downgraded from Complete because the Verification Mapping's structured observation-report requirement (`cli/tools/lint/spechonesty/cmd/spechonesty/main.go`'s `observe`/`--report` flow) is not yet wired into CI, so no automated evidence can be attached here. Note the backend selection now also includes an `axon` option this doc predates.
 **Priority:** P0
 **Owner:** DDx Team
 
@@ -370,7 +370,7 @@ ddx bead export [--stdout] [file]
 
 ## User Stories
 
-### US-020: Create and Manage Beads
+### US-228: Create and Manage Beads
 **As a** developer tracking work items
 **I want** to create, update, and close beads from the CLI
 **So that** I have a lightweight work queue without external tools
@@ -381,7 +381,7 @@ ddx bead export [--stdout] [file]
 - Given a bead exists, when I run `ddx bead close <id>`, then its status is set to `closed`
 - Given beads exist, when I run `ddx bead list --status open`, then only open beads are shown
 
-### US-021: Track Dependencies Between Beads
+### US-229: Track Dependencies Between Beads
 **As a** developer with ordered work
 **I want** to declare that bead A must complete before bead B
 **So that** the ready queue reflects actual execution order
@@ -392,7 +392,7 @@ ddx bead export [--stdout] [file]
 - Given B depends on A and A is closed, when I run `ddx bead ready`, then B is listed
 - Given I run `ddx bead dep tree`, then I see the full dependency graph
 
-### US-022: Import Beads from External Sources
+### US-230: Import Beads from External Sources
 **As a** developer migrating from another tracker
 **I want** to import beads from `bd`, `br`, or JSONL files
 **So that** I can consolidate work items into DDx
@@ -402,7 +402,7 @@ ddx bead export [--stdout] [file]
 - Given `bd` is available and has data, when I run `ddx bead import --from bd`, then beads are imported
 - Given I run `ddx bead export --stdout`, then JSONL output is compatible with `ddx bead import --from jsonl`
 
-### US-023: Agent Queries Ready Beads via MCP
+### US-231: Agent Queries Ready Beads via MCP
 **As an** AI agent with MCP tool access
 **I want** to query the ready queue programmatically
 **So that** I can pick up the next actionable work item
@@ -423,7 +423,7 @@ ddx bead export [--stdout] [file]
 - Given a ranked bead is blocked, superseded, on retry cooldown, `execution-eligible=false`, or an epic-only/container bead, then `ddx bead ready --execution` still excludes it
 - Given a ranked bead exists, when I run `ddx bead queue clear <id>`, then DDx removes `queue-rank` and the bead returns to the default priority/created/id ordering
 
-### US-024: Operator Recovers From Partial JSONL Corruption
+### US-232: Operator Recovers From Partial JSONL Corruption
 **As a** repo operator
 **I want** bead queue commands to survive a partially written or externally edited `beads.jsonl`
 **So that** one bad record does not block the whole queue

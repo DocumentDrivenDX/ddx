@@ -246,7 +246,7 @@ follow-up).
 
 ## User Stories
 
-### US-095: Operator Promotes One Node to Hub
+### US-244: Operator Promotes One Node to Hub
 **As an** operator with several DDx machines on a tailnet
 **I want** to designate one of them as the federation hub
 **So that** I can see all my machines' work in a single dashboard
@@ -259,7 +259,7 @@ follow-up).
 - Given I open the hub UI, then `/federation` is reachable and shows the hub
   with no spokes
 
-### US-096: Operator Joins a Spoke to the Federation
+### US-245: Operator Joins a Spoke to the Federation
 **As an** operator running DDx on a second machine
 **I want** to point that node at the hub
 **So that** the hub can show its beads, runs, and projects
@@ -272,7 +272,7 @@ follow-up).
 - Given the spoke version is incompatible per the ADR-007 matrix, then
   registration fails fast with a clear error and the spoke logs the reason
 
-### US-097: Operator Sees Federated Work in the Hub UI
+### US-246: Operator Sees Federated Work in the Hub UI
 **As an** operator using the hub UI
 **I want** combined views to fan out across spokes
 **So that** my dashboard reflects everything happening on my machines
@@ -313,7 +313,7 @@ from the node that owns each project
 worker start, forward bead create/update, forward spec save, simulate offline
 spoke, and verify refusal plus idempotency.
 
-### US-098: Operator Falls Back to a Spoke UI Directly
+### US-247: Operator Falls Back to a Spoke UI Directly
 **As an** operator when the hub is unreachable
 **I want** to open the spoke UI directly
 **So that** I can keep working without waiting for the hub to recover
@@ -324,7 +324,7 @@ spoke, and verify refusal plus idempotency.
 - Given the hub returns later, then the spoke re-registers on the next
   heartbeat without operator intervention
 
-### US-099: Operator Sees Version Skew Surfaced in the UI
+### US-248: Operator Sees Version Skew Surfaced in the UI
 **As an** operator running mixed DDx versions
 **I want** to know when a spoke is degraded due to schema or version skew
 **So that** I can plan upgrades without surprises
@@ -335,7 +335,7 @@ spoke, and verify refusal plus idempotency.
 - Given any federated row sourced from that spoke, then the row carries the
   same `degraded` badge
 
-### US-100: Operator Confirms Default Transport Is ts-net Only
+### US-249: Operator Confirms Default Transport Is ts-net Only
 **As a** security-conscious operator
 **I want** federation to refuse non-ts-net peers by default
 **So that** a misconfigured network does not leak federation traffic

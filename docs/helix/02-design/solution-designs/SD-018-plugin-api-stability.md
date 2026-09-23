@@ -10,6 +10,8 @@ ddx:
 ---
 # Solution Design: Plugin API Stability
 
+**Status:** Accepted
+
 ## Overview
 
 This design defines the stable, file-based plugin API that DDx exposes to

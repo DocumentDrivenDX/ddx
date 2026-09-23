@@ -8,6 +8,8 @@ ddx:
 ---
 # Solution Design: Git Awareness and Revision Control Integration
 
+**Status:** Accepted
+
 ## Purpose
 
 Extend DDx with a thin, deliberate git integration layer: auto-commit on
