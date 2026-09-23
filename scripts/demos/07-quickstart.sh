@@ -49,8 +49,9 @@ type_command ddx bead status
 
 # Drain the queue. The script harness produces deterministic commits so the
 # recording exercises the full layer-3 path (claim → execute → land → review)
-# without external services.
-type_command ddx work --local --harness script --no-review
+# without external services. --no-review is a break-glass override and
+# requires --no-review-i-know-what-im-doing (ddx-86996834).
+type_command ddx work --local --harness script --no-review --no-review-i-know-what-im-doing
 
 type_command ddx bead status
 type_command git log --oneline -3
