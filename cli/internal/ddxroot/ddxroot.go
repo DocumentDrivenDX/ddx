@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -42,7 +43,7 @@ func ExistingPath(ctx context.Context, projectRoot string) (string, bool) {
 	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
 		return inTree, true
 	}
-	root := filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
+	root := cachedConventionRoot(ctx, projectRoot)
 	if info, err := os.Stat(root); err == nil && info.IsDir() {
 		return root, true
 	}
@@ -78,9 +79,117 @@ func Path(ctx context.Context, projectRoot string) string {
 	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
 		return inTree
 	}
-	root := filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
-	_ = bootstrapConventionRoot(ctx, projectRoot, root)
+	return bootstrappedConventionRoot(ctx, projectRoot)
+}
+
+// pathCacheKey identifies one convention root within one process. It is
+// scoped by projectsRoot() (derived from XDG_DATA_HOME) so tests that repoint
+// XDG_DATA_HOME between calls never share a stale entry.
+type pathCacheKey struct {
+	projectsRoot string
+	worktree     string
+}
+
+// pathCacheEntry memoizes convention-root resolution and bootstrap state for
+// one key. identity/root are filled once (identity resolution has no
+// invalidation trigger within a process); bootstrapped is only set true after
+// bootstrapConventionRootFn returns nil, and is cleared again if the root is
+// later found missing, so a failed or since-removed bootstrap is retried
+// rather than permanently cached as successful.
+type pathCacheEntry struct {
+	mu           sync.Mutex
+	identity     string
+	root         string
+	bootstrapped bool
+}
+
+// pathCache memoizes ddxroot.Path's convention-root bootstrap per process.
+// Without this, every call in the convention-root branch (no in-tree .ddx/)
+// re-runs bootstrapConventionRoot, which shells out to git 2-5 times
+// (rev-parse --git-dir, remote get-url origin, rev-parse --verify HEAD, and
+// on first use init/add/commit) plus a lock acquire/release and a
+// worktrees.json rewrite. That costs on the order of 100-200ms per call on a
+// slow-exec host, and this path is reachable from every bead.NewStore call
+// and every worker liveness heartbeat tick, so an unmemoized Path() makes any
+// tight-timing loop (or test) unreliable. See ddx-related investigation of
+// TestExecuteBeadLoopReleasesServerUnavailableWhenProbeHealthy.
+var pathCache sync.Map // map[pathCacheKey]*pathCacheEntry
+
+// bootstrapConventionRootFn is a test seam over bootstrapConventionRoot.
+var bootstrapConventionRootFn = bootstrapConventionRoot
+
+// bootstrappedConventionRoot resolves and, at most once per process per key,
+// bootstraps the convention root for projectRoot.
+func bootstrappedConventionRoot(ctx context.Context, projectRoot string) string {
+	root, entry, ok := cachedConventionRootEntry(ctx, projectRoot)
+	if !ok {
+		// canonicalWorktreePath failed (Getwd failure resolving a relative
+		// projectRoot); fall back to the uncached path rather than caching
+		// under a key we can't reliably reproduce.
+		root = filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
+		_ = bootstrapConventionRootFn(ctx, projectRoot, root)
+		return root
+	}
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.bootstrapped {
+		if info, err := os.Stat(entry.root); err == nil && info.IsDir() {
+			return entry.root
+		}
+		// The root vanished out from under a long-running process; re-bootstrap.
+		entry.bootstrapped = false
+	}
+	if err := bootstrapConventionRootFn(ctx, projectRoot, entry.root); err == nil {
+		entry.bootstrapped = true
+	}
 	return root
+}
+
+// cachedConventionRoot resolves (without bootstrapping) the convention root
+// for projectRoot, reusing a cached project identity when available. Used by
+// ExistingPath, which must never trigger or trust a bootstrap.
+func cachedConventionRoot(ctx context.Context, projectRoot string) string {
+	root, _, ok := cachedConventionRootEntry(ctx, projectRoot)
+	if !ok {
+		return filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
+	}
+	return root
+}
+
+// cachedConventionRootEntry loads or creates the cache entry for projectRoot,
+// resolving its identity/root once. ok is false only when projectRoot can't
+// be canonicalized (e.g. os.Getwd failing on a relative path), in which case
+// callers must not cache and should fall back to the uncached computation.
+func cachedConventionRootEntry(ctx context.Context, projectRoot string) (root string, entry *pathCacheEntry, ok bool) {
+	worktree, err := canonicalWorktreePath(projectRoot)
+	if err != nil {
+		return "", nil, false
+	}
+	key := pathCacheKey{projectsRoot: projectsRoot(), worktree: worktree}
+	loaded, _ := pathCache.LoadOrStore(key, &pathCacheEntry{})
+	entry = loaded.(*pathCacheEntry)
+
+	entry.mu.Lock()
+	if entry.identity == "" {
+		entry.identity = projectIdentity(ctx, projectRoot)
+		entry.root = filepath.Join(key.projectsRoot, entry.identity)
+	}
+	root = entry.root
+	entry.mu.Unlock()
+	return root, entry, true
+}
+
+// resetPathCache clears all memoized convention-root state. Tests that
+// exercise convention-root bootstrapping under distinct XDG_DATA_HOME/project
+// roots don't need this (each key is naturally distinct), but tests that
+// reuse a root or assert on repeated bootstrap calls should call it via
+// t.Cleanup to avoid cross-test leakage within the same test binary.
+func resetPathCache() {
+	pathCache.Range(func(key, _ any) bool {
+		pathCache.Delete(key)
+		return true
+	})
 }
 
 func projectsRoot() string {
