@@ -368,7 +368,7 @@ exists in the target project.
 
 ## User Stories
 
-### US-090: Operator Views All Active Work in One Dashboard
+### US-239: Operator Views All Active Work in One Dashboard
 **As an** operator managing multiple projects on one machine
 **I want** to see all open beads and recent run records from every project
 **So that** I can understand the full workload without switching context
@@ -393,7 +393,7 @@ exists in the target project.
 - node-beads: open combined beads → verify cross-project beads with project badges → filter by project → verify URL and filtered results → click bead → verify navigation to project-scoped bead detail → press Back
 - node-runs: open combined runs → verify cross-project records with layer and project badges → filter by layer → click work record → verify detail → click child try → verify fields → press Back through hierarchy
 
-### US-091: Operator Navigates to a Project-Scoped View
+### US-240: Operator Navigates to a Project-Scoped View
 **As an** operator investigating one project
 **I want** to select a project and see its artifacts, graph, runs, and commits
 **So that** I can do project-specific work without losing the node context
@@ -411,7 +411,7 @@ exists in the target project.
 
 **E2E Test:** `navigation.spec.ts` — full workflow: open node overview → click project → verify project overview URL → open artifact browser → switch project in picker → verify URL and content updated to project B → copy URL → open in new tab → verify same view → navigate to run detail → switch project → verify fallback to run history
 
-### US-092: Operator Bookmarks a Filtered View
+### US-241: Operator Bookmarks a Filtered View
 **As an** operator who checks the ready queue every morning
 **I want** to bookmark the ready queue filtered to my project
 **So that** I can open it directly without navigating through the UI
@@ -426,7 +426,7 @@ exists in the target project.
 
 **E2E Test:** `navigation.spec.ts` — full workflow: apply status + project filters → verify URL params → copy URL → reload page → verify same filter applied without interaction
 
-### US-093: Operator Traces a Bead to Its Closing Commit
+### US-242: Operator Traces a Bead to Its Closing Commit
 **As an** operator reviewing completed work
 **I want** to see the git commit that closed a bead
 **So that** I can inspect the code change that fulfilled the bead's acceptance
@@ -441,7 +441,7 @@ exists in the target project.
 
 **E2E Test:** `commits.spec.ts` — full workflow: open bead with closing commit → click commit link → verify commit log opens with commit highlighted → click bead link from commit row → verify bead detail opens → press Back → verify commit log restored at same position
 
-### US-094: Operator Sees Node Identity in the UI
+### US-243: Operator Sees Node Identity in the UI
 **As an** operator with multiple machines
 **I want** to see which node I am connected to
 **So that** I don't confuse the eitri server with the bragi server
@@ -748,11 +748,11 @@ mocking of the GraphQL or HTTP layer.
 
 | E2E Spec | User Stories | Workflow Covered |
 |---|---|---|
-| `navigation.spec.ts` | US-091, US-092, US-094 | Root redirect → node overview → project picker → project switch preserving page context → bookmarkable URL round-trip → node identity visible |
-| `node-beads.spec.ts` | US-090 (beads) | Combined bead view → cross-project badges → filter by project → click bead → navigate to project-scoped detail → Back |
-| `node-runs.spec.ts` | US-090 (runs) | Combined run history → cross-project layer badges → filter → drill work→try→run → breadcrumbs back to list |
+| `navigation.spec.ts` | US-240, US-241, US-243 | Root redirect → node overview → project picker → project switch preserving page context → bookmarkable URL round-trip → node identity visible |
+| `node-beads.spec.ts` | US-239 (beads) | Combined bead view → cross-project badges → filter by project → click bead → navigate to project-scoped detail → Back |
+| `node-runs.spec.ts` | US-239 (runs) | Combined run history → cross-project layer badges → filter → drill work→try→run → breadcrumbs back to list |
 | `runs.spec.ts` | US-094b | Project runs → apply layer filter → work detail → try detail → run detail tabs/evidence → artifact link → Back through full hierarchy |
-| `commits.spec.ts` | US-093 | Bead with closing commit → commit log → highlighted commit → bead cross-link → Back |
+| `commits.spec.ts` | US-242 | Bead with closing commit → commit log → highlighted commit → bead cross-link → Back |
 
 ## Dependencies
 

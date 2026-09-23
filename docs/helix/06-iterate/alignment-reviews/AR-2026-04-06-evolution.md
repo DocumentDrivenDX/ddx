@@ -11,7 +11,7 @@ ddx:
 
 **Date:** 2026-04-06
 **Scope:** Full repo — vision and PRD evolution
-**Status:** Complete
+**Status:** Historical — this review is complete as a point-in-time record, but superseded as current guidance by later reviews (AR-2026-04-09-repo.md, AR-2026-04-14-server-plan.md, AR-2026-04-20.md, AR-2026-07-13-vision-vs-reality.md); see the Historical banner above. Not re-stamped Complete because its own gap register and `ddx-*` bead references no longer resolve against the live tracker.
 **Epic:** ddx-24eefcfe
 
 ## Scope and Governing Artifacts

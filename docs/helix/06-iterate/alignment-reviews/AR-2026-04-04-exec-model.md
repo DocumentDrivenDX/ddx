@@ -85,8 +85,8 @@ ddx:
 
 | Story / Feature | Criterion | Test Reference | Status | Evidence |
 |-----------------|-----------|----------------|--------|----------|
-| US-090 / FEAT-010 | Run a metric-backed execution and retain raw logs plus structured result data. | `cli/internal/exec/store_test.go`, `cli/cmd/exec_acceptance_test.go`, `cli/cmd/metric_acceptance_test.go` | PARTIAL | Command-backed exec runs and metric projections exist; `agent` executor support is still pending. |
-| US-091 / FEAT-010 | Preserve ordered execution history and inspect run status, logs, structured result, and provenance. | `cli/internal/exec/store_test.go`, `cli/cmd/exec_acceptance_test.go` | PARTIAL | Generic history and inspection exist, but storage-hardening follow-ons are still open. |
+| US-233 / FEAT-010 | Run a metric-backed execution and retain raw logs plus structured result data. | `cli/internal/exec/store_test.go`, `cli/cmd/exec_acceptance_test.go`, `cli/cmd/metric_acceptance_test.go` | PARTIAL | Command-backed exec runs and metric projections exist; `agent` executor support is still pending. |
+| US-234 / FEAT-010 | Preserve ordered execution history and inspect run status, logs, structured result, and provenance. | `cli/internal/exec/store_test.go`, `cli/cmd/exec_acceptance_test.go` | PARTIAL | Generic history and inspection exist, but storage-hardening follow-ons are still open. |
 | US-092 / FEAT-010 | Query execution history by artifact ID and retain agent-session linkage when applicable. | `cli/internal/exec/store_test.go` | PARTIAL | Artifact filtering exists; agent-session linkage is blocked on `agent` executor support inside `ddx exec`. |
 | US-093 / FEAT-010 | Optional metric convenience commands resolve through `ddx exec` without a separate authoritative `.ddx/metrics/` store. | `cli/cmd/metric_acceptance_test.go`, `cli/internal/metric/store_test.go` | IMPLEMENTED | The metric surface now resolves through the exec store and bridges to generic execution records. |
 | US-094 / FEAT-010 | Define a migration or backward-compatible policy for older specialized runtime data. | `cli/internal/exec/store_test.go` | PARTIAL | Legacy `.ddx/exec/` fallback reads exist; final migration cleanup and hardening remain open. |
@@ -109,7 +109,7 @@ ddx:
 
 | Vision | Requirement | Feature/Story | Arch/ADR | Design | Tests | Impl Plan | Code Status | Classification |
 |--------|-------------|---------------|----------|--------|-------|-----------|-------------|----------------|
-| Runtime evidence stays reusable and artifact-linked | Generic execution substrate with immutable runs | FEAT-010 / US-090-US-094 | `architecture.md`, `ADR-004` | `TD-010`, `SD-005`, `TD-005` | `TP-010`, `TP-005` | `ddx-facb7aa5` and child tasks | Generic exec substrate exists; remaining gaps are executor coverage and storage hardening | PARTIAL |
+| Runtime evidence stays reusable and artifact-linked | Generic execution substrate with immutable runs | FEAT-010 / US-233, US-234, US-092-US-094 | `architecture.md`, `ADR-004` | `TD-010`, `SD-005`, `TD-005` | `TP-010`, `TP-005` | `ddx-facb7aa5` and child tasks | Generic exec substrate exists; remaining gaps are executor coverage and storage hardening | PARTIAL |
 
 ## Execution Issues Generated
 

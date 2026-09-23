@@ -13,7 +13,7 @@ tags: [agent, harness, completion, AC-AGENT-001]
 # Agent Harness Test Completion - COMPLETED
 
 **ID:** AC-AGENT-002
-**Status:** Complete
+**Status:** In Progress — implementation and unit-test coverage verified against the current codebase (pi/gemini harness definitions, arg construction, usage/output extraction); downgraded from Complete because the Verification Mapping's structured observation-report requirement (`cli/tools/lint/spechonesty/cmd/spechonesty/main.go`'s `observe`/`--report` flow) is not yet wired into CI, so no automated evidence can be attached here.
 **Date:** 2026-04-07
 
 ## Summary

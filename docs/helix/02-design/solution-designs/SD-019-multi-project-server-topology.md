@@ -16,6 +16,8 @@ ddx:
 ---
 # Solution Design: Host+User Multi-Project Server Topology
 
+**Status:** Accepted
+
 ## Purpose
 
 Define the `ddx server` topology that runs as a per-user host daemon and

@@ -4,7 +4,7 @@ ddx:
   depends_on:
     - FEAT-027
     - SPIKE-2026-05-06-prose-checker-engine-selection
-  status: complete
+  status: proposed # provisional recommendation; see doc body
 ---
 # Spike: Vale as an Internal DDx Engine
 

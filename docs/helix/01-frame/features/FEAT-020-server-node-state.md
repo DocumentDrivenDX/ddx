@@ -242,7 +242,7 @@ contract (mode `0700`, files mode `0600`) extends to that file unchanged.
 
 ## User Stories
 
-### US-087: Operator Identifies the Running Server Node
+### US-237: Operator Identifies the Running Server Node
 **As an** operator managing a machine running ddx-server
 **I want** to query the server and learn which node it is
 **So that** I can verify I'm looking at the right server instance
@@ -253,7 +253,7 @@ contract (mode `0700`, files mode `0600`) extends to that file unchanged.
 - Given I restart the server, then the node ID is the same as before (loaded
   from persisted state)
 
-### US-088: Projects Register Automatically Without Configuration
+### US-238: Projects Register Automatically Without Configuration
 **As a** developer running ddx commands in a project
 **I want** the server to know about my project without manual registration
 **So that** I can see it in the UI without configuring anything

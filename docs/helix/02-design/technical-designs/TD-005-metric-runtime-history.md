@@ -9,6 +9,8 @@ ddx:
 ---
 # Technical Design: Metric Runtime and History
 
+**Status:** Accepted
+
 This design extends [TD-010](TD-010-executions.md).
 Generic execution collection naming, attachment publication, and legacy
 fallback rules come from the generic execution substrate; this document adds

@@ -13,6 +13,8 @@ ddx:
 ---
 # Solution Design: Agent Evaluation and Prompt Comparison
 
+**Status:** Accepted
+
 ## Purpose
 
 FEAT-019 adds an evaluation layer above DDx's work tracker and git-aware

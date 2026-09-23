@@ -86,7 +86,7 @@ project-scoped tabs in the global navigation, in this order:
 | Workers | `workers` | Live + recent worker processes for this project (US-085b, US-086, US-086a) |
 | Personas | `personas` | Persona browser + role bindings (US-097) |
 | Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
-| Commits | `commits` | Project git commit log (US-093, FEAT-021) |
+| Commits | `commits` | Project git commit log (US-242, FEAT-021) |
 
 **Sessions and Executions are retired as top-level activity tabs**
 (Story 8). The unified Runs tab carries the shared layer-aware tab
@@ -1280,7 +1280,7 @@ outcome, including navigation back.
 
 | E2E Spec | User Stories | Workflow Covered |
 |---|---|---|
-| `navigation.spec.ts` | US-094 (via FEAT-021) | Root redirect, project picker, node identity in nav bar |
+| `navigation.spec.ts` | US-243 (via FEAT-021) | Root redirect, project picker, node identity in nav bar |
 | `artifacts.spec.ts` | US-080, US-081b, US-083, US-083a, US-084, US-081a | Browse library → open artifact → render by media type → edit + save → search → follow intra-repo links |
 | `graph.spec.ts` | US-081, US-081c | Open graph → pan/zoom → identify stale nodes → click node → navigate back; graph cross-link from artifact detail; integrity issue expand → apply fix → verify graph reload; non-repairable issue tooltip; stale-issue error |
 | `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-082h, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, proposed bead resolution, create/manage, worker progress, delete |

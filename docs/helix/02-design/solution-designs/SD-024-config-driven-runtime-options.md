@@ -8,6 +8,8 @@ ddx:
 ---
 # Solution Design: Config-Driven Runtime Options
 
+**Status:** Accepted
+
 > **BOUNDARY AMENDMENT (2026-07-13).** The immutable resolved-config pattern
 > below applies only to DDx-owned workflow settings and unchanged explicit
 > operator passthrough. Legacy `Profile`, model-route, catalog, provider-probe,

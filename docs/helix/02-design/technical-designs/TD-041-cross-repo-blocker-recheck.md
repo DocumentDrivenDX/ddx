@@ -1,6 +1,6 @@
 ---
 ddx:
-  id: TD-040-cross-repo-blocker-recheck
+  id: TD-041-cross-repo-blocker-recheck
   depends_on:
     - TD-031
     - TD-024
@@ -11,6 +11,8 @@ ddx:
     - ddx-a851b60b
 ---
 # Technical Design: Structured Cross-Repo Blocker Recheck
+
+**Status:** Proposed (no Acceptance Criteria section yet — see AR-2026-07-13-vision-vs-reality.md P2.2)
 
 ## Purpose
 

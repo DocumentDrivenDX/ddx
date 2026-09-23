@@ -9,6 +9,8 @@ ddx:
 ---
 # Solution Design: Multi-Machine Land Coordinator Topology
 
+**Status:** Accepted
+
 ## Purpose
 
 Define the operator-visible contract for running `ddx-server` on multiple

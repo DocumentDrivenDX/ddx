@@ -15,7 +15,7 @@ ddx:
 > state.
 
 **ID:** FEAT-009
-**Status:** Complete
+**Status:** In Progress — downgraded from Complete: verified against the current codebase, `registry.BuiltinRegistry()` (`cli/internal/registry/registry.go`) is a hardcoded package list with no `registry.yaml` fetch or cache, and `ddx plugin uninstall`/`upgrade` do not exist (`newPluginCommand` in `cli/cmd/install.go` wires only `install`/`list`/`show`; `TestRemovedInstallCommandsAreUnavailable` actively asserts top-level `install`/`installed`/`uninstall` are unavailable). Already flagged in `docs/helix/06-iterate/phase2-doc-truth-plan-2026-07-13.md:71`.
 **Priority:** P0
 **Owner:** DDx Team
 

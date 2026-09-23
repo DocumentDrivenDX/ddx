@@ -7,6 +7,8 @@ ddx:
 ---
 # Technical Design: Sidecar `.ddx.yaml` Schema
 
+**Status:** Accepted
+
 ## Purpose
 
 This design specifies the sidecar file format that extends DDx artifact identity

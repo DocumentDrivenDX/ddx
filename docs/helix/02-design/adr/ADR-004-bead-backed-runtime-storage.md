@@ -10,7 +10,7 @@ ddx:
 
 ## Status
 
-Accepted
+**Status:** Accepted
 
 ## Context
 
