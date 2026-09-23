@@ -12,6 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// canonicalLefthookGoTestRoot resolves root the same way lefthook-go-test.sh
+// resolves its own module/repo roots (cd -P / pwd -P), so assertions compare
+// against the physical path rather than a symlinked logical one (e.g. macOS
+// /var -> /private/var for t.TempDir()). Falls back to root unresolved if
+// symlink evaluation fails.
+func canonicalLefthookGoTestRoot(t *testing.T, root string) string {
+	t.Helper()
+
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return root
+	}
+	return resolved
+}
+
 func repoRootForLefthookGoTest(t *testing.T) string {
 	t.Helper()
 
@@ -117,7 +132,7 @@ func TestLefthookGoTest_FromRepoRootRunsInternalAgent(t *testing.T) {
 
 	lines := readGoLog(t, logPath)
 	require.Len(t, lines, 1)
-	assert.Equal(t, filepath.Join(root, "cli")+" | go test -short -race -timeout 30m ./internal/agent", lines[0])
+	assert.Equal(t, filepath.Join(canonicalLefthookGoTestRoot(t, root), "cli")+" | go test -short -race -timeout 30m ./internal/agent", lines[0])
 }
 
 func TestLefthookGoTest_FromCliRootRemainsCompatible(t *testing.T) {
@@ -129,7 +144,7 @@ func TestLefthookGoTest_FromCliRootRemainsCompatible(t *testing.T) {
 
 	lines := readGoLog(t, logPath)
 	require.Len(t, lines, 1)
-	assert.Equal(t, filepath.Join(root, "cli")+" | go test -short -race -timeout 30m ./internal/agent", lines[0])
+	assert.Equal(t, filepath.Join(canonicalLefthookGoTestRoot(t, root), "cli")+" | go test -short -race -timeout 30m ./internal/agent", lines[0])
 }
 
 func TestLefthookGoTest_UnmappedGoPathFailsClosed(t *testing.T) {
@@ -151,7 +166,7 @@ func TestLefthookGoTest_DeduplicatesPackageSelection(t *testing.T) {
 
 	lines := readGoLog(t, logPath)
 	require.Len(t, lines, 1)
-	assert.Equal(t, filepath.Join(root, "cli")+" | go test -short -race -timeout 30m ./internal/agent", lines[0])
+	assert.Equal(t, filepath.Join(canonicalLefthookGoTestRoot(t, root), "cli")+" | go test -short -race -timeout 30m ./internal/agent", lines[0])
 }
 
 func readFileString(t *testing.T, path string) string {

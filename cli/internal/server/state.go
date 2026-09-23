@@ -270,8 +270,13 @@ func (s *ServerState) save() error {
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
 		return err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	// A write lock, not RLock: this mutates s.Node.LastSeen below, so two
+	// concurrent save() calls (e.g. two HTTP requests each doing
+	// RegisterProject-then-save) would otherwise both hold the "read" lock
+	// simultaneously and race on that write (and on json.MarshalIndent's own
+	// read of the rest of s).
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.Node.LastSeen = time.Now().UTC()
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -404,11 +409,17 @@ func (s *ServerState) GetProjectByID(id string) (ProjectEntry, bool) {
 }
 
 // GetProjectByPath returns the project entry with the given path, if any.
+// path is symlink-resolved before comparing since Projects[].Path is stored
+// canonical (see RegisterProject/resolvedProjectPath): on macOS, t.TempDir()
+// and other callers routinely hand back a path under /var, a symlink to
+// /private/var, so a raw string compare against the stored canonical form
+// would miss every registration made through that symlink.
 func (s *ServerState) GetProjectByPath(path string) (ProjectEntry, bool) {
+	canonical := canonicalizePath(path)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.Projects {
-		if p.Path == path {
+		if p.Path == canonical {
 			return p, true
 		}
 	}

@@ -112,8 +112,9 @@ func TestGraphQLProjects(t *testing.T) {
 		t.Error("expected at least one project edge")
 	}
 	found := false
+	wantWorkDir := canonicalizePath(workDir)
 	for _, e := range resp.Data.Projects.Edges {
-		if e.Node.Path == workDir {
+		if e.Node.Path == wantWorkDir {
 			found = true
 			if !strings.HasPrefix(e.Node.ID, "proj-") {
 				t.Errorf("expected project id to start with 'proj-', got %q", e.Node.ID)
@@ -121,7 +122,7 @@ func TestGraphQLProjects(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("workDir %s not found in projects response", workDir)
+		t.Errorf("workDir %s not found in projects response", wantWorkDir)
 	}
 }
 

@@ -373,7 +373,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			})
 		} else {
 			for _, p := range paths {
-				registered[filepath.Clean(p)] = struct{}{}
+				registered[canonicalRegisteredWorktreePath(p)] = struct{}{}
 			}
 		}
 	}
@@ -503,7 +503,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			}
 		}
 
-		if _, ok := registered[filepath.Clean(path)]; ok {
+		if _, ok := registered[canonicalRegisteredWorktreePath(path)]; ok {
 			if missingMetadata {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 					Path:    path,
@@ -862,7 +862,7 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summa
 			// while measureTree walks them. Unregistered fresh scratch still
 			// respects minAge so live tests are not reaped mid-run. Dead
 			// scratch-owner markers already proved the producer is gone.
-			_, isRegistered := registered[filepath.Clean(path)]
+			_, isRegistered := registered[canonicalRegisteredWorktreePath(path)]
 			if !isRegistered && !deadScratchOwner {
 				if age := now.Sub(info.ModTime()); age < minAge {
 					summary.PreservedActiveScratchDirs++
@@ -1010,9 +1010,9 @@ func (m *ExecutionCleanupManager) isRegisteredWorktree(projectRoot, path string,
 		})
 		return false
 	}
-	clean := filepath.Clean(path)
+	clean := canonicalRegisteredWorktreePath(path)
 	for _, p := range paths {
-		if filepath.Clean(p) == clean {
+		if canonicalRegisteredWorktreePath(p) == clean {
 			return true
 		}
 	}
@@ -1133,11 +1133,54 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 	return false
 }
 
+// sameCleanPath reports whether a and b refer to the same path. Comparisons
+// canonicalize both sides (resolving symlinks such as macOS's /var ->
+// /private/var) because callers regularly compare a project root recorded on
+// disk (e.g. cleanup.json's meta.ProjectRoot, written from a caller's raw
+// working directory) against m.ProjectRoot, which some callers derive via
+// gitpkg.FindProjectRoot — a canonical, symlink-resolved path. Without
+// canonicalizing both sides the same way, a project root behind a symlink
+// (any macOS temp dir, or any real project checked out under a symlinked
+// path) spuriously mismatches its own recorded metadata, misclassifying an
+// owned worktree as "foreign" and preserving it instead of reclaiming it.
 func sameCleanPath(a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
-	return filepath.Clean(a) == filepath.Clean(b)
+	return canonicalRegisteredWorktreePath(a) == canonicalRegisteredWorktreePath(b)
+}
+
+// canonicalRegisteredWorktreePath normalizes a worktree path for use as a registered/
+// observed-set map key. `git worktree list` resolves symlinks when reporting
+// registered worktree paths (e.g. macOS's /var -> /private/var), while paths
+// built by walking TempRoot/scratch scan roots preserve whatever form the
+// project root was given in. Without canonicalizing both sides the same way,
+// a genuinely registered worktree fails the registered-set lookup, gets
+// mis-classified and force-removed as "unregistered", and is then processed
+// a second time by cleanupRegisteredDDxWorktrees against a directory that no
+// longer exists.
+//
+// The path itself may already have been removed by the time this is called
+// (e.g. an earlier pass in the same Cleanup() call already ran `git worktree
+// remove` on it), so a plain filepath.EvalSymlinks on the full path would
+// fail and silently fall back to the raw, uncanonicalized form — right when
+// canonicalization matters most for matching an already-recorded
+// observation. Walk upward to the nearest existing ancestor, resolve that,
+// and rejoin the remainder — the ancestor (TempRoot/ProjectRoot) is present
+// for the lifetime of the Cleanup() call even after a leaf worktree is gone.
+func canonicalRegisteredWorktreePath(path string) string {
+	clean := filepath.Clean(path)
+	if clean == "." || clean == string(filepath.Separator) {
+		return clean
+	}
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		return resolved
+	}
+	parent := filepath.Dir(clean)
+	if parent == clean {
+		return clean
+	}
+	return filepath.Join(canonicalRegisteredWorktreePath(parent), filepath.Base(clean))
 }
 
 func isPathWithin(path, root string) bool {
@@ -1495,7 +1538,7 @@ func (m *ExecutionCleanupManager) cleanupRegisteredDDxWorktrees(
 	seenObs := map[string]struct{}{}
 	for _, obs := range summary.Observations {
 		if obs.Path != "" {
-			seenObs[filepath.Clean(obs.Path)] = struct{}{}
+			seenObs[canonicalRegisteredWorktreePath(obs.Path)] = struct{}{}
 		}
 	}
 	for path := range registered {
@@ -1504,7 +1547,10 @@ func (m *ExecutionCleanupManager) cleanupRegisteredDDxWorktrees(
 				return
 			}
 		}
-		clean := filepath.Clean(path)
+		// registered keys are already canonicalized when built above, but
+		// re-canonicalize defensively in case a caller populates the map
+		// directly (e.g. tests).
+		clean := canonicalRegisteredWorktreePath(path)
 		if _, done := seenObs[clean]; done {
 			continue
 		}

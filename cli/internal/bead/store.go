@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -3372,17 +3373,33 @@ func detectPrefix(workingDir string) string {
 	if out, err := cmd.Output(); err == nil {
 		root := strings.TrimSpace(string(out))
 		if root != "" {
-			return filepath.Base(root)
+			return sanitizePrefix(filepath.Base(root))
 		}
 	}
 	// Fall back to the provided working dir, then cwd.
 	if workingDir != "" {
-		return filepath.Base(workingDir)
+		return sanitizePrefix(filepath.Base(workingDir))
 	}
 	if wd, err := os.Getwd(); err == nil {
-		return filepath.Base(wd)
+		return sanitizePrefix(filepath.Base(wd))
 	}
 	return DefaultPrefix
+}
+
+var prefixInvalidCharsRe = regexp.MustCompile(`[^a-zA-Z0-9-]+`)
+
+// sanitizePrefix maps a directory/repo name to the bead ID charset
+// ([a-zA-Z0-9-]), so a name containing e.g. a dot, underscore, or space
+// (very common — including mktemp's own "tmp.XXXXXXXXXX" default template,
+// which broke every bead create under a plain `mktemp -d` project root)
+// doesn't produce an ID that ValidateID then rejects. Falls back to
+// DefaultPrefix if nothing usable survives sanitization.
+func sanitizePrefix(name string) string {
+	sanitized := strings.Trim(prefixInvalidCharsRe.ReplaceAllString(name, "-"), "-")
+	if sanitized == "" {
+		return DefaultPrefix
+	}
+	return sanitized
 }
 
 // workingDir returns the project root for git operations. When Dir is the

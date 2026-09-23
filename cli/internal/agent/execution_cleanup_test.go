@@ -408,6 +408,15 @@ func TestExecutionCleanup_PreservesRegisteredMetadataLessWorktree(t *testing.T) 
 	}
 	mgr := newHermeticExecutionCleanupTestManager(t, projectRoot, tempRoot, gitOps)
 	mgr.Now = func() time.Time { return now }
+	// The attempt-process census is a documented no-op stub on non-Linux
+	// platforms (see execution_cleanup_process_other.go), where it always
+	// fails with errExecutionCleanupAttemptProcessUnavailable and would
+	// otherwise inject an unrelated "attempt_process_cleanup_unavailable"
+	// warning ahead of the metadata warning this test asserts on. Inject a
+	// deterministic empty scanner so this test's assertions are
+	// platform-independent, matching the fake-scanner pattern used in
+	// execution_cleanup_process_test.go.
+	mgr.attemptProcessScanner = fakeExecutionCleanupAttemptProcessScanner{}
 
 	summary, err := mgr.Cleanup(context.Background())
 	require.NoError(t, err)
@@ -1029,7 +1038,7 @@ func TestExecutionCleanup_DefaultScratchRootsIncludeConfiguredParentAndLegacyTem
 	assert.Contains(t, roots, configuredParent)
 	assert.Contains(t, roots, filepath.Join(configuredParent, "fixture-bin"),
 		"nested fixture-bin container must be scanned; single-level parent scan never sees ddx-fixture-bin-*")
-	assert.Contains(t, roots, os.TempDir())
+	assert.Contains(t, roots, filepath.Clean(os.TempDir()))
 }
 
 func TestExecutionCleanup_ReclaimsYoungAbandonedForeignWorktreeWithoutGrace(t *testing.T) {
@@ -2154,7 +2163,15 @@ func TestExecutionCleanup_ReclaimsRegisteredLandOutsideScratchRoots(t *testing.T
 	require.NoError(t, err)
 
 	assert.NoDirExists(t, landPath)
-	assert.Equal(t, []string{landPath}, gitOps.removed)
+	// cleanupRegisteredDDxWorktrees canonicalizes registered paths (resolving
+	// symlinks such as macOS's /var -> /private/var) so filesystem-scanned
+	// paths and `git worktree list` output compare consistently; canonicalize
+	// the expected path here the same way before comparing.
+	wantLandPath := landPath
+	if resolved, err := filepath.EvalSymlinks(orphanRoot); err == nil {
+		wantLandPath = filepath.Join(resolved, filepath.Base(landPath))
+	}
+	assert.Equal(t, []string{wantLandPath}, gitOps.removed)
 	assert.Equal(t, int64(1), summary.RemovedRegisteredWorktrees)
 	assert.True(t, hasObservationClass(summary.Observations, "removed_registered_ddx_worktree"))
 }

@@ -58,12 +58,18 @@ func newMultiProjectSelfHealingFixture(t *testing.T) *multiProjectSelfHealingFix
 	require.NotNil(t, srv.supervisorRegistry)
 	t.Cleanup(func() { _ = srv.Shutdown() })
 
+	// Canonicalize once, up front: getOrCreate keys its supervisor registry
+	// by canonical path, so every desired-state/worker-record ProjectRoot
+	// built from these roots below must already be in that form or the
+	// reconcile-time project_root/manager-root check rejects them (and, on
+	// macOS, t.TempDir() routinely returns a path under /var, a symlink to
+	// /private/var).
 	fx := &multiProjectSelfHealingFixture{
 		srv:        srv,
-		ddxRoot:    t.TempDir(),
-		cayceRoot:  t.TempDir(),
-		snorriRoot: t.TempDir(),
-		pqueueRoot: t.TempDir(),
+		ddxRoot:    canonicalizePath(t.TempDir()),
+		cayceRoot:  canonicalizePath(t.TempDir()),
+		snorriRoot: canonicalizePath(t.TempDir()),
+		pqueueRoot: canonicalizePath(t.TempDir()),
 	}
 
 	now := time.Now().UTC()

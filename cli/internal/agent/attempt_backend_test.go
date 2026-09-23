@@ -150,7 +150,11 @@ func TestDefaultAttemptBackendSandboxCanCommitWithoutPrimaryGitMetadata(t *testi
 	t.Cleanup(func() { _ = backend.Cleanup(context.Background(), ws) })
 
 	gitDir := runGitInteg(t, ws.WorkDir, "rev-parse", "--absolute-git-dir")
-	require.Equal(t, filepath.Join(ws.WorkDir, ".git"), gitDir)
+	wantWorkDir := ws.WorkDir
+	if resolved, err := filepath.EvalSymlinks(wantWorkDir); err == nil {
+		wantWorkDir = resolved
+	}
+	require.Equal(t, filepath.Join(wantWorkDir, ".git"), gitDir)
 	require.NotContains(t, gitDir, filepath.Join(projectRoot, ".git", "worktrees"))
 
 	require.NoError(t, os.WriteFile(filepath.Join(ws.WorkDir, "sandboxed.txt"), []byte("ok\n"), 0o644))

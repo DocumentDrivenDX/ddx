@@ -40,15 +40,26 @@ jobs:
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:
-        version: v2.11.4
+        version: v2.13.2
         working-directory: cli
         skip-cache: false
 
     - name: Install lefthook
       run: |
-        # Install using Go for better reliability in CI
-        go install github.com/evilmartians/lefthook@latest
-        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+        # Download the pre-built binary rather than `go install`: lefthook's
+        # own dependency graph is outside this repo's go.mod, so compiling it
+        # with whichever Go toolchain actions/setup-go resolves (cli/go.mod's
+        # `go` directive) can break independently of this repo's own
+        # dependencies — e.g. it failed to compile under Go 1.27+ once
+        # GOEXPERIMENT=jsonv2 defaulted on, the same class of break this repo
+        # fixed in its own deps via the tailscale.com bump, but unfixable here
+        # since we don't control lefthook's go.sum.
+        version=$(curl -fsSL https://api.github.com/repos/evilmartians/lefthook/releases/latest | jq -r .tag_name | sed 's/^v//')
+        curl -fsSL -o lefthook.gz "https://github.com/evilmartians/lefthook/releases/download/v${version}/lefthook_${version}_Linux_x86_64.gz"
+        gunzip lefthook.gz
+        chmod +x lefthook
+        sudo mv lefthook /usr/local/bin/lefthook
+        lefthook version
 
     - name: Set up Bun
       uses: oven-sh/setup-bun@v2

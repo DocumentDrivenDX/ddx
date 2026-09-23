@@ -20,7 +20,12 @@ func (f *CommandFactory) newArtifactCommand() *cobra.Command {
 Regeneration is an explicit wrapper around the FEAT-010 execution substrate:
 DDx selects a generator definition for the artifact, records the run, and marks
 the record with produces_artifact. DDx does not synthesize manual fallback
-prompts when an artifact has no generator provenance.`,
+prompts when an artifact has no generator provenance.
+
+check-in and check-out drive the authoring cycle of an artifact whose
+ddx.authoring.home is external-tool: check-out marks the body as not dependable
+while the document is edited in its tool, and check-in extracts the committed
+export back into the body so the Markdown is once again the read surface.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			serverreg.TryRegisterAsync(f.WorkingDir)
 			return nil
@@ -31,6 +36,8 @@ prompts when an artifact has no generator provenance.`,
 	}
 
 	cmd.AddCommand(f.newArtifactRegenerateCommand())
+	cmd.AddCommand(f.newArtifactCheckInCommand())
+	cmd.AddCommand(f.newArtifactCheckOutCommand())
 	return cmd
 }
 

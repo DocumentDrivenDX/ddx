@@ -125,8 +125,10 @@ func TestServerManagementDisabledSpawnsNothing(t *testing.T) {
 	}
 	assert.Equal(t, 0, running, "zero DDx workers when management disabled")
 
-	// Server policy zeros desired spawn intent on startup.
-	loaded, loadErr := NewWorkerSupervisor(NewWorkerManager(root)).LoadDesiredState()
+	// Server policy zeros desired spawn intent on startup, keyed by New()'s
+	// canonicalized working dir — read the desired-state file back the same
+	// way, not by the raw root the rest of this test uses directly.
+	loaded, loadErr := NewWorkerSupervisor(NewWorkerManager(canonicalizePath(root))).LoadDesiredState()
 	if loadErr == nil {
 		assert.Equal(t, 0, loaded.DesiredCount, "startup with management disabled must zero desired_count")
 	}

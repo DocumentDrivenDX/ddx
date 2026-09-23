@@ -46,6 +46,10 @@ func (s *inventoryServiceStub) RouteStatus(context.Context) (*agentlib.RouteStat
 	return s.routeStatus, nil
 }
 
+// inventoryTestContext expects workDir to already be in whatever form the
+// factory will actually receive: canonical when the caller's Server comes
+// from New() (which canonicalizes s.WorkingDir), or raw when the caller
+// builds a bare &Server{WorkingDir: ...} literal that skips New() entirely.
 func inventoryTestContext(t *testing.T, workDir string, svc *inventoryServiceStub) context.Context {
 	t.Helper()
 	return withInventoryServiceFactory(context.Background(), func(_ context.Context, gotWorkDir string) (inventoryService, error) {

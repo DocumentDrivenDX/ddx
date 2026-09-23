@@ -47,11 +47,11 @@ func (r *reviewFailureRunner) Reviewer() agent.BeadReviewer {
 		if n <= r.failUntilCall {
 			class := evidence.OutcomeReviewProviderEmpty
 			return &agent.ReviewResult{
-					Verdict:   agent.VerdictBlock,
-					Error:     class,
-					ResultRev: resultRev,
-				}, fmt.Errorf("review-failure-runner: %s: %w", class,
-					errors.New("simulated reviewer failure"))
+				Verdict:   agent.VerdictBlock,
+				Error:     class,
+				ResultRev: resultRev,
+			}, fmt.Errorf("review-failure-runner: %s: %w", class,
+				errors.New("simulated reviewer failure"))
 		}
 		return &agent.ReviewResult{
 			Verdict:   agent.VerdictApprove,
