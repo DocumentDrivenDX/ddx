@@ -9,6 +9,8 @@ ddx:
 ---
 # Solution Design: DDx Agent Skills
 
+**Status:** Accepted
+
 > **Updated 2026-04-20.** FEAT-011 consolidated the earlier 4-skill layout
 > (`ddx-bead`, `ddx-agent`, `ddx-install`, `ddx-status`) into a single
 > `ddx` skill with an intent router and per-topic reference files.

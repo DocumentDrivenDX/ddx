@@ -8,6 +8,8 @@ ddx:
 ---
 # Technical Design: Execution Definitions and Runs
 
+**Status:** Accepted
+
 ## Purpose
 
 This design defines the generic DDx execution substrate introduced by

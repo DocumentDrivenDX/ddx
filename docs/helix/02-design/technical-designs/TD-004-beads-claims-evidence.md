@@ -8,6 +8,8 @@ ddx:
 ---
 # Technical Design: Execution Evidence
 
+**Status:** Accepted
+
 > **Scope note (2026-05-11):** This TD was previously titled "Bead Claims and Execution Evidence" and bundled two concerns. Claim resolution semantics moved to TD-027 §11 (Claim Semantics) as part of the bead-architecture consolidation; this document now focuses solely on the execution-evidence subsystem.
 
 ## Purpose

@@ -75,9 +75,9 @@
 
 | Story / Feature | Criterion | Test Reference | Status | Evidence |
 |-----------------|-----------|----------------|--------|----------|
-| FEAT-020 / US-087 | GET /api/node returns stable node ID, name, started_at | TestGetNode | SATISFIED | `cli/internal/server/server_test.go:2434-2460` |
-| FEAT-020 / US-088 | POST /api/projects/register adds project; GET /api/projects lists it | TestRegisterProject, TestRegisterProjectIdempotent | SATISFIED | `cli/internal/server/server_test.go:2493-2543` |
-| FEAT-020 / US-088 | CLI ddx bead/agent/doc calls TryRegisterAsync | Source inspection | SATISFIED | `cli/cmd/bead.go:39`, `cli/cmd/agent_cmd.go:56`, `cli/cmd/doc.go:40` |
+| FEAT-020 / US-237 | GET /api/node returns stable node ID, name, started_at | TestGetNode | SATISFIED | `cli/internal/server/server_test.go:2434-2460` |
+| FEAT-020 / US-238 | POST /api/projects/register adds project; GET /api/projects lists it | TestRegisterProject, TestRegisterProjectIdempotent | SATISFIED | `cli/internal/server/server_test.go:2493-2543` |
+| FEAT-020 / US-238 | CLI ddx bead/agent/doc calls TryRegisterAsync | Source inspection | SATISFIED | `cli/cmd/bead.go:39`, `cli/cmd/agent_cmd.go:56`, `cli/cmd/doc.go:40` |
 | FEAT-020 / US-089 | State survives restart; GET /api/projects returns previously registered projects | no test | UNTESTED | `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:196-204` |
 | FEAT-020 / TC-011.2 | Server writes server.addr under XDG_DATA_HOME/ddx | no test | UNTESTED | `cli/internal/server/server.go:158-164` |
 | FEAT-020 / TC-011.6 | Second ddx server start overwrites addr file | no test | UNTESTED | `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:203-205` |
@@ -85,8 +85,8 @@
 | FEAT-014 / US-143 | Provider dashboard shows all harnesses with availability, auth, quota/headroom | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-014-token-awareness.md:373-395` |
 | FEAT-006 / progress | GET /api/projects/:project/workers/:id/progress streams SSE progress events | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-002-server.md:163-179`, `docs/helix/01-frame/features/FEAT-006-agent-service.md:765-776` |
 | FEAT-002 / req 22-25 | Worker list/show returns current_attempt and recent_phases | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-002-server.md:145-214`, `cli/internal/server/workers.go:31-68` |
-| FEAT-021 / US-090 | Combined bead view shows beads from all projects | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:192-202` |
-| FEAT-021 / US-091 | /nodes/:nodeId/projects/:projectId URL routing works as deep link | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:46-74` |
+| FEAT-021 / US-239 | Combined bead view shows beads from all projects | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:192-202` |
+| FEAT-021 / US-240 | /nodes/:nodeId/projects/:projectId URL routing works as deep link | no test | UNIMPLEMENTED | `docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:46-74` |
 | TP-002 / TC-010 | Project registry and scoped routing covered by Playwright projects.spec.ts | no test | PLANNED | `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:168-190` |
 | TP-002 / TC-012 | Project isolation tested (disjoint bead sets, concurrent requests) | no test | PLANNED | `docs/helix/03-test/test-plans/TP-002-server-web-ui.md:206-216` |
 | TP-002 / TC-013 | Worker lifecycle tested (start, logs, stop, scope, replay artifacts) | workers_test.go covers start/list/stop; TC-013.4/5/6 planned | PARTIAL | `cli/internal/server/workers_test.go:16-202` |
@@ -122,7 +122,7 @@
 
 | Vision | Requirement | Feature/Story | Arch/ADR | Design | Tests | Impl Plan | Code Status | Classification |
 |--------|-------------|---------------|----------|--------|-------|-----------|-------------|----------------|
-| Provide reusable local runtime services | One server per machine, XDG state, CLI auto-registration | FEAT-020 / US-087, US-088, US-089 | `docs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md:56-70` | FEAT-020 | TC-011 (partially covered by server_test.go) | ddx-8b6cd40e | State, node identity, registry, CLI hooks all aligned; state persistence tests incomplete | PARTIAL |
+| Provide reusable local runtime services | One server per machine, XDG state, CLI auto-registration | FEAT-020 / US-237, US-238, US-089 | `docs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md:56-70` | FEAT-020 | TC-011 (partially covered by server_test.go) | ddx-8b6cd40e | State, node identity, registry, CLI hooks all aligned; state persistence tests incomplete | PARTIAL |
 | Provide reusable local runtime services | Project-scoped HTTP and MCP routing | FEAT-002, SD-019 | `docs/helix/02-design/architecture.md` | SD-019 | TP-002 TC-010 | hx-bed139d3 | Legacy unscoped routes still authoritative; canonical project-scoped routes unimplemented | DIVERGENT |
 | Track process metrics from existing evidence | Provider availability, utilization, and routing signals | FEAT-002 reqs 26-27, FEAT-014 | FEAT-002 | FEAT-014 | no test | ddx-8fd9436e (new) | No /api/providers routes exist | UNIMPLEMENTED |
 | Provide reusable local runtime services | Live worker progress observable through SSE | FEAT-002 req 24, FEAT-006 progress events | SD-019 | FEAT-006 §Embedded-Agent Progress Events | workers_test.go (partial); TC-013 | ddx-7869b685 (new) | No SSE progress endpoint; WorkerRecord shape incomplete | DIVERGENT |

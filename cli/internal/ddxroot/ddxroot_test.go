@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -274,6 +275,212 @@ func TestDDxRoot_ConventionMode_LocalFallback(t *testing.T) {
 	if got != want {
 		t.Fatalf("Path() = %q, want %q", got, want)
 	}
+}
+
+func TestDDxRoot_PathMemoizesBootstrapWithinProcess(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	calls := 0
+	restore := stubBootstrapConventionRootFn(t, func(ctx context.Context, projectRoot, root string) error {
+		calls++
+		return bootstrapConventionRoot(ctx, projectRoot, root)
+	})
+	defer restore()
+
+	var roots [5]string
+	for i := range roots {
+		roots[i] = Path(context.Background(), projectRoot)
+	}
+	for i := 1; i < len(roots); i++ {
+		require.Equal(t, roots[0], roots[i])
+	}
+	require.Equal(t, 1, calls, "bootstrap must run once per process for a stable root")
+
+	registryPath := filepath.Join(roots[0], "worktrees.json")
+	before, err := os.Stat(registryPath)
+	require.NoError(t, err)
+	_ = Path(context.Background(), projectRoot)
+	after, err := os.Stat(registryPath)
+	require.NoError(t, err)
+	require.Equal(t, before.ModTime(), after.ModTime(), "worktrees.json must not be rewritten by cached calls")
+}
+
+func TestDDxRoot_PathCacheRelativeAndAbsoluteShareEntry(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	calls := 0
+	restore := stubBootstrapConventionRootFn(t, func(ctx context.Context, projectRoot, root string) error {
+		calls++
+		return bootstrapConventionRoot(ctx, projectRoot, root)
+	})
+	defer restore()
+
+	abs := Path(context.Background(), projectRoot)
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	rel, err := filepath.Rel(wd, projectRoot)
+	require.NoError(t, err)
+	relRoot := Path(context.Background(), rel)
+
+	require.Equal(t, abs, relRoot)
+	require.Equal(t, 1, calls, "relative and absolute spellings of the same root must share one bootstrap")
+}
+
+func TestDDxRoot_PathCacheRespectsXDGDataHomeChange(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	calls := 0
+	restore := stubBootstrapConventionRootFn(t, func(ctx context.Context, projectRoot, root string) error {
+		calls++
+		return bootstrapConventionRoot(ctx, projectRoot, root)
+	})
+	defer restore()
+
+	xdgA := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgA)
+	rootA := Path(context.Background(), projectRoot)
+
+	xdgB := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgB)
+	rootB := Path(context.Background(), projectRoot)
+
+	require.NotEqual(t, rootA, rootB)
+	require.True(t, strings.HasPrefix(rootA, xdgA))
+	require.True(t, strings.HasPrefix(rootB, xdgB))
+	require.Equal(t, 2, calls, "repointing XDG_DATA_HOME must not reuse the prior root's cache entry")
+}
+
+func TestDDxRoot_PathCacheNotPoisonedByBootstrapFailure(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	calls := 0
+	injectErr := true
+	restore := stubBootstrapConventionRootFn(t, func(ctx context.Context, projectRoot, root string) error {
+		calls++
+		if injectErr {
+			injectErr = false
+			return errFakeBootstrapFailure
+		}
+		return bootstrapConventionRoot(ctx, projectRoot, root)
+	})
+	defer restore()
+
+	_ = Path(context.Background(), projectRoot)
+	require.Equal(t, 1, calls, "first call should have attempted bootstrap")
+	require.False(t, headExistsForTest(t, filepath.Join(xdg, "ddx", "projects", expectedLocalIdentity(projectRoot))))
+
+	root := Path(context.Background(), projectRoot)
+	require.Equal(t, 2, calls, "a failed bootstrap must not be cached as successful")
+	require.True(t, headExistsForTest(t, root))
+
+	_ = Path(context.Background(), projectRoot)
+	require.Equal(t, 2, calls, "a successful bootstrap must then be cached")
+}
+
+func TestDDxRoot_PathInTreeCheckStaysLiveAfterConventionCache(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	conventionRoot := Path(context.Background(), projectRoot)
+	require.True(t, strings.HasPrefix(conventionRoot, xdg))
+
+	inTree := InTree(projectRoot)
+	require.NoError(t, os.MkdirAll(inTree, 0o755))
+
+	got := Path(context.Background(), projectRoot)
+	require.Equal(t, inTree, got, "an in-tree .ddx/ created mid-process must take effect immediately")
+}
+
+func TestDDxRoot_PathCacheRebootstrapsWhenConventionRootRemoved(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	calls := 0
+	restore := stubBootstrapConventionRootFn(t, func(ctx context.Context, projectRoot, root string) error {
+		calls++
+		return bootstrapConventionRoot(ctx, projectRoot, root)
+	})
+	defer restore()
+
+	root := Path(context.Background(), projectRoot)
+	require.Equal(t, 1, calls)
+
+	require.NoError(t, os.RemoveAll(root))
+
+	root2 := Path(context.Background(), projectRoot)
+	require.Equal(t, root, root2)
+	require.Equal(t, 2, calls, "a convention root removed out from under the process must be re-bootstrapped")
+	require.True(t, headExistsForTest(t, root2))
+}
+
+func TestExistingPath_ReusesIdentityWithoutBootstrapping(t *testing.T) {
+	t.Cleanup(resetPathCache)
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	calls := 0
+	restore := stubBootstrapConventionRootFn(t, func(ctx context.Context, projectRoot, root string) error {
+		calls++
+		return bootstrapConventionRoot(ctx, projectRoot, root)
+	})
+	defer restore()
+
+	_, ok := ExistingPath(context.Background(), projectRoot)
+	require.False(t, ok)
+	require.Equal(t, 0, calls, "ExistingPath must never bootstrap")
+
+	root := Path(context.Background(), projectRoot)
+	require.Equal(t, 1, calls)
+
+	got, ok := ExistingPath(context.Background(), projectRoot)
+	require.True(t, ok)
+	require.Equal(t, root, got)
+	require.Equal(t, 1, calls, "ExistingPath must reuse the cached identity rather than re-resolving it")
+}
+
+var errFakeBootstrapFailure = errors.New("fake bootstrap failure")
+
+func stubBootstrapConventionRootFn(t *testing.T, fn func(ctx context.Context, projectRoot, root string) error) func() {
+	t.Helper()
+	prev := bootstrapConventionRootFn
+	bootstrapConventionRootFn = fn
+	return func() { bootstrapConventionRootFn = prev }
 }
 
 func TestDDxRoot_URLParsing(t *testing.T) {

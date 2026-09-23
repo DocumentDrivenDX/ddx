@@ -6,6 +6,8 @@ ddx:
 ---
 # Technical Design: Config-Driven Runtime Options
 
+**Status:** Accepted
+
 > **NEEDS REVISION — NOT EXECUTION-READY (2026-07-13).** The type-sealing and
 > DDx-owned configuration goals remain useful, but route-shaped field tables and
 > code samples below predate the corrected Fizeau boundary. They must not be

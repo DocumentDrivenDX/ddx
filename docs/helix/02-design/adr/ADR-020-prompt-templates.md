@@ -1,7 +1,7 @@
 # ADR-020: Prompt Template System with Quality Gates
 
 **Date**: 2026-04-07
-**Status**: Rejected (2026-04-21)
+**Status:** Rejected (2026-04-21)
 **Authors**: Prompt Engineering Experiment Results
 
 ---

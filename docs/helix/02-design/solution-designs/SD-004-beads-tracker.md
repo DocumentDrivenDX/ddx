@@ -11,6 +11,8 @@ ddx:
 ---
 # Solution Design: Beads Tracker
 
+**Status:** Accepted
+
 ## Overview
 
 This design specifies the runtime behavior of `ddx bead` and the file-backed

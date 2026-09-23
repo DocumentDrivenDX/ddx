@@ -9,6 +9,8 @@ ddx:
 ---
 # Solution Design: Multi-Agent Coordination
 
+**Status:** Accepted
+
 ## Purpose
 
 This design specifies how DDx makes multi-agent and multi-machine work safe

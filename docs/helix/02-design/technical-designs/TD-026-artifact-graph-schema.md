@@ -8,6 +8,8 @@ ddx:
 ---
 # Technical Design: Artifact Graph Schema
 
+**Status:** Accepted
+
 ## Purpose
 
 This design defines the graph record shape used after artifact identity expands

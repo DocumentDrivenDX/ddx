@@ -3,7 +3,7 @@ ddx:
   id: TD-036
   depends_on:
     - FEAT-027
-  status: implemented
+  status: superseded # boundary decision (Decision section) superseded by ADR-025; core prose-check surfaces remain implemented and tested
 ---
 # Technical Design: Prose Quality Pipeline
 

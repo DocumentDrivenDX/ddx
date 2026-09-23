@@ -1514,7 +1514,7 @@ The shared tab strip is:
 
 ## User Stories
 
-### US-090: Developer Inspects a Layer-1 Run
+### US-233: Developer Inspects a Layer-1 Run
 
 **As a** developer running an ad-hoc agent invocation
 **I want** to inspect the resulting run record
@@ -1529,7 +1529,7 @@ The shared tab strip is:
   operator `MaxPower` when supplied, actual model/power audit facts, requested
   passthrough constraints if supplied, and attachment references.
 
-### US-091: Developer Inspects a Layer-2 Bead Attempt
+### US-234: Developer Inspects a Layer-2 Bead Attempt
 
 **As a** developer reviewing a bead attempt
 **I want** to see the attempt's worktree finalization and the child
@@ -1602,7 +1602,7 @@ spinning, or interrupted
   their child layer-1 run ids are reachable by following
   `parent_run_id` pointers.
 
-### US-095: Artifact Regeneration Records Provenance
+### US-235: Artifact Regeneration Records Provenance
 
 **As a** consumer of the document graph
 **I want** generated artifacts to point back to the run that produced
@@ -1615,7 +1615,7 @@ them
 - Given a generated artifact has been produced by a run, then
   FEAT-007's `generated_by` edge resolves to that run id.
 
-### US-096: Operator Migrates From Legacy Run Trees
+### US-236: Operator Migrates From Legacy Run Trees
 
 **As a** repo operator adopting the unified substrate
 **I want** legacy `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/`

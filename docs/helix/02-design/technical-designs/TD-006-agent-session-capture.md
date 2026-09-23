@@ -6,6 +6,8 @@ ddx:
 ---
 # Technical Design: Agent Invocation Activity and Native Session References
 
+**Status:** Accepted
+
 ## File Layout
 
 For the JSONL backend, DDx invocation activity records and any optional

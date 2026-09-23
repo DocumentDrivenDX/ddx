@@ -14,6 +14,8 @@ ddx:
 ---
 # Solution Design: Hub Control Plane and Managed Nodes
 
+**Status:** Accepted
+
 ## Purpose
 
 Define DDx's multi-node control-plane topology after the managed-node decision

@@ -11,6 +11,8 @@ ddx:
 ---
 # Technical Design: Drain-Loop Operational Contract over Beads
 
+**Status:** Accepted
+
 ## Purpose
 
 This TD specifies the **operational contract** by which the DDx drain loop / executor consumes the bead lifecycle defined in [TD-027](TD-027-bead-collection-abstraction.md). It is the policy layer between bead storage primitives and the agent execution machinery.

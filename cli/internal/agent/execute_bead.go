@@ -1518,7 +1518,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// cancel-honored:true so subsequent cancel POSTs are silent no-ops.
 	dispatchCtx, dispatchCancel := context.WithCancel(ctx)
 	defer dispatchCancel()
-	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
+	cancelHonored, stopCancelPoll := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
 	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
@@ -1531,6 +1531,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Runtime:     runRuntime,
 	})
 	stopRunStateRefresh()
+	stopCancelPoll()
 	cleanupTrigger := ""
 	if dispatchCtx.Err() != nil {
 		cleanupTrigger = dispatchCtx.Err().Error()

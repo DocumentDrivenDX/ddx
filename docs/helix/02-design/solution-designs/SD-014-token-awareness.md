@@ -10,6 +10,8 @@ ddx:
 ---
 # Solution Design: Agent Usage, Cost, and Runtime Projections
 
+**Status:** Accepted
+
 ## Purpose
 
 DDx records the resource facts that Fizeau returns for an agent operation and
