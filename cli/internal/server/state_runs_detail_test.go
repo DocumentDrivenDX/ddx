@@ -381,8 +381,8 @@ func TestDocumentPathConfinement_RejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected normal path to resolve, got error: %v", err)
 	}
-	if resolved != normalFile {
-		t.Errorf("expected %q, got %q", normalFile, resolved)
+	if want := canonicalizePath(normalFile); resolved != want {
+		t.Errorf("expected %q, got %q", want, resolved)
 	}
 }
 

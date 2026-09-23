@@ -146,6 +146,15 @@ func listRunBundleFiles(bundleRoot string) []*ddxgraphql.RunBundleFile {
 	if bundleRoot == "" {
 		return out
 	}
+	// Canonicalize the root itself before walking: the escape check below
+	// compares each entry's symlink-resolved form against bundleRoot, so if
+	// bundleRoot sits behind a symlink (e.g. macOS's /var -> /private/var)
+	// but isn't resolved here too, filepath.Rel produces a nonsense
+	// cross-tree relative path and every legitimate file looks like an
+	// escape, silently dropping the whole listing.
+	if canonical := canonicalizePath(bundleRoot); canonical != "" {
+		bundleRoot = canonical
+	}
 	_ = filepath.Walk(bundleRoot, func(p string, info os.FileInfo, err error) error {
 		if err != nil || info == nil {
 			return nil

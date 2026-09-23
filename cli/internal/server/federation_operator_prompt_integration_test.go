@@ -144,7 +144,7 @@ func TestFederation_OperatorPromptSubmit_CoordinatorToSpoke_IdentityUnchanged(t 
 		t.Fatalf("EnableSpokeMode: %v", err)
 	}
 
-	projID := projectID(spokeDir)
+	projID := projectID(canonicalizePath(spokeDir))
 	requestBody := map[string]any{
 		"query": operatorPromptSubmitMutation,
 		"variables": map[string]any{

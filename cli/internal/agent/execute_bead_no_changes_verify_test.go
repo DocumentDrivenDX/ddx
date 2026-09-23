@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -163,30 +161,10 @@ func TestDefaultVerificationCommandRunner(t *testing.T) {
 	})
 }
 
-func TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("process-group assertions are unix-specific")
-	}
-
-	projectRoot := t.TempDir()
-	shellPIDFile := filepath.Join(projectRoot, "inner-shell.pid")
-	childPIDFile := filepath.Join(projectRoot, "sleep.pid")
-	command := nestedPIDCaptureCommand(shellPIDFile, childPIDFile, "sleep 30")
-
-	code, _, err := DefaultVerificationCommandRunnerWithTimeout(time.Second)(context.Background(), projectRoot, command)
-	require.Error(t, err)
-	assert.Equal(t, -1, code)
-	assert.Contains(t, err.Error(), "timed out after")
-
-	shellPID := readPIDFile(t, shellPIDFile)
-	childPID := readPIDFile(t, childPIDFile)
-	var shellState, childState string
-	require.Eventually(t, func() bool {
-		shellState = processDeadOrZombieStatus(shellPID)
-		childState = processDeadOrZombieStatus(childPID)
-		return processDeadOrZombie(shellPID) && processDeadOrZombie(childPID)
-	}, time.Second, 20*time.Millisecond, "shell proc state=%s child proc state=%s", procStateSnapshot{&shellState}, procStateSnapshot{&childState})
-}
+// TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup lives in
+// execute_bead_no_changes_verify_linux_test.go: it asserts on /proc-derived
+// zombie/dead process state via processDeadOrZombieStatus, which is
+// Linux-only (see process_dead_or_zombie_linux_test.go).
 
 func TestDefaultVerificationCommandRunnerAllowsConfiguredLongGate(t *testing.T) {
 	command := "sh -lc 'sleep 0.05'"

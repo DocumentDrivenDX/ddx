@@ -332,6 +332,14 @@ func localProjectIdentity(projectRoot string) string {
 	if err != nil {
 		absRoot = filepath.Clean(projectRoot)
 	}
+	// Resolve symlinks so this converges with internal/workerstatus's own
+	// canonicalPath: on macOS, t.TempDir() (and some real project layouts)
+	// sit under /var, a symlink to /private/var, so hashing the raw form
+	// here while workerstatus hashes the resolved form produces two
+	// different identities for the same physical project.
+	if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRoot = resolved
+	}
 	base := filepath.Base(absRoot)
 	if base == "." || base == string(filepath.Separator) || base == "" {
 		base = "project"

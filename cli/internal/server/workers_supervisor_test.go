@@ -1489,6 +1489,10 @@ func runningManagedWorkers(t *testing.T, m *WorkerManager, projectRoot string) [
 	recs, err := m.List()
 	require.NoError(t, err)
 
+	// projectRoot must already be in whatever form the underlying
+	// WorkerRecord.ProjectRoot actually uses: canonical when m came from a
+	// canonicalizing path (e.g. SupervisorRegistry.getOrCreate), or raw when
+	// the caller built a standalone NewWorkerManager(root) directly.
 	out := make([]WorkerRecord, 0, len(recs))
 	for _, rec := range recs {
 		if rec.Kind != "work" || rec.ProjectRoot != projectRoot || rec.State != "running" {

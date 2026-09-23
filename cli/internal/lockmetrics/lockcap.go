@@ -237,6 +237,19 @@ const executeBeadClonePathSegment = ".execute-bead-clone-"
 // same project lock domain. Otherwise the caller falls back to the standard
 // project-scoped DDx path.
 func SharedMainGitLockRoot(projectRoot string) string {
+	// Canonicalize up front: git's own worktree/checkout paths are already
+	// symlink-resolved, but a caller-supplied projectRoot (e.g. a raw
+	// t.TempDir() on macOS, where /var is a symlink to /private/var) may not
+	// be. Without this, two entry points for the "same" project can resolve
+	// to different lock-path strings, defeating the whole point of a shared
+	// lock domain.
+	if abs, err := filepath.Abs(projectRoot); err == nil {
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+			projectRoot = resolved
+		} else {
+			projectRoot = abs
+		}
+	}
 	// Only shell out to git config for isolated local-clone attempt paths.
 	// Ordinary project roots and linked worktrees must not pay a git-config
 	// round-trip on every withMainGitLock (ddx-39e78654).
@@ -286,6 +299,13 @@ func sharedMainGitLockRootFromConfig(projectRoot string) string {
 	}
 	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
 		return ""
+	}
+	// Symlink-resolve so this converges with SharedMainGitLockRoot's own
+	// canonicalization above: the value in git config was written from
+	// whatever raw path the clone was created with, not necessarily
+	// resolved (e.g. macOS's /var -> /private/var).
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved
 	}
 	return abs
 }

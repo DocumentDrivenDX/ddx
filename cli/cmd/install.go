@@ -430,8 +430,26 @@ func prepareSymlinkTarget(target string, force bool) error {
 // do not auto-commit so the recorded plugin pin remains whatever the project
 // already declares.
 func (f *CommandFactory) installLocal(name, localPath string, force bool, global bool, out io.Writer) error {
-	// Resolve to absolute path.
-	absPath, err := filepath.Abs(localPath)
+	// Resolve to absolute path. Relative paths are resolved against
+	// f.WorkingDir (the project root) rather than filepath.Abs's implicit
+	// os.Getwd(), because the caller's Chdir(f.WorkingDir) above makes
+	// os.Getwd() return the OS's canonicalized cwd (e.g. macOS resolves
+	// /var -> /private/var) rather than the literal f.WorkingDir string.
+	// Using f.WorkingDir directly keeps this path consistent with the rest
+	// of installLocal, which builds destination paths from f.WorkingDir
+	// unresolved.
+	var absPath string
+	var err error
+	if filepath.IsAbs(localPath) {
+		absPath = filepath.Clean(localPath)
+	} else if f.WorkingDir != "" {
+		absPath = filepath.Join(f.WorkingDir, localPath)
+		if !filepath.IsAbs(absPath) {
+			absPath, err = filepath.Abs(absPath)
+		}
+	} else {
+		absPath, err = filepath.Abs(localPath)
+	}
 	if err != nil {
 		return fmt.Errorf("resolving path %s: %w", localPath, err)
 	}

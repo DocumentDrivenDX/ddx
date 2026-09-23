@@ -206,11 +206,11 @@ func TestStateFileProjectsPersistAcrossRestart(t *testing.T) {
 	for _, p := range projects {
 		paths[p.Path] = true
 	}
-	if !paths[workDir] {
-		t.Errorf("workDir %s missing from project list after restart", workDir)
+	if want := canonicalizePath(workDir); !paths[want] {
+		t.Errorf("workDir %s missing from project list after restart", want)
 	}
-	if !paths[extraPath] {
-		t.Errorf("extraPath %s missing from project list after restart", extraPath)
+	if want := canonicalizePath(extraPath); !paths[want] {
+		t.Errorf("extraPath %s missing from project list after restart", want)
 	}
 }
 

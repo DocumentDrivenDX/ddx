@@ -161,7 +161,28 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		wallClockElapsed  atomic.Int64
 		killOnce          sync.Once
 	)
-	stopProcess := func() { killOnce.Do(func() { cmdKillProcessGroup(cmd) }) }
+	stopProcess := func() {
+		killOnce.Do(func() {
+			// A single cmdKillProcessGroup(-pid) shot has a real TOCTOU
+			// race for a shell script with multiple `;`-separated commands
+			// (e.g. this package's own "echo ...; sleep 60" test fixture):
+			// the shell can still be mid-fork for its NEXT command when we
+			// signal the CURRENT process group, so that next child is
+			// created after the kill already fired and returned, is never
+			// signaled, and runs to completion. Verified empirically with
+			// a standalone repro: one kill attempt fails intermittently;
+			// retrying the group-kill for a few hundred ms reliably also
+			// catches a child forked in that narrow window.
+			deadline := time.Now().Add(300 * time.Millisecond)
+			for {
+				cmdKillProcessGroup(cmd)
+				if time.Now().After(deadline) {
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		})
+	}
 	activity := make(chan struct{}, 1)
 	pulse := func() {
 		select {

@@ -13,23 +13,9 @@ import (
 	"time"
 )
 
-// TestCmdSetProcessGroup_Pdeathsig verifies that cmdSetProcessGroup sets
-// Pdeathsig to SIGKILL on Linux to ensure harness children die when the
-// parent worker dies abnormally.
-func TestCmdSetProcessGroup_Pdeathsig(t *testing.T) {
-	cmd := exec.Command("sleep", "60")
-	cmdSetProcessGroup(cmd)
-
-	if cmd.SysProcAttr == nil {
-		t.Fatal("SysProcAttr is nil")
-	}
-	if !cmd.SysProcAttr.Setpgid {
-		t.Error("Setpgid is not true")
-	}
-	if cmd.SysProcAttr.Pdeathsig != syscall.SIGKILL {
-		t.Errorf("Pdeathsig = %v, want SIGKILL", cmd.SysProcAttr.Pdeathsig)
-	}
-}
+// TestCmdSetProcessGroup_Pdeathsig lives in executor_pdeathsig_linux_test.go:
+// Pdeathsig only exists on Linux's syscall.SysProcAttr (see
+// executor_darwin_bsd.go, which doesn't set it on other Unix platforms).
 
 // TestExecutor_OrphanKilledOnParentSIGKILL verifies that a harness child
 // does not survive when its parent worker is killed with SIGKILL.

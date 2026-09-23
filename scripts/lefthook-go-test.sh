@@ -10,10 +10,17 @@ if [ "$#" -eq 0 ]; then
   exit 0
 fi
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+# Resolve every path physically (-P) so a symlinked temp/parent dir (e.g.
+# macOS /var -> /private/var) can never produce a canonical path on one side
+# of a comparison and a non-canonical path on the other. Relying on plain
+# `pwd`/`cd` here is unsafe: it trusts the inherited $PWD when it matches the
+# physical cwd and silently falls back to the resolved physical path when it
+# doesn't (e.g. when a caller chdirs via exec without exporting PWD, as Go's
+# os/exec does) — producing exactly that inconsistency.
+script_dir=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+repo_root=$(CDPATH= cd -P -- "$script_dir/.." && pwd -P)
 module_root="$repo_root/cli"
-cwd_root=$(pwd)
+cwd_root=$(pwd -P)
 
 packages_file=$(mktemp)
 trap 'rm -f "$packages_file"' EXIT HUP INT TERM

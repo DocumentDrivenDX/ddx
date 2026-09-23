@@ -164,6 +164,19 @@ func TestDocProseCommandMissingRunnerReportsDiagnostic(t *testing.T) {
 	gitPath := mustLookPath(t, "git")
 	binDir := t.TempDir()
 	require.NoError(t, os.Symlink(gitPath, filepath.Join(binDir, "git")))
+	// git-receive-pack/git-upload-pack are separate binaries (not colocated
+	// with `git` on every platform, e.g. under `git --exec-path` on macOS's
+	// Command Line Tools) that git's local (file://) transport looks up via
+	// PATH itself. NewTestEnvironment below builds a fixture library over a
+	// file:// remote and pushes to it, so without these, that push fails
+	// with "git-receive-pack: command not found" under this test's
+	// restricted PATH.
+	if receivePackPath := lookPathOrExecPath(t, gitPath, "git-receive-pack"); receivePackPath != "" {
+		require.NoError(t, os.Symlink(receivePackPath, filepath.Join(binDir, "git-receive-pack")))
+	}
+	if uploadPackPath := lookPathOrExecPath(t, gitPath, "git-upload-pack"); uploadPackPath != "" {
+		require.NoError(t, os.Symlink(uploadPackPath, filepath.Join(binDir, "git-upload-pack")))
+	}
 	t.Setenv("PATH", binDir)
 
 	env := NewTestEnvironment(t)
@@ -193,6 +206,42 @@ func mustLookPath(t *testing.T, name string) string {
 	return found
 }
 
+// lookPathOrExecPath resolves name via the normal PATH first, falling back to
+// `<gitPath> --exec-path` (where git-core helper binaries like
+// git-receive-pack and git-upload-pack live on some platforms, e.g. macOS's
+// Command Line Tools, separately from the `git` binary itself) and then a
+// handful of well-known Command Line Tools / Homebrew exec-path locations.
+// Querying --exec-path via the already-resolved gitPath (rather than a bare
+// "git" that would do its own, possibly different, PATH lookup) keeps this
+// consistent with the git binary actually being symlinked into the test's
+// constrained PATH. Returns "" if not found any way rather than failing the
+// test outright, since not every test needs it.
+func lookPathOrExecPath(t *testing.T, gitPath, name string) string {
+	t.Helper()
+	if found, err := exec.LookPath(name); err == nil {
+		return found
+	}
+	if execPath, err := exec.Command(gitPath, "--exec-path").Output(); err == nil {
+		candidate := filepath.Join(strings.TrimSpace(string(execPath)), name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	for _, dir := range []string{
+		"/Library/Developer/CommandLineTools/usr/libexec/git-core",
+		"/usr/libexec/git-core",
+		"/opt/homebrew/libexec/git-core",
+		"/usr/local/libexec/git-core",
+		"/usr/lib/git-core",
+	} {
+		candidate := filepath.Join(dir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // installFakeVale writes a shell script named "vale" into a temp bin dir that
 // returns the given JSON output (for the linting invocation) and reports a
 // supported version when invoked with --version. The directory also exposes
@@ -206,9 +255,20 @@ func installFakeVale(t *testing.T, lintJSON string) string {
 	binDir := t.TempDir()
 
 	// Re-expose the real git binary on the constrained PATH so git status
-	// inside the changed-paths helper still works.
+	// inside the changed-paths helper still works. git-receive-pack is a
+	// separate binary (not under the same PATH entry as `git` on macOS,
+	// where it lives under `git --exec-path`) that git's local (file://)
+	// transport looks up via PATH itself when pushing, so it must be
+	// re-exposed too or `git push` to a file:// remote fails with
+	// "git-receive-pack: command not found".
 	gitPath := mustLookPath(t, "git")
 	require.NoError(t, os.Symlink(gitPath, filepath.Join(binDir, "git")))
+	if receivePackPath := lookPathOrExecPath(t, gitPath, "git-receive-pack"); receivePackPath != "" {
+		require.NoError(t, os.Symlink(receivePackPath, filepath.Join(binDir, "git-receive-pack")))
+	}
+	if uploadPackPath := lookPathOrExecPath(t, gitPath, "git-upload-pack"); uploadPackPath != "" {
+		require.NoError(t, os.Symlink(uploadPackPath, filepath.Join(binDir, "git-upload-pack")))
+	}
 
 	scriptPath := filepath.Join(binDir, "vale")
 	// The script must rely only on shell built-ins because tests set PATH

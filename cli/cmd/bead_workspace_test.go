@@ -37,8 +37,13 @@ func TestBeadWorkspaceRoot_RelativeEnvInsideLinkedWorktreeUsesPrimaryWorkspace(t
 	t.Setenv("DDX_BEAD_DIR", ".ddx")
 	factory := NewCommandFactory(worktreeRoot)
 
+	wantProjectRoot := projectRoot
+	if resolved, err := filepath.EvalSymlinks(projectRoot); err == nil {
+		wantProjectRoot = resolved
+	}
+
 	got := factory.beadWorkspaceRoot()
-	require.Equal(t, projectRoot, got,
+	require.Equal(t, wantProjectRoot, got,
 		"relative DDX_BEAD_DIR inside execute-bead worktrees must resolve to the primary workspace, not the worktree")
 }
 

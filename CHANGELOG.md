@@ -4,6 +4,30 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: `ddx artifact check-in` / `check-out` for external-tool artifacts
+
+The HELIX artifact schema defines `authoring.home: external-tool` with a
+`checked-out` / `checked-in` cycle, but nothing produced the `checked-in`
+state. DDx now does.
+
+`ddx artifact check-in <artifact-id>` reads `ddx.authoring.export` — the
+committed original exported from the authoring tool — converts it to Markdown,
+and replaces the artifact's body with the result, preserving the frontmatter.
+It sets `ddx.authoring.state: checked-in` and writes
+`ddx.authoring.export_sha256`, a new field that makes "the body matches the
+external document" verifiable rather than asserted.
+
+`ddx artifact check-out <artifact-id>` sets `ddx.authoring.state: checked-out`
+and leaves the body and `export` alone: the previous check-in remains as the
+last known copy, as the schema requires.
+
+`.pptx` is the first supported export format, ported from the deterministic
+Python reference extractor: slides in numeric order, runs joined without a
+separator (PowerPoint splits words mid-run), `<a:br>` line breaks, tables,
+image alt text and speaker notes. Conversion is byte-for-byte deterministic so
+committed renderings diff meaningfully. `.docx`, `.pdf` and others plug in
+behind the `internal/docconvert.Converter` interface.
+
 ### Fixed: pin Fizeau v0.17.3 for claude-tui Stop-hook flush-race wait
 
 DDx now consumes `github.com/easel/fizeau v0.17.3`. That release waits briefly

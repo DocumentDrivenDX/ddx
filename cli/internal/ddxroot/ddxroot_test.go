@@ -124,16 +124,17 @@ func TestDDxRoot_BootstrapInitsGitRepoInXDG(t *testing.T) {
 	if !headExistsForTest(t, root) {
 		t.Fatalf("bootstrap root %q has no HEAD commit", root)
 	}
-	out := runGitOutput(t, root, "rev-parse", "--path-format=absolute", "--git-dir")
-	// git resolves symlinks in --path-format=absolute output; on macOS
-	// t.TempDir() sits under /var, a symlink to /private/var, so root itself
-	// must be resolved the same way before comparing.
-	resolvedRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		t.Fatalf("resolve symlinks for root %q: %v", root, err)
+	// git rev-parse --path-format=absolute always symlink-resolves its
+	// output, regardless of whether root itself (built from XDG_DATA_HOME,
+	// e.g. a raw t.TempDir() on macOS under /var -> /private/var) is
+	// resolved — canonicalize root the same way before comparing.
+	wantRoot := root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		wantRoot = resolved
 	}
-	if filepath.Clean(strings.TrimSpace(string(out))) != filepath.Join(resolvedRoot, ".git") {
-		t.Fatalf("git dir = %q, want %q", strings.TrimSpace(string(out)), filepath.Join(resolvedRoot, ".git"))
+	out := runGitOutput(t, root, "rev-parse", "--path-format=absolute", "--git-dir")
+	if filepath.Clean(strings.TrimSpace(string(out))) != filepath.Join(wantRoot, ".git") {
+		t.Fatalf("git dir = %q, want %q", strings.TrimSpace(string(out)), filepath.Join(wantRoot, ".git"))
 	}
 }
 
@@ -569,6 +570,12 @@ func expectedLocalIdentity(projectRoot string) string {
 	absRoot, err := filepath.Abs(projectRoot)
 	if err != nil {
 		absRoot = filepath.Clean(projectRoot)
+	}
+	// Mirror localProjectIdentity's own symlink resolution (added so its
+	// hash converges with internal/workerstatus's canonicalPath) or this
+	// helper's expectation silently drifts from what production computes.
+	if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRoot = resolved
 	}
 	sum := sha1.Sum([]byte(absRoot))
 	return filepath.Join("local", filepath.Base(absRoot)+"-"+hex.EncodeToString(sum[:])[:8])

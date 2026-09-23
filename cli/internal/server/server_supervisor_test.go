@@ -74,7 +74,11 @@ func TestServer_StartSupervisorTicksReconcile(t *testing.T) {
 // full tick — the goroutine calls Reconcile once synchronously on
 // startup so a freshly-started server catches up immediately.
 func TestServer_SupervisorReconcilesDesiredStateOnStart(t *testing.T) {
-	workDir := setupTestDir(t)
+	// New() canonicalizes s.WorkingDir, and srv.supervisor is keyed off that
+	// canonical form (getOrCreate), so the desired state written here must
+	// use the same form or Reconcile rejects it as belonging to a different
+	// manager root (e.g. macOS's /var -> /private/var).
+	workDir := canonicalizePath(setupTestDir(t))
 	setupBeadStore(t, workDir)
 
 	// Pre-write a valid desired-state file with desired_count=0 so

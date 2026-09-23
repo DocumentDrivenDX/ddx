@@ -200,6 +200,14 @@ type Server struct {
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
 func New(addr, workingDir string) *Server {
+	// Canonicalize once, up front: the project registry always stores and
+	// compares canonical paths (see RegisterProject/GetProjectByPath), so
+	// s.WorkingDir must match that form or every entry.Path == s.WorkingDir
+	// comparison below silently fails whenever workingDir sits behind a
+	// symlink (e.g. macOS's /var -> /private/var).
+	if canonical := canonicalizePath(workingDir); canonical != "" {
+		workingDir = canonical
+	}
 	nodeName := resolveNodeName()
 	stateDir := serverAddrDir() // XDG-standard user-level dir, one per node
 	state := loadServerState(stateDir, nodeName)

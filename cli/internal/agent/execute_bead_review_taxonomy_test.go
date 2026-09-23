@@ -32,11 +32,11 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 			// loop classifier reads the structured Error first.
 			reviewer: beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
-						Verdict:   VerdictBlock,
-						Error:     evidence.OutcomeReviewContextOverflow,
-						ResultRev: resultRev,
-					}, fmt.Errorf("reviewer: %s (assembled prompt 200000 bytes exceeds cap 100000)",
-						evidence.OutcomeReviewContextOverflow)
+					Verdict:   VerdictBlock,
+					Error:     evidence.OutcomeReviewContextOverflow,
+					ResultRev: resultRev,
+				}, fmt.Errorf("reviewer: %s (assembled prompt 200000 bytes exceeds cap 100000)",
+					evidence.OutcomeReviewContextOverflow)
 			}),
 		},
 		{
@@ -44,11 +44,11 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 			wantClass: evidence.OutcomeReviewProviderEmpty,
 			reviewer: beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
-						Verdict:   VerdictBlock,
-						Error:     evidence.OutcomeReviewProviderEmpty,
-						ResultRev: resultRev,
-					}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewProviderEmpty,
-						ErrReviewVerdictUnparseable)
+					Verdict:   VerdictBlock,
+					Error:     evidence.OutcomeReviewProviderEmpty,
+					ResultRev: resultRev,
+				}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewProviderEmpty,
+					ErrReviewVerdictUnparseable)
 			}),
 		},
 		{
@@ -56,12 +56,12 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 			wantClass: evidence.OutcomeReviewUnparseable,
 			reviewer: beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
-						Verdict:   VerdictBlock,
-						Error:     evidence.OutcomeReviewUnparseable,
-						ResultRev: resultRev,
-						RawOutput: "Reviewer text without a structured verdict line.",
-					}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewUnparseable,
-						ErrReviewVerdictUnparseable)
+					Verdict:   VerdictBlock,
+					Error:     evidence.OutcomeReviewUnparseable,
+					ResultRev: resultRev,
+					RawOutput: "Reviewer text without a structured verdict line.",
+				}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewUnparseable,
+					ErrReviewVerdictUnparseable)
 			}),
 		},
 		{
@@ -69,11 +69,11 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 			wantClass: evidence.OutcomeReviewTransport,
 			reviewer: beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
-						Verdict:   VerdictBlock,
-						Error:     evidence.OutcomeReviewTransport,
-						ResultRev: resultRev,
-					}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewTransport,
-						errors.New("dial tcp: connection refused"))
+					Verdict:   VerdictBlock,
+					Error:     evidence.OutcomeReviewTransport,
+					ResultRev: resultRev,
+				}, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewTransport,
+					errors.New("dial tcp: connection refused"))
 			}),
 		},
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,6 +21,22 @@ import (
 // making pgrep match the shell itself. The shell loops until killed.
 func startSelfMatchingMonitorShell(t *testing.T, tag string) int {
 	t.Helper()
+	if runtime.GOOS != "linux" {
+		// BSD/macOS pgrep excludes the calling pgrep process and all its
+		// ancestors from matches by default (see `man pgrep`'s `-a` flag
+		// description) — the opposite of GNU pgrep's behavior. Since the
+		// shell spawned below is pgrep's own parent, `pgrep -f <tag>` can
+		// never find itself here, so the fixture's while-loop condition
+		// fails on its first iteration and the shell exits almost
+		// immediately, long before the scanner's poll loop can observe it.
+		// This isn't a DDx bug: production's extractPgrepPattern (see
+		// monitor_shell_cleanup.go) specifically greps for the literal
+		// "pgrep -f" substring, so working around this by changing the
+		// fixture to `pgrep -af`/`-a -f` would also defeat that detection —
+		// the self-matching-loop scenario this simulates is inherently a
+		// GNU/Linux pgrep behavior in the first place.
+		t.Skip("self-matching pgrep -f loop relies on GNU pgrep's ancestor-inclusion; BSD/macOS pgrep excludes ancestors by default (see man pgrep -a)")
+	}
 	shPath, err := exec.LookPath("sh")
 	if err != nil {
 		t.Skipf("sh not available: %v", err)

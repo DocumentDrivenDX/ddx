@@ -90,7 +90,10 @@ func TestCoordinationContract_HTTP(t *testing.T) {
 	// Production path uses LandCoordinators (not a parallel land table).
 	require.NotNil(t, srv.workers)
 	require.NotNil(t, srv.workers.LandCoordinators)
-	landCoord := srv.landCoordinatorFor(projectRoot)
+	// landCoordinatorFor keys its registry by canonical path (matching how
+	// the production HTTP path resolves it via workingDirForRequest), so
+	// look it up by proj.Path, not the raw projectRoot the test set up with.
+	landCoord := srv.landCoordinatorFor(proj.Path)
 	require.NotNil(t, landCoord, "handlers must resolve LandCoordinator via WorkerManager")
 
 	// --- Tracker transition + already_applied

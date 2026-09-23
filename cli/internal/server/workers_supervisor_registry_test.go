@@ -65,11 +65,14 @@ func TestSupervisorRegistry_ReconcileAllContinuesOtherProjectsWhenOneRestartBloc
 	now := time.Now().UTC()
 	terminalAt := now.Add(-10 * time.Minute)
 
+	// getOrCreate canonicalizes its root internally, so the desired state's
+	// own ProjectRoot must match that canonical form or reconcile's
+	// project_root/manager-root check rejects it.
 	blockedSup := srv.supervisorRegistry.getOrCreate(blockedRoot)
 	require.NotNil(t, blockedSup)
 	installBlockingWorkerFactory(blockedSup.manager)
-	seedTerminalOperatorAttentionWorker(t, blockedSup.manager, blockedRoot, "worker-20260707T000005-oa", terminalAt)
-	blockedDesired := DefaultWorkerDesiredState(blockedRoot)
+	seedTerminalOperatorAttentionWorker(t, blockedSup.manager, canonicalizePath(blockedRoot), "worker-20260707T000005-oa", terminalAt)
+	blockedDesired := DefaultWorkerDesiredState(canonicalizePath(blockedRoot))
 	blockedDesired.DesiredCount = 1
 	blockedDesired.DefaultSpec.OpaquePassthrough = true
 	blockedDesired.UpdatedAt = terminalAt.Add(-time.Minute)
@@ -78,7 +81,7 @@ func TestSupervisorRegistry_ReconcileAllContinuesOtherProjectsWhenOneRestartBloc
 	goodSup := srv.supervisorRegistry.getOrCreate(goodRoot)
 	require.NotNil(t, goodSup)
 	installBlockingWorkerFactory(goodSup.manager)
-	goodDesired := DefaultWorkerDesiredState(goodRoot)
+	goodDesired := DefaultWorkerDesiredState(canonicalizePath(goodRoot))
 	goodDesired.DesiredCount = 1
 	goodDesired.DefaultSpec.OpaquePassthrough = true
 	require.NoError(t, writeDesiredStateForTest(goodSup, goodDesired))
@@ -87,9 +90,11 @@ func TestSupervisorRegistry_ReconcileAllContinuesOtherProjectsWhenOneRestartBloc
 	srv.RegisterProject(goodRoot)
 
 	require.NoError(t, srv.supervisorRegistry.ReconcileAll())
-	assert.Zero(t, runningManagedWorkerCount(t, blockedSup.manager, blockedRoot))
+	// blockedSup/goodSup.manager came from getOrCreate, so their workers'
+	// ProjectRoot is canonical — query the same way.
+	assert.Zero(t, runningManagedWorkerCount(t, blockedSup.manager, canonicalizePath(blockedRoot)))
 	require.Eventually(t, func() bool {
-		return runningManagedWorkerCount(t, goodSup.manager, goodRoot) == 1
+		return runningManagedWorkerCount(t, goodSup.manager, canonicalizePath(goodRoot)) == 1
 	}, 2*time.Second, 20*time.Millisecond)
 }
 
@@ -102,8 +107,11 @@ func TestServer_MultiProjectSupervisorPicksUpNewProjects(t *testing.T) {
 	projectB := t.TempDir()
 	initSupervisorProject(t, projectA)
 	initSupervisorProject(t, projectB)
-	writeDesiredState(t, projectA, 1)
-	writeDesiredState(t, projectB, 1)
+	// writeDesiredState's WorkerManager and the registry's getOrCreate must
+	// agree on the project root's canonical form, or reconcile rejects the
+	// desired state as belonging to a different manager.
+	writeDesiredState(t, canonicalizePath(projectA), 1)
+	writeDesiredState(t, canonicalizePath(projectB), 1)
 
 	srv.RegisterProject(projectA)
 	srv.RegisterProject(projectB)
@@ -120,8 +128,8 @@ func TestServer_MultiProjectSupervisorPicksUpNewProjects(t *testing.T) {
 		if supA == nil || supA.manager == nil || supB == nil || supB.manager == nil {
 			return false
 		}
-		return runningManagedWorkerCount(t, supA.manager, projectA) == 1 &&
-			runningManagedWorkerCount(t, supB.manager, projectB) == 1
+		return runningManagedWorkerCount(t, supA.manager, canonicalizePath(projectA)) == 1 &&
+			runningManagedWorkerCount(t, supB.manager, canonicalizePath(projectB)) == 1
 	}, 2*time.Second, 25*time.Millisecond)
 	require.NoError(t, srv.Shutdown())
 }
@@ -147,9 +155,9 @@ func TestServer_DDXSupervisedProjectsEnvRegistersProjects(t *testing.T) {
 		paths = append(paths, proj.Path)
 	}
 
-	assert.Contains(t, paths, workDir)
-	assert.Contains(t, paths, projectA)
-	assert.Contains(t, paths, projectB)
+	assert.Contains(t, paths, canonicalizePath(workDir))
+	assert.Contains(t, paths, canonicalizePath(projectA))
+	assert.Contains(t, paths, canonicalizePath(projectB))
 	assert.Len(t, paths, 3)
 }
 

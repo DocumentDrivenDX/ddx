@@ -578,7 +578,14 @@ func (te *TestEnvironment) initGit() {
 	// DDx lock sidecars are runtime coordination state, never source dirt.
 	// Keep them out of fixture status assertions without creating an untracked
 	// .gitignore file that would itself make the fixture dirty.
-	excludePath := filepath.Join(te.Dir, ".git", "info", "exclude")
+	//
+	// git init's own template-copy step is what normally creates .git/info/,
+	// but under some invoking environments (e.g. a restricted PATH, or a
+	// template dir this environment doesn't provide) it doesn't, so
+	// MkdirAll here rather than assuming the directory already exists.
+	excludeDir := filepath.Join(te.Dir, ".git", "info")
+	require.NoError(te.t, os.MkdirAll(excludeDir, 0o755))
+	excludePath := filepath.Join(excludeDir, "exclude")
 	require.NoError(te.t, os.WriteFile(excludePath, []byte(".ddx/*.lock\n"), 0o644))
 }
 

@@ -227,6 +227,14 @@ func collectSkillRoots(root string, pkg *Package) []string {
 }
 
 func collectIgnoredBrokenSymlinkPaths(root string, pkg *Package) map[string]bool {
+	// auditBrokenSymlinks walks the symlink-resolved form of root (so a
+	// broken symlink's own path is still reported correctly even when root
+	// itself sits behind a symlink), so the ignore-list keys built here must
+	// use that same resolved form or they never match and auditSkillRoot's
+	// tolerant recoverSkillDir handling gets double-flagged as broken here.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil && resolved != "" {
+		root = resolved
+	}
 	ignored := make(map[string]bool)
 	for _, mapping := range pkg.Install.Skills {
 		cleanSource := filepath.Clean(filepath.FromSlash(mapping.Source))
