@@ -91,6 +91,44 @@ func TestBeadCreate_RelativeEnvInsideLinkedWorktreeUsesPrimaryNamingAndStore(t *
 	require.Error(t, err, "created bead must not be written to the isolated worktree store")
 }
 
+func TestBeadCreate_OperatorLinkedWorktreeUsesOwnStore(t *testing.T) {
+	tmp := t.TempDir()
+	projectRoot := filepath.Join(tmp, "origin-tree")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"origin\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("fixture\n"), 0o644))
+
+	runGitForWorkspaceTest(t, projectRoot, "init")
+	runGitForWorkspaceTest(t, projectRoot, "config", "user.name", "Test")
+	runGitForWorkspaceTest(t, projectRoot, "config", "user.email", "test@example.com")
+	runGitForWorkspaceTest(t, projectRoot, "add", "README.md", ".ddx/config.yaml", ".ddx/beads.jsonl")
+	runGitForWorkspaceTest(t, projectRoot, "commit", "-m", "init")
+
+	worktreeRoot := filepath.Join(tmp, "origin-tree.feature")
+	runGitForWorkspaceTest(t, projectRoot, "worktree", "add", "-b", "feature", worktreeRoot)
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", worktreeRoot).Run()
+	})
+	worktreeDDX := filepath.Join(worktreeRoot, ddxroot.DirName)
+
+	t.Setenv("DDX_BEAD_DIR", "")
+	root := NewCommandFactory(worktreeRoot).NewRootCommand()
+	out, err := executeCommand(root, "bead", "create", "feature bead", "--priority", "1")
+	require.NoError(t, err)
+	createdID := strings.TrimSpace(out)
+
+	worktreeStore := bead.NewStore(worktreeDDX)
+	created, err := worktreeStore.Get(context.Background(), createdID)
+	require.NoError(t, err, "bead created from an operator worktree must land in that worktree's store")
+	require.Equal(t, "feature bead", created.Title)
+
+	primaryStore := bead.NewStore(ddxDir)
+	_, err = primaryStore.Get(context.Background(), createdID)
+	require.Error(t, err, "bead created from an operator worktree must not land in the primary worktree's store")
+}
+
 func TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping real-binary worktree regression in short mode")

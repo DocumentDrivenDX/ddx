@@ -304,12 +304,23 @@ func isReviewCloseBead(b *bead.Bead) bool {
 	return false
 }
 
+// findBeadWorkspace resolves the bead workspace for dir. A linked worktree
+// the operator created keeps its own .ddx/ so beads land on the branch checked
+// out there. Ephemeral execute-bead attempt worktrees still redirect to the
+// primary workspace: their tracker snapshot is discarded (ddx-381f4171).
+func findBeadWorkspace(dir string) string {
+	if strings.Contains(filepath.ToSlash(dir), agentpkg.ExecuteBeadWtPrefix) {
+		return gitpkg.FindNearestDDxWorkspace(dir)
+	}
+	return gitpkg.FindWorktreeDDxWorkspace(dir)
+}
+
 func (f *CommandFactory) beadWorkspaceRoot() string {
 	dir := os.Getenv("DDX_BEAD_DIR")
 	if dir != "" {
 		if filepath.Base(dir) == ".ddx" {
 			if !filepath.IsAbs(dir) && f.WorkingDir != "" {
-				if workspaceRoot := gitpkg.FindNearestDDxWorkspace(f.WorkingDir); workspaceRoot != "" {
+				if workspaceRoot := findBeadWorkspace(f.WorkingDir); workspaceRoot != "" {
 					return workspaceRoot
 				}
 				dir = filepath.Join(f.WorkingDir, dir)
@@ -324,7 +335,7 @@ func (f *CommandFactory) beadWorkspaceRoot() string {
 	if f.WorkingDir == "" {
 		return ""
 	}
-	if workspaceRoot := gitpkg.FindNearestDDxWorkspace(f.WorkingDir); workspaceRoot != "" {
+	if workspaceRoot := findBeadWorkspace(f.WorkingDir); workspaceRoot != "" {
 		return workspaceRoot
 	}
 	return f.WorkingDir
@@ -2157,8 +2168,8 @@ This command is not a general hand-edit workflow for bead tracker data.`,
 				path = args[0]
 			}
 			// Use the working directory to locate the repo containing the conflict.
-			// beadWorkspaceRoot() redirects to the primary workspace in a linked
-			// worktree, but conflict stages live in the index of the worktree where
+			// beadWorkspaceRoot() redirects execute-bead worktrees to the primary
+			// workspace, but conflict stages live in the index of the worktree where
 			// the merge actually failed — not the primary bead workspace.
 			workspaceRoot := f.WorkingDir
 			if workspaceRoot == "" {
