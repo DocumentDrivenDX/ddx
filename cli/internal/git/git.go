@@ -111,6 +111,35 @@ func FindNearestDDxWorkspace(startDir string) string {
 	}
 
 	gitRoot := FindProjectRoot(abs)
+	if workspace := nearestDDxWorkspaceWithin(abs, gitRoot); workspace != "" {
+		return workspace
+	}
+
+	if IsRepository(abs) {
+		return gitRoot
+	}
+	return ""
+}
+
+// FindWorktreeDDxWorkspace is like FindNearestDDxWorkspace but does not
+// redirect a linked worktree to the primary worktree when the linked worktree
+// has its own .ddx/. Operator-created worktrees (`git worktree add`, worktrunk
+// siblings) keep their tracker on the branch checked out there. When the
+// current worktree has no .ddx/, it falls back to FindNearestDDxWorkspace.
+func FindWorktreeDDxWorkspace(startDir string) string {
+	abs, err := filepath.Abs(startDir)
+	if err != nil {
+		return ""
+	}
+	if workspace := nearestDDxWorkspaceWithin(abs, FindProjectRoot(abs)); workspace != "" {
+		return workspace
+	}
+	return FindNearestDDxWorkspace(abs)
+}
+
+// nearestDDxWorkspaceWithin walks up from abs, stopping at gitRoot, and
+// returns the first directory containing .ddx/, or "" if none is found.
+func nearestDDxWorkspaceWithin(abs, gitRoot string) string {
 	current := abs
 	for {
 		candidate := filepath.Join(current, ddxDirSegment)
@@ -118,19 +147,14 @@ func FindNearestDDxWorkspace(startDir string) string {
 			return current
 		}
 		if current == gitRoot {
-			break
+			return ""
 		}
 		parent := filepath.Dir(current)
 		if parent == current {
-			break
+			return ""
 		}
 		current = parent
 	}
-
-	if IsRepository(abs) {
-		return gitRoot
-	}
-	return ""
 }
 
 // IsRepository checks if the current directory is a git repository.

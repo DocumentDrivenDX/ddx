@@ -200,6 +200,29 @@ func TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary(t *testing.T) {
 	assert.Equal(t, primary, got)
 }
 
+// TestFindWorktreeDDxWorkspace_LinkedWorktreeUsesOwnDDx verifies that an
+// operator-created linked worktree with its own .ddx/ resolves to itself, and
+// falls back to the primary only when it has no .ddx/.
+func TestFindWorktreeDDxWorkspace_LinkedWorktreeUsesOwnDDx(t *testing.T) {
+	primary := setupTestGitRepo(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(primary, ddxDirSegment), 0755))
+
+	linked := filepath.Join(filepath.Dir(primary), "linked-wt")
+	runGitInDir(t, primary, "worktree", "add", "-b", "linked-branch", linked)
+
+	// No .ddx/ in the linked worktree yet: fall back to the primary.
+	assert.Equal(t, primary, FindWorktreeDDxWorkspace(linked))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(linked, ddxDirSegment), 0755))
+	assert.Equal(t, linked, FindWorktreeDDxWorkspace(linked))
+
+	subdir := filepath.Join(linked, "some", "deep", "dir")
+	require.NoError(t, os.MkdirAll(subdir, 0755))
+	assert.Equal(t, linked, FindWorktreeDDxWorkspace(subdir))
+
+	assert.Equal(t, primary, FindWorktreeDDxWorkspace(primary))
+}
+
 func TestFindNearestDDxWorkspace_ConventionRootFallsBackToProjectRoot(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 
