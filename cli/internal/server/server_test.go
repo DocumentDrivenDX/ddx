@@ -3442,6 +3442,8 @@ func TestMCPExecDispatchTrustedAllowed(t *testing.T) {
 }
 
 func TestMCPAgentDispatchTrustedAllowed(t *testing.T) {
+	// Provider discovery must not launch operator-installed harness CLIs.
+	t.Setenv("PATH", "/usr/bin:/bin")
 	if testing.Short() {
 		t.Skip("provider-probe test; runs only in non-short mode")
 	}

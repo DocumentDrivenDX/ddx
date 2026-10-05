@@ -193,9 +193,15 @@ func TestWorkerManagerStopSIGTERMtoSIGKILL(t *testing.T) {
 	defer m.StopWatchdog()
 
 	// Child process that traps SIGTERM and would otherwise sleep 60s.
-	cmd := exec.Command("sh", "-c", `trap '' TERM; sleep 60`)
+	ready := filepath.Join(root, "term-handler-ready")
+	cmd := exec.Command("sh", "-c", `trap '' TERM; printf ready > "$1"; exec sleep 60`, "sh", ready)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(ready)
+		return err == nil && string(data) == "ready"
+	}, 5*time.Second, 10*time.Millisecond, "child must install its TERM handler before Stop")
 
 	waitErrCh := make(chan error, 1)
 	go func() { waitErrCh <- cmd.Wait() }()

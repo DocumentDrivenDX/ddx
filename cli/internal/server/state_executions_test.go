@@ -363,7 +363,7 @@ func TestExecutions_ListPerf_1000(t *testing.T) {
 	if len(all) != 1000 {
 		t.Fatalf("expected 1000 executions, got %d", len(all))
 	}
-	if elapsed > 2*time.Second {
+	if !raceEnabled && elapsed > 2*time.Second {
 		t.Fatalf("scanning 1000 executions took %s, expected < 2s", elapsed)
 	}
 	t.Logf("scanned 1000 executions in %s", elapsed)

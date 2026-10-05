@@ -17,6 +17,8 @@ import (
 // TestListProviders verifies GET /api/providers returns a JSON array containing
 // all known harnesses.
 func TestListProviders(t *testing.T) {
+	// Provider discovery must not launch operator-installed harness CLIs.
+	t.Setenv("PATH", "/usr/bin:/bin")
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -423,6 +425,8 @@ func TestProviderDetailSuppressesStaleQuotaAndUsageSources(t *testing.T) {
 
 // TestMCPProviderList verifies the ddx_provider_list MCP tool.
 func TestMCPProviderList(t *testing.T) {
+	// Provider discovery must not launch operator-installed harness CLIs.
+	t.Setenv("PATH", "/usr/bin:/bin")
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -467,6 +471,8 @@ func TestMCPProviderList(t *testing.T) {
 
 // TestMCPProviderShow verifies the ddx_provider_show MCP tool.
 func TestMCPProviderShow(t *testing.T) {
+	// Provider discovery must not launch operator-installed harness CLIs.
+	t.Setenv("PATH", "/usr/bin:/bin")
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 

@@ -138,6 +138,14 @@ func TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget(t *testin
 
 	require.NotEmpty(t, got, "expected lock samples from claim/heartbeat/event/release cycles")
 
+	// Race instrumentation changes scheduling and filesystem latency. Keep
+	// the concurrent correctness proof above, but enforce budgets without it.
+	if raceEnabled {
+		return
+	}
+
+	t.Logf("lock wait p95=%.2fms p99=%.2fms; hold p95=%.2fms p99=%.2fms", p95Wait, p99Wait, p95Hold, p99Hold)
+
 	const (
 		maxP95WaitMS = 25.0
 		// Leave headroom for shared builders and concurrent package execution;

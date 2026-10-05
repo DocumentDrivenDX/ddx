@@ -90,7 +90,11 @@ func TestExecutionTempRoot_DefaultsUnderUserCache(t *testing.T) {
 	projectRoot := t.TempDir()
 
 	got := ExecutionTempRoot(projectRoot)
-	want := filepath.Join(cacheRoot, "ddx", "exec-wt")
+	platformCache, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(platformCache, "ddx", "exec-wt")
 	if got != want {
 		t.Fatalf("ExecutionTempRoot = %q, want %q", got, want)
 	}

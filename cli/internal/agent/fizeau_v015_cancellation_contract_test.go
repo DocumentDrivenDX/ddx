@@ -105,8 +105,8 @@ wait "$child"
 	if err := os.WriteFile(codexPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write codex stub: %v", err)
 	}
-	// Keep system PATH so sh/sleep remain available inside the fixture.
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// Keep POSIX utilities available without discovering operator harness CLIs.
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/usr/bin:/bin")
 
 	refreshCtx, refreshCancel := context.WithCancel(context.Background())
 	refreshCancel()

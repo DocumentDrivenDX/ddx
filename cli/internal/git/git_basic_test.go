@@ -65,7 +65,8 @@ func runGitInDir(t *testing.T, dir string, args ...string) {
 
 // Helper function to create a test git repository
 func setupTestGitRepo(t *testing.T) string {
-	tempDir := t.TempDir()
+	tempDir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 
 	runGitInDir(t, tempDir, "init")
 	runGitInDir(t, tempDir, "config", "user.email", "test@example.com")
