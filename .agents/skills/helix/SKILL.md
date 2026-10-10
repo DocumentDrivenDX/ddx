@@ -144,7 +144,8 @@ Use to refine work items before execution.
 
 Use when the safe next action is ambiguous.
 
-1. Inspect the queue, governing artifacts, and known blockers.
+1. Inspect governing artifacts and known blockers; inspect a queue only when
+   tracking is explicitly selected.
 2. Decide conservatively among build, design, alignment, backfill, polish, wait,
    guidance, or stop.
 3. Do not dispatch another workflow silently.
@@ -217,7 +218,7 @@ misplaced content unit:
 | Content to add | Destination-shaped draft content |
 | Template fit | Destination section and blocking/warning checks |
 | Destination risks | Any template check the proposed addition would fail |
-| Follow-up | Tracker issue ID or explicit issue to create |
+| Follow-up | Next action or continuation evidence; selected tracker ID when applicable |
 
 Do not remove content from one artifact unless the destination content and
 follow-up work are captured durably.
