@@ -49,8 +49,8 @@ Use for sparse user intent that needs to become governed HELIX work.
 1. Clarify scope only when missing information would make the resulting work
    unsafe or unactionable.
 2. Identify governing artifacts that already exist.
-3. Produce or update planning work items rather than implementation work when
-   authority is missing.
+3. Identify missing planning authority; create tracker items only when
+   explicitly requested or required by the active execution contract.
 4. Keep created work standalone: include context, acceptance criteria, labels,
    parent/dependency relationships, and verification commands.
 
@@ -103,7 +103,8 @@ Use when implementation needs design authority before build work.
    data model, errors, security, testing, sequencing, risks, and observability.
 3. Iterate through self-critique until material changes converge.
 4. Write the design to the project HELIX design location.
-5. Derive ordered, verifiable implementation work from the design.
+5. Derive an ordered, verifiable implementation plan from the design. Tracker
+   decomposition is optional and requires explicit selection.
 
 ### Backfill
 
@@ -124,8 +125,8 @@ Use for fresh-eyes review of plans, PRs, implementation, or recent work.
 2. Inspect governing artifacts, changed implementation, tests, and public
    projection relevant to the scope.
 3. Report findings first, ordered by severity, with concrete evidence.
-4. File durable follow-up work for actionable medium-or-higher findings when
-   the project uses DDx/HELIX tracking.
+4. Report actionable findings and suggested corrections. File follow-up work
+   only when explicitly requested or required by the active execution contract.
 
 ### Polish
 
@@ -147,18 +148,22 @@ Use when the safe next action is ambiguous.
 2. Decide conservatively among build, design, alignment, backfill, polish, wait,
    guidance, or stop.
 3. Do not dispatch another workflow silently.
-4. If missing tracked work is discovered, create or recommend explicit work
-   before returning the next action.
+4. Recommend the next action from governing artifacts. Create tracking only
+   when explicitly requested or required by the active execution contract.
 
 ### Build And Run
 
 Use only when the user explicitly asks for HELIX execution.
 
-1. Build handles one bounded implementation pass for a selected work item.
-2. Run handles the bounded operator loop over ready work.
-3. Stay within the governing bead/work item.
-4. Do not broaden scope beyond the named work.
+1. Build executes an implementation-ready plan through verified completion
+   after explicit user authorization. A step or context boundary is not a stop.
+2. Run follows the explicitly selected runtime execution contract.
+3. Stay within the governing plan or explicitly selected work item.
+4. Keep concise continuation evidence alongside the plan and reconcile it
+   against the diff and tests on resume. Do not broaden the named scope.
 5. Verify with the project gate before reporting completion.
+6. Tracking is optional for direct implementation. Explicit worker execution
+   preserves required claims, dependencies, acceptance evidence, and audit history.
 
 ### Commit
 
@@ -221,8 +226,11 @@ follow-up work are captured durably.
 
 - Use the workflow contracts in this skill as the active interface; consult
   packaged workflow prompts only when deeper mode-specific detail is needed.
-- For DDx-backed projects, obey bead-first rules before writing files or tracker
-  mutations.
+- Do not infer tracking from installed tools or repository metadata. Do not
+  discover or invoke tracker binaries for ordinary HELIX work. Use tracking
+  only when explicitly requested or required by the active execution contract.
+  Prefer one item per coherent goal; split for independent scheduling, ownership,
+  parallel execution, or deferred work. Planning alone does not authorize build.
 - Do not silently start implementation when the request is planning, alignment,
   review, or routing.
 - If the correct route is unclear, use check mode rather than guessing.
