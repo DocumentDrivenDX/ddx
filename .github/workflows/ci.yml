@@ -112,7 +112,11 @@ jobs:
     # PR tier: everything in `lefthook run ci` except the full -race suite
     # (heavy.yml / scripts/verify-full.sh) and lint (golangci-lint action above).
     - name: Run CI validation
-      run: lefthook run ci --exclude go-test-all,go-lint-all
+      # `lefthook run --exclude` did not drop go-test-all (the -race suite ran and hit the timeout),
+      # so delete those commands from a copy of the config instead.
+      run: |
+        yq 'del(.ci.commands.go-test-all) | del(.ci.commands.go-lint-all)' lefthook.yml > "$RUNNER_TEMP/lefthook-pr.yml"
+        LEFTHOOK_CONFIG="$RUNNER_TEMP/lefthook-pr.yml" lefthook run ci
       env:
         LEFTHOOK_QUIET: meta,execution
 
