@@ -1,0 +1,215 @@
+# Heavy / expensive suites. NOT run on ordinary PRs.
+# Triggers: release.yml (scope=gate: integration + frontend e2e must pass before
+# publishing; release.yml already runs the -race suite and builds all targets),
+# weekly schedule + dispatch (scope full, includes perf), and PRs labelled
+# `ci:full` (called from ci.yml). No `concurrency:` on purpose: when called, the
+# caller's group applies.
+name: Heavy
+
+on:
+  workflow_call:
+    inputs:
+      scope:
+        type: string
+        default: gate
+      ref:
+        type: string
+        default: ''
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'  # weekly, Monday 04:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    if: inputs.scope != 'gate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        # Fizeau v0.14.32 does not currently cross-compile for Windows
+        # (github.com/easel/fizeau/internal/discoverycache uses syscall.Kill).
+        os: [linux, darwin]
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+    
+    - name: Build binary
+      run: |
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
+          go build -v -o ../bin/ddx-${{ matrix.os }}-${{ matrix.arch }} .
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ddx-${{ matrix.os }}-${{ matrix.arch }}
+        path: bin/ddx-${{ matrix.os }}-${{ matrix.arch }}
+        retention-days: 7
+
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Build binary
+      run: go build -o ../bin/ddx .
+
+    - name: Run E2E smoke tests
+      run: go test -v ./cmd -run TestE2ESmokeJourney -count=1 2>&1 | tee ../e2e-test-output.txt
+
+    - name: Upload E2E test output
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-output
+        path: e2e-test-output.txt
+        retention-days: 7
+
+    - name: Render execute-bead prompt-size report
+      env:
+        DDX_PROMPT_SIZE_REPORT: ${{ github.workspace }}/prompt-size-report.txt
+      run: go test -v ./internal/agent -run '^TestPromptSizeReport$' -count=1 2>&1 | tee ../prompt-size-report.log
+
+    - name: Upload prompt-size report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: prompt-size-report
+        path: |
+          prompt-size-report.txt
+          prompt-size-report.json
+          prompt-size-report.log
+        retention-days: 14
+
+
+  frontend-e2e:
+    name: Frontend Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Install frontend dependencies
+      working-directory: cli/internal/server/frontend
+      run: bun install
+
+    - name: Build frontend bundle
+      working-directory: cli/internal/server/frontend
+      run: bun run build
+
+    - name: Build CLI binary
+      working-directory: cli
+      run: make build
+
+    - name: Install Playwright browsers
+      working-directory: cli/internal/server/frontend
+      run: bunx playwright install --with-deps chromium
+
+    - name: Run frontend unit tests
+      working-directory: cli/internal/server/frontend
+      run: bun run test:unit -- --run
+
+    - name: Run frontend Playwright E2E tests
+      working-directory: cli/internal/server/frontend
+      run: bun run test:e2e:functional
+
+
+  test-timing:
+    name: Test Timing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: inputs.scope != 'gate'
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Run tests with JSON output
+      run: go test -json -race -cover -timeout 30m ./... 2>&1 | tee ../test-output.json || true
+
+    - name: Generate timing summary
+      if: always()
+      run: go run ./tools/test-timing < ../test-output.json > ../test-timing-summary.md
+
+    - name: Upload test timing artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-timing-${{ github.run_id }}
+        path: |
+          test-output.json
+          test-timing-summary.md
+        retention-days: 30
+
+
+  perf:
+    name: Perf Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Run perf tests
+      run: make test-perf

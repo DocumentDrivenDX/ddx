@@ -38,6 +38,8 @@ type releaseWorkflowJob struct {
 	Outputs  map[string]string       `yaml:"outputs"`
 	Strategy releaseWorkflowStrategy `yaml:"strategy"`
 	Steps    []releaseWorkflowStep   `yaml:"steps"`
+	// Uses is set for jobs that call a reusable workflow (no steps of their own).
+	Uses string `yaml:"uses"`
 }
 
 type releaseWorkflowStrategy struct {
@@ -108,6 +110,10 @@ func TestReleaseWorkflowResolvesManualAndTagEventToSameImmutableTag(t *testing.T
 	for jobName, job := range wf.Jobs {
 		if jobName != "prepare" {
 			require.Containsf(t, []string(job.Needs), "prepare", "%s must consume the resolved release identity", jobName)
+		}
+		if job.Uses != "" {
+			// A reusable-workflow call has no steps; the callee checks out the ref it is given.
+			continue
 		}
 		checkoutAt := stepIndex(job, func(step releaseWorkflowStep) bool {
 			return strings.HasPrefix(step.Uses, "actions/checkout@")

@@ -25,6 +25,7 @@ jobs:
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       tag: ${{ steps.identity.outputs.tag }}
       commit: ${{ steps.identity.outputs.commit }}
@@ -103,6 +104,7 @@ jobs:
     name: Build Verified Frontend
     needs: prepare
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v4
       with:
@@ -131,11 +133,21 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
+  # Integration + frontend e2e (heavy.yml, scope=gate) must pass before publishing.
+  heavy:
+    name: Heavy suite
+    needs: prepare
+    uses: ./.github/workflows/heavy.yml
+    with:
+      scope: gate
+      ref: ${{ needs.prepare.outputs.commit }}
+
   # Run full test suite before release
   test:
     name: Test Release
     needs: [prepare, frontend]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
       with:
@@ -174,7 +186,7 @@ jobs:
   # Build binaries for all platforms
   build-matrix:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
-    needs: [prepare, frontend, test]
+    needs: [prepare, frontend, test, heavy]
     strategy:
       matrix:
         # Fizeau v0.15.2 still does not cross-compile for Windows
@@ -193,6 +205,7 @@ jobs:
             goarch: arm64
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
       with:
@@ -287,6 +300,7 @@ jobs:
     name: Create Release
     needs: [prepare, build-matrix]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v4
       with:

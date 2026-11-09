@@ -1,24 +1,27 @@
 name: Security
 
+# PR tier: secret scan (diff only, verified secrets) + dependency review, path
+# filtered. Full dependency scan, SAST (CodeQL, gosec) and a full-history secret
+# scan run weekly and on manual dispatch only (no push, no daily cron).
+# Branch protection: "Security Summary" is not produced on PRs; use
+# "Secret Scanning" if a security check must be required.
+
 on:
   schedule:
-    - cron: '0 0 * * *'  # Daily at midnight UTC
-  push:
-    branches: [ main, develop ]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'cli/internal/server/frontend/**'
-      - '.github/workflows/security.yml'
+    - cron: '0 3 * * 0'  # weekly, Sunday 03:00 UTC
   pull_request:
     branches: [ main ]
     paths:
       - '**.go'
-      - 'go.mod'
-      - 'go.sum'
+      - 'cli/go.mod'
+      - 'cli/go.sum'
       - 'cli/internal/server/frontend/**'
+      - '.github/workflows/security.yml'
   workflow_dispatch:  # Manual trigger
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -30,6 +33,7 @@ jobs:
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
     steps:
@@ -65,10 +69,23 @@ jobs:
         fi
         exit $found
 
-  # Dependency vulnerability scanning
+  # Dependency review (PR only, seconds, no toolchain setup)
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/dependency-review-action@v4
+      continue-on-error: true  # Advanced Security may be unavailable
+
+  # Dependency vulnerability scanning (weekly/dispatch)
   dependency-scan:
     name: Dependency Scanning
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
       OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
@@ -88,14 +105,6 @@ jobs:
       uses: oven-sh/setup-bun@v2
       with:
         bun-version: latest
-    
-    - name: Dependency Review
-      if: github.event_name == 'pull_request'
-      continue-on-error: true  # Allow workflow to continue if Advanced Security is not enabled
-      uses: actions/dependency-review-action@v4
-      with:
-        base-ref: ${{ github.event.pull_request.base.sha || github.ref }}
-        head-ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
     - name: Nancy vulnerability scan
       if: ${{ env.OSS_INDEX_USERNAME != '' && env.OSS_INDEX_TOKEN != '' }}
@@ -150,7 +159,9 @@ jobs:
   # Static Application Security Testing (SAST)
   sast:
     name: Static Analysis Security Testing
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
     
@@ -186,45 +197,18 @@ jobs:
       with:
         sarif_file: gosec-results.sarif
 
-  # Aggregate results
+  # Aggregate results (weekly/dispatch only)
   security-summary:
     name: Security Summary
     needs: [secret-scan, dependency-scan, sast]
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
     - name: Check results
       run: |
-        echo "## Security Scan Summary"
-        echo ""
-        
-        # Check each job result
-        if [ "${{ needs.secret-scan.result }}" = "success" ]; then
-          echo "✅ Secret scanning: Passed"
-        else
-          echo "❌ Secret scanning: Failed"
-        fi
-        
-        if [ "${{ needs.dependency-scan.result }}" = "success" ]; then
-          echo "✅ Dependency scanning: Passed"
-        else
-          echo "❌ Dependency scanning: Failed"
-        fi
-        
-        if [ "${{ needs.sast.result }}" = "success" ]; then
-          echo "✅ SAST: Passed"
-        else
-          echo "❌ SAST: Failed"
-        fi
-        
-        # Overall result
-        if [ "${{ needs.secret-scan.result }}" != "success" ] || \
-           [ "${{ needs.dependency-scan.result }}" != "success" ] || \
-           [ "${{ needs.sast.result }}" != "success" ]; then
-          echo ""
-          echo "⚠️ Security checks failed. Please review the results above."
-          exit 1
-        fi
-        
-        echo ""
-        echo "✅ All security checks passed!"
+        echo "secret-scan=${{ needs.secret-scan.result }} dependency-scan=${{ needs.dependency-scan.result }} sast=${{ needs.sast.result }}"
+        for r in "${{ needs.secret-scan.result }}" "${{ needs.dependency-scan.result }}" "${{ needs.sast.result }}"; do
+          if [ "$r" != "success" ]; then echo "Security checks failed; review the jobs above."; exit 1; fi
+        done
+        echo "All security checks passed"
