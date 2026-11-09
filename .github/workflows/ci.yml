@@ -1,19 +1,38 @@
 name: CI
 
+# PR tier is deliberately light: lint, build, schema/lefthook checks and fast
+# unit tests (no -race/-cover) on one ubuntu runner. Integration, Playwright
+# e2e, the cross-platform build matrix, timing and perf live in heavy.yml and run
+# on release, weekly, dispatch, or a PR labelled `ci:full`.
+#
+# Merge gate for heavy-suite code: `evidence-gate`. Run scripts/verify-full.sh
+# locally and commit .ci/evidence/full-suite.json (hash of all tracked files),
+# or label the PR `ci:full`.
+#
+# Branch protection: required checks are "CI Validation" (unchanged) and
+# "evidence-gate". Removed checks: "Build (linux/darwin x amd64/arm64)",
+# "Integration Tests", "Frontend Playwright E2E", "Test Timing". Docs-only PRs
+# skip this workflow (paths-ignore) so required checks would stay pending there.
+
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
+    paths-ignore:
+      - '.ddx/**'   # tracker heartbeat commits
   pull_request:
-    branches: [ main ]
-  schedule:
-    - cron: '0 4 * * 1'  # Weekly on Monday at 04:00 UTC
-  workflow_dispatch:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'website/**'
+      - 'demos/**'
+      - '.ddx/**'
+      - 'LICENSE*'
 
-# Cancel superseded runs on the same ref so tracker-heartbeat floods do not
-# queue dozens of full-suite jobs behind a single failing SHA.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Minimal permissions by default
 permissions:
@@ -26,6 +45,7 @@ jobs:
   ci:
     name: CI Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
     - uses: actions/checkout@v4
       with:
@@ -89,10 +109,19 @@ jobs:
     - name: Validate ddx skill (agentskills.io conformance)
       run: scripts/eval-skill.sh --validate
 
+    # PR tier: everything in `lefthook run ci` except the full -race suite
+    # (heavy.yml / scripts/verify-full.sh) and lint (golangci-lint action above).
     - name: Run CI validation
-      run: lefthook run ci
+      run: lefthook run ci --exclude go-test-all,go-lint-all
       env:
         LEFTHOOK_QUIET: meta,execution
+
+    - name: Fast unit tests
+      working-directory: cli
+      run: go test -timeout 20m ./...
+      env:
+        CGO_ENABLED: "1"
+        SKIP_INTEGRATION_TESTS: "true"
 
     - name: Guard server state against test pollution
       run: |
@@ -142,180 +171,51 @@ jobs:
           exit 1
         fi
 
-  # Separate build job for matrix builds
-  build:
-    name: Build
-    needs: ci
+  full:
+    name: Heavy suite (ci:full)
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:full')
+    uses: ./.github/workflows/heavy.yml
+    with:
+      scope: full
+
+  # Cheap gate (seconds): proves the heavy suite was run for this exact tree.
+  # Passes if (a) .ci/evidence/full-suite.json matches the PR head content hash
+  # (produced by scripts/verify-full.sh), OR (b) PR has label `ci:full` and the
+  # heavy job passed, OR (c) the diff touches no path the heavy suite covers.
+  evidence-gate:
+    name: evidence-gate
+    if: always() && github.event_name == 'pull_request'
+    needs: [full]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # Fizeau v0.14.32 does not currently cross-compile for Windows
-        # (github.com/easel/fizeau/internal/discoverycache uses syscall.Kill).
-        os: [linux, darwin]
-        arch: [amd64, arm64]
-    defaults:
-      run:
-        working-directory: cli
+    timeout-minutes: 5
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: 'cli/go.mod'
-        cache-dependency-path: cli/go.sum
-    
-    - name: Build binary
-      run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
-          go build -v -o ../bin/ddx-${{ matrix.os }}-${{ matrix.arch }} .
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ddx-${{ matrix.os }}-${{ matrix.arch }}
-        path: bin/ddx-${{ matrix.os }}-${{ matrix.arch }}
-        retention-days: 7
-
-  # Integration tests
-  integration:
-    name: Integration Tests
-    needs: ci
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cli
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: 'cli/go.mod'
-        cache-dependency-path: cli/go.sum
-
-    - name: Build binary
-      run: go build -o ../bin/ddx .
-
-    - name: Run E2E smoke tests
-      run: go test -v ./cmd -run TestE2ESmokeJourney -count=1 2>&1 | tee ../e2e-test-output.txt
-
-    - name: Upload E2E test output
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: e2e-test-output
-        path: e2e-test-output.txt
-        retention-days: 7
-
-    - name: Render execute-bead prompt-size report
-      env:
-        DDX_PROMPT_SIZE_REPORT: ${{ github.workspace }}/prompt-size-report.txt
-      run: go test -v ./internal/agent -run '^TestPromptSizeReport$' -count=1 2>&1 | tee ../prompt-size-report.log
-
-    - name: Upload prompt-size report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: prompt-size-report
-        path: |
-          prompt-size-report.txt
-          prompt-size-report.json
-          prompt-size-report.log
-        retention-days: 14
-
-  frontend-e2e:
-    name: Frontend Playwright E2E
-    needs: ci
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: 'cli/go.mod'
-        cache-dependency-path: cli/go.sum
-
-    - name: Set up Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: latest
-
-    - name: Install frontend dependencies
-      working-directory: cli/internal/server/frontend
-      run: bun install
-
-    - name: Build frontend bundle
-      working-directory: cli/internal/server/frontend
-      run: bun run build
-
-    - name: Build CLI binary
-      working-directory: cli
-      run: make build
-
-    - name: Install Playwright browsers
-      working-directory: cli/internal/server/frontend
-      run: bunx playwright install --with-deps chromium
-
-    - name: Run frontend unit tests
-      working-directory: cli/internal/server/frontend
-      run: bun run test:unit -- --run
-
-    - name: Run frontend Playwright E2E tests
-      working-directory: cli/internal/server/frontend
-      run: bun run test:e2e:functional
-
-  # Test timing — runs the full suite with -json output and uploads durable timing artifacts.
-  # Non-gating: timing data is captured regardless of ci job outcome.
-  test-timing:
-    name: Test Timing
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cli
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: 'cli/go.mod'
-        cache-dependency-path: cli/go.sum
-
-    - name: Run tests with JSON output
-      run: go test -json -race -cover -timeout 30m ./... 2>&1 | tee ../test-output.json || true
-
-    - name: Generate timing summary
-      if: always()
-      run: go run ./tools/test-timing < ../test-output.json > ../test-timing-summary.md
-
-    - name: Upload test timing artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-timing-${{ github.run_id }}
-        path: |
-          test-output.json
-          test-timing-summary.md
-        retention-days: 30
-
-  # Perf tests — non-gating; run weekly on schedule or on manual dispatch only
-  perf:
-    name: Perf Tests
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    defaults:
-      run:
-        working-directory: cli
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: 'cli/go.mod'
-        cache-dependency-path: cli/go.sum
-
-    - name: Run perf tests
-      run: make test-perf
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Check evidence
+        env:
+          FULL_RESULT: ${{ needs.full.result }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAVY_RE: '^(cli/|scripts/|lefthook\.yml|Makefile|\.golangci)'
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          if ! grep -Eq "$HEAVY_RE" <<<"$changed"; then
+            echo "No heavy-suite paths changed; gate passes."; exit 0
+          fi
+          if [[ "$FULL_RESULT" == "success" ]]; then
+            echo "ci:full label set and heavy suite passed; gate passes."; exit 0
+          fi
+          f=.ci/evidence/full-suite.json
+          if [[ -f "$f" ]]; then
+            want=$(jq -r .content_hash "$f")
+            have=$(bash scripts/verify-full.sh --hash-only)
+            if [[ "$want" == "$have" ]]; then
+              echo "Evidence matches ($(jq -r '.suite + " @ " + .timestamp' "$f")); gate passes."; exit 0
+            fi
+            echo "::error::Evidence is stale (recorded $want, tree is $have). Re-run scripts/verify-full.sh and commit."
+          else
+            echo "::error::No $f. Run scripts/verify-full.sh and commit the evidence, or add the 'ci:full' label."
+          fi
+          exit 1

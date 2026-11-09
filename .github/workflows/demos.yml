@@ -2,6 +2,7 @@ name: Regenerate Demos
 
 on:
   push:
+    branches: [main]
     paths:
       - 'cli/**'
       - 'scripts/demos/**'
@@ -10,10 +11,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   demos:
     name: Record and Render Demos
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       AGG_VERSION: 1.7.0
     steps:
